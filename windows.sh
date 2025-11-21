@@ -197,6 +197,11 @@ while true; do
 		export build_ffmpeg_shared=y
 		shift
 		;;
+	--enable-debug-build)
+		export do_debug_build=y
+		enable_debug
+		shift
+		;;
 	--get-total-steps | --get-all-steps | --get-step-name=*) exit 0 ;; # Handled above, just consume and ignore here
 	--clean-builds)
 		export clean_builds=y

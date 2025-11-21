@@ -3059,9 +3059,9 @@ do_configure() {
 	fi
 	if [ ! -f "$touch_name" ]; then
 		# make uninstall # does weird things when run under ffmpeg src so disabled for now...
-		echo -e "configuring $english_name ($PWD) as $ PKG_CONFIG_PATH=$PKG_CONFIG_PATH PATH=$PATH $configure_name $configure_options" # say it now in case bootstrap fails etc.
-		echo -e "all touch files" "already_configured$touch_postfix*" touchname= "$touch_name"
-		echo -e "config options $configure_options $configure_name"
+		echo -e "INFO: configuring $english_name ($PWD) as $ PKG_CONFIG_PATH=$PKG_CONFIG_PATH PATH=$PATH $configure_name $configure_options" # say it now in case bootstrap fails etc.
+		echo -e "INFO: all touch files" "already_configured$touch_postfix*" touchname= "$touch_name"
+		echo -e "INFO: config options $configure_options $configure_name"
 		if [ -f bootstrap ]; then
 			./bootstrap # some need this to create ./configure :|
 		fi
@@ -3069,19 +3069,19 @@ do_configure() {
 			./bootstrap.sh
 		fi
 		if [[ ! -f $configure_name ]]; then
-			echo -e "running autoreconf to generate configure file for us..."
+			echo -e "INFO: running autoreconf to generate configure file for us..."
 			autoreconf -fiv # a handful of them require this to create ./configure :|
 		fi
 		remove_path -f "$cur_dir2/already_"*    # reset
 		chmod u+x "$configure_name" # In non-windows environments, with devcontainers, the configuration file doesn't have execution permissions
-		echo -e "INFO: do_configure() PATH=$PATH\n nice running: \"$configure_name $configure_options\""
+		echo -e "INFO: do_configure() PATH=$PATH\n PKG_CONFIG_PATH=$PKG_CONFIG_PATH nice running: \"$configure_name $configure_options\""
 		# shellcheck disable=SC2086
 		nice -n 5 $configure_name $configure_options || {
-			echo -e "failed configure $english_name"
+			echo -e "ERROR: failed configure $english_name"
 			exit 1
 		} # less nicey than make (since single thread, and what if you're running another ffmpeg nice build elsewhere?)
 		touch -- "$touch_name"
-		echo -e "doing preventative make clean"
+		echo -e "INFO: doing preventative make clean"
 		echo -e "INFO: do_configure() nice running: \"make clean -j $(get_cpu_count)\""
 		nice make clean -j "$(get_cpu_count)" --silent # sometimes useful when files change, etc.
 	#else
@@ -3094,7 +3094,7 @@ do_make() {
 	local extra_make_options="$1"
 	local touch_postfix=""
 	[[ -n $2 ]] && touch_postfix="_$2"
-	extra_make_options="--silent -j $(get_cpu_count) $extra_make_options"
+	extra_make_options="-j$(get_cpu_count) $extra_make_options"
 	local cur_dir2=$(pwd)
 	local touch_name=$(get_small_touchfile_name "already_ran_make$touch_postfix" "$extra_make_options")
 	if [[ $BUILD_FORCE == "1" ]]; then
@@ -3105,12 +3105,12 @@ do_make() {
 		echo -e "Making $cur_dir2 as $ PATH=$PATH make $extra_make_options"
 		echo -e
 		if [ ! -f configure ]; then
-			echo -e "INFO: do_make() PATH=$PATH\n nice running: \"make clean -j $(get_cpu_count)\""
-			nice make clean -j "$(get_cpu_count)" --silent # just in case helpful if old junk left around and this is a 're make' and wasn't cleaned at reconfigure time
+			echo -e "INFO: do_make() PATH=$PATH\n nice running: \"make clean -j$(get_cpu_count)\""
+			nice make clean -j"$(get_cpu_count)" # just in case helpful if old junk left around and this is a 're make' and wasn't cleaned at reconfigure time
 		fi
 		echo -e "INFO: do_make() PATH=$PATH\n nice running: \"make $extra_make_options\""
 		# shellcheck disable=SC2086
-		nice make $extra_make_options --silent || exit 1
+		nice make $extra_make_options || exit 1
 		touch "$touch_name" || exit 1 # only touch if the build was OK
 	else
 		echo -e "Already made $(dirname "$cur_dir2") $(basename "$cur_dir2") ..."
@@ -3130,7 +3130,7 @@ do_make_and_make_install() {
 # 2. extra_install_options
 # 3. touch_postfix
 do_make_install() {
-	local extra_make_install_options="--silent $1"
+	local extra_make_install_options="$1"
 	local override_make_install_options="$2" # startingly, some need/use something different than just 'make install'
 	local touch_postfix=""
 	[[ -n $3 ]] && touch_postfix="_$3"
@@ -3146,7 +3146,7 @@ do_make_install() {
 	if [ ! -f "$touch_name" ]; then
 		echo -e "INFO: do_make_install() PATH=$PATH\n nice running: \"make $make_install_options\""
 		# shellcheck disable=SC2086
-		nice make $make_install_options --silent || exit 1
+		nice make $make_install_options || exit 1
 		touch "$touch_name" || exit 1
 	fi
 }
@@ -3981,8 +3981,8 @@ build_fontconfig() {
 	meson_options+=" --cross-file=$(get_meson_cross_file)"
 	do_meson "$meson_options"
 	do_ninja_and_ninja_install
-	#generic_configure "--enable-iconv --enable-libxml2 --disable-docs --with-libiconv --disable-testing" # Use Libxml2 instead of Expat; will find libintl from gettext on 2nd pass build and ffmpeg rejects it
-	#do_make_and_make_install
+	# generic_configure "--enable-iconv --enable-libxml2 --disable-docs --with-libiconv" # Use Libxml2 instead of Expat; will find libintl from gettext on 2nd pass build and ffmpeg rejects it
+	# do_make_and_make_install
 	change_dir "$src_dir"
 }
 

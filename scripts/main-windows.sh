@@ -164,24 +164,24 @@ else
 	elif [[ $build_ffmpeg_only == "y" || $build_ffmpeg_only == "yes" || $build_ffmpeg_only == "1" ]]; then
 		echo -e "INFO: Building ffmpeg only..." | tee -a "$LOG_FILE"
 		echo -e "WARNING: This may fail if previous dependencies havent been built yet." | tee -a "$LOG_FILE"
-		download_ffmpeg #1>>$LOG_FILE 2>&1
-		install_ffmpeg  #1>>$LOG_FILE 2>&1
+		download_ffmpeg
+		install_ffmpeg
 		exit 0
 	elif [[ $build_ffmpeg_kit_only == "y" || $build_ffmpeg_kit_only == "yes" || $build_ffmpeg_kit_only == "1" ]]; then
 		echo -e "INFO: Building ffmpeg-kit only..." | tee -a "$LOG_FILE"
 		echo -e "WARNING: This may fail if previous dependencies havent been built yet." | tee -a "$LOG_FILE"
-		configure_ffmpeg_kit #1>>$LOG_FILE 2>&1
+		configure_ffmpeg_kit
 		install_ffmpeg_kit
 		create_windows_bundle
 		exit 0
 	else
 		echo -e "INFO: Building all..." | tee -a "$LOG_FILE"
-		build_all_ffmpeg_dependencies #1>>$LOG_FILE 2>&1
-		download_ffmpeg               #1>>$LOG_FILE 2>&1
-		install_ffmpeg                #1>>$LOG_FILE 2>&1
-		configure_ffmpeg_kit          #1>>$LOG_FILE 2>&1
-		install_ffmpeg_kit            #1>>$LOG_FILE 2>&1
-		create_windows_bundle         #1>>$LOG_FILE 2>&1
+		build_all_ffmpeg_dependencies 
+		download_ffmpeg               
+		install_ffmpeg                
+		configure_ffmpeg_kit          
+		install_ffmpeg_kit            
+		create_windows_bundle         
 		exit 0
 	fi
 fi

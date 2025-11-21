@@ -469,13 +469,6 @@ get_ffmpeg_kit_version() {
 	echo -e "${FFMPEG_KIT_VERSION}"
 }
 
-build_ffmpeg_kit() {
-	echo -e "INFO: Building ffmpeg kit\n" 1>>"$LOG_FILE" 2>&1
-	# BUILD FFMPEG KIT
-
-	echo -e "INFO: Done building ffmpeg kit\n" 1>>"$LOG_FILE" 2>&1
-}
-
 download_ffmpeg() {
 	local output_dir="$src_dir/ffmpeg"
 	local desired_version="$ffmpeg_git_checkout_version"
@@ -519,14 +512,14 @@ install_cross_compiler() {
 
 	unset CFLAGS # don't want these "windows target" settings used the compiler itself since it creates executables to run on the local box (we have a parameter allowing them to set them for the script "all builds" basically)
 	# pthreads version to avoid having to use cvs for it
-	echo -e "Starting to download and build cross compile version of gcc [requires working internet access] with thread count $gcc_cpu_count..." 1>>"$LOG_FILE"2 >&1
-	echo -e "" 1>>"$LOG_FILE"2 >&1
+	echo -e "Starting to download and build cross compile version of gcc [requires working internet access] with thread count $gcc_cpu_count..." 1>>"$LOG_FILE" 2>&1
+	echo -e "" 1>>"$LOG_FILE" 2>&1
 
 	# --disable-shared allows c++ to be distributed at all...which seemed necessary for some random dependency which happens to use/require c++...
 	local zeranoe_script_name=mingw-w64-build
 	local zeranoe_script_options="--gcc-branch=releases/gcc-14 --mingw-w64-branch=master --binutils-branch=binutils-2_44-branch" # --cached-sources"
 	if [[ ($compiler_flavors == "win32" || $compiler_flavors == "multi") && ! -f ../$win32_gcc ]]; then
-		echo -e "Building win32 cross compiler..." 1>>"$LOG_FILE"2 >&1
+		echo -e "Building win32 cross compiler..." 1>>"$LOG_FILE" 2>&1
 		download_gcc_build_script $zeranoe_script_name
 		if [[ "$(uname)" =~ (5.1) ]]; then # Avoid using secure API functions for compatibility with msvcrt.dll on Windows XP.
 			sed -i "s/ --enable-secure-api//" $zeranoe_script_name
@@ -534,25 +527,25 @@ install_cross_compiler() {
 		# shellcheck disable=SC2086
 		CFLAGS='-O2 -pipe' CXXFLAGS='-O2 -pipe' nice ./$zeranoe_script_name $zeranoe_script_options i686 || exit 1 # i586 option needs work to implement
 		if [[ ! -f ../$win32_gcc ]]; then
-			echo -e "Failure building 32 bit gcc? Recommend nuke prebuilt (rm -rf prebuilt) and start over..." 1>>"$LOG_FILE"2 >&1
+			echo -e "Failure building 32 bit gcc? Recommend nuke prebuilt (rm -rf prebuilt) and start over..." 1>>"$LOG_FILE" 2>&1
 			exit 1
 		fi
 		if [[ ! -f ../cross_compilers/mingw-w64-i686/i686-w64-mingw32/lib/libmingwex.a ]]; then
-			echo -e "failure building mingwex? 32 bit" 1>>"$LOG_FILE"2 >&1
+			echo -e "failure building mingwex? 32 bit" 1>>"$LOG_FILE" 2>&1
 			exit 1
 		fi
 	fi
 	if [[ ($compiler_flavors == "win64" || $compiler_flavors == "multi") && ! -f ../$win64_gcc ]]; then
-		echo -e "Building win64 x86_64 cross compiler..." 1>>"$LOG_FILE"2 >&1
+		echo -e "Building win64 x86_64 cross compiler..." 1>>"$LOG_FILE" 2>&1
 		download_gcc_build_script $zeranoe_script_name
 		# shellcheck disable=SC2086
 		CFLAGS='-O3 -pipe' CXXFLAGS='-O3 -pipe' nice ./$zeranoe_script_name $zeranoe_script_options x86_64 || exit 1
 		if [[ ! -f ../$win64_gcc ]]; then
-			echo -e "Failure building 64 bit gcc? Recommend nuke prebuilt (rm -rf prebuilt) and start over..." 1>>"$LOG_FILE"2 >&1
+			echo -e "Failure building 64 bit gcc? Recommend nuke prebuilt (rm -rf prebuilt) and start over..." 1>>"$LOG_FILE" 2>&1
 			exit 1
 		fi
 		if [[ ! -f ../cross_compilers/mingw-w64-x86_64/x86_64-w64-mingw32/lib/libmingwex.a ]]; then
-			echo -e "failure building mingwex? 64 bit" 1>>"$LOG_FILE"2 >&1
+			echo -e "failure building mingwex? 64 bit" 1>>"$LOG_FILE" 2>&1
 			exit 1
 		fi
 	fi
@@ -596,18 +589,18 @@ check_builds() {
 		if [[ $static_build_exists == 0 || "$BUILD_FORCE" -eq 1 ]]; then
 			echo -e "INFO: Static build does not exist or force requested. (Re-)configuring Ffmpeg for static build." | tee -a "$LOG_FILE"
 			# shellcheck disable=SC2129
-			remove_path -rf "${ffmpeg_source_dir}/build_$(get_build_type)" 1>>"$LOG_FILE"2 >&1
-			remove_path -f "${ffmpeg_source_dir}/already_"* 1>>"$LOG_FILE"2 >&1
-			configure_ffmpeg 1>>"$LOG_FILE"2 >&1
+			remove_path -rf "${ffmpeg_source_dir}/build_$(get_build_type)" 1>>"$LOG_FILE" 2>&1
+			remove_path -f "${ffmpeg_source_dir}/already_"* 1>>"$LOG_FILE" 2>&1
+			configure_ffmpeg 1>>"$LOG_FILE" 2>&1
 		fi
 	elif [[ ${build_ffmpeg_shared,,} =~ ^(y|yes|1|true|on)$ ]]; then
 		echo -e "INFO: Shared build requested..." | tee -a "$LOG_FILE"
 		if [[ $shared_build_exists == 0 || "$BUILD_FORCE" -eq 1 ]]; then
 			echo -e "INFO: Shared build does not exist or force requested. (Re-)configuring Ffmpeg for shared build." | tee -a "$LOG_FILE"
 			# shellcheck disable=SC2129
-			remove_path -rf "${ffmpeg_source_dir}/build_$(get_build_type)" 1>>"$LOG_FILE"2 >&1
-			remove_path -f "${ffmpeg_source_dir}/already_"* 1>>"$LOG_FILE"2 >&1
-			configure_ffmpeg 1>>"$LOG_FILE"2 >&1
+			remove_path -rf "${ffmpeg_source_dir}/build_$(get_build_type)" 1>>"$LOG_FILE" 2>&1
+			remove_path -f "${ffmpeg_source_dir}/already_"* 1>>"$LOG_FILE" 2>&1
+			configure_ffmpeg 1>>"$LOG_FILE" 2>&1
 		fi
 	fi
 }
@@ -621,7 +614,7 @@ install_ffmpeg() {
 
 	create_dir "$install_prefix"
 
-	do_make_and_make_install "" "" "$(get_build_type)" 1>>"$LOG_FILE"2 >&1
+	do_make_and_make_install "" "" "$(get_build_type)" 1>>"$LOG_FILE" 2>&1
 
 	echo -e "INFO: Moving all binaries" | tee -a "$LOG_FILE"
 
@@ -692,7 +685,7 @@ install_ffmpeg_pkg() {
 		overwrite_file "${ffmpeg_source_dir}"/libavutil/aarch64/timer.h "${install_prefix}"/include/libavutil/aarch64/timer.h
 		overwrite_file "${ffmpeg_source_dir}"/compat/w32pthreads.h "${install_prefix}"/include/libavutil/compat/w32pthreads.h
 		overwrite_file "${ffmpeg_source_dir}"/libavutil/wchar_filename.h "${install_prefix}"/include/libavutil/wchar_filename.h
-	} 1>>"$LOG_FILE"2 >&1
+	} 1>>"$LOG_FILE" 2>&1
 
 	echo -e "INFO: Done installing ffmpeg pkg-config\n" | tee -a "$LOG_FILE"
 }
@@ -700,33 +693,11 @@ install_ffmpeg_pkg() {
 # shellcheck disable=SC2120
 configure_ffmpeg() {
 	echo -e "INFO: Configuring ffmpeg\n" | tee -a "$LOG_FILE"
-
+	
 	change_dir "$ffmpeg_source_dir" 1>>"$LOG_FILE" 2>&1 || return 1
 
 	if [[ $BUILD_FORCE == "1" ]]; then
 		remove_path -f "${ffmpeg_source_dir}/already_configured_$(get_build_type)"*
-	fi
-
-	# SET DEBUG OPTIONS
-	if [[ -z ${FFMPEG_KIT_DEBUG} ]]; then
-		# SET LTO FLAGS
-		DEBUG_OPTIONS=" --disable-debug"
-	else
-		DEBUG_OPTIONS=" --enable-debug --disable-stripping"
-	fi
-	local extra_postpend_configure_options=$2
-
-	local postpend_configure_opts=""
-
-	# can't mix and match --enable-static --enable-shared unfortunately, or the final executable seems to just use shared if the're both present
-	if [[ ${build_ffmpeg_shared,,} =~ ^(y|yes|1|true|on)$ ]]; then
-		postpend_configure_opts="--enable-shared --disable-static --prefix=${install_prefix}" # I guess this doesn't have to be at the end...
-	else
-		postpend_configure_opts="--enable-static --disable-shared --prefix=${install_prefix}"
-	fi
-
-	if [[ $ffmpeg_git_checkout_version == *"n4.4"* ]] || [[ $ffmpeg_git_checkout_version == *"n4.3"* ]] || [[ $ffmpeg_git_checkout_version == *"n4.2"* ]]; then
-		postpend_configure_opts="${postpend_configure_opts} --disable-libdav1d " # dav1d has diverged since so isn't compat with older ffmpegs
 	fi
 
 	change_dir "$ffmpeg_source_dir" || exit
@@ -737,193 +708,100 @@ configure_ffmpeg() {
 		local arch=amd64
 	fi
 
-	local init_options="--pkg-config=pkg-config"
-	init_options+=" --pkg-config-flags=--static"
+	local postpend_configure_opts=""
+	local init_options=""
+
+	init_options+=" --pkg-config=pkg-config"
 	init_options+=" --enable-version3"
-	init_options+=" --disable-debug"
 	init_options+=" --arch=$arch"
-	init_options+=" --target-os=mingw32"
+	init_options+=" --target-os=$compiler_flavors"
 	init_options+=" --cross-prefix=$cross_prefix"
+	init_options+=" --prefix=$install_prefix"
+	init_options+=" --extra-cflags=-DLIBTWOLAME_STATIC"
+	init_options+=" --extra-cflags=-DMODPLUG_STATIC"
+	init_options+=" --extra-cflags=-DCACA_STATIC"
+	init_options+=" --extra-cflags=-DWIN32_LEAN_AND_MEAN"
+	init_options+=" --extra-cflags=-DWIN32_ANSI_API"
+	init_options+=" --extra-cflags=-DHAVE_WCHAR_FILENAME_H=0"
+	init_options+=" --extra-ldflags=-lole32"
+	init_options+=" --extra-ldflags=-lshlwapi"
+	init_options+=" --extra-ldflags=-static-libgcc"
+	init_options+=" --extra-ldflags=-static-libstdc++"
+	init_options+=" --extra-cflags=-mtune=generic"
+	init_options+=" --extra-cflags=-O3"
+	init_options+=" --extra-cflags=-pipe"
+	init_options+=" --enable-pic"
+	init_options+=" --enable-static"
+	init_options+=" --enable-swscale"
+	init_options+=" --enable-optimizations"
+	init_options+=" --enable-small"
+	init_options+=" --enable-cross-compile"
+	init_options+=" --enable-w32threads"
 
-	unset PKG_CONFIG_LIBDIR # just use locally packages for all the xcb stuff for now, you need to install them locally first...
-	init_options+=" --enable-libv4l2"
-	init_options+=" --enable-libxcb"
-	init_options+=" --enable-libxcb-shm"
-	init_options+=" --enable-libxcb-xfixes"
-	init_options+=" --enable-libxcb-shape "
-
-	if [[ $(uname) =~ 5.1 ]]; then
-		init_options+=" --disable-schannel"
-		# Fix WinXP incompatibility by disabling Microsoft's Secure Channel, because Windows XP doesn't support TLS 1.1 and 1.2, but with GnuTLS or OpenSSL it does.  XP compat!
+	# can't mix and match --enable-static --enable-shared unfortunately, or the final executable seems to just use shared if the're both present
+	if [[ ${build_ffmpeg_shared,,} =~ ^(y|yes|1|true|on)$ ]]; then
+		postpend_configure_opts=" --enable-shared --disable-static" # I guess this doesn't have to be at the end...
+	else
+		postpend_configure_opts=" --enable-static --disable-shared"
+		init_options+=" --pkg-config-flags=--static"
 	fi
-	local config_options=" $init_options"
-	config_options+=" --disable-alsa"
-	config_options+=" --disable-appkit"
-	config_options+=" --disable-audiotoolbox"
-	config_options+=" --disable-autodetect"
+
+	local config_options=""
 	config_options+=" --disable-doc"
-	config_options+=" --disable-gmp"
-	config_options+=" --disable-gnutls"
 	config_options+=" --disable-htmlpages"
-	config_options+=" --disable-iconv"
-	config_options+=" --disable-libdav1d"
-	config_options+=" --disable-libfribidi"
-	config_options+=" --disable-libilbc"
-	config_options+=" --disable-libkvazaar"
-	config_options+=" --disable-libopencore-amrnb"
-	config_options+=" --disable-libopencore-amrwb"
-	config_options+=" --disable-libopenh264"
-	config_options+=" --disable-librubberband"
-	config_options+=" --disable-libshine"
-	config_options+=" --disable-libsnappy"
-	config_options+=" --disable-libsoxr"
-	config_options+=" --disable-libspeex"
-	config_options+=" --disable-libsrt"
-	config_options+=" --disable-libtesseract"
-	config_options+=" --disable-libtheora"
-	config_options+=" --disable-libtwolame"
-	config_options+=" --disable-libvidstab"
-	config_options+=" --disable-libvo-amrwbenc"
-	config_options+=" --disable-libxml2"
-	config_options+=" --disable-libxvid"
-	config_options+=" --disable-libzimg"
-	config_options+=" --disable-manpages"
-	config_options+=" --disable-neon-clobber-test"
+  config_options+=" --disable-manpages"
+  config_options+=" --disable-podpages"
+  config_options+=" --disable-txtpages"
+	config_options+=" --disable-schannel"
 	config_options+=" --disable-openssl"
-	config_options+=" --disable-podpages"
-	config_options+=" --disable-pthreads"
-	config_options+=" --disable-sdl2"
-	config_options+=" --disable-securetransport"
-	config_options+=" --disable-sndio"
-	config_options+=" --disable-txtpages"
-	config_options+=" --disable-v4l2-m2m"
-	config_options+=" --disable-vaapi"
-	config_options+=" --disable-vdpau"
-	config_options+=" --disable-videotoolbox"
-	config_options+=" --disable-xlib"
-	config_options+=" --disable-xmm-clobber-test"
-	config_options+=" --enable-bzlib"
-	config_options+=" --enable-cross-compile"
-	config_options+=" --enable-cuda"
-	config_options+=" --enable-cuvid"
-	config_options+=" --enable-ffnvcodec"
-	config_options+=" --enable-filter=drawtext"
-	config_options+=" --enable-libass"
-	config_options+=" --enable-libfontconfig"
-	config_options+=" --enable-libfreetype"
-	config_options+=" --enable-libmp3lame"
-	config_options+=" --enable-libopus"
-	config_options+=" --enable-libvorbis"
-	config_options+=" --enable-libvpx"
-	config_options+=" --enable-libwebp"
-	config_options+=" --enable-libx264"
-	config_options+=" --enable-nvdec"
-	config_options+=" --enable-nvenc"
-	config_options+=" --enable-optimizations"
-	config_options+=" --enable-pic"
-	config_options+=" --enable-small"
-	config_options+=" --enable-swscale"
-	config_options+=" --enable-w32threads"
-	config_options+=" --enable-zlib"
-	#config_options+=" --disable-indevs"
-	#config_options+=" --disable-outdevs"
-	config_options+=${SIZE_OPTIONS}
-	config_options+=${DEBUG_OPTIONS}
+	config_options+=" --disable-outdev=fbdev"
+  config_options+=" --disable-indev=fbdev"
+  config_options+=" --disable-neon-clobber-test"
+  config_options+=" --disable-sndio"
+  config_options+=" --disable-securetransport"
+  config_options+=" --disable-xlib"
+  config_options+=" --disable-cuda"
+  config_options+=" --disable-cuvid"
+  config_options+=" --disable-nvenc"
+  config_options+=" --disable-vaapi"
+  config_options+=" --disable-vdpau"
+  config_options+=" --disable-videotoolbox"
+  config_options+=" --disable-audiotoolbox"
+  config_options+=" --disable-appkit"
 
 	if [[ $build_svt_hevc = y ]]; then
 		# SVT-HEVC patches and enable
-		if [[ $ffmpeg_git_checkout_version == *"n4.4"* ]] || [[ $ffmpeg_git_checkout_version == *"n4.3"* ]] || [[ $ffmpeg_git_checkout_version == *"n4.2"* ]]; then
-			git apply "$work_dir/SVT-HEVC_git/ffmpeg_plugin/n4.4-0001-lavc-svt_hevc-add-libsvt-hevc-encoder-wrapper.patch"
-			git apply "$WINPATCHDIR/SVT-HEVC-0002-doc-Add-libsvt_hevc-encoder-docs.patch"
-		elif [[ $ffmpeg_git_checkout_version == *"n4.1"* ]] || [[ $ffmpeg_git_checkout_version == *"n3"* ]] || [[ $ffmpeg_git_checkout_version == *"n2"* ]]; then
-			: # too old...
-		else
-			git apply "$work_dir/SVT-HEVC_git/ffmpeg_plugin/master-0001-lavc-svt_hevc-add-libsvt-hevc-encoder-wrapper.patch"
-		fi
+		git apply "$src_dir/SVT-HEVC_git/ffmpeg_plugin/master-0001-lavc-svt_hevc-add-libsvt-hevc-encoder-wrapper.patch"
 		config_options+=" --enable-libsvthevc"
 	fi
 
-	if [[ $build_svt_vp9 = y ]]; then
+	if [[ $build_svt_vp9 == "y" ]]; then
 		# SVT-VP9 patches and enable
-		if [[ $ffmpeg_git_checkout_version == *"n4.3.1"* ]]; then
-			git apply "$work_dir/SVT-VP9_git/ffmpeg_plugin/n4.3.1-0001-Add-ability-for-ffmpeg-to-run-svt-vp9.patch"
-		elif [[ $ffmpeg_git_checkout_version == *"n4.2.3"* ]]; then
-			git apply "$work_dir/SVT-VP9_git/ffmpeg_plugin/n4.2.3-0001-Add-ability-for-ffmpeg-to-run-svt-vp9.patch"
-		elif [[ $ffmpeg_git_checkout_version == *"n4.2.2"* ]]; then
-			git apply "$work_dir/SVT-VP9_git/ffmpeg_plugin/0001-Add-ability-for-ffmpeg-to-run-svt-vp9.patch"
-		else
-			git apply "$work_dir/SVT-VP9_git/ffmpeg_plugin/master-0001-Add-ability-for-ffmpeg-to-run-svt-vp9.patch"
-		fi
-		config_options+=" --enable-libsvtvp9"
+		git apply "$src_dir/SVT-VP9_git/ffmpeg_plugin/master-0001-Add-ability-for-ffmpeg-to-run-svt-vp9.patch"
 	fi
-	local enable_libsvtav1=" --enable-libsvtav1"
 	# SVT-AV1
-	if [[ $ffmpeg_git_checkout_version != *"n6"* ]] && [[ $ffmpeg_git_checkout_version != *"n5"* ]] && [[ $ffmpeg_git_checkout_version != *"n4"* ]] && [[ $ffmpeg_git_checkout_version != *"n3"* ]] && [[ $ffmpeg_git_checkout_version != *"n2"* ]]; then
-		git apply "$work_dir/SVT-AV1_git/.gitlab/workflows/linux/ffmpeg_n7_fix.patch" >/dev/null 2>&1
-		patch_exists=$?
-		if [[ $patch_exists != 0 ]]; then
-			enable_libsvtav1=" --disable-libsvtav1"
-		fi
-	fi
-	config_options+=$enable_libsvtav1
-
-	config_options+=" --enable-libaom"
-
-	# ==================== ORIGINAL EXTRAS (conditionally kept) ====================
-
-	if [[ $build_amd_amf = n ]]; then
-		config_options+=" --disable-amf"
-	else
-		config_options+=" --enable-amf"
+	git apply "$src_dir/SVT-AV1_git/.gitlab/workflows/linux/ffmpeg_n7_fix.patch" >/dev/null 2>&1
+	patch_exists=$?
+	if [[ $patch_exists != 0 ]]; then
+		config_options+=" --disable-libsvtav1"
 	fi
 
-	config_options+=" --enable-libvpl"
-
-	if [[ $ffmpeg_git_checkout_version != *"n6.0"* ]] && [[ $ffmpeg_git_checkout_version != *"n5"* ]] && [[ $ffmpeg_git_checkout_version != *"n4"* ]] && [[ $ffmpeg_git_checkout_version != *"n3"* ]] && [[ $ffmpeg_git_checkout_version != *"n2"* ]]; then
-		config_options+=" --enable-libaribcaption"
-	fi
-
-	if [[ $GPL_ENABLED == 'y' ]] || [[ $GPL_ENABLED == 'yes' ]]; then
-		config_options+=" --enable-gpl --enable-frei0r --enable-librubberband --enable-libvidstab --enable-libx265 --enable-avisynth"
-		config_options+=" --enable-libxvid --enable-libdavs2"
+	if [[ ${GPL_ENABLED,,} =~ ^(y|yes|1|true|on)$ ]]; then
+		config_options+=" --enable-gpl --enable-frei0r --enable-librubberband --enable-libvidstab --enable-libx265 --enable-avisynth --enable-libxvid --enable-libdavs2"
 		if [[ $host_target != 'i686-w64-mingw32' ]]; then
 			config_options+=" --enable-libxavs2"
 		fi
-		config_options+=" --enable-libxavs"
 	fi
 
-	# Extra libs and flags
-	config_options+=" --extra-libs=-lz"
-	config_options+=" --extra-libs=-lpng"
-	config_options+=" --extra-libs=-lm"
-	config_options+=" --extra-libs=-lfreetype"
-	config_options+=" --extra-libs=-lshlwapi"
-	config_options+=" --extra-libs=-lmpg123"
-	config_options+=" --extra-libs=-lpthread"
-	config_options+=" --extra-cflags=-DLIBTWOLAME_STATIC --extra-cflags=-DMODPLUG_STATIC --extra-cflags=-DCACA_STATIC"
-	config_options+=" --extra-cflags=-DWIN32_ANSI_API --extra-cflags=-DHAVE_WCHAR_FILENAME_H=0"
-	config_options+=" --extra-ldflags=-lole32 --extra-ldflags=-lshlwapi"
-	config_options+=" --extra-ldflags=-static-libgcc --extra-ldflags=-static-libstdc++"
-	for i in $CFLAGS; do
-		config_options+=" --extra-cflags=$i"
-	done
-
-	config_options+=" $postpend_configure_opts"
-
-	# if [[ "$non_free" = "y" ]]; then
-	#   config_options+=" --enable-nonfree --enable-libfdk-aac"
-	#   config_options+=" --enable-audiotoolbox --disable-outdev=audiotoolbox --extra-libs=-lAudioToolboxWrapper" && apply_patch file://"$WINPATCHDIR"/AudioToolBox.patch -p1
-	#   config_options+=" --enable-decklink"
-	# fi
-
-	do_debug_build=n
-	if [[ "$do_debug_build" = "y" ]]; then
-		config_options+=" --disable-optimizations --extra-cflags=-Og --extra-cflags=-fno-omit-frame-pointer --enable-debug=3 --extra-cflags=-fno-inline $postpend_configure_opts"
-		config_options+=" --disable-libgme"
+	if [[ "$do_debug_build" == "y" || -n $FFMPEG_KIT_DEBUG ]]; then
+		postpend_configure_opts+=" --disable-stripping --disable-optimizations --extra-cflags=-Og --extra-cflags=-fno-omit-frame-pointer --enable-debug=3 --extra-cflags=-fno-inline"
+		postpend_configure_opts+=" --disable-libgme"
+	else
+		postpend_configure_opts+=" --disable-debug"
 	fi
-	config_options+=" $extra_postpend_configure_options"
-
-	do_configure "$config_options" "./configure" "$(get_build_type)" 1>>"$LOG_FILE" 2>&1
+	export PKG_CONFIG_PATH="$mingw_w64_x86_64_prefix/lib/pkgconfig"
+	export PATH="$mingw_bin_path:$original_path"
+	do_configure "$init_options$config_options$postpend_configure_opts" "./configure" "$(get_build_type)" 1>>"$LOG_FILE" 2>&1
 
 	echo -e "INFO: Done configuering ffmpeg\n" | tee -a "$LOG_FILE"
 }
@@ -955,7 +833,7 @@ configure_ffmpeg_kit() {
 	if [ ! -f "$touch_name" ]; then
 		remove_path -f "${BASEDIR}/windows/already_autoreconf_${TYPE_POSTFIX}"*
 		change_dir "${ffmpeg_kit_src_dir}"
-		autoreconf_library "ffmpeg-kit" 1>>"$LOG_FILE"2 >&1 || return 1
+		autoreconf_library "ffmpeg-kit" 1>>"$LOG_FILE" 2>&1 || return 1
 		touch -- "$touch_name"
 		local BUILD_DATE="-DFFMPEG_KIT_BUILD_DATE=$(date +%Y%m%d 2>>"${BASEDIR}"/build.log)"
 		export CFLAGS="${local_cflags} ${BUILD_DATE}"
@@ -973,7 +851,7 @@ configure_ffmpeg_kit() {
 		config_options+=" --disable-static"
 	fi
 	change_dir "${ffmpeg_kit_src_dir}"
-	do_configure "${config_options}" "./configure" "${TYPE_POSTFIX}" 1>>"$LOG_FILE"2 >&1 || return 1
+	do_configure "${config_options}" "./configure" "${TYPE_POSTFIX}" 1>>"$LOG_FILE" 2>&1 || return 1
 
 	echo -e "INFO: Done configuring ffmpeg kit\n" | tee -a "$LOG_FILE"
 }
@@ -1010,7 +888,7 @@ install_ffmpeg_kit() {
 	change_dir "${ffmpeg_kit_src_dir}"
 	do_make_and_make_install "" "" "$(get_build_type)" 1>>"$LOG_FILE" 2>&1
 
-	create_ffmpegkit_package_config "$(get_ffmpeg_kit_version)" 1>>"$LOG_FILE"2 >&1 || return 1
+	create_ffmpegkit_package_config "$(get_ffmpeg_kit_version)" 1>>"$LOG_FILE" 2>&1 || return 1
 
 	echo -e "INFO: Done installing ffmpeg kit to ${ffmpeg_kit_install}\n" | tee -a "$LOG_FILE"
 }
@@ -1057,7 +935,7 @@ create_windows_bundle() {
 			# COPY BINARIES
 			copy_path "${ffmpeg_kit_install}/bin/"* "${FFMPEG_KIT_BUNDLE_BIN_DIRECTORY}" "-r -P"
 			copy_path "${install_prefix}/bin/"* "${FFMPEG_KIT_BUNDLE_BIN_DIRECTORY}" "-r -P"
-		} 1>>"$LOG_FILE"2 >&1
+		} 1>>"$LOG_FILE" 2>&1
 
 		install_pkg_config_file "libavformat.pc"
 		install_pkg_config_file "libswresample.pc"
