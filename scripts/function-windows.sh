@@ -149,8 +149,7 @@ setup_build_environment() {
 	fi
 	FFMPEG_KIT_BUILD_TYPE=windows
 	export FFMPEG_KIT_BUILD_TYPE
-	echo -e
-	echo -e "************** Setting up environment for $compiler_flavors build... **************"
+	echo -e "\n************** Setting up environment for $compiler_flavors build... **************"
 	if [[ $compiler_flavors == "win32" ]]; then
 		export ARCH=$(get_arch_name "$(from_arch_name "$compiler_flavors")")
 		export FULL_ARCH="i686"
@@ -179,8 +178,7 @@ setup_build_environment() {
 		export compiler_flags="CC=${cross_prefix}gcc AR=${cross_prefix}ar PREFIX=$mingw_w64_x86_64_prefix RANLIB=${cross_prefix}ranlib LD=${cross_prefix}ld STRIP=${cross_prefix}strip CXX=${cross_prefix}g++"
 		export LIB_INSTALL_BASE=$work_dir
 	else
-		echo -e "Error: Unknown compiler flavor '$compiler_flavors'"
-		exit 1
+		exit_message 1 "Unknown compiler flavor '$compiler_flavors'"
 	fi
 	export make_prefix_options="--cc=${cross_prefix}gcc \
 --ar=$(realpath "${cross_prefix}"ar) \
@@ -194,7 +192,7 @@ setup_build_environment() {
 	export LIB_INSTALL_BASE="$work_dir"
 	export INSTALL_PKG_CONFIG_DIR="${work_dir}/pkgconfig"
 	export ffmpeg_source_dir="${src_dir}/ffmpeg"
-	export install_prefix="$ffmpeg_source_dir/build_$(get_build_type)" # install them to their a separate dir
+	export install_prefix="${work_dir}/ffmpeg_$(get_build_type)" # install them to their a separate dir
 	export ffmpeg_kit_install="${work_dir}/ffmpeg-kit_$(get_build_type)"
 	export ffmpeg_kit_bundle="${work_dir}/$(get_bundle_directory)"
 	export ffmpeg_kit_src_dir="${BASEDIR}/windows"
@@ -447,14 +445,12 @@ install_pkg_config_file() {
 
 	# DELETE OLD FILE
 	if ! remove_path -rf "$DESTINATION" 2>>"$LOG_FILE"; then
-		echo -e "failed\n\nSee $LOG_FILE for details\n"
-		exit 1
+		exit_message 1 "DEBUG: failed\n\nSee $LOG_FILE for details"
 	fi
 
 	# INSTALL THE NEW FILE
 	if ! copy_path "$SOURCE" "$DESTINATION" 2>>"$LOG_FILE"; then
-		echo -e "failed\n\nSee $LOG_FILE for details\n"
-		exit 1
+		exit_message 1 "DEBUG: failed\n\nSee $LOG_FILE for details"
 	fi
 
 	prepare_inline_sed
@@ -477,7 +473,7 @@ download_ffmpeg() {
 		desired_version="master"
 	fi
 
-	do_git_checkout "$ffmpeg_git_checkout" "$output_dir" "$desired_version" || exit 1
+	do_git_checkout "$ffmpeg_git_checkout" "$output_dir" "$desired_version" 1>>"$LOG_FILE" 2>&1 || exit_message 1 "could not git $ffmpeg_git_checkout $output_dir $desired_version"
 	ffmpeg_source_dir=$output_dir
 }
 
@@ -506,7 +502,6 @@ check_cross_compiler() {
 
 install_cross_compiler() {
 	echo -e "INFO: Building (or already built) MinGW-w64 cross-compiler(s)..." | tee -a "$LOG_FILE"
-	echo -e "$(date)" | tee -a "$LOG_FILE"
 	create_dir "$work_dir"/cross_compilers
 	change_dir "$work_dir"/cross_compilers
 
@@ -525,28 +520,24 @@ install_cross_compiler() {
 			sed -i "s/ --enable-secure-api//" $zeranoe_script_name
 		fi
 		# shellcheck disable=SC2086
-		CFLAGS='-O2 -pipe' CXXFLAGS='-O2 -pipe' nice ./$zeranoe_script_name $zeranoe_script_options i686 || exit 1 # i586 option needs work to implement
+		CFLAGS='-O2 -pipe' CXXFLAGS='-O2 -pipe' nice ./$zeranoe_script_name $zeranoe_script_options i686 || exit_message 1 "cannot set up i686 cross compiler script" # i686 option needs work to implement
 		if [[ ! -f ../$win32_gcc ]]; then
-			echo -e "Failure building 32 bit gcc? Recommend nuke prebuilt (rm -rf prebuilt) and start over..." 1>>"$LOG_FILE" 2>&1
-			exit 1
+			exit_message 1 "failure building 32 bit gcc? Recommend nuke prebuilt (rm -rf prebuilt) and start over..."
 		fi
 		if [[ ! -f ../cross_compilers/mingw-w64-i686/i686-w64-mingw32/lib/libmingwex.a ]]; then
-			echo -e "failure building mingwex? 32 bit" 1>>"$LOG_FILE" 2>&1
-			exit 1
+			exit_message 1 "failure building mingwex? 32 bit"
 		fi
 	fi
 	if [[ ($compiler_flavors == "win64" || $compiler_flavors == "multi") && ! -f ../$win64_gcc ]]; then
 		echo -e "Building win64 x86_64 cross compiler..." 1>>"$LOG_FILE" 2>&1
 		download_gcc_build_script $zeranoe_script_name
 		# shellcheck disable=SC2086
-		CFLAGS='-O3 -pipe' CXXFLAGS='-O3 -pipe' nice ./$zeranoe_script_name $zeranoe_script_options x86_64 || exit 1
+		CFLAGS='-O3 -pipe' CXXFLAGS='-O3 -pipe' nice ./$zeranoe_script_name $zeranoe_script_options x86_64 || exit_message 1 "could not update cross compiler script for x86_64"
 		if [[ ! -f ../$win64_gcc ]]; then
-			echo -e "Failure building 64 bit gcc? Recommend nuke prebuilt (rm -rf prebuilt) and start over..." 1>>"$LOG_FILE" 2>&1
-			exit 1
+			exit_message 1 "failure building 64 bit gcc? Recommend nuke prebuilt (rm -rf prebuilt) and start over..."
 		fi
 		if [[ ! -f ../cross_compilers/mingw-w64-x86_64/x86_64-w64-mingw32/lib/libmingwex.a ]]; then
-			echo -e "failure building mingwex? 64 bit" 1>>"$LOG_FILE" 2>&1
-			exit 1
+			exit_message 1 "failure building mingwex? 64 bit"
 		fi
 	fi
 
@@ -554,7 +545,6 @@ install_cross_compiler() {
 	reset_cflags
 	change_dir ..
 	echo -e "INFO: Done building (or already built) MinGW-w64 cross-compiler(s) successfully..." | tee -a "$LOG_FILE"
-	echo -e "$(date)" | tee -a "$LOG_FILE" # so they can see how long it took :)
 }
 
 check_builds() {
@@ -562,21 +552,23 @@ check_builds() {
 	static_build_exists=0
 
 	# Check shared build
-	echo -e "DEBUG: Checking $ffmpeg_source_dir/build_$(get_build_type)"
-	if [[ -d "${ffmpeg_source_dir}/build_$(get_build_type)" && -d "${ffmpeg_source_dir}/build_$(get_build_type)/bin" ]]; then
-		echo -e "DEBUG: Checking binaries in $ffmpeg_source_dir/build_$(get_build_type)/bin"
+	local build_dir="$work_dir/ffmpeg_shared" #install_prefix
+	echo -e "INFO: Checking $build_dir"
+	if [[ -d "$build_dir" && -d "$build_dir/bin" ]]; then
+		echo -e "INFO: Checking binaries in $build_dir/bin..."
 		check_binaries=0
-		if find "${ffmpeg_source_dir}/build_$(get_build_type)/bin" -maxdepth 1 -type f \( -name '*.a' -o -name '*.dll' -o -name '*.so' -o -name '*.dylib' -o -name '*.lib' -o -name '*.exe' \) -print -quit | grep -q .; then
+		if find "$build_dir/bin" -maxdepth 1 -type f \( -name '*.a' -o -name '*.dll' -o -name '*.so' -o -name '*.dylib' -o -name '*.lib' -o -name '*.exe' \) -print -quit | grep -q .; then
 			check_binaries=1
 		fi
 		[[ $check_binaries -eq 1 ]] && shared_build_exists=1
 	fi
-	echo -e "DEBUG: Checking $ffmpeg_source_dir/build_$(get_build_type)"
+	build_dir="$work_dir/ffmpeg_static" #install_prefix
+	echo -e "INFO: Checking $build_dir"
 	# Check static build
-	if [[ -d "${ffmpeg_source_dir}/build_$(get_build_type)" && -d "${ffmpeg_source_dir}/build_$(get_build_type)/bin" ]]; then
-		echo -e "DEBUG: Checking binaries in $ffmpeg_source_dir/build_$(get_build_type)/bin"
+	if [[ -d "$build_dir" && -d "$build_dir/bin" ]]; then
+		echo -e "INFO: Checking binaries in $build_dir/bin..."
 		check_binaries=0
-		if find "${ffmpeg_source_dir}/build_$(get_build_type)/bin" -maxdepth 1 -type f \( -name '*.a' -o -name '*.dll' -o -name '*.so' -o -name '*.dylib' -o -name '*.lib' -o -name '*.exe' \) -print -quit | grep -q .; then
+		if find "$build_dir/bin" -maxdepth 1 -type f \( -name '*.a' -o -name '*.dll' -o -name '*.so' -o -name '*.dylib' -o -name '*.lib' -o -name '*.exe' \) -print -quit | grep -q .; then
 			check_binaries=1
 		fi
 		[[ $check_binaries -eq 1 ]] && static_build_exists=1
@@ -587,34 +579,40 @@ check_builds() {
 	if [[ ${build_ffmpeg_static,,} =~ ^(y|yes|1|true|on)$ ]]; then
 		echo -e "INFO: Static build requested..." | tee -a "$LOG_FILE"
 		if [[ $static_build_exists == 0 || "$BUILD_FORCE" -eq 1 ]]; then
-			echo -e "INFO: Static build does not exist or force requested. (Re-)configuring Ffmpeg for static build." | tee -a "$LOG_FILE"
+			build_dir="$work_dir/ffmpeg_static" #install_prefix
+			echo -e "INFO: Static build does not exist or force requested. (Re-)configuring Ffmpeg for static build..." | tee -a "$LOG_FILE"
 			# shellcheck disable=SC2129
-			remove_path -rf "${ffmpeg_source_dir}/build_$(get_build_type)" 1>>"$LOG_FILE" 2>&1
+			remove_path -rf "$build_dir" 1>>"$LOG_FILE" 2>&1
 			remove_path -f "${ffmpeg_source_dir}/already_"* 1>>"$LOG_FILE" 2>&1
 			configure_ffmpeg 1>>"$LOG_FILE" 2>&1
+		else
+			echo -e "INFO: Static build already exists at $build_dir" | tee -a "$LOG_FILE"
 		fi
 	elif [[ ${build_ffmpeg_shared,,} =~ ^(y|yes|1|true|on)$ ]]; then
 		echo -e "INFO: Shared build requested..." | tee -a "$LOG_FILE"
 		if [[ $shared_build_exists == 0 || "$BUILD_FORCE" -eq 1 ]]; then
-			echo -e "INFO: Shared build does not exist or force requested. (Re-)configuring Ffmpeg for shared build." | tee -a "$LOG_FILE"
+			build_dir="$work_dir/ffmpeg_shared" #install_prefix
+			echo -e "INFO: Shared build does not exist or force requested. (Re-)configuring Ffmpeg for shared build..." | tee -a "$LOG_FILE"
 			# shellcheck disable=SC2129
-			remove_path -rf "${ffmpeg_source_dir}/build_$(get_build_type)" 1>>"$LOG_FILE" 2>&1
+			remove_path -rf "$build_dir" 1>>"$LOG_FILE" 2>&1
 			remove_path -f "${ffmpeg_source_dir}/already_"* 1>>"$LOG_FILE" 2>&1
 			configure_ffmpeg 1>>"$LOG_FILE" 2>&1
+		else
+			echo -e "INFO: Shared build already exists at $build_dir" | tee -a "$LOG_FILE"
 		fi
 	fi
 }
 
 install_ffmpeg() {
-	check_builds
-	echo -e "INFO: Installing ffmpeg if not installed\n" | tee -a "$LOG_FILE"
+	check_builds 1>>"$LOG_FILE" 2>&1
+	echo -e "INFO: Installing ffmpeg if not installed" | tee -a "$LOG_FILE"
 	change_dir "$ffmpeg_source_dir"
 
 	echo -e "INFO: Making Ffmpeg $(pwd)" | tee -a "$LOG_FILE"
 
 	create_dir "$install_prefix"
 
-	do_make_and_make_install "" "" "$(get_build_type)" 1>>"$LOG_FILE" 2>&1
+	do_make_and_make_install "" "" "$(get_build_type)"
 
 	echo -e "INFO: Moving all binaries" | tee -a "$LOG_FILE"
 
@@ -623,13 +621,13 @@ install_ffmpeg() {
     mv -- */*.a */*.dylib */*.lib */*.dll *.exe *.so "${install_prefix}/bin" 2>/dev/null || true
 	} >> "$LOG_FILE" 2>&1
 
-	echo -e "INFO: Done installing ffmpeg\n" | tee -a "$LOG_FILE"
+	echo -e "INFO: Done installing ffmpeg" | tee -a "$LOG_FILE"
 
 	install_ffmpeg_pkg
 }
 
 install_ffmpeg_pkg() {
-	echo -e "INFO: Checking deployment files...\n" | tee -a "$LOG_FILE"
+	echo -e "INFO: Checking deployment files..." | tee -a "$LOG_FILE"
 
 	required_files=(
 		"${install_prefix}/lib/pkgconfig/libavformat.pc"
@@ -642,9 +640,9 @@ install_ffmpeg_pkg() {
 
 	check_files_exist "false" "${required_files[@]}"
 
-	echo -e "INFO: Done checking deployment files.\n" | tee -a "$LOG_FILE"
+	echo -e "INFO: Done checking deployment files." | tee -a "$LOG_FILE"
 
-	echo -e "INFO: Installing ffmpeg pkg-config\n" | tee -a "$LOG_FILE"
+	echo -e "INFO: Installing ffmpeg pkg-config" | tee -a "$LOG_FILE"
 
 	create_dir "$INSTALL_PKG_CONFIG_DIR"
 
@@ -687,12 +685,12 @@ install_ffmpeg_pkg() {
 		overwrite_file "${ffmpeg_source_dir}"/libavutil/wchar_filename.h "${install_prefix}"/include/libavutil/wchar_filename.h
 	} 1>>"$LOG_FILE" 2>&1
 
-	echo -e "INFO: Done installing ffmpeg pkg-config\n" | tee -a "$LOG_FILE"
+	echo -e "INFO: Done installing ffmpeg pkg-config" | tee -a "$LOG_FILE"
 }
 
 # shellcheck disable=SC2120
 configure_ffmpeg() {
-	echo -e "INFO: Configuring ffmpeg\n" | tee -a "$LOG_FILE"
+	echo -e "INFO: Configuring ffmpeg" | tee -a "$LOG_FILE"
 	
 	change_dir "$ffmpeg_source_dir" 1>>"$LOG_FILE" 2>&1 || return 1
 
@@ -712,9 +710,11 @@ configure_ffmpeg() {
 	local init_options=""
 
 	init_options+=" --pkg-config=pkg-config"
+	init_options+=" --pkg-config-flags=--static"
 	init_options+=" --enable-version3"
 	init_options+=" --arch=$arch"
-	init_options+=" --target-os=$compiler_flavors"
+	#init_options+=" --target-os=$compiler_flavors"
+	init_options+=" --target-os=mingw32"
 	init_options+=" --cross-prefix=$cross_prefix"
 	init_options+=" --prefix=$install_prefix"
 	init_options+=" --extra-cflags=-DLIBTWOLAME_STATIC"
@@ -731,7 +731,6 @@ configure_ffmpeg() {
 	init_options+=" --extra-cflags=-O3"
 	init_options+=" --extra-cflags=-pipe"
 	init_options+=" --enable-pic"
-	init_options+=" --enable-static"
 	init_options+=" --enable-swscale"
 	init_options+=" --enable-optimizations"
 	init_options+=" --enable-small"
@@ -743,7 +742,6 @@ configure_ffmpeg() {
 		postpend_configure_opts=" --enable-shared --disable-static" # I guess this doesn't have to be at the end...
 	else
 		postpend_configure_opts=" --enable-static --disable-shared"
-		init_options+=" --pkg-config-flags=--static"
 	fi
 
 	local config_options=""
@@ -801,13 +799,13 @@ configure_ffmpeg() {
 	fi
 	export PKG_CONFIG_PATH="$mingw_w64_x86_64_prefix/lib/pkgconfig"
 	export PATH="$mingw_bin_path:$original_path"
-	do_configure "$init_options$config_options$postpend_configure_opts" "./configure" "$(get_build_type)" 1>>"$LOG_FILE" 2>&1
+	do_configure "$init_options$config_options$postpend_configure_opts" "./configure" "$(get_build_type)" || exit_message 1 "unable to configure ffmpeg. see $LOG_FILE for details."
 
-	echo -e "INFO: Done configuering ffmpeg\n" | tee -a "$LOG_FILE"
+	echo -e "INFO: Done configuering ffmpeg" | tee -a "$LOG_FILE"
 }
 
 configure_ffmpeg_kit() {
-	echo -e "INFO: Configuring ffmpeg kit\n" | tee -a "$LOG_FILE"
+	echo -e "INFO: Configuring ffmpeg kit" | tee -a "$LOG_FILE"
 	local TYPE_POSTFIX="$(get_build_type)"
 	local FFMPEG_KIT_VERSION=$(get_ffmpeg_kit_version)
 
@@ -827,14 +825,14 @@ configure_ffmpeg_kit() {
 	local local_cxxfalgs="${CXXFLAGS} -I${install_prefix}/include -L${install_prefix}/bin -L${install_prefix}/lib -I${ffmpeg_source_dir} -I${ffmpeg_source_dir}/compat"
 
 	change_dir "${ffmpeg_kit_src_dir}"
-	make distclean 2>/dev/null 1>/dev/null
+	make distclean 2>&1 | redirect_output
 
 	local touch_name=$(get_small_touchfile_name "already_autoreconf_${TYPE_POSTFIX}" "$FFMPEG_KIT_VERSION $local_cflags $local_cxxfalgs")
 	if [ ! -f "$touch_name" ]; then
 		remove_path -f "${BASEDIR}/windows/already_autoreconf_${TYPE_POSTFIX}"*
 		change_dir "${ffmpeg_kit_src_dir}"
 		autoreconf_library "ffmpeg-kit" 1>>"$LOG_FILE" 2>&1 || return 1
-		touch -- "$touch_name"
+		create_touch_file 0 "$touch_name"
 		local BUILD_DATE="-DFFMPEG_KIT_BUILD_DATE=$(date +%Y%m%d 2>>"${BASEDIR}"/build.log)"
 		export CFLAGS="${local_cflags} ${BUILD_DATE}"
 		export CXXFLAGS="${local_cxxfalgs} ${BUILD_DATE}"
@@ -851,9 +849,9 @@ configure_ffmpeg_kit() {
 		config_options+=" --disable-static"
 	fi
 	change_dir "${ffmpeg_kit_src_dir}"
-	do_configure "${config_options}" "./configure" "${TYPE_POSTFIX}" 1>>"$LOG_FILE" 2>&1 || return 1
+	do_configure "${config_options}" "./configure" "${TYPE_POSTFIX}" || exit_message 1 "unable to configure ffmpeg-kit. see $LOG_FILE for details."
 
-	echo -e "INFO: Done configuring ffmpeg kit\n" | tee -a "$LOG_FILE"
+	echo -e "INFO: Done configuring ffmpeg kit" | tee -a "$LOG_FILE"
 }
 
 create_ffmpegkit_package_config() {
@@ -883,14 +881,14 @@ EOF
 }
 
 install_ffmpeg_kit() {
-	echo -e "INFO: Installing ffmpeg kit to ${ffmpeg_kit_install}\n" | tee -a "$LOG_FILE"
+	echo -e "INFO: Installing ffmpeg kit to ${ffmpeg_kit_install}" | tee -a "$LOG_FILE"
 
 	change_dir "${ffmpeg_kit_src_dir}"
-	do_make_and_make_install "" "" "$(get_build_type)" 1>>"$LOG_FILE" 2>&1
+	do_make_and_make_install "" "" "$(get_build_type)" || exit_message 1 "unable to make ffmpeg-kit. see $LOG_FILE for details."
 
 	create_ffmpegkit_package_config "$(get_ffmpeg_kit_version)" 1>>"$LOG_FILE" 2>&1 || return 1
 
-	echo -e "INFO: Done installing ffmpeg kit to ${ffmpeg_kit_install}\n" | tee -a "$LOG_FILE"
+	echo -e "INFO: Done installing ffmpeg kit to ${ffmpeg_kit_install}" | tee -a "$LOG_FILE"
 }
 
 get_bundle_directory() {
@@ -903,7 +901,7 @@ get_bundle_directory() {
 }
 
 create_windows_bundle() {
-	echo -e "INFO: Creating bundle" 1>>"$LOG_FILE" 2>&1
+	echo -e "INFO: Creating bundle" | tee -a "$LOG_FILE"
 	local TYPE_POSTFIX="$(get_build_type)"
 	local FFMPEG_KIT_VERSION=$(get_ffmpeg_kit_version)
 
@@ -925,16 +923,16 @@ create_windows_bundle() {
 		create_dir "${FFMPEG_KIT_BUNDLE_PKG_CONFIG_DIRECTORY}"
 		{
 			# COPY HEADERS
-			copy_path "${ffmpeg_kit_install}/include/"* "${FFMPEG_KIT_BUNDLE_INCLUDE_DIRECTORY}" "-r -P"
-			copy_path "${install_prefix}/include/"* "${FFMPEG_KIT_BUNDLE_INCLUDE_DIRECTORY}" "-r -P"
+			cp -rP "${ffmpeg_kit_install}/include/"* "${FFMPEG_KIT_BUNDLE_INCLUDE_DIRECTORY}"
+			cp -rP "${install_prefix}/include/"* "${FFMPEG_KIT_BUNDLE_INCLUDE_DIRECTORY}"
 
 			# COPY LIBS
-			copy_path "${ffmpeg_kit_install}/lib/"* "${FFMPEG_KIT_BUNDLE_LIB_DIRECTORY}" "-r -P"
-			copy_path "${install_prefix}/lib/"* "${FFMPEG_KIT_BUNDLE_LIB_DIRECTORY}" "-r -P"
+			cp -rP "${ffmpeg_kit_install}/lib/"* "${FFMPEG_KIT_BUNDLE_LIB_DIRECTORY}"
+			cp -rP "${install_prefix}/lib/"* "${FFMPEG_KIT_BUNDLE_LIB_DIRECTORY}"
 
 			# COPY BINARIES
-			copy_path "${ffmpeg_kit_install}/bin/"* "${FFMPEG_KIT_BUNDLE_BIN_DIRECTORY}" "-r -P"
-			copy_path "${install_prefix}/bin/"* "${FFMPEG_KIT_BUNDLE_BIN_DIRECTORY}" "-r -P"
+			cp -rP "${ffmpeg_kit_install}/bin/"* "${FFMPEG_KIT_BUNDLE_BIN_DIRECTORY}"
+			cp -rP "${install_prefix}/bin/"* "${FFMPEG_KIT_BUNDLE_BIN_DIRECTORY}"
 		} 1>>"$LOG_FILE" 2>&1
 
 		install_pkg_config_file "libavformat.pc"
@@ -950,15 +948,15 @@ create_windows_bundle() {
 
 		create_dir "${LICENSE_BASEDIR}"
 
-		echo -e "INFO: Copying licenses...\n" | tee -a "$LOG_FILE"
-		bash "${SCRIPTDIR}/extract_licenses.sh" "${work_dir}" "${LICENSE_BASEDIR}" 1>>"$LOG_FILE" 2>&1
-		echo -e "INFO: Done copying licenses\n" | tee -a "$LOG_FILE"
+		echo -e "INFO: Copying licenses..." | tee -a "$LOG_FILE"
+		bash "${SCRIPTDIR}/extract_licenses.sh" "${src_dir}" "${LICENSE_BASEDIR}" | redirect_output
+		echo -e "INFO: Done copying licenses" | tee -a "$LOG_FILE"
 
 		copy_path "${BASEDIR}"/tools/source/SOURCE "${LICENSE_BASEDIR}/source.txt" 1>>"$LOG_FILE" 2>&1
 		copy_path "${BASEDIR}"/tools/license/LICENSE.GPLv3 "${LICENSE_BASEDIR}"/license.txt 1>>"${BASEDIR}"/build.log 2>&1
-		touch -- "$touch_name"
+		create_touch_file 0 "$touch_name"
 	fi
-	echo -e "INFO: Done creating bundle\n" | tee -a "$LOG_FILE"
+	echo -e "INFO: Done creating bundle" | tee -a "$LOG_FILE"
 }
 
 pick_clean_type() {
@@ -993,8 +991,7 @@ EOF
 	ffmpeg-kit) export clean_type="ffmpeg-kit" ;;
 	ffmpeg-kit-bundle) export clean_type="ffmpeg-kit-bundle" ;;
 	5)
-		echo -e "exiting"
-		exit 0
+		exit_message 0 "exiting"
 		;;
 	*)
 		echo -e 'Your choice was not valid, please try again.'
@@ -1013,14 +1010,14 @@ clean_ffmpeg_builds() {
 		clean_builds "win64"
 	else
 		clean_builds "$compiler_flavors"
-		exit 0
+		exit_message 0 "INFO: Done cleaning builds"
 	fi
 }
 
 clean_builds() {
 	local build_flavor=$1
 	if [[ -z $build_flavor ]]; then
-		exit 1
+		exit_message 1 "no build flavor provided"
 	fi
 	pick_compiler_flavors "$build_flavor"
 	setup_build_environment "$compiler_flavors"

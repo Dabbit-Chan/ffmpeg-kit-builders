@@ -1,27 +1,31 @@
 #!/bin/bash
 
-# shellcheck disable=SC2317
-# shellcheck disable=SC1091
-# shellcheck disable=SC2120
-# shellcheck disable=SC2035
-# shellcheck disable=SC2016
+# shellcheck disable=SC2317,SC2129,SC1091,SC2120,SC2035,SC2016
 
 #echo -e ${SCRIPTDIR}/source.sh
 #echo -e "${SCRIPTDIR}/variable.sh"
 
 source "${SCRIPTDIR}/source.sh"
 
-# 1. error_msg
-error_exit() {
-	local error_msg="$1"
+# 1. exit code
+# 2. message
+exit_message() {
+	local code=$1
 	shift 1
-
-	if [ "$error_msg" ]; then
-		printf "%s\n" "$error_msg" >&2
-	else
-		printf "an error occured\n" >&2
-	fi
+	local msg="$*"
+	
+	if [[ $code == 1 ]]; then
+		if [ "$msg" ]; then
+			echo -e "ERROR: $msg"
+		else
+			echo -e "ERROR: an error occured"
+		fi
 	exit 1
+	else
+		if [ "$msg" ]; then
+			echo -e "INFO: $msg"
+		fi
+	fi
 }
 
 # 1. info_msg
@@ -37,7 +41,7 @@ execute() {
 		error_msg="error"
 	fi
 	if [[ $no_exit != "true" ]]; then
-		"$@" >>"$LOG_FILE" 2>&1 || error_exit "$error_msg, check $LOG_FILE for details"
+		"$@" >>"$LOG_FILE" 2>&1 || exit_message 1 "$error_msg, check $LOG_FILE for details"
 	else
 		echo -e "${info_msg}" 1>>"$LOG_FILE" 2>&1
 		"$@" >>"$LOG_FILE" 2>&1
@@ -51,7 +55,7 @@ create_dir() {
 	echo -e "DEBUG: creating path ${path}" 1>>"$LOG_FILE" 2>&1
 
 	if [ -z "$path" ]; then
-		error_exit "ERROR: path argument is required"
+		exit_message 1 "ERROR: path argument is required"
 	fi
 
 	if [[ ! -e "$path" ]]; then
@@ -104,7 +108,7 @@ change_dir() {
 	local path="$1"
 	
 	if [ -z "$path" ]; then
-		error_exit "ERROR: path argument is required"
+		exit_message 1 "ERROR: path argument is required"
 	fi
 
 	if [[ -e "$path" ]]; then
@@ -128,7 +132,7 @@ copy_path() {
 	echo -e "DEBUG: copying from ${source_path} to ${destination_path}" 1>>"$LOG_FILE" 2>&1
 
 	if [ -z "$source_path" ] || [ -z "$destination_path" ]; then
-		error_exit "ERROR: both source and destination path arguments are required"
+		exit_message 1 "ERROR: both source and destination path arguments are required"
 	fi
 
 	if [ ! -e "$source_path" ]; then
@@ -191,7 +195,7 @@ check_files_exist() {
 			echo -e "INFO: ${#missing_files[@]} files are missing" 1>>"$LOG_FILE" 2>&1
 			return 0
 		else
-			error_exit "ERROR: ${#missing_files[@]} required files are missing: ${missing_files[*]}"
+			exit_message 1 "ERROR: ${#missing_files[@]} required files are missing: ${missing_files[*]}"
 		fi
 	else
 		echo -e "INFO: all ${#files[@]} files exist" 1>>"$LOG_FILE" 2>&1
@@ -2707,6 +2711,7 @@ check_missing_packages() {
 
 	if [[ ${#missing_packages[@]} -gt 0 ]]; then
 		clear
+		echo -e "DEBUG:"
 		echo -e "Could not find the following execs (svn is actually package subversion, makeinfo is actually package texinfo if you're missing them): ${missing_packages[*]}"
 		echo -e 'Install the missing packages before running this script.'
 		determine_distro
@@ -2769,7 +2774,7 @@ check_missing_packages() {
 			echo -e "for linux native compiler option: same as <your OS> above, also add libva-dev"
 			;;
 		esac
-		exit 1
+		exit_message 1
 	fi
 
 	export REQUIRED_CMAKE_VERSION="3.0.0"
@@ -2785,24 +2790,23 @@ check_missing_packages() {
 				export cmake_command="${cmake_binary}"
 				break
 			else
-				echo -e "your ${cmake_binary} version is too old ${cmake_version} wanted ${REQUIRED_CMAKE_VERSION}"
+				echo -e "ERROR: your ${cmake_binary} version is too old ${cmake_version} wanted ${REQUIRED_CMAKE_VERSION}"
 			fi
 		fi
 	done
 
 	# If cmake_command never got assigned then there where no versions found which where sufficient.
 	if [ -z "${cmake_command}" ]; then
-		echo -e "there where no appropriate versions of cmake found on your machine."
-		exit 1
+		exit_message 1 "there where no appropriate versions of cmake found on your machine."
 	else
 		# If cmake_command is set then either one of the cmake's is adequate.
 		if [[ $cmake_command != "cmake" ]]; then # don't echo -e if it's the normal default
-			echo -e "cmake binary for this build will be ${cmake_command}"
+			echo -e "DEBUG: cmake binary for this build will be ${cmake_command}"
 		fi
 	fi
 
 	if [[ ! -f /usr/include/zlib.h ]]; then
-		echo -e "warning: you may need to install zlib development headers first if you want to build mp4-box [on ubuntu: $ apt-get install zlib1g-dev] [on redhat/fedora distros: $ yum install zlib-devel]" # XXX do like configure does and attempt to compile and include zlib.h instead?
+		echo -e "WARNING: you may need to install zlib development headers first if you want to build mp4-box [on ubuntu: $ apt-get install zlib1g-dev] [on redhat/fedora distros: $ yum install zlib-devel]" # XXX do like configure does and attempt to compile and include zlib.h instead?
 		sleep 1
 	fi
 
@@ -2814,13 +2818,12 @@ check_missing_packages() {
 	local yasm_binary=yasm
 	local yasm_version="$("${yasm_binary}" --version | sed -e "s#${yasm_binary}##g" | head -n 1 | tr -dc '0-9.\n')"
 	if ! at_least_required_version "${REQUIRED_YASM_VERSION}" "${yasm_version}"; then
-		echo -e "your yasm version is too old $yasm_version wanted ${REQUIRED_YASM_VERSION}"
-		exit 1
+		exit_message 1 "your yasm version is too old $yasm_version wanted ${REQUIRED_YASM_VERSION}"
 	fi
 	# local meson_version=`meson --version`
 	# if ! at_least_required_version "0.60.0" "${meson_version}"; then
 	# echo -e "your meson version is too old $meson_version wanted 0.60.0"
-	# exit 1
+	# exit_message 1
 	# fi
 	# also check missing "setup" so it's early LOL
 
@@ -2833,7 +2836,7 @@ check_missing_packages() {
 			echo -e "windows WSL detected: you must first disable 'binfmt' by running this
       sudo bash -c 'echo -e 0 > /proc/sys/fs/binfmt_misc/WSLInterop'
       then try again"
-			#exit 1
+			#exit_message 1
 		fi
 		export MINIMUM_KERNEL_VERSION="4.19.128"
 		KERNVER=$(uname -a | awk -F'[ ]' '{ print $3 }' | awk -F- '{ print $1 }')
@@ -2845,7 +2848,7 @@ check_missing_packages() {
 		if [ "$(version "$KERNVER")" -lt "$(version "$MINIMUM_KERNEL_VERSION")" ]; then
 			echo -e "Windows Subsystem for Linux (WSL) detected - kernel not at minumum version required: $MINIMUM_KERNEL_VERSION
       Please update via windows update then try again"
-			#exit 1
+			#exit_message 1
 		fi
 		echo -e "for WSL ubuntu 20.04 you need to do an extra step https://github.com/rdp/ffmpeg-windows-build-helpers/issues/452"
 	fi
@@ -2876,8 +2879,8 @@ download_gcc_build_script() {
 	local zeranoe_script_name=$1
 	cp "$WINPATCHDIR"/"$zeranoe_script_name" "$WINPATCHDIR"/"$zeranoe_script_name".bak
 	cp "$WINPATCHDIR"/"$zeranoe_script_name" "$zeranoe_script_name"
-	#rm -f $WINPATCHDIR/$zeranoe_script_name || exit 1
-	#curl -4 https://raw.githubusercontent.com/Zeranoe/mingw-w64-build/refs/heads/master/mingw-w64-build -O --fail || exit 1
+	#rm -f $WINPATCHDIR/$zeranoe_script_name || exit_message 1
+	#curl -4 https://raw.githubusercontent.com/Zeranoe/mingw-w64-build/refs/heads/master/mingw-w64-build -O --fail || exit_message 1
 	chmod u+x "$zeranoe_script_name"
 }
 
@@ -2890,9 +2893,9 @@ do_svn_checkout() {
 	if [ ! -d "$to_dir" ]; then
 		echo -e "INFO: svn checking out to $to_dir"
 		if [[ -z "$desired_revision" ]]; then
-			svn checkout "$repo_url" "$to_dir".tmp --non-interactive --trust-server-cert || exit 1
+			svn checkout "$repo_url" "$to_dir".tmp --non-interactive --trust-server-cert || exit_message 1 "could not checkout $repo_url"
 		else
-			svn checkout -r "$desired_revision" "$repo_url" "$to_dir".tmp || exit 1
+			svn checkout -r "$desired_revision" "$repo_url" "$to_dir".tmp || exit_message 1 "could not checkout $desired_revision $repo_url"
 		fi
 		mv "$to_dir".tmp "$to_dir"
 	else
@@ -2981,13 +2984,13 @@ retry_git_or_die() { # originally from https://stackoverflow.com/a/76012343/3245
 		fi
 		#git clone --depth 1 -b "$desired_branch" "$repo_url" "$to_dir.tmp" --recurse-submodules --single-branch && break
 		# get here -> failure
-		[[ $i -eq $RETRIES_NO ]] && echo -e "DEBUG: Failed to execute git cmd $repo_url $to_dir after $RETRIES_NO retries" && exit 1
+		[[ $i -eq $RETRIES_NO ]] && exit_message 1 "DEBUG: Failed to execute git cmd $repo_url $to_dir after $RETRIES_NO retries"
 		echo -e "DEBUG: sleeping before retry git"
 		sleep ${RETRY_DELAY}
 	done
 	# prevent partial checkout confusion by renaming it only after success
 	#mv $to_dir.tmp $to_dir
-	echo -e "done git cloning branch $desired_branch to $to_dir"
+	echo -e "INFO: done git cloning branch $desired_branch to $to_dir"
 }
 
 do_git_checkout() {
@@ -3033,6 +3036,16 @@ git_hard_reset() {
 	fi
 }
 
+create_touch_file() {
+	local file_name=$1
+	local exit_code=$2
+	if [[ $exit_code != 1 ]]; then
+		touch "$file_name" || echo -e "DEBUG: unable to create touch file $file_name"
+	else
+		touch "$file_name" || exit_message "$exit_code" "unable to create touch file $file_name"
+	fi
+}
+
 get_small_touchfile_name() { # have to call with assignment like a=$(get_small...)
 	local beginning="$1"
 	local extra_stuff="$2"
@@ -3040,6 +3053,30 @@ get_small_touchfile_name() { # have to call with assignment like a=$(get_small..
 	touch_name=$(echo -e "$touch_name" | sed "s/ //g")                                                      # md5sum introduces spaces, remove them
 	echo -e "$touch_name"                                                                                   # bash cruddy return system LOL
 }
+
+redirect_output() {
+	local term_width="${COLUMNS:-80}"
+  local max_length=$((term_width > 10 ? term_width - 2 : 78))
+  while IFS= read -r line; do
+		if [[ "$line" == *$'\n'* ]]; then
+      IFS=$'\n' read -ra parts <<< "$line"
+      for part in "${parts[@]}"; do
+				if [ "${#part}" -gt "$max_length" ]; then
+        	part="${part:0:$max_length}…"
+      	fi
+        printf "\r\033[K%s" "$part"
+      done
+    else
+			part=$line
+			if [ "${#part}" -gt "$max_length" ]; then
+        part="${part:0:$max_length}…"
+      fi
+			printf "\r\033[K%s" "$part"
+		fi
+		echo "$line" 1>>"$LOG_FILE" 2>&1
+	done
+}
+
 # 1. configure_options
 # 2. configure_name
 # 3. touch_postfix
@@ -3059,9 +3096,9 @@ do_configure() {
 	fi
 	if [ ! -f "$touch_name" ]; then
 		# make uninstall # does weird things when run under ffmpeg src so disabled for now...
-		echo -e "INFO: configuring $english_name ($PWD) as $ PKG_CONFIG_PATH=$PKG_CONFIG_PATH PATH=$PATH $configure_name $configure_options" # say it now in case bootstrap fails etc.
-		echo -e "INFO: all touch files" "already_configured$touch_postfix*" touchname= "$touch_name"
-		echo -e "INFO: config options $configure_options $configure_name"
+		echo -e "INFO: configuring $english_name ($PWD) as $ PKG_CONFIG_PATH=$PKG_CONFIG_PATH PATH=$PATH $configure_name $configure_options" 1>>"$LOG_FILE" 2>&1 # say it now in case bootstrap fails etc.
+		echo -e "INFO: all touch files" "already_configured$touch_postfix*" touchname= "$touch_name" 1>>"$LOG_FILE" 2>&1
+		echo -e "INFO: config options $configure_options $configure_name" 1>>"$LOG_FILE" 2>&1
 		if [ -f bootstrap ]; then
 			./bootstrap # some need this to create ./configure :|
 		fi
@@ -3069,23 +3106,22 @@ do_configure() {
 			./bootstrap.sh
 		fi
 		if [[ ! -f $configure_name ]]; then
-			echo -e "INFO: running autoreconf to generate configure file for us..."
+			echo -e "INFO: running autoreconf to generate configure file for us..." 1>>"$LOG_FILE" 2>&1
 			autoreconf -fiv # a handful of them require this to create ./configure :|
 		fi
 		remove_path -f "$cur_dir2/already_"*    # reset
 		chmod u+x "$configure_name" # In non-windows environments, with devcontainers, the configuration file doesn't have execution permissions
-		echo -e "INFO: do_configure() PATH=$PATH\n PKG_CONFIG_PATH=$PKG_CONFIG_PATH nice running: \"$configure_name $configure_options\""
+		echo -e "INFO: do_configure() PATH=$PATH\n PKG_CONFIG_PATH=$PKG_CONFIG_PATH nice running: \"$configure_name $configure_options\"" 1>>"$LOG_FILE" 2>&1
 		# shellcheck disable=SC2086
-		nice -n 5 $configure_name $configure_options || {
-			echo -e "ERROR: failed configure $english_name"
-			exit 1
+		nice -n 5 $configure_name $configure_options 2>&1 | redirect_output || {
+			exit_message 1 "failed configure $english_name \n see $(find "$(pwd)" -name "config.log" -print)"
 		} # less nicey than make (since single thread, and what if you're running another ffmpeg nice build elsewhere?)
-		touch -- "$touch_name"
-		echo -e "INFO: doing preventative make clean"
-		echo -e "INFO: do_configure() nice running: \"make clean -j $(get_cpu_count)\""
-		nice make clean -j "$(get_cpu_count)" --silent # sometimes useful when files change, etc.
-	#else
-	#  echo -e "already configured $(basename $cur_dir2)"
+		create_touch_file 0 "$touch_name"
+		echo -e "INFO: doing preventative make clean" 1>>"$LOG_FILE" 2>&1
+		echo -e "INFO: do_configure() nice running: \"make clean -j $(get_cpu_count)\"" 1>>"$LOG_FILE" 2>&1
+		nice make clean -j "$(get_cpu_count)" --silent 2>&1 | redirect_output # sometimes useful when files change, etc.
+	else
+	 echo -e "DEBUG: already configured $(basename "$cur_dir2")" 1>>"$LOG_FILE" 2>&1
 	fi
 }
 # 1. extra_make_options
@@ -3101,19 +3137,17 @@ do_make() {
 		remove_path -f "$cur_dir2/already_ran_make$touch_postfix"*
 	fi
 	if [ ! -f "$touch_name" ]; then
-		echo -e
-		echo -e "Making $cur_dir2 as $ PATH=$PATH make $extra_make_options"
-		echo -e
+		echo -e "INFO: Making $cur_dir2 as $ PATH=$PATH make $extra_make_options" 1>>"$LOG_FILE" 2>&1
 		if [ ! -f configure ]; then
-			echo -e "INFO: do_make() PATH=$PATH\n nice running: \"make clean -j$(get_cpu_count)\""
-			nice make clean -j"$(get_cpu_count)" # just in case helpful if old junk left around and this is a 're make' and wasn't cleaned at reconfigure time
+			echo -e "INFO: do_make() PATH=$PATH\n nice running: \"make clean -j$(get_cpu_count)\"" 1>>"$LOG_FILE" 2>&1
+			nice make clean -j"$(get_cpu_count)" 2>&1 | redirect_output # just in case helpful if old junk left around and this is a 're make' and wasn't cleaned at reconfigure time
 		fi
-		echo -e "INFO: do_make() PATH=$PATH\n nice running: \"make $extra_make_options\""
+		echo -e "INFO: do_make() PATH=$PATH\n nice running: \"make $extra_make_options\"" 1>>"$LOG_FILE" 2>&1
 		# shellcheck disable=SC2086
-		nice make $extra_make_options || exit 1
-		touch "$touch_name" || exit 1 # only touch if the build was OK
+		nice make $extra_make_options 2>&1 | redirect_output || exit_message 1 "could not make with $extra_make_options"
+		create_touch_file 1 "$touch_name" # only touch if the build was OK
 	else
-		echo -e "Already made $(dirname "$cur_dir2") $(basename "$cur_dir2") ..."
+		echo -e "INFO: Already made $(dirname "$cur_dir2") $(basename "$cur_dir2") ..." 1>>"$LOG_FILE" 2>&1
 	fi
 }
 # 1. extra_make_options
@@ -3144,10 +3178,10 @@ do_make_install() {
 		remove_path -f "already_ran_make_install$touch_postfix"*
 	fi
 	if [ ! -f "$touch_name" ]; then
-		echo -e "INFO: do_make_install() PATH=$PATH\n nice running: \"make $make_install_options\""
+		echo -e "INFO: do_make_install() PATH=$PATH\n nice running: \"make $make_install_options\"" 1>>"$LOG_FILE" 2>&1
 		# shellcheck disable=SC2086
-		nice make $make_install_options || exit 1
-		touch "$touch_name" || exit 1
+		nice make $make_install_options 2>&1 | redirect_output || exit_message 1 "could not make with $make_install_options"
+		create_touch_file 1 "$touch_name"
 	fi
 }
 
@@ -3156,37 +3190,37 @@ check_cmake_cache() {
     local expected_source_dir="${2:-$(pwd)}"
     
     if [[ -f "$build_dir/CMakeCache.txt" ]]; then
-        echo "INFO: Checking CMake cache in $build_dir"
+        echo "INFO: Checking CMake cache in $build_dir" 1>>"$LOG_FILE" 2>&1
         
         # Get cached values
         local cache_build_dir=$(grep "^CMAKE_CACHEFILE_DIR:" "$build_dir/CMakeCache.txt" | cut -d'=' -f2- 2>/dev/null | xargs || echo "")
         local cache_source_dir=$(grep "^CMAKE_HOME_DIRECTORY:" "$build_dir/CMakeCache.txt" | cut -d'=' -f2- 2>/dev/null | xargs || echo "")
         
-        echo "INFO: Current build dir: $build_dir"
-        echo "INFO: Cached build dir: $cache_build_dir"
-        echo "INFO: Expected source dir: $expected_source_dir" 
-        echo "INFO: Cached source dir: $cache_source_dir"
+        echo "INFO: Current build dir: $build_dir" 1>>"$LOG_FILE" 2>&1
+        echo "INFO: Cached build dir: $cache_build_dir" 1>>"$LOG_FILE" 2>&1
+        echo "INFO: Expected source dir: $expected_source_dir" 1>>"$LOG_FILE" 2>&1
+        echo "INFO: Cached source dir: $cache_source_dir" 1>>"$LOG_FILE" 2>&1
         
         # Check if build directory matches
         if [[ "$cache_build_dir" != "$build_dir" ]]; then
-            echo "WARNING: CMakeCache.txt build directory mismatch"
-            echo "  Cache expects: $cache_build_dir"
-            echo "  Current build: $build_dir"
+            echo "WARNING: CMakeCache.txt build directory mismatch" 1>>"$LOG_FILE" 2>&1
+            echo "  Cache expects: $cache_build_dir" 1>>"$LOG_FILE" 2>&1
+            echo "  Current build: $build_dir" 1>>"$LOG_FILE" 2>&1
             return 1
         fi
         
         # Check if source directory matches (most important check)
         if [[ "$cache_source_dir" != "$expected_source_dir" ]]; then
-            echo "WARNING: CMakeCache.txt source directory mismatch"
-            echo "  Cache expects: $cache_source_dir"
-            echo "  Current source: $expected_source_dir"
+            echo "WARNING: CMakeCache.txt source directory mismatch" 1>>"$LOG_FILE" 2>&1
+            echo "  Cache expects: $cache_source_dir" 1>>"$LOG_FILE" 2>&1
+            echo "  Current source: $expected_source_dir" 1>>"$LOG_FILE" 2>&1
             return 1
         fi
         
-        echo "INFO: CMake cache is valid"
+        echo "INFO: CMake cache is valid" 1>>"$LOG_FILE" 2>&1
         return 0
     else
-        echo "INFO: No CMakeCache.txt found in $build_dir"
+        echo "INFO: No CMakeCache.txt found in $build_dir" 1>>"$LOG_FILE" 2>&1
         return 0
     fi
 }
@@ -3196,17 +3230,17 @@ clean_cmake_cache() {
     local build_dir="${1:-./build}"
     local source_dir="${2:-$(pwd)}"
 		if ! check_cmake_cache "$source_dir" "$source_dir"; then
-        echo "DEBUG: Removing invalid CMake cache..."
+        echo "DEBUG: Removing invalid CMake cache..." 1>>"$LOG_FILE" 2>&1
         remove_path -f "$source_dir/CMakeCache.txt" 2>/dev/null || true
         remove_path -rf "$source_dir/CMakeFiles" 2>/dev/null || true
-        echo "DEBUG: CMake cache cleaned"
+        echo "DEBUG: CMake cache cleaned" 1>>"$LOG_FILE" 2>&1
 				return 0
     fi
     if ! check_cmake_cache "$build_dir" "$source_dir"; then
-        echo "DEBUG: Removing invalid CMake cache..."
+        echo "DEBUG: Removing invalid CMake cache..." 1>>"$LOG_FILE" 2>&1
         remove_path -f "$build_dir/CMakeCache.txt" 2>/dev/null || true
         remove_path -rf "$build_dir/CMakeFiles" 2>/dev/null || true
-        echo "DEBUG: CMake cache cleaned"
+        echo "DEBUG: CMake cache cleaned" 1>>"$LOG_FILE" 2>&1
 				return 0
     fi
 }
@@ -3236,13 +3270,13 @@ do_cmake() {
 		else
 			local config_options+="-DCMAKE_SYSTEM_PROCESSOR=AMD64"
 		fi
-		echo -e "doing cmake in $cur_dir2 with PATH=$PATH with extra_args=$extra_args like this:"
+		echo -e "doing cmake in $cur_dir2 with PATH=$PATH with extra_args=$extra_args like this:" 1>>"$LOG_FILE" 2>&1
 		# TODO: Allow shared library build
 		local command="${build_from_dir} -DCMAKE_MESSAGE_LOG_LEVEL=ERROR -DENABLE_STATIC_RUNTIME=1 -DBUILD_SHARED_LIBS=0 -DCMAKE_SYSTEM_NAME=Windows -DCMAKE_FIND_ROOT_PATH=$mingw_w64_x86_64_prefix -DCMAKE_FIND_ROOT_PATH_MODE_PROGRAM=NEVER -DCMAKE_FIND_ROOT_PATH_MODE_LIBRARY=ONLY -DCMAKE_FIND_ROOT_PATH_MODE_INCLUDE=ONLY -DCMAKE_RANLIB=${cross_prefix}ranlib -DCMAKE_C_COMPILER=${cross_prefix}gcc -DCMAKE_CXX_COMPILER=${cross_prefix}g++ -DCMAKE_RC_COMPILER=${cross_prefix}windres -DCMAKE_INSTALL_PREFIX=$mingw_w64_x86_64_prefix $config_options $extra_args"
-		echo -e "INFO: do_cmake() nice running: \"${cmake_command} -G\"Unix Makefiles\" $command\""
+		echo -e "INFO: do_cmake() nice running: \"${cmake_command} -G\"Unix Makefiles\" $command\"" 1>>"$LOG_FILE" 2>&1
 		# shellcheck disable=SC2086
-		nice -n 5  ${cmake_command} -G"Unix Makefiles" $command || exit 1
-		touch "$touch_name" || exit 1
+		nice -n 5  ${cmake_command} -G"Unix Makefiles" $command 2>&1 | redirect_output || exit_message 1 "could not run nice: \"${cmake_command} -G\"Unix Makefiles\" $command\""
+		create_touch_file 1 "$touch_name"
 	fi
 }
 # 1. source_dir
@@ -3266,7 +3300,7 @@ do_cmake_and_install() {
 }
 
 activate_meson() {
-	echo -e "INFO: Activating meson"
+	echo -e "INFO: Activating meson" 1>>"$LOG_FILE" 2>&1
 	change_dir "$src_dir" # requires python3-full
 	get_meson_cross_file
 	if [[ ! -e meson_git ]]; then
@@ -3311,7 +3345,7 @@ do_meson() {
 	fi
 	if [ ! -f "$touch_name" ]; then
 		if [ "$configure_noclean" != "noclean" ]; then
-			make clean --silent # just in case
+			make clean --silent 2>&1 | redirect_output # just in case
 		fi
 		remove_path -f already_* # reset
 		# if [[ -n "${configure_command[*]}" && -d "$(pwd)/build" ]]; then
@@ -3319,20 +3353,20 @@ do_meson() {
 		# 	"${configure_command[@]}" setup --wipe "$(pwd)/build"
 		# fi
 		if [[ -n "${configure_command[*]}" && -d "$(pwd)/build" ]]; then
-			echo -e "INFO: Adding --reconfigure to meson config because there is an existing previous build"
+			echo -e "INFO: Adding --reconfigure to meson config because there is an existing previous build" 1>>"$LOG_FILE" 2>&1
 			configure_options+=" --reconfigure"
 		fi
-		echo -e "INFO: Using meson: $english_name ($PWD) as PATH=$PATH ${configure_env} ${configure_command[*]} $configure_options"
+		echo -e "INFO: Using meson: $english_name ($PWD) as PATH=$PATH ${configure_env} ${configure_command[*]} $configure_options" 1>>"$LOG_FILE" 2>&1
 		#env
 		export MESON_BUILD_ROOT="$(pwd)/build"
 		export MESON_SOURCE_ROOT="$(pwd)"
 		# shellcheck disable=SC2086
 		# shellcheck disable=SC1078
-		"${configure_command[@]}" $configure_options || exit 1
-		touch -- "$touch_name"
-		make clean --silent # just in case
+		"${configure_command[@]}" $configure_options 2>&1 | redirect_output || exit_message 1 "could not run configure ${configure_command[*]}"
+		create_touch_file 0 "$touch_name"
+		make clean --silent 2>&1 | redirect_output # just in case
 	else
-		echo -e "INFO: Already used meson $(basename "$cur_dir2")"
+		echo -e "INFO: Already used meson $(basename "$cur_dir2")" 1>>"$LOG_FILE" 2>&1
 	fi
 }
 # 1. extra_args
@@ -3362,9 +3396,9 @@ do_ninja_and_ninja_install() {
 		remove_path -f "already_ran_make_install$touch_postfix"*
 	fi
 	if [ ! -f "$touch_name" ]; then
-		echo -e "INFO: PATH=$PATH\n do_ninja() in $(pwd) ninja running: \"build $extra_make_options\""
-		ninja -C build install --quiet || exit 1
-		touch "$touch_name" || exit 1
+		echo -e "INFO: PATH=$PATH\n do_ninja() in $(pwd) ninja running: \"build $extra_make_options\"" 1>>"$LOG_FILE" 2>&1
+		ninja -C build install --quiet 2>&1 | redirect_output || exit_message 1 "could not do_ninja() in $(pwd) ninja running: \"build $extra_make_options\""
+		create_touch_file 1 "$touch_name"
 	fi
 }
 
@@ -3379,15 +3413,13 @@ do_ninja() {
 		remove_path -f "already_ran_make$touch_postfix"*
 	fi
 	if [ ! -f "$touch_name" ]; then
-		echo -e
-		echo -e "INFO: ninja-ing $cur_dir2 as PATH=$PATH ninja -C build $extra_make_options"
-		echo -e
-		echo -e "INFO: do_ninja() ninja running: \"build $extra_make_options\""
+		echo -e "INFO: ninja-ing $cur_dir2 as PATH=$PATH ninja -C build $extra_make_options" 1>>"$LOG_FILE" 2>&1
+		echo -e "INFO: do_ninja() ninja running: \"build $extra_make_options\"" 1>>"$LOG_FILE" 2>&1
 		# shellcheck disable=SC2086
-		ninja -C build ${extra_make_options} --quiet || exit 1
-		touch "$touch_name" || exit 1 # only touch if the build was OK
+		ninja -C build ${extra_make_options} --quiet 2>&1 | redirect_output || exit_message 1 "could not do_ninja() ninja running: \"build $extra_make_options\""
+		create_touch_file 1 "$touch_name" # only touch if the build was OK
 	else
-		echo -e "INFO: already did ninja $(basename "$cur_dir2")"
+		echo -e "INFO: already did ninja $(basename "$cur_dir2")" 1>>"$LOG_FILE" 2>&1
 	fi
 }
 
@@ -3402,22 +3434,17 @@ apply_patch() {
 	local touch_name=
 	if [[ ! -e $patch_done_name ]]; then
 		if [[ -f $patch_name ]]; then
-			remove_path -rf "$patch_name" || exit 1 # remove old version in case it has been since updated on the server...
+			remove_path -rf "$patch_name" || exit_message 1 # remove old version in case it has been since updated on the server...
 		fi
-		curl -4 --retry 5 "$url" -O --fail || echo_and_exit "unable to download patch file $url"
-		echo -e "INFO: applying patch $patch_name"
-		patch "$patch_type" <"$patch_name" || exit 1
-		touch "$patch_done_name" || exit 1
+		curl -4 --retry 5 "$url" -O --fail || exit_message 1 "unable to download patch file $url"
+		echo -e "INFO: applying patch $patch_name" 1>>"$LOG_FILE" 2>&1
+		patch "$patch_type" <"$patch_name" >>"$LOG_FILE" || exit_message 1 "unable apply patch file $url"
+		create_touch_file 1 "$patch_done_name"
 		# too crazy, you can't do do_configure then apply a patch?
 		# rm -f already_ran* # if it's a new patch, reset everything too, in case it's really really really new
 	#else
 	#  echo -e "patch $patch_name already applied" # too chatty
 	fi
-}
-
-echo_and_exit() {
-	echo -e "failure, exiting: $1"
-	exit 1
 }
 
 # takes a url, output_dir as params, output_dir optional
@@ -3429,9 +3456,9 @@ download_and_unpack_file() {
 		output_dir=$(basename "$url" | sed s/\.tar\.*//) # remove .tar.xx
 	fi
 	if [ ! -f "$output_dir/unpacked.successfully" ]; then
-		echo -e "downloading $url" # redownload in case failed...
+		echo -e "downloading $url" 1>>"$LOG_FILE" 2>&1 # redownload in case failed...
 		if [[ -f $output_name ]]; then
-			remove_path -rf "$output_name" || exit 1
+			remove_path -rf "$output_name" || exit_message 1 "could not delete $output_name"
 		fi
 
 		#  From man curl
@@ -3442,10 +3469,10 @@ download_and_unpack_file() {
 		#  -L means "allow redirection" or some odd :|
 
 		curl -4 "$url" --retry 50 -O -L --fail || echo -e_and_exit "unable to download $url"
-		echo -e "unzipping $output_name ..."
-		tar -xf "$output_name" || unzip "$output_name" || exit 1
-		touch "$output_dir/unpacked.successfully" || exit 1
-		remove_path -rf "$output_name" || exit 1
+		echo -e "unzipping $output_name ..." 1>>"$LOG_FILE" 2>&1
+		tar -xf "$output_name" || unzip "$output_name" || exit_message 1 "unable to unzip $output_name"
+		create_touch_file 1 "$output_dir/unpacked.successfully"
+		remove_path -rf "$output_name" || exit_message 1 "could not remove existing $output_name"
 	fi
 }
 # 1. extra config options
@@ -3490,9 +3517,9 @@ gen_ld_script() {
 	lib=$mingw_w64_x86_64_prefix/lib/$1
 	lib_s="$2"
 	if [[ ! -f $mingw_w64_x86_64_prefix/lib/lib$lib_s.a ]]; then
-		echo -e "Generating linker script $lib: $2 $3"
+		echo -e "Generating linker script $lib: $2 $3" 1>>"$LOG_FILE" 2>&1
 		mv -f "$lib" "$mingw_w64_x86_64_prefix"/lib/lib"$lib_s".a
-		echo -e "GROUP ( -l$lib_s $3 )" >"$lib"
+		echo -e "GROUP ( -l$lib_s $3 )" >"$lib" 1>>"$LOG_FILE" 2>&1
 	fi
 }
 
@@ -3615,7 +3642,7 @@ build_amd_amf_headers() {
 			create_dir "$mingw_w64_x86_64_prefix/include/AMF"
 		fi
 		cp -av "amf/public/include/." "$mingw_w64_x86_64_prefix/include/AMF"
-		touch "already_installed"
+		create_touch_file 0 "already_installed"
 	fi
 	change_dir "$src_dir"
 }
@@ -3638,8 +3665,8 @@ build_intel_qsv_mfx() {
 	do_git_checkout https://github.com/lu-zero/mfx_dispatch.git mfx_dispatch_git 2cd279f # lu-zero?? oh well seems somewhat supported...
 	change_dir "$src_dir/mfx_dispatch_git"
 	if [[ ! -f "configure" ]]; then
-		autoreconf -fiv || exit 1
-		automake --add-missing || exit 1
+		autoreconf -fiv || exit_message 1 "could not autoreconf intel_qsv_mfx"
+		automake --add-missing || exit_message 1 "could not autoremake intel_qsv_mfx"
 	fi
 	generic_configure_make_install
 	change_dir "$src_dir"
@@ -3921,7 +3948,7 @@ build_harfbuzz() {
 		meson_options+=" --cross-file=$(get_meson_cross_file)"
 		do_meson "$meson_options"
 		do_ninja_and_ninja_install
-		touch DUN
+		create_touch_file 0 DUN
 	fi
 	change_dir "$src_dir"
 	build_freetype # with harfbuzz now
@@ -4215,8 +4242,8 @@ build_libsndfile() {
 	generic_configure "--disable-sqlite --disable-external-libs --disable-full-suite"
 	do_make_and_make_install
 	if [[ ! -f $mingw_w64_x86_64_prefix/lib/libgsm.a ]]; then
-		install -m644 src/GSM610/gsm.h "$mingw_w64_x86_64_prefix/include/gsm.h" || exit 1
-		install -m644 src/GSM610/.libs/libgsm.a "$mingw_w64_x86_64_prefix/lib/libgsm.a" || exit 1
+		install -m644 src/GSM610/gsm.h "$mingw_w64_x86_64_prefix/include/gsm.h" || exit_message 1 "could not install src/GSM610/gsm.h"
+		install -m644 src/GSM610/.libs/libgsm.a "$mingw_w64_x86_64_prefix/lib/libgsm.a" || exit_message 1 "could not install src/GSM610/.libs/libgsm.a"
 	else
 		echo -e "already installed GSM 6.10 ..."
 	fi
@@ -4246,7 +4273,7 @@ build_twolame() {
 	do_git_checkout https://github.com/njh/twolame.git twolame_git "origin/main"
 	change_dir "$src_dir/twolame_git"
 	if [[ ! -f Makefile.am.bak ]]; then # Library only, front end refuses to build for some reason with git master
-		sed -i.bak "/^SUBDIRS/s/ frontend.*//" Makefile.am || exit 1
+		sed -i.bak "/^SUBDIRS/s/ frontend.*//" Makefile.am || exit_message 1 "could not update makefile for twolame"
 	fi
 	cpu_count=1 # maybe can't handle it http://betterlogic.com/roger/2017/07/mp3lame-woe/ comments
 	generic_configure_make_install
@@ -4264,7 +4291,7 @@ build_twolame() {
 #     fi
 #   change_dir $checkout_dir
 #     if [[ ! -f "configure" ]]; then
-#       autoreconf -fiv || exit 1
+#       autoreconf -fiv || exit_message 1
 #     fi
 #     generic_configure_make_install
 #   change_dir ..
@@ -4305,8 +4332,8 @@ build_libmodplug() {
 	sed -i.bak 's/__declspec(dllexport)//' "$mingw_w64_x86_64_prefix/include/libmodplug/modplug.h" #strip DLL import/export directives
 	sed -i.bak 's/__declspec(dllimport)//' "$mingw_w64_x86_64_prefix/include/libmodplug/modplug.h"
 	if [[ ! -f "configure" ]]; then
-		autoreconf -fiv || exit 1
-		automake --add-missing || exit 1
+		autoreconf -fiv || exit_message 1 "could not autoreconf libmodplug"
+		automake --add-missing || exit_message 1 "could not automake libmodplug"
 	fi
 	generic_configure_make_install # or could use cmake I guess
 	change_dir "$src_dir"
@@ -4501,7 +4528,7 @@ build_frei0r() {
 			sed "s/$/\r/" $doc >"$mingw_w64_x86_64_prefix/lib/frei0r-1/$doc.txt"
 		done
 		7z a -mx=9 "$archive $mingw_w64_x86_64_prefix/lib/frei0r-1" && remove_path -f "$mingw_w64_x86_64_prefix/lib/frei0r-1/*.txt"
-		touch "$archive.done" # for those with no 7z so it won't restrip every time
+		create_touch_file 0 "$archive.done" # for those with no 7z so it won't restrip every time
 	fi
 	change_dir "$src_dir"
 }
@@ -4865,7 +4892,7 @@ build_dav1d() {
 	meson_options+=" --cross-file=$(get_meson_cross_file)"
 	do_meson "$meson_options"
 	do_ninja_and_ninja_install
-	copy_path "$src_dir/build/src/libdav1d.a" "$mingw_w64_x86_64_prefix/lib" || exit 1 # avoid 'run ranlib' weird failure, possibly older meson's https://github.com/mesonbuild/meson/issues/4138 :|
+	copy_path "$src_dir/build/src/libdav1d.a" "$mingw_w64_x86_64_prefix/lib" || exit_message 1 "could not copy $src_dir/build/src/libdav1d.a" # avoid 'run ranlib' weird failure, possibly older meson's https://github.com/mesonbuild/meson/issues/4138 :|
 	cpu_count=$original_cpu_count
 	deactivate
 	change_dir "$src_dir"
@@ -5023,9 +5050,9 @@ build_libx264() {
 		# TODO more march=native here?
 		# TODO profile guided here option, with wine?
 		do_configure "$configure_flags"
-		curl -4 http://samples.mplayerhq.hu/yuv4mpeg2/example.y4m.bz2 -O --fail || exit 1
+		curl -4 http://samples.mplayerhq.hu/yuv4mpeg2/example.y4m.bz2 -O --fail || exit_message 1 "could not download from http://samples.mplayerhq.hu/yuv4mpeg2/example.y4m.bz2"
 		remove_path -f example.y4m # in case it exists already...
-		bunzip2 example.y4m.bz2 || exit 1
+		bunzip2 example.y4m.bz2 || exit_message 1 "could not unzip example.y4m.bz2"
 		# XXX does this kill git updates? maybe a more general fix, since vid.stab does also?
 		sed -i.bak "s_\\, ./x264_, wine ./x264_" Makefile     # in case they have wine auto-run disabled http://askubuntu.com/questions/344088/how-to-ensure-wine-does-not-auto-run-exe-files
 		do_make_and_make_install "fprofiled VIDS=example.y4m" # guess it has its own make fprofiled, so we don't need to manually add -fprofile-generate here...
@@ -5124,7 +5151,7 @@ build_lua() {
 }
 
 build_libhdhomerun() {
-	exit 1 # still broken unfortunately, for cross compile :|
+	exit_message 1 "unable to build libhdhomerun at the moment" # still broken unfortunately, for cross compile :|
 	change_dir "$src_dir"
 	download_and_unpack_file https://download.silicondust.com/hdhomerun/libhdhomerun_20150826.tgz libhdhomerun
 	change_dir "$src_dir/libhdhomerun"
@@ -5225,10 +5252,10 @@ build_qt() {
 	if [ ! -f 'already_qt_maked_k' ]; then
 		make sub-src -j "$(get_cpu_count)"
 		make install sub-src                                                                      # let it fail, baby, it still installs a lot of good stuff before dying on mng...? huh wuh?
-		cp ./plugins/imageformats/libqjpeg.a "$mingw_w64_x86_64_prefix/lib" || exit 1             # I think vlc's install is just broken to need this [?]
-		cp ./plugins/accessible/libqtaccessiblewidgets.a "$mingw_w64_x86_64_prefix/lib" || exit 1 # this feels wrong...
+		cp ./plugins/imageformats/libqjpeg.a "$mingw_w64_x86_64_prefix/lib" || exit_message 1 "could not copy ./plugins/imageformats/libqjpeg.a"             # I think vlc's install is just broken to need this [?]
+		cp ./plugins/accessible/libqtaccessiblewidgets.a "$mingw_w64_x86_64_prefix/lib" || exit_message 1 "could not copy ./plugins/accessible/libqtaccessiblewidgets.a" # this feels wrong...
 		# do_make_and_make_install "sub-src" # sub-src might make the build faster? # complains on mng? huh?
-		touch 'already_qt_maked_k'
+		create_touch_file 0 'already_qt_maked_k'
 	fi
 	# vlc needs an adjust .pc file? huh wuh?
 	sed -i.bak 's/Libs: -L${libdir} -lQtGui/Libs: -L${libdir} -lcomctl32 -lqjpeg -lqtaccessiblewidgets -lQtGui/' "$PKG_CONFIG_PATH/QtGui.pc" # sniff

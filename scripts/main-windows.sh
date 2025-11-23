@@ -122,7 +122,7 @@ for arg in "$@"; do
 		exit 0
 	fi
 done
-
+echo -e "$(date)" | tee -a "$LOG_FILE"
 reset_cflags           # also overrides any "native" CFLAGS, which we may need if there are some 'linux only' settings in there
 reset_cppflags         # Ensure CPPFLAGS are cleared and set to what is configured
 check_missing_packages # do this first since it's annoying to go through prompts then be rejected
@@ -160,20 +160,17 @@ else
 		echo -e "INFO: Building dependencies only..." | tee -a "$LOG_FILE"
 		echo -e "WARNING: This may fail if previous dependencies havent been built yet." | tee -a "$LOG_FILE"
 		build_all_ffmpeg_dependencies
-		exit 0
 	elif [[ $build_ffmpeg_only == "y" || $build_ffmpeg_only == "yes" || $build_ffmpeg_only == "1" ]]; then
 		echo -e "INFO: Building ffmpeg only..." | tee -a "$LOG_FILE"
 		echo -e "WARNING: This may fail if previous dependencies havent been built yet." | tee -a "$LOG_FILE"
 		download_ffmpeg
 		install_ffmpeg
-		exit 0
 	elif [[ $build_ffmpeg_kit_only == "y" || $build_ffmpeg_kit_only == "yes" || $build_ffmpeg_kit_only == "1" ]]; then
 		echo -e "INFO: Building ffmpeg-kit only..." | tee -a "$LOG_FILE"
 		echo -e "WARNING: This may fail if previous dependencies havent been built yet." | tee -a "$LOG_FILE"
 		configure_ffmpeg_kit
 		install_ffmpeg_kit
 		create_windows_bundle
-		exit 0
 	else
 		echo -e "INFO: Building all..." | tee -a "$LOG_FILE"
 		build_all_ffmpeg_dependencies 
@@ -181,7 +178,8 @@ else
 		install_ffmpeg                
 		configure_ffmpeg_kit          
 		install_ffmpeg_kit            
-		create_windows_bundle         
-		exit 0
+		create_windows_bundle
 	fi
 fi
+echo -e "$(date)" | tee -a "$LOG_FILE"
+exit 0
