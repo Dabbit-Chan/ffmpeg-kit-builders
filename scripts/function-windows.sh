@@ -192,8 +192,8 @@ setup_build_environment() {
 	export LIB_INSTALL_BASE="$work_dir"
 	export INSTALL_PKG_CONFIG_DIR="${work_dir}/pkgconfig"
 	export ffmpeg_source_dir="${src_dir}/ffmpeg"
-	export install_prefix="${work_dir}/ffmpeg_$(get_build_type)" # install them to their a separate dir
-	export ffmpeg_kit_install="${work_dir}/ffmpeg-kit_$(get_build_type)"
+	export install_prefix="${work_dir}/$(get_ffmpeg_directory)" # install them to their a separate dir
+	export ffmpeg_kit_install="${work_dir}/$(get_ffmpeg_kit_directory)"
 	export ffmpeg_kit_bundle="${work_dir}/$(get_bundle_directory)"
 	export ffmpeg_kit_src_dir="${BASEDIR}/windows"
 	create_dir "$work_dir"
@@ -206,6 +206,24 @@ get_arch_specific_ldflags() {
 		echo -e "-march=x86-64 -Wl,-z,text"
 		;;
 	esac
+}
+
+get_ffmpeg_kit_directory() {
+	local build_type=$1
+	if [[ -z $build_type ]]; then
+		echo -e "ffmpeg-kit-${target_name}_$(get_build_type)"
+	else
+		echo -e "ffmpeg-kit-${target_name}_$build_type"
+	fi
+}
+
+get_ffmpeg_directory() {
+	local build_type=$1
+	if [[ -z $build_type ]]; then
+		echo -e "ffmpeg-${target_name}_$(get_build_type)"
+	else
+		echo -e "ffmpeg-${target_name}_$build_type"
+	fi
 }
 
 get_size_optimization_ldflags() {
@@ -552,7 +570,7 @@ check_builds() {
 	static_build_exists=0
 
 	# Check shared build
-	local build_dir="$work_dir/ffmpeg_shared" #install_prefix
+	local build_dir="$work_dir/$(get_ffmpeg_directory shared)" #install_prefix
 	echo -e "INFO: Checking $build_dir"
 	if [[ -d "$build_dir" && -d "$build_dir/bin" ]]; then
 		echo -e "INFO: Checking binaries in $build_dir/bin..."
@@ -562,7 +580,7 @@ check_builds() {
 		fi
 		[[ $check_binaries -eq 1 ]] && shared_build_exists=1
 	fi
-	build_dir="$work_dir/ffmpeg_static" #install_prefix
+	build_dir="$work_dir/$(get_ffmpeg_directory static)" #install_prefix
 	echo -e "INFO: Checking $build_dir"
 	# Check static build
 	if [[ -d "$build_dir" && -d "$build_dir/bin" ]]; then
@@ -579,7 +597,7 @@ check_builds() {
 	if [[ ${build_ffmpeg_static,,} =~ ^(y|yes|1|true|on)$ ]]; then
 		echo -e "INFO: Static build requested..." | tee -a "$LOG_FILE"
 		if [[ $static_build_exists == 0 || "$BUILD_FORCE" -eq 1 ]]; then
-			build_dir="$work_dir/ffmpeg_static" #install_prefix
+			build_dir="$work_dir/$(get_ffmpeg_directory static)" #install_prefix
 			echo -e "INFO: Static build does not exist or force requested. (Re-)configuring Ffmpeg for static build..." | tee -a "$LOG_FILE"
 			# shellcheck disable=SC2129
 			remove_path -rf "$build_dir" 1>>"$LOG_FILE" 2>&1
@@ -591,7 +609,7 @@ check_builds() {
 	elif [[ ${build_ffmpeg_shared,,} =~ ^(y|yes|1|true|on)$ ]]; then
 		echo -e "INFO: Shared build requested..." | tee -a "$LOG_FILE"
 		if [[ $shared_build_exists == 0 || "$BUILD_FORCE" -eq 1 ]]; then
-			build_dir="$work_dir/ffmpeg_shared" #install_prefix
+			build_dir="$work_dir/$(get_ffmpeg_directory shared)" #install_prefix
 			echo -e "INFO: Shared build does not exist or force requested. (Re-)configuring Ffmpeg for shared build..." | tee -a "$LOG_FILE"
 			# shellcheck disable=SC2129
 			remove_path -rf "$build_dir" 1>>"$LOG_FILE" 2>&1
@@ -897,7 +915,7 @@ get_bundle_directory() {
 		LTS_POSTFIX="-lts"
 	fi
 	local TYPE_POSTFIX="$(get_build_type)"
-	echo -e "bundle-windows-${TYPE_POSTFIX}${LTS_POSTFIX}"
+	echo -e "bundle-${target_name}-${TYPE_POSTFIX}${LTS_POSTFIX}"
 }
 
 create_windows_bundle() {

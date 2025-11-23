@@ -97,5 +97,6 @@ if [ ${#directories_without_licenses[@]} -gt 0 ]; then
     echo
     echo "=== DIRECTORIES WITHOUT LICENSE/COPYING FILES ==="
     printf '%s\n' "${directories_without_licenses[@]}"
-    echo "Total: ${#directories_without_licenses[@]} directories"
+    echo "Total: ${#directories_without_licenses[@]} directories did not have license files"
+		echo
 fi
