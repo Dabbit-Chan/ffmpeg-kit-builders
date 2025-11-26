@@ -1,0 +1,32 @@
+diff --git a/meson.build b/meson.build
+index 34ae92f..29e0f45 100755
+--- a/meson.build
++++ b/meson.build	
+@@ -104,10 +104,23 @@ if enable_guard_pattern
+ endif
+ 
+ if enable_vsscript or enable_python_module
+-    py = import('python').find_installation(python3_bin)
+-    py_dep = py.dependency(embed: true, required: false, version: '>=3.8.0')
+-    if not py_dep.found()
+-        py_dep = py.dependency(embed: false, version: '>=3.8.0')
++    if meson.is_cross_build() and host_system == 'windows'
++        message('Cross-compiling detected: Using local python_dep directory')
++        py = import('python').find_installation(python3_bin)
++        enable_python_module = false
++        py_inc = include_directories('python_dep/tools/include')
++        py_lib = cxx.find_library('python312', dirs : meson.current_source_dir() / 'python_dep/tools/libs')
++        py_dep = declare_dependency(
++            include_directories : py_inc,
++            dependencies : py_lib,
++            compile_args : ['-DMS_WIN64']
++        )
++    else
++        py = import('python').find_installation(python3_bin)
++        py_dep = py.dependency(embed: true, required: false, version: '>=3.8.0')
++        if not py_dep.found()
++            py_dep = py.dependency(embed: false, version: '>=3.8.0')
++        endif
+     endif
+ endif
+ 

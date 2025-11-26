@@ -1,0 +1,46 @@
+# As this script is run in a new cmake instance, it does not have access to
+# the existing cache variables. Pass them in via the configure_file command.
+set(CMAKE_BINARY_DIR @CMAKE_BINARY_DIR@)
+set(CMAKE_SOURCE_DIR @CMAKE_SOURCE_DIR@)
+set(UNIX @UNIX_VALUE@)
+set(WIN32 @WIN32_VALUE@)
+set(CMAKE_CROSSCOMPILING @CMAKE_CROSSCOMPILING@)
+set(CMAKE_FIND_LIBRARY_SUFFIXES @CMAKE_FIND_LIBRARY_SUFFIXES@)
+set(CMAKE_FIND_LIBRARY_PREFIXES @CMAKE_FIND_LIBRARY_PREFIXES@)
+set(CMAKE_SYSTEM_LIBRARY_PATH @CMAKE_SYSTEM_LIBRARY_PATH@)
+set(CMAKE_FIND_ROOT_PATH @CMAKE_FIND_ROOT_PATH@)
+set(CODEC2_DLL ${CMAKE_BINARY_DIR}/src/libcodec2.dll)
+
+# Alternative approach: Use objdump to find dependencies
+if(CMAKE_OBJDUMP AND EXISTS ${CODEC2_DLL})
+    execute_process(
+        COMMAND ${CMAKE_OBJDUMP} -p ${CODEC2_DLL}
+        OUTPUT_VARIABLE objdump_output
+        RESULT_VARIABLE objdump_result
+    )
+    
+    if(objdump_result EQUAL 0)
+        # Extract DLL dependencies from objdump output
+        string(REGEX MATCHALL "DLL Name: *[^\n]+" dll_lines "${objdump_output}")
+        foreach(line ${dll_lines})
+            string(REGEX REPLACE "DLL Name: *" "" dll_name "${line}")
+            # Skip system DLLs that don't need to be copied
+            if(dll_name AND NOT dll_name MATCHES "^(KERNEL32|USER32|ADVAPI32|msvcrt)\\.dll$")
+                message("Looking for ${dll_name}")
+                find_library(RUNTIME_${dll_name} ${dll_name}
+                    PATHS ${CMAKE_SYSTEM_LIBRARY_PATH}
+                    NO_DEFAULT_PATH
+                )
+                if(RUNTIME_${dll_name})
+                    message("Found: ${RUNTIME_${dll_name}}")
+                    file(INSTALL DESTINATION "${CMAKE_INSTALL_PREFIX}/bin"
+                         TYPE EXECUTABLE FILES "${RUNTIME_${dll_name}}")
+                else()
+                    message(WARNING "Could not find dependency: ${dll_name}")
+                endif()
+            endif()
+        endforeach()
+    endif()
+elseif(NOT EXISTS ${CODEC2_DLL})
+    message(STATUS "No DLL found for dependency analysis (static build)")
+endif()

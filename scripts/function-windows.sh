@@ -5,8 +5,6 @@
 #echo -e "${SCRIPTDIR}/variable.sh"
 #echo -e "${SCRIPTDIR}/function.sh"
 
-source "${SCRIPTDIR}/function.sh"
-
 find_all_build_exes() {
 	local found=""
 	# NB that we're currently in the prebuilt dir...
@@ -90,7 +88,7 @@ build_all_ffmpeg_dependencies() {
 
 		# printf "\r\033[K[%s] %3d%% (%2d/%2d) | %s" "$bar_str" "$percent" "$current_step" "$steps" "$step_name"
 
-		build_ffmpeg_dependency_only "$step_name" 1>>"$LOG_FILE" 2>&1 || echo
+		build_ffmpeg_dependency_only "$step_name" || echo
 	done
 	printf "\r\033[KAll dependencies built successfully!\n"
 }
@@ -155,28 +153,39 @@ setup_build_environment() {
 		export FULL_ARCH="i686"
 		export target_name="$FFMPEG_KIT_BUILD_TYPE-$FULL_ARCH"
 		export work_dir="$(realpath "$WORKDIR"/"$target_name")"
-		export host_target='i686-w64-mingw32'
-		export mingw_w64_x86_64_prefix="$(realpath "$work_dir"/cross_compilers/mingw-w64-i686/$host_target)"
-		export mingw_bin_path="$(realpath "$work_dir"/cross_compilers/mingw-w64-i686/bin)"
+		export host_target="$FULL_ARCH-w64-mingw32"
+		export toolchain_root="mingw-w64-$FULL_ARCH"
+		export mingw_w64_x86_64_prefix="$(realpath "$work_dir"/cross_compilers/$toolchain_root/$host_target)"
+		export toolchain_root_dir="$(realpath "$work_dir"/cross_compilers/$toolchain_root)"
+		export mingw_bin_path="$(realpath "$toolchain_root_dir"/bin)"
 		export PKG_CONFIG_PATH="$mingw_w64_x86_64_prefix/lib/pkgconfig"
 		export PATH="$mingw_bin_path:$original_path"
 		export bits_target=32
-		export cross_prefix="$mingw_bin_path/i686-w64-mingw32-"
+		export cross_prefix="$mingw_bin_path/$host_target-"
 		export compiler_flags="CC=${cross_prefix}gcc AR=${cross_prefix}ar PREFIX=$mingw_w64_x86_64_prefix RANLIB=${cross_prefix}ranlib LD=${cross_prefix}ld STRIP=${cross_prefix}strip CXX=${cross_prefix}g++"
+		export CARGO_TARGET_I686_PC_WINDOWS_GNU_LINKER="${cross_prefix}gcc"  
+		export CARGO_TARGET_I868_PC_WINDOWS_GNU_AR="${cross_prefix}ar"
 	elif [[ $compiler_flavors == "win64" ]]; then
 		export ARCH=$(get_arch_name "$(from_arch_name "$compiler_flavors")")
 		export FULL_ARCH="x86_64"
 		export target_name="$FFMPEG_KIT_BUILD_TYPE-$FULL_ARCH"
 		export work_dir="$(realpath "$WORKDIR"/"$target_name")"
-		export host_target='x86_64-w64-mingw32'
-		export mingw_w64_x86_64_prefix="$(realpath "$work_dir"/cross_compilers/mingw-w64-x86_64/$host_target)"
-		export mingw_bin_path="$(realpath "$work_dir"/cross_compilers/mingw-w64-x86_64/bin)"
+		export host_target="$FULL_ARCH-w64-mingw32"
+		export toolchain_root="mingw-w64-$FULL_ARCH"
+		export mingw_w64_x86_64_prefix="$(realpath "$work_dir"/cross_compilers/$toolchain_root/$host_target)"
+		export toolchain_root_dir="$(realpath "$work_dir"/cross_compilers/$toolchain_root)"
+		export mingw_bin_path="$(realpath "$toolchain_root_dir"/bin)"
 		export PKG_CONFIG_PATH="$mingw_w64_x86_64_prefix/lib/pkgconfig"
 		export PATH="$mingw_bin_path:$original_path"
 		export bits_target=64
-		export cross_prefix="$mingw_bin_path/x86_64-w64-mingw32-"
+		export cross_prefix="$mingw_bin_path/$host_target-"
 		export compiler_flags="CC=${cross_prefix}gcc AR=${cross_prefix}ar PREFIX=$mingw_w64_x86_64_prefix RANLIB=${cross_prefix}ranlib LD=${cross_prefix}ld STRIP=${cross_prefix}strip CXX=${cross_prefix}g++"
 		export LIB_INSTALL_BASE=$work_dir
+		export CARGO_TARGET_X86_64_PC_WINDOWS_GNU_LINKER="${cross_prefix}gcc"
+		export CARGO_TARGET_X86_64_PC_WINDOWS_GNU_AR="${cross_prefix}ar"
+		export CC_x86_64_pc_windows_gnu="${cross_prefix}gcc"
+		export CXX_x86_64_pc_windows_gnu="${cross_prefix}g++"
+		export AR_x86_64_pc_windows_gnu="${cross_prefix}ar"
 	else
 		exit_message 1 "Unknown compiler flavor '$compiler_flavors'"
 	fi
@@ -473,8 +482,8 @@ install_pkg_config_file() {
 
 	prepare_inline_sed
 	# UPDATE PATHS
-	${SED_INLINE} "s|${ffmpeg_kit_install}|${ffmpeg_kit_bundle}|g" "$DESTINATION" 1>>"$LOG_FILE" 2>&1 || return 1
-	${SED_INLINE} "s|${ffmpeg_source_dir}|${ffmpeg_kit_bundle}|g" "$DESTINATION" 1>>"$LOG_FILE" 2>&1 || return 1
+	${SED_INLINE} "s|${ffmpeg_kit_install}|${ffmpeg_kit_bundle}|g" "$DESTINATION" || return 1
+	${SED_INLINE} "s|${ffmpeg_source_dir}|${ffmpeg_kit_bundle}|g" "$DESTINATION" || return 1
 }
 
 get_ffmpeg_kit_version() {
@@ -491,7 +500,7 @@ download_ffmpeg() {
 		desired_version="master"
 	fi
 
-	do_git_checkout "$ffmpeg_git_checkout" "$output_dir" "$desired_version" 1>>"$LOG_FILE" 2>&1 || exit_message 1 "could not git $ffmpeg_git_checkout $output_dir $desired_version"
+	do_git_checkout "$ffmpeg_git_checkout" "$output_dir" "$desired_version" || exit_message 1 "could not git $ffmpeg_git_checkout $output_dir $desired_version"
 	ffmpeg_source_dir=$output_dir
 }
 
@@ -525,14 +534,14 @@ install_cross_compiler() {
 
 	unset CFLAGS # don't want these "windows target" settings used the compiler itself since it creates executables to run on the local box (we have a parameter allowing them to set them for the script "all builds" basically)
 	# pthreads version to avoid having to use cvs for it
-	echo -e "Starting to download and build cross compile version of gcc [requires working internet access] with thread count $gcc_cpu_count..." 1>>"$LOG_FILE" 2>&1
-	echo -e "" 1>>"$LOG_FILE" 2>&1
+	echo -e "Starting to download and build cross compile version of gcc [requires working internet access] with thread count $gcc_cpu_count..."
+	echo -e ""
 
 	# --disable-shared allows c++ to be distributed at all...which seemed necessary for some random dependency which happens to use/require c++...
 	local zeranoe_script_name=mingw-w64-build
 	local zeranoe_script_options="--gcc-branch=releases/gcc-14 --mingw-w64-branch=master --binutils-branch=binutils-2_44-branch" # --cached-sources"
 	if [[ ($compiler_flavors == "win32" || $compiler_flavors == "multi") && ! -f ../$win32_gcc ]]; then
-		echo -e "Building win32 cross compiler..." 1>>"$LOG_FILE" 2>&1
+		echo -e "Building win32 cross compiler..."
 		download_gcc_build_script $zeranoe_script_name
 		if [[ "$(uname)" =~ (5.1) ]]; then # Avoid using secure API functions for compatibility with msvcrt.dll on Windows XP.
 			sed -i "s/ --enable-secure-api//" $zeranoe_script_name
@@ -547,7 +556,7 @@ install_cross_compiler() {
 		fi
 	fi
 	if [[ ($compiler_flavors == "win64" || $compiler_flavors == "multi") && ! -f ../$win64_gcc ]]; then
-		echo -e "Building win64 x86_64 cross compiler..." 1>>"$LOG_FILE" 2>&1
+		echo -e "Building win64 x86_64 cross compiler..."
 		download_gcc_build_script $zeranoe_script_name
 		# shellcheck disable=SC2086
 		CFLAGS='-O3 -pipe' CXXFLAGS='-O3 -pipe' nice ./$zeranoe_script_name $zeranoe_script_options x86_64 || exit_message 1 "could not update cross compiler script for x86_64"
@@ -600,9 +609,9 @@ check_builds() {
 			build_dir="$work_dir/$(get_ffmpeg_directory static)" #install_prefix
 			echo -e "INFO: Static build does not exist or force requested. (Re-)configuring Ffmpeg for static build..." | tee -a "$LOG_FILE"
 			# shellcheck disable=SC2129
-			remove_path -rf "$build_dir" 1>>"$LOG_FILE" 2>&1
-			remove_path -f "${ffmpeg_source_dir}/already_"* 1>>"$LOG_FILE" 2>&1
-			configure_ffmpeg 1>>"$LOG_FILE" 2>&1
+			remove_path -rf "$build_dir" 
+			remove_path -f "${ffmpeg_source_dir}/already_"* 
+			configure_ffmpeg 
 		else
 			echo -e "INFO: Static build already exists at $build_dir" | tee -a "$LOG_FILE"
 		fi
@@ -612,9 +621,9 @@ check_builds() {
 			build_dir="$work_dir/$(get_ffmpeg_directory shared)" #install_prefix
 			echo -e "INFO: Shared build does not exist or force requested. (Re-)configuring Ffmpeg for shared build..." | tee -a "$LOG_FILE"
 			# shellcheck disable=SC2129
-			remove_path -rf "$build_dir" 1>>"$LOG_FILE" 2>&1
-			remove_path -f "${ffmpeg_source_dir}/already_"* 1>>"$LOG_FILE" 2>&1
-			configure_ffmpeg 1>>"$LOG_FILE" 2>&1
+			remove_path -rf "$build_dir" 
+			remove_path -f "${ffmpeg_source_dir}/already_"* 
+			configure_ffmpeg
 		else
 			echo -e "INFO: Shared build already exists at $build_dir" | tee -a "$LOG_FILE"
 		fi
@@ -622,7 +631,7 @@ check_builds() {
 }
 
 install_ffmpeg() {
-	check_builds 1>>"$LOG_FILE" 2>&1
+	check_builds
 	echo -e "INFO: Installing ffmpeg if not installed" | tee -a "$LOG_FILE"
 	change_dir "$ffmpeg_source_dir"
 
@@ -710,7 +719,7 @@ install_ffmpeg_pkg() {
 configure_ffmpeg() {
 	echo -e "INFO: Configuring ffmpeg" | tee -a "$LOG_FILE"
 	
-	change_dir "$ffmpeg_source_dir" 1>>"$LOG_FILE" 2>&1 || return 1
+	change_dir "$ffmpeg_source_dir" || return 1
 
 	if [[ $BUILD_FORCE == "1" ]]; then
 		remove_path -f "${ffmpeg_source_dir}/already_configured_$(get_build_type)"*
@@ -774,16 +783,209 @@ configure_ffmpeg() {
   config_options+=" --disable-indev=fbdev"
   config_options+=" --disable-neon-clobber-test"
   config_options+=" --disable-sndio"
-  config_options+=" --disable-securetransport"
   config_options+=" --disable-xlib"
+	# hw accel features
   config_options+=" --disable-cuda"
   config_options+=" --disable-cuvid"
   config_options+=" --disable-nvenc"
   config_options+=" --disable-vaapi"
   config_options+=" --disable-vdpau"
-  config_options+=" --disable-videotoolbox"
+	# apple features
+  config_options+=" --disable-securetransport"
+	config_options+=" --disable-videotoolbox"
   config_options+=" --disable-audiotoolbox"
   config_options+=" --disable-appkit"
+
+
+##   --enable-chromaprint       enable audio fingerprinting with chromaprint [no]
+##   --enable-frei0r            enable frei0r video filtering [no]
+#   --enable-gcrypt            enable gcrypt, needed for rtmp(t)e support
+#                              if openssl, librtmp or gmp is not used [no]
+##   --enable-gmp               enable gmp, needed for rtmp(t)e support
+#                              if openssl or librtmp is not used [no]
+##   --enable-gnutls            enable gnutls, needed for https support
+#                              if openssl, libtls or mbedtls is not used [no]
+#   --enable-jni               enable JNI support [no]
+#   --enable-ladspa            enable LADSPA audio filtering [no]
+##   --enable-lcms2             enable ICC profile support via LittleCMS 2 [no]
+##   --enable-libaom            enable AV1 video encoding/decoding via libaom [no]
+##   --enable-libaribb24        enable ARIB text and caption decoding via libaribb24 [no]
+##   --enable-libaribcaption    enable ARIB text and caption decoding via libaribcaption [no]
+##   --enable-libass            enable libass subtitles rendering,
+#                              needed for subtitles and ass filter [no]
+#   --enable-libbluray         enable BluRay reading using libbluray [no]
+#   --enable-libbs2b           enable bs2b DSP library [no]
+#   --enable-libcaca           enable textual display using libcaca [no]
+#   --enable-libcelt           enable CELT decoding via libcelt [no]
+#   --enable-libcdio           enable audio CD grabbing with libcdio [no]
+#   --enable-libcodec2         enable codec2 en/decoding using libcodec2 [no]
+#   --enable-libdav1d          enable AV1 decoding via libdav1d [no]
+#   --enable-libdavs2          enable AVS2 decoding via libdavs2 [no]
+#   --enable-libdc1394         enable IIDC-1394 grabbing using libdc1394
+#                              and libraw1394 [no]
+#   --enable-libdvdnav         enable libdvdnav, needed for DVD demuxing [no]
+#   --enable-libdvdread        enable libdvdread, needed for DVD demuxing [no]
+#   --enable-libfdk-aac        enable AAC de/encoding via libfdk-aac [no]
+#   --enable-libflite          enable flite (voice synthesis) support via libflite [no]
+#   --enable-libfontconfig     enable libfontconfig, useful for drawtext filter [no]
+#   --enable-libfreetype       enable libfreetype, needed for drawtext filter [no]
+#   --enable-libfribidi        enable libfribidi, improves drawtext filter [no]
+#   --enable-libharfbuzz       enable libharfbuzz, needed for drawtext filter [no]
+#   --enable-libglslang        enable GLSL->SPIRV compilation via libglslang [no]
+#   --enable-libgme            enable Game Music Emu via libgme [no]
+#   --enable-libgsm            enable GSM de/encoding via libgsm [no]
+#   --enable-libiec61883       enable iec61883 via libiec61883 [no]
+#   --enable-libilbc           enable iLBC de/encoding via libilbc [no]
+#   --enable-libjack           enable JACK audio sound server [no]
+#   --enable-libjxl            enable JPEG XL de/encoding via libjxl [no]
+#   --enable-libklvanc         enable Kernel Labs VANC processing [no]
+#   --enable-libkvazaar        enable HEVC encoding via libkvazaar [no]
+#   --enable-liblc3            enable LC3 de/encoding via liblc3 [no]
+#   --enable-liblcevc-dec      enable LCEVC decoding via liblcevc-dec [no]
+#   --enable-liblensfun        enable lensfun lens correction [no]
+#   --enable-libmodplug        enable ModPlug via libmodplug [no]
+#   --enable-libmp3lame        enable MP3 encoding via libmp3lame [no]
+#   --enable-liboapv           enable APV encoding via liboapv [no]
+#   --enable-libopencore-amrnb enable AMR-NB de/encoding via libopencore-amrnb [no]
+#   --enable-libopencore-amrwb enable AMR-WB decoding via libopencore-amrwb [no]
+#   --enable-libopencv         enable video filtering via libopencv [no]
+#   --enable-libopenh264       enable H.264 encoding via OpenH264 [no]
+#   --enable-libopenjpeg       enable JPEG 2000 encoding via OpenJPEG [no]
+#   --enable-libopenmpt        enable decoding tracked files via libopenmpt [no]
+#   --enable-libopenvino       enable OpenVINO as a DNN module backend
+#                              for DNN based filters like dnn_processing [no]
+#   --enable-libopus           enable Opus de/encoding via libopus [no]
+#   --enable-libplacebo        enable libplacebo library [no]
+#   --enable-libpulse          enable Pulseaudio input via libpulse [no]
+#   --enable-libqrencode       enable QR encode generation via libqrencode [no]
+#   --enable-libquirc          enable QR decoding via libquirc [no]
+#   --enable-librabbitmq       enable RabbitMQ library [no]
+#   --enable-librav1e          enable AV1 encoding via rav1e [no]
+#   --enable-librist           enable RIST via librist [no]
+#   --enable-librsvg           enable SVG rasterization via librsvg [no]
+#   --enable-librubberband     enable rubberband needed for rubberband filter [no]
+#   --enable-librtmp           enable RTMP[E] support via librtmp [no]
+#   --enable-libshaderc        enable GLSL->SPIRV compilation via libshaderc [no]
+#   --enable-libshine          enable fixed-point MP3 encoding via libshine [no]
+#   --enable-libsmbclient      enable Samba protocol via libsmbclient [no]
+#   --enable-libsnappy         enable Snappy compression, needed for hap encoding [no]
+#   --enable-libsoxr           enable Include libsoxr resampling [no]
+#   --enable-libspeex          enable Speex de/encoding via libspeex [no]
+#   --enable-libsrt            enable Haivision SRT protocol via libsrt [no]
+#   --enable-libssh            enable SFTP protocol via libssh [no]
+#   --enable-libsvtav1         enable AV1 encoding via SVT [no]
+#   --enable-libtensorflow     enable TensorFlow as a DNN module backend
+#                              for DNN based filters like sr [no]
+#   --enable-libtesseract      enable Tesseract, needed for ocr filter [no]
+#   --enable-libtheora         enable Theora encoding via libtheora [no]
+#   --enable-libtls            enable LibreSSL (via libtls), needed for https support
+#                              if openssl, gnutls or mbedtls is not used [no]
+#   --enable-libtorch          enable Torch as one DNN backend [no]
+#   --enable-libtwolame        enable MP2 encoding via libtwolame [no]
+#   --enable-libuavs3d         enable AVS3 decoding via libuavs3d [no]
+#   --enable-libv4l2           enable libv4l2/v4l-utils [no]
+#   --enable-libvidstab        enable video stabilization using vid.stab [no]
+#   --enable-libvmaf           enable vmaf filter via libvmaf [no]
+#   --enable-libvo-amrwbenc    enable AMR-WB encoding via libvo-amrwbenc [no]
+#   --enable-libvorbis         enable Vorbis en/decoding via libvorbis,
+#                              native implementation exists [no]
+#   --enable-libvpx            enable VP8 and VP9 de/encoding via libvpx [no]
+#   --enable-libvvenc          enable H.266/VVC encoding via vvenc [no]
+#   --enable-libwebp           enable WebP encoding via libwebp [no]
+#   --enable-libx264           enable H.264 encoding via x264 [no]
+#   --enable-libx265           enable HEVC encoding via x265 [no]
+#   --enable-libxeve           enable EVC encoding via libxeve [no]
+#   --enable-libxevd           enable EVC decoding via libxevd [no]
+#   --enable-libxavs           enable AVS encoding via xavs [no]
+#   --enable-libxavs2          enable AVS2 encoding via xavs2 [no]
+#   --enable-libxvid           enable Xvid encoding via xvidcore,
+#                              native MPEG-4/Xvid encoder exists [no]
+#   --enable-libxml2           enable XML parsing using the C library libxml2, needed
+#                              for dash and imf demuxing support [no]
+#   --enable-libzimg           enable z.lib, needed for zscale filter [no]
+#   --enable-libzmq            enable message passing via libzmq [no]
+#   --enable-libzvbi           enable teletext support via libzvbi [no]
+#   --enable-lv2               enable LV2 audio filtering [no]
+#   --enable-decklink          enable Blackmagic DeckLink I/O support [no]
+#   --enable-mbedtls           enable mbedTLS, needed for https support
+#                              if openssl, gnutls or libtls is not used [no]
+#   --enable-mediacodec        enable Android MediaCodec support [no]
+#   --enable-mediafoundation   enable encoding via MediaFoundation [auto]
+#   --enable-libmysofa         enable libmysofa, needed for sofalizer filter [no]
+#   --enable-ohcodec           enable OpenHarmony Codec support [no]
+#   --enable-openal            enable OpenAL 1.1 capture support [no]
+#   --enable-opencl            enable OpenCL processing [no]
+#   --enable-opengl            enable OpenGL rendering [no]
+#   --enable-openssl           enable openssl, needed for https support
+#                              if gnutls, libtls or mbedtls is not used [no]
+#   --enable-pocketsphinx      enable PocketSphinx, needed for asr filter [no]
+#   --enable-vapoursynth       enable VapourSynth demuxer [no]
+#   --enable-whisper           enable whisper filter [no]
+
+# External library support:
+
+#   Using any of the following switches will allow FFmpeg to link to the
+#   corresponding external library. All the components depending on that library
+#   will become enabled, if all their other dependencies are met and they are not
+#   explicitly disabled. E.g. --enable-libopus will enable linking to
+#   libopus and allow the libopus encoder to be built, unless it is
+#   specifically disabled with --disable-encoder=libopus.
+
+#   Note that only the system libraries are auto-detected. All the other external
+#   libraries must be explicitly enabled.
+
+#   Also note that the following help text describes the purpose of the libraries
+#   themselves, not all their features will necessarily be usable by FFmpeg.
+
+#   --disable-alsa           disable ALSA support [autodetect]
+#   --disable-appkit         disable Apple AppKit framework [autodetect]
+#   --disable-avfoundation   disable Apple AVFoundation framework [autodetect]
+#   --enable-avisynth        enable reading of AviSynth script files [no]
+#   --disable-bzlib          disable bzlib [autodetect]
+#   --disable-coreimage      disable Apple CoreImage framework [autodetect]
+#   --disable-iconv          disable iconv [autodetect]
+#   --enable-libxcb          enable X11 grabbing using XCB [autodetect]
+#   --enable-libxcb-shm      enable X11 grabbing shm communication [autodetect]
+#   --enable-libxcb-xfixes   enable X11 grabbing mouse rendering [autodetect]
+#   --enable-libxcb-shape    enable X11 grabbing shape rendering [autodetect]
+#   --disable-lzma           disable lzma [autodetect]
+#   --enable-mediafoundation enable encoding via MediaFoundation [auto]
+#   --disable-metal          disable Apple Metal framework [autodetect]
+#   --disable-sndio          disable sndio support [autodetect]
+#   --disable-schannel       disable SChannel SSP, needed for TLS support on
+#                            Windows if openssl and gnutls are not used [autodetect]
+#   --disable-sdl2           disable sdl2 [autodetect]
+#   --disable-securetransport disable Secure Transport, needed for TLS support
+#                            on OSX if openssl and gnutls are not used [autodetect]
+#   --disable-xlib           disable xlib [autodetect]
+#   --disable-zlib           disable zlib [autodetect]
+
+#   The following libraries provide various hardware acceleration features:
+#   --disable-amf            disable AMF video encoding code [autodetect]
+#   --disable-audiotoolbox   disable Apple AudioToolbox code [autodetect]
+#   --enable-cuda-nvcc       enable Nvidia CUDA compiler [no]
+#   --disable-cuda-llvm      disable CUDA compilation using clang [autodetect]
+#   --disable-cuvid          disable Nvidia CUVID support [autodetect]
+#   --disable-d3d11va        disable Microsoft Direct3D 11 video acceleration code [autodetect]
+#   --disable-d3d12va        disable Microsoft Direct3D 12 video acceleration code [autodetect]
+#   --disable-dxva2          disable Microsoft DirectX 9 video acceleration code [autodetect]
+#   --disable-ffnvcodec      disable dynamically linked Nvidia code [autodetect]
+#   --disable-libdrm         disable DRM code (Linux) [autodetect]
+#   --enable-libmfx          enable Intel MediaSDK (AKA Quick Sync Video) code via libmfx [no]
+#   --enable-libvpl          enable Intel oneVPL code via libvpl if libmfx is not used [no]
+#   --enable-libnpp          enable Nvidia Performance Primitives-based code [no]
+#   --enable-mmal            enable Broadcom Multi-Media Abstraction Layer (Raspberry Pi) via MMAL [no]
+#   --disable-nvdec          disable Nvidia video decoding acceleration (via hwaccel) [autodetect]
+#   --disable-nvenc          disable Nvidia video encoding code [autodetect]
+#   --enable-omx             enable OpenMAX IL code [no]
+#   --enable-omx-rpi         enable OpenMAX IL code for Raspberry Pi [no]
+#   --enable-rkmpp           enable Rockchip Media Process Platform code [no]
+#   --disable-v4l2-m2m       disable V4L2 mem2mem code [autodetect]
+#   --disable-vaapi          disable Video Acceleration API (mainly Unix/Intel) code [autodetect]
+#   --disable-vdpau          disable Nvidia Video Decode and Presentation API for Unix code [autodetect]
+#   --disable-videotoolbox   disable VideoToolbox code [autodetect]
+#   --disable-vulkan         disable Vulkan code [autodetect]
+#   --enable-vulkan-static   statically link to libvulkan [no]
 
 	if [[ $build_svt_hevc = y ]]; then
 		# SVT-HEVC patches and enable
@@ -843,13 +1045,13 @@ configure_ffmpeg_kit() {
 	local local_cxxfalgs="${CXXFLAGS} -I${install_prefix}/include -L${install_prefix}/bin -L${install_prefix}/lib -I${ffmpeg_source_dir} -I${ffmpeg_source_dir}/compat"
 
 	change_dir "${ffmpeg_kit_src_dir}"
-	make distclean 2>&1 | redirect_output
+	make distclean > >(redirect_output) 2>&1
 
 	local touch_name=$(get_small_touchfile_name "already_autoreconf_${TYPE_POSTFIX}" "$FFMPEG_KIT_VERSION $local_cflags $local_cxxfalgs")
 	if [ ! -f "$touch_name" ]; then
 		remove_path -f "${BASEDIR}/windows/already_autoreconf_${TYPE_POSTFIX}"*
 		change_dir "${ffmpeg_kit_src_dir}"
-		autoreconf_library "ffmpeg-kit" 1>>"$LOG_FILE" 2>&1 || return 1
+		autoreconf_library "ffmpeg-kit" || exit_message 1 "could not autoreconf ffmpeg-kit. See $LOG_FILE for details."
 		create_touch_file 0 "$touch_name"
 		local BUILD_DATE="-DFFMPEG_KIT_BUILD_DATE=$(date +%Y%m%d 2>>"${BASEDIR}"/build.log)"
 		export CFLAGS="${local_cflags} ${BUILD_DATE}"
@@ -904,7 +1106,7 @@ install_ffmpeg_kit() {
 	change_dir "${ffmpeg_kit_src_dir}"
 	do_make_and_make_install "" "" "$(get_build_type)" || exit_message 1 "unable to make ffmpeg-kit. see $LOG_FILE for details."
 
-	create_ffmpegkit_package_config "$(get_ffmpeg_kit_version)" 1>>"$LOG_FILE" 2>&1 || return 1
+	create_ffmpegkit_package_config "$(get_ffmpeg_kit_version)" || return 1
 
 	echo -e "INFO: Done installing ffmpeg kit to ${ffmpeg_kit_install}" | tee -a "$LOG_FILE"
 }
@@ -967,11 +1169,11 @@ create_windows_bundle() {
 		create_dir "${LICENSE_BASEDIR}"
 
 		echo -e "INFO: Copying licenses..." | tee -a "$LOG_FILE"
-		bash "${SCRIPTDIR}/extract_licenses.sh" "${src_dir}" "${LICENSE_BASEDIR}" | redirect_output
+		bash "${SCRIPTDIR}/extract_licenses.sh" "${src_dir}" "${LICENSE_BASEDIR}" > >(redirect_output) 2>&1
 		echo -e "INFO: Done copying licenses" | tee -a "$LOG_FILE"
 
-		copy_path "${BASEDIR}"/tools/source/SOURCE "${LICENSE_BASEDIR}/source.txt" 1>>"$LOG_FILE" 2>&1
-		copy_path "${BASEDIR}"/tools/license/LICENSE.GPLv3 "${LICENSE_BASEDIR}"/license.txt 1>>"${BASEDIR}"/build.log 2>&1
+		copy_path "${BASEDIR}"/tools/source/SOURCE "${LICENSE_BASEDIR}/source.txt"
+		copy_path "${BASEDIR}"/tools/license/LICENSE.GPLv3 "${LICENSE_BASEDIR}"/license.txt
 		create_touch_file 0 "$touch_name"
 	fi
 	echo -e "INFO: Done creating bundle" | tee -a "$LOG_FILE"

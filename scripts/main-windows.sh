@@ -2,12 +2,8 @@
 
 # shellcheck disable=SC2317,SC1091,SC1090,SC2120
 
-#echo -e "${SCRIPTDIR}/variable.sh"
-#echo -e "${SCRIPTDIR}/function.sh"
-#echo -e "${SCRIPTDIR}/function-windows.sh"
-
-source "${SCRIPTDIR}/function.sh"
 source "${SCRIPTDIR}/function-windows.sh"
+source "${SCRIPTDIR}/run-windows.sh"
 
 if [ -z "$(get_cpu_count)" ]; then
 	cpu_count=$(sysctl -n hw.ncpu | tr -d '\n') # OS X cpu count
@@ -139,7 +135,7 @@ if [[ -n "$build_only" ]]; then
 	step_name="${BUILD_STEPS[$index]}"
 	echo -e "--- Executing single build step: $step_name ---" | tee -a "$LOG_FILE"
 	echo -e "WARNING: This may fail if previous dependencies havent been built yet." | tee -a "$LOG_FILE"
-	build_ffmpeg_dependency_only "$step_name" 1>>"$LOG_FILE" 2>&1
+	build_ffmpeg_dependency_only "$step_name"
 	echo -e "--- Done building single build step: $step_name ---" | tee -a "$LOG_FILE"
 elif [[ -n "$build_from" ]]; then
 	if [[ $(is_integer "$build_from") != 0 ]]; then
