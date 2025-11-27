@@ -3,6 +3,7 @@
  * Copyright (c) 2000-2003 Fabrice Bellard
  * Copyright (c) 2018-2022 Taner Sener
  * Copyright (c) 2023 ARTHENICA LTD
+ * Copyright (c) 2025 Akash Patel
  *
  * This file is part of FFmpeg.
  *

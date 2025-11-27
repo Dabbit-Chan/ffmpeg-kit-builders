@@ -2,6 +2,7 @@
  * This file is part of FFmpeg.
  * Copyright (c) 2018-2022 Taner Sener
  * Copyright (c) 2023 ARTHENICA LTD
+ * Copyright (c) 2025 Akash Patel
  *
  * FFmpeg is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public

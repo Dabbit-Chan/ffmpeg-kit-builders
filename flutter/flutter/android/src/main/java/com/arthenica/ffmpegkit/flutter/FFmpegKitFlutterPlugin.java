@@ -1,6 +1,7 @@
 /*
  * Copyright (c) 2018-2022 Taner Sener
- *
+ * Copyright (c) 2025 Akash Patel
+ * 
  * This file is part of FFmpegKit.
  *
  * FFmpegKit is free software: you can redistribute it and/or modify
