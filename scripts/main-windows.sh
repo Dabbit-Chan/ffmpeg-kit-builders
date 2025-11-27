@@ -2,9 +2,6 @@
 
 # shellcheck disable=SC2317,SC1091,SC1090,SC2120
 
-source "${SCRIPTDIR}/function-windows.sh"
-source "${SCRIPTDIR}/run-windows.sh"
-
 if [ -z "$(get_cpu_count)" ]; then
 	cpu_count=$(sysctl -n hw.ncpu | tr -d '\n') # OS X cpu count
 	if [ -z "$(get_cpu_count)" ]; then

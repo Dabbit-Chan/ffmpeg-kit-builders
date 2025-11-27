@@ -2,9 +2,6 @@
 
 # shellcheck disable=SC2317,SC1091,SC1090,SC2120
 
-#echo -e "${SCRIPTDIR}/variable.sh"
-#echo -e "${SCRIPTDIR}/function.sh"
-
 find_all_build_exes() {
 	local found=""
 	# NB that we're currently in the prebuilt dir...
@@ -162,7 +159,13 @@ setup_build_environment() {
 		export PATH="$mingw_bin_path:$original_path"
 		export bits_target=32
 		export cross_prefix="$mingw_bin_path/$host_target-"
-		export compiler_flags="CC=${cross_prefix}gcc AR=${cross_prefix}ar PREFIX=$mingw_w64_x86_64_prefix RANLIB=${cross_prefix}ranlib LD=${cross_prefix}ld STRIP=${cross_prefix}strip CXX=${cross_prefix}g++"
+		export compiler_flags="CC=${cross_prefix}gcc 
+AR=${cross_prefix}ar \
+PREFIX=$mingw_w64_x86_64_prefix \
+RANLIB=${cross_prefix}ranlib \
+LD=${cross_prefix}ld \
+STRIP=${cross_prefix}strip \
+CXX=${cross_prefix}g++"
 		export CARGO_TARGET_I686_PC_WINDOWS_GNU_LINKER="${cross_prefix}gcc"  
 		export CARGO_TARGET_I868_PC_WINDOWS_GNU_AR="${cross_prefix}ar"
 	elif [[ $compiler_flavors == "win64" ]]; then
@@ -179,7 +182,13 @@ setup_build_environment() {
 		export PATH="$mingw_bin_path:$original_path"
 		export bits_target=64
 		export cross_prefix="$mingw_bin_path/$host_target-"
-		export compiler_flags="CC=${cross_prefix}gcc AR=${cross_prefix}ar PREFIX=$mingw_w64_x86_64_prefix RANLIB=${cross_prefix}ranlib LD=${cross_prefix}ld STRIP=${cross_prefix}strip CXX=${cross_prefix}g++"
+		export compiler_flags="CC=${cross_prefix}gcc 
+AR=${cross_prefix}ar \
+PREFIX=$mingw_w64_x86_64_prefix \
+RANLIB=${cross_prefix}ranlib \
+LD=${cross_prefix}ld \
+STRIP=${cross_prefix}strip \
+CXX=${cross_prefix}g++"
 		export LIB_INSTALL_BASE=$work_dir
 		export CARGO_TARGET_X86_64_PC_WINDOWS_GNU_LINKER="${cross_prefix}gcc"
 		export CARGO_TARGET_X86_64_PC_WINDOWS_GNU_AR="${cross_prefix}ar"
@@ -603,7 +612,7 @@ check_builds() {
 
 	echo -e "INFO: Checking if build already exists..." | tee -a "$LOG_FILE"
 
-	if [[ ${build_ffmpeg_static,,} =~ ^(y|yes|1|true|on)$ ]]; then
+	if truthy $build_ffmpeg_static; then
 		echo -e "INFO: Static build requested..." | tee -a "$LOG_FILE"
 		if [[ $static_build_exists == 0 || "$BUILD_FORCE" -eq 1 ]]; then
 			build_dir="$work_dir/$(get_ffmpeg_directory static)" #install_prefix
@@ -615,7 +624,7 @@ check_builds() {
 		else
 			echo -e "INFO: Static build already exists at $build_dir" | tee -a "$LOG_FILE"
 		fi
-	elif [[ ${build_ffmpeg_shared,,} =~ ^(y|yes|1|true|on)$ ]]; then
+	elif truthy $build_ffmpeg_shared; then
 		echo -e "INFO: Shared build requested..." | tee -a "$LOG_FILE"
 		if [[ $shared_build_exists == 0 || "$BUILD_FORCE" -eq 1 ]]; then
 			build_dir="$work_dir/$(get_ffmpeg_directory shared)" #install_prefix
@@ -765,7 +774,7 @@ configure_ffmpeg() {
 	init_options+=" --enable-w32threads"
 
 	# can't mix and match --enable-static --enable-shared unfortunately, or the final executable seems to just use shared if the're both present
-	if [[ ${build_ffmpeg_shared,,} =~ ^(y|yes|1|true|on)$ ]]; then
+	if truthy $build_ffmpeg_shared; then
 		postpend_configure_opts=" --enable-shared --disable-static" # I guess this doesn't have to be at the end...
 	else
 		postpend_configure_opts=" --enable-static --disable-shared"
@@ -781,234 +790,216 @@ configure_ffmpeg() {
 	config_options+=" --disable-openssl"
 	config_options+=" --disable-outdev=fbdev"
   config_options+=" --disable-indev=fbdev"
-  config_options+=" --disable-neon-clobber-test"
-  config_options+=" --disable-sndio"
-  config_options+=" --disable-xlib"
-	# hw accel features
-  config_options+=" --disable-cuda"
-  config_options+=" --disable-cuvid"
-  config_options+=" --disable-nvenc"
-  config_options+=" --disable-vaapi"
-  config_options+=" --disable-vdpau"
-	# apple features
-  config_options+=" --disable-securetransport"
-	config_options+=" --disable-videotoolbox"
-  config_options+=" --disable-audiotoolbox"
-  config_options+=" --disable-appkit"
+  config_options+="$enable_nonfree"
+  #------------------------------------------------------------------------------     
+  # ----------------------------- android features ------------------------------     
+  #------------------------------------------------------------------------------      
+  if [[ $FFMPEG_KIT_BUILD_TYPE == "android" ]]; then
+  truthy $disable_jni && config_options+=" --disable-jni"                           # enable JNI support [no]
+  truthy $disable_ladspa && config_options+=" --disable-ladspa"                     # enable LADSPA audio filtering [no]
+  truthy $disable_mediacodec && config_options+=" --disable-mediacodec"             # enable Android MediaCodec support [no]
+  fi
+  #------------------------------------------------------------------------------    
+  # ----------------------------- harmony features ------------------------------     
+  #------------------------------------------------------------------------------    
+  if [[ $FFMPEG_KIT_BUILD_TYPE == "harmony" ]]; then
+  truthy $disable_ohcodec && config_options+=" --disable-ohcodec"                   # enable OpenHarmony Codec support [no]
+  fi
+  #------------------------------------------------------------------------------    
+  # --------------------------- linux/unix features -----------------------------     
+  #------------------------------------------------------------------------------    
+  if [[ $FFMPEG_KIT_BUILD_TYPE == "linux" ]]; then
+  truthy $disable_alsa && config_options+=" --disable-alsa"                         # disable ALSA support [autodetect]
+  truthy $disable_libdc1394 && config_options+=" --disable-libdc1394"               # enable IIDC-1394 grabbing using libdc1394 and libraw1394 [no]
+  truthy $disable_libdrm && config_options+=" --disable-libdrm"                     # disable DRM code (Linux) [autodetect]
+  truthy $disable_libiec61883 && config_options+=" --disable-libiec61883"           # enable iec61883 via libiec61883 [no]
+  truthy $disable_libv4l2 && config_options+=" --disable-libv4l2"                   # enable libv4l2/v4l-utils [no]
+  truthy $disable_libxcb_shape && config_options+=" --disable-libxcb-shape"         # enable X11 grabbing shape rendering [autodetect]
+  truthy $disable_libxcb_shm && config_options+=" --disable-libxcb-shm"             # enable X11 grabbing shm communication [autodetect]
+  truthy $disable_libxcb_xfixes && config_options+=" --disable-libxcb-xfixes"       # enable X11 grabbing mouse rendering [autodetect]
+  truthy $disable_libxcb && config_options+=" --disable-libxcb"                     # enable X11 grabbing using XCB [autodetect]
+  truthy $disable_rkmpp && config_options+=" --disable-rkmpp"                       # enable Rockchip Media Process Platform code [no]
+  truthy $disable_v4l2_m2m && config_options+=" --disable-v4l2-m2m"                 # disable V4L2 mem2mem code [autodetect]
+  truthy $disable_vaapi && config_options+=" --disable-vaapi"                       # disable Video Acceleration API (mainly Unix/Intel) code [autodetect]
+  truthy $disable_vdpau && config_options+=" --disable-vdpau"                       # disable Nvidia Video Decode and Presentation API for Unix code [autodetect]
+  truthy $disable_xlib && config_options+=" --disable-xlib"                         # disable xlib [autodetect]
+  fi
+  #------------------------------------------------------------------------------
+  # ----------------------------- hardware features ----------------------------- 
+  #------------------------------------------------------------------------------
+  truthy $disable_amf && config_options+=" --disable-amf"                           # disable AMF video encoding code [autodetect]
+  truthy $disable_vaapi && config_options+=" --disable-vaapi"                       # disable Video Acceleration API (mainly Unix/Intel) code [autodetect]
+  truthy $disable_vulkan && config_options+=" --disable-vulkan"                     # disable Vulkan code [autodetect]
+  truthy $enable_libmfx && config_options+=" --enable-libmfx"                       # enable Intel MediaSDK (AKA Quick Sync Video) code via libmfx [no]
+  truthy $enable_libvpl && config_options+=" --enable-libvpl"                       # enable Intel oneVPL code via libvpl if libmfx is not used [no]
+  truthy $enable_omx && config_options+=" --enable-omx"                             # enable OpenMAX IL code [no]
+  truthy $enable_vulkan_static && config_options+=" --enable-vulkan-static"         # statically link to libvulkan [no]
+  #------------------------------------------------------------------------------
+  # ----------------------------- windows features ------------------------------ 
+  #------------------------------------------------------------------------------
+  if [[ $FFMPEG_KIT_BUILD_TYPE == "windows" ]]; then
+  truthy $enable_avisynth && config_options+=" --enable-avisynth"                   # enable reading of AviSynth script files [no]
+  fi
+  #------------------------------------------------------------------------------
+  # -------------------------- cross-platform features --------------------------
+  #------------------------------------------------------------------------------ 
+  truthy $disable_bzlib && config_options+=" --disable-bzlib"                       # disable bzlib [autodetect]
+  truthy $disable_iconv && config_options+=" --disable-iconv"                       # disable iconv [autodetect]
+  truthy $disable_lzma && config_options+=" --disable-lzma"                         # disable lzma [autodetect]
+  truthy $disable_sdl2 && config_options+=" --disable-sdl2"                         # disable sdl2 [autodetect]
+  truthy $disable_sndio && config_options+=" --disable-sndio"                       # disable sndio support [autodetect]
+  truthy $disable_zlib && config_options+=" --disable-zlib"                         # disable zlib [autodetect]
+  truthy $enable_libvo_amrwbenc && config_options+=" --enable-libvo-amrwbenc"       # enable AMR-WB encoding via libvo-amrwbenc [no]
+  truthy $enable_libopencore_amrnb && config_options+=" --enable-libopencore-amrnb" # enable AMR-NB de/encoding via libopencore-amrnb [no]
+  truthy $enable_libopencore_amrwb && config_options+=" --enable-libopencore-amrwb" # enable AMR-WB decoding via libopencore-amrwb [no]
+  truthy $enable_liblcevc_dec && config_options+=" --enable-liblcevc-dec"           # enable LCEVC decoding via liblcevc-dec [no]
+  truthy $enable_chromaprint && config_options+=" --enable-chromaprint"             # enable audio fingerprinting with chromaprint [no]
+  truthy $enable_frei0r && config_options+=" --enable-frei0r"                       # enable frei0r video filtering [no]
+  truthy $enable_gcrypt && config_options+=" --enable-gcrypt"                       # enable gcrypt, needed for rtmp(t)e support if openssl, librtmp or gmp is not used [no]
+  truthy $enable_gmp && config_options+=" --enable-gmp"                             # enable gmp, needed for rtmp(t)e support if openssl or librtmp is not used [no]
+  truthy $enable_gnutls && config_options+=" --enable-gnutls"                       # enable gnutls, needed for https support if openssl, libtls or mbedtls is not used [no]
+  truthy $enable_lcms2 && config_options+=" --enable-lcms2"                         # enable ICC profile support via LittleCMS 2 [no]
+  truthy $enable_libaom && config_options+=" --enable-libaom"                       # enable AV1 video encoding/decoding via libaom [no]
+  truthy $enable_libaribb24 && config_options+=" --enable-libaribb24"               # enable ARIB text and caption decoding via libaribb24 [no]
+  truthy $enable_libaribcaption && config_options+=" --enable-libaribcaption"       # enable ARIB text and caption decoding via libaribcaption [no]
+  truthy $enable_libass && config_options+=" --enable-libass"                       # enable libass subtitles rendering, needed for subtitles and ass filter [no]
+  truthy $enable_libbluray && config_options+=" --enable-libbluray"                 # enable BluRay reading using libbluray [no]
+  truthy $enable_libbs2b && config_options+=" --enable-libbs2b"                     # enable bs2b DSP library [no]
+  truthy $enable_libcaca && config_options+=" --enable-libcaca"                     # enable textual display using libcaca [no]
+  truthy $enable_libcdio && config_options+=" --enable-libcdio"                     # enable audio CD grabbing with libcdio [no]
+  truthy $enable_libcelt && config_options+=" --enable-libcelt"                     # enable CELT decoding via libcelt [no]
+  truthy $enable_libcodec2 && config_options+=" --enable-libcodec2"                 # enable codec2 en/decoding using libcodec2 [no]
+  truthy $enable_libdav1d && config_options+=" --enable-libdav1d"                   # enable AV1 decoding via libdav1d [no]
+  truthy $enable_libdavs2 && config_options+=" --enable-libdavs2"                   # enable AVS2 decoding via libdavs2 [no]
+  truthy $enable_libdvdnav && config_options+=" --enable-libdvdnav"                 # enable libdvdnav, needed for DVD demuxing [no]
+  truthy $enable_libdvdread && config_options+=" --enable-libdvdread"               # enable libdvdread, needed for DVD demuxing [no]
+  truthy $enable_libflite && config_options+=" --enable-libflite"                   # enable flite (voice synthesis) support via libflite [no]
+  truthy $enable_libfontconfig && config_options+=" --enable-libfontconfig"         # enable libfontconfig, useful for drawtext filter [no]
+  truthy $enable_libfreetype && config_options+=" --enable-libfreetype"             # enable libfreetype, needed for drawtext filter [no]
+  truthy $enable_libfribidi && config_options+=" --enable-libfribidi"               # enable libfribidi, improves drawtext filter [no]
+  truthy $enable_libglslang && config_options+=" --enable-libglslang"               # enable GLSL->SPIRV compilation via libglslang [no]
+  truthy $enable_libgme && config_options+=" --enable-libgme"                       # enable Game Music Emu via libgme [no]
+  truthy $enable_libgsm && config_options+=" --enable-libgsm"                       # enable GSM de/encoding via libgsm [no]
+  truthy $enable_libharfbuzz && config_options+=" --enable-libharfbuzz"             # enable libharfbuzz, needed for drawtext filter [no]
+  truthy $enable_libilbc && config_options+=" --enable-libilbc"                     # enable iLBC de/encoding via libilbc [no]
+  truthy $enable_libjack && config_options+=" --enable-libjack"                     # enable JACK audio sound server [no]
+  truthy $enable_libjxl && config_options+=" --enable-libjxl"                       # enable JPEG XL de/encoding via libjxl [no]
+  truthy $enable_libklvanc && config_options+=" --enable-libklvanc"                 # enable Kernel Labs VANC processing [no]
+  truthy $enable_libkvazaar && config_options+=" --enable-libkvazaar"               # enable HEVC encoding via libkvazaar [no]
+  truthy $enable_liblc3 && config_options+=" --enable-liblc3"                       # enable LC3 de/encoding via liblc3 [no]
+  truthy $enable_liblensfun && config_options+=" --enable-liblensfun"               # enable lensfun lens correction [no]
+  truthy $enable_libmodplug && config_options+=" --enable-libmodplug"               # enable ModPlug via libmodplug [no]
+  truthy $enable_libmp3lame && config_options+=" --enable-libmp3lame"               # enable MP3 encoding via libmp3lame [no]
+  truthy $enable_libmysofa && config_options+=" --enable-libmysofa"                 # enable libmysofa, needed for sofalizer filter [no]
+  truthy $enable_liboapv && config_options+=" --enable-liboapv"                     # enable APV encoding via liboapv [no]
+  truthy $enable_libopencv && config_options+=" --enable-libopencv"                 # enable video filtering via libopencv [no]
+  truthy $enable_libopenh264 && config_options+=" --enable-libopenh264"             # enable H.264 encoding via OpenH264 [no]
+  truthy $enable_libopenjpeg && config_options+=" --enable-libopenjpeg"             # enable JPEG 2000 encoding via OpenJPEG [no]
+  truthy $enable_libopenmpt && config_options+=" --enable-libopenmpt"               # enable decoding tracked files via libopenmpt [no]
+  truthy $enable_libopenvino && config_options+=" --enable-libopenvino"             # enable OpenVINO as a DNN module backend for DNN based filters like dnn_processing [no]
+  truthy $enable_libopus && config_options+=" --enable-libopus"                     # enable Opus de/encoding via libopus [no]
+  truthy $enable_libplacebo && config_options+=" --enable-libplacebo"               # enable libplacebo library [no]
+  truthy $enable_libpulse && config_options+=" --enable-libpulse"                   # enable Pulseaudio input via libpulse [no]
+  truthy $enable_libqrencode && config_options+=" --enable-libqrencode"             # enable QR encode generation via libqrencode [no]
+  truthy $enable_libquirc && config_options+=" --enable-libquirc"                   # enable QR decoding via libquirc [no]
+  truthy $enable_librabbitmq && config_options+=" --enable-librabbitmq"             # enable RabbitMQ library [no]
+  truthy $enable_librav1e && config_options+=" --enable-librav1e"                   # enable AV1 encoding via rav1e [no]
+  truthy $enable_librist && config_options+=" --enable-librist"                     # enable RIST via librist [no]
+  truthy $enable_librsvg && config_options+=" --enable-librsvg"                     # enable SVG rasterization via librsvg [no]
+  truthy $enable_librtmp && config_options+=" --enable-librtmp"                     # enable RTMP[E] support via librtmp [no]
+  truthy $enable_librubberband && config_options+=" --enable-librubberband"         # enable rubberband needed for rubberband filter [no]
+  truthy $enable_libshaderc && config_options+=" --enable-libshaderc"               # enable GLSL->SPIRV compilation via libshaderc [no]
+  truthy $enable_libshine && config_options+=" --enable-libshine"                   # enable fixed-point MP3 encoding via libshine [no]
+  truthy $enable_libsmbclient && config_options+=" --enable-libsmbclient"           # enable Samba protocol via libsmbclient [no]
+  truthy $enable_libsnappy && config_options+=" --enable-libsnappy"                 # enable Snappy compression, needed for hap encoding [no]
+  truthy $enable_libsoxr && config_options+=" --enable-libsoxr"                     # enable Include libsoxr resampling [no]
+  truthy $enable_libspeex && config_options+=" --enable-libspeex"                   # enable Speex de/encoding via libspeex [no]
+  truthy $enable_libsrt && config_options+=" --enable-libsrt"                       # enable Haivision SRT protocol via libsrt [no]
+  truthy $enable_libssh && config_options+=" --enable-libssh"                       # enable SFTP protocol via libssh [no]
+  truthy $enable_libtensorflow && config_options+=" --enable-libtensorflow"         # enable TensorFlow as a DNN module backend for DNN based filters like sr [no]
+  truthy $enable_libtesseract && config_options+=" --enable-libtesseract"           # enable Tesseract, needed for ocr filter [no]
+  truthy $enable_libtheora && config_options+=" --enable-libtheora"                 # enable Theora encoding via libtheora [no]
+  truthy $enable_libtls && config_options+=" --enable-libtls"                       # enable LibreSSL (via libtls), needed for https support if openssl, gnutls or mbedtls is not used [no]
+  truthy $enable_libtorch && config_options+=" --enable-libtorch"                   # enable Torch as one DNN backend [no]
+  truthy $enable_libtwolame && config_options+=" --enable-libtwolame"               # enable MP2 encoding via libtwolame [no]
+  truthy $enable_libuavs3d && config_options+=" --enable-libuavs3d"                 # enable AVS3 decoding via libuavs3d [no]
+  truthy $enable_libvidstab && config_options+=" --enable-libvidstab"               # enable video stabilization using vid.stab [no]
+  truthy $enable_libvmaf && config_options+=" --enable-libvmaf"                     # enable vmaf filter via libvmaf [no]
+  truthy $enable_libvorbis && config_options+=" --enable-libvorbis"                 # enable Vorbis en/decoding via libvorbis, native implementation exists [no]
+  truthy $enable_libvpx && config_options+=" --enable-libvpx"                       # enable VP8 and VP9 de/encoding via libvpx [no]
+  truthy $enable_libvvenc && config_options+=" --enable-libvvenc"                   # enable H.266/VVC encoding via vvenc [no]
+  truthy $enable_libwebp && config_options+=" --enable-libwebp"                     # enable WebP encoding via libwebp [no]
+  truthy $enable_libx264 && config_options+=" --enable-libx264"                     # enable H.264 encoding via x264 [no]
+  truthy $enable_libx265 && config_options+=" --enable-libx265"                     # enable HEVC encoding via x265 [no]
+  truthy $enable_libxavs && config_options+=" --enable-libxavs"                     # enable AVS encoding via xavs [no]
+  truthy $enable_libxavs2 && config_options+=" --enable-libxavs2"                   # enable AVS2 encoding via xavs2 [no]
+  truthy $enable_libxevd && config_options+=" --enable-libxevd"                     # enable EVC decoding via libxevd [no]
+  truthy $enable_libxeve && config_options+=" --enable-libxeve"                     # enable EVC encoding via libxeve [no]
+  truthy $enable_libxml2 && config_options+=" --enable-libxml2"                     # enable XML parsing using the C library libxml2, needed for dash and imf demuxing support [no]
+  truthy $enable_libxvid && config_options+=" --enable-libxvid"                     # enable Xvid encoding via xvidcore, native MPEG-4/Xvid encoder exists [no]
+  truthy $enable_libzimg && config_options+=" --enable-libzimg"                     # enable z.lib, needed for zscale filter [no]
+  truthy $enable_libzmq && config_options+=" --enable-libzmq"                       # enable message passing via libzmq [no]
+  truthy $enable_libzvbi && config_options+=" --enable-libzvbi"                     # enable teletext support via libzvbi [no]
+  truthy $enable_lv2 && config_options+=" --enable-lv2"                             # enable LV2 audio filtering [no]
+  truthy $enable_mbedtls && config_options+=" --enable-mbedtls"                     # enable mbedTLS, needed for https support if openssl, gnutls or libtls is not used [no]
+  truthy $enable_openal && config_options+=" --enable-openal"                       # enable OpenAL 1.1 capture support [no]
+  truthy $enable_opencl && config_options+=" --enable-opencl"                       # enable OpenCL processing [no]
+  truthy $enable_opengl && config_options+=" --enable-opengl"                       # enable OpenGL rendering [no]
+  truthy $enable_openssl && config_options+=" --enable-openssl"                     # enable openssl, needed for https support if gnutls, libtls or mbedtls is not used [no]
+  truthy $enable_pocketsphinx && config_options+=" --enable-pocketsphinx"           # enable PocketSphinx, needed for asr filter [no]
+  truthy $enable_vapoursynth && config_options+=" --enable-vapoursynth"             # enable VapourSynth demuxer [no]
+  truthy $enable_whisper && config_options+=" --enable-whisper"                     # enable whisper filter [no]
 
+  # add any additional ff prefixed flags 
+  ff_flags=$(concat_array "$ff_flags_values" " ")
+  config_options+=" $ff_flags"
 
-##   --enable-chromaprint       enable audio fingerprinting with chromaprint [no]
-##   --enable-frei0r            enable frei0r video filtering [no]
-#   --enable-gcrypt            enable gcrypt, needed for rtmp(t)e support
-#                              if openssl, librtmp or gmp is not used [no]
-##   --enable-gmp               enable gmp, needed for rtmp(t)e support
-#                              if openssl or librtmp is not used [no]
-##   --enable-gnutls            enable gnutls, needed for https support
-#                              if openssl, libtls or mbedtls is not used [no]
-#   --enable-jni               enable JNI support [no]
-#   --enable-ladspa            enable LADSPA audio filtering [no]
-##   --enable-lcms2             enable ICC profile support via LittleCMS 2 [no]
-##   --enable-libaom            enable AV1 video encoding/decoding via libaom [no]
-##   --enable-libaribb24        enable ARIB text and caption decoding via libaribb24 [no]
-##   --enable-libaribcaption    enable ARIB text and caption decoding via libaribcaption [no]
-##   --enable-libass            enable libass subtitles rendering,
-#                              needed for subtitles and ass filter [no]
-#   --enable-libbluray         enable BluRay reading using libbluray [no]
-#   --enable-libbs2b           enable bs2b DSP library [no]
-#   --enable-libcaca           enable textual display using libcaca [no]
-#   --enable-libcelt           enable CELT decoding via libcelt [no]
-#   --enable-libcdio           enable audio CD grabbing with libcdio [no]
-#   --enable-libcodec2         enable codec2 en/decoding using libcodec2 [no]
-#   --enable-libdav1d          enable AV1 decoding via libdav1d [no]
-#   --enable-libdavs2          enable AVS2 decoding via libdavs2 [no]
-#   --enable-libdc1394         enable IIDC-1394 grabbing using libdc1394
-#                              and libraw1394 [no]
-#   --enable-libdvdnav         enable libdvdnav, needed for DVD demuxing [no]
-#   --enable-libdvdread        enable libdvdread, needed for DVD demuxing [no]
-#   --enable-libfdk-aac        enable AAC de/encoding via libfdk-aac [no]
-#   --enable-libflite          enable flite (voice synthesis) support via libflite [no]
-#   --enable-libfontconfig     enable libfontconfig, useful for drawtext filter [no]
-#   --enable-libfreetype       enable libfreetype, needed for drawtext filter [no]
-#   --enable-libfribidi        enable libfribidi, improves drawtext filter [no]
-#   --enable-libharfbuzz       enable libharfbuzz, needed for drawtext filter [no]
-#   --enable-libglslang        enable GLSL->SPIRV compilation via libglslang [no]
-#   --enable-libgme            enable Game Music Emu via libgme [no]
-#   --enable-libgsm            enable GSM de/encoding via libgsm [no]
-#   --enable-libiec61883       enable iec61883 via libiec61883 [no]
-#   --enable-libilbc           enable iLBC de/encoding via libilbc [no]
-#   --enable-libjack           enable JACK audio sound server [no]
-#   --enable-libjxl            enable JPEG XL de/encoding via libjxl [no]
-#   --enable-libklvanc         enable Kernel Labs VANC processing [no]
-#   --enable-libkvazaar        enable HEVC encoding via libkvazaar [no]
-#   --enable-liblc3            enable LC3 de/encoding via liblc3 [no]
-#   --enable-liblcevc-dec      enable LCEVC decoding via liblcevc-dec [no]
-#   --enable-liblensfun        enable lensfun lens correction [no]
-#   --enable-libmodplug        enable ModPlug via libmodplug [no]
-#   --enable-libmp3lame        enable MP3 encoding via libmp3lame [no]
-#   --enable-liboapv           enable APV encoding via liboapv [no]
-#   --enable-libopencore-amrnb enable AMR-NB de/encoding via libopencore-amrnb [no]
-#   --enable-libopencore-amrwb enable AMR-WB decoding via libopencore-amrwb [no]
-#   --enable-libopencv         enable video filtering via libopencv [no]
-#   --enable-libopenh264       enable H.264 encoding via OpenH264 [no]
-#   --enable-libopenjpeg       enable JPEG 2000 encoding via OpenJPEG [no]
-#   --enable-libopenmpt        enable decoding tracked files via libopenmpt [no]
-#   --enable-libopenvino       enable OpenVINO as a DNN module backend
-#                              for DNN based filters like dnn_processing [no]
-#   --enable-libopus           enable Opus de/encoding via libopus [no]
-#   --enable-libplacebo        enable libplacebo library [no]
-#   --enable-libpulse          enable Pulseaudio input via libpulse [no]
-#   --enable-libqrencode       enable QR encode generation via libqrencode [no]
-#   --enable-libquirc          enable QR decoding via libquirc [no]
-#   --enable-librabbitmq       enable RabbitMQ library [no]
-#   --enable-librav1e          enable AV1 encoding via rav1e [no]
-#   --enable-librist           enable RIST via librist [no]
-#   --enable-librsvg           enable SVG rasterization via librsvg [no]
-#   --enable-librubberband     enable rubberband needed for rubberband filter [no]
-#   --enable-librtmp           enable RTMP[E] support via librtmp [no]
-#   --enable-libshaderc        enable GLSL->SPIRV compilation via libshaderc [no]
-#   --enable-libshine          enable fixed-point MP3 encoding via libshine [no]
-#   --enable-libsmbclient      enable Samba protocol via libsmbclient [no]
-#   --enable-libsnappy         enable Snappy compression, needed for hap encoding [no]
-#   --enable-libsoxr           enable Include libsoxr resampling [no]
-#   --enable-libspeex          enable Speex de/encoding via libspeex [no]
-#   --enable-libsrt            enable Haivision SRT protocol via libsrt [no]
-#   --enable-libssh            enable SFTP protocol via libssh [no]
-#   --enable-libsvtav1         enable AV1 encoding via SVT [no]
-#   --enable-libtensorflow     enable TensorFlow as a DNN module backend
-#                              for DNN based filters like sr [no]
-#   --enable-libtesseract      enable Tesseract, needed for ocr filter [no]
-#   --enable-libtheora         enable Theora encoding via libtheora [no]
-#   --enable-libtls            enable LibreSSL (via libtls), needed for https support
-#                              if openssl, gnutls or mbedtls is not used [no]
-#   --enable-libtorch          enable Torch as one DNN backend [no]
-#   --enable-libtwolame        enable MP2 encoding via libtwolame [no]
-#   --enable-libuavs3d         enable AVS3 decoding via libuavs3d [no]
-#   --enable-libv4l2           enable libv4l2/v4l-utils [no]
-#   --enable-libvidstab        enable video stabilization using vid.stab [no]
-#   --enable-libvmaf           enable vmaf filter via libvmaf [no]
-#   --enable-libvo-amrwbenc    enable AMR-WB encoding via libvo-amrwbenc [no]
-#   --enable-libvorbis         enable Vorbis en/decoding via libvorbis,
-#                              native implementation exists [no]
-#   --enable-libvpx            enable VP8 and VP9 de/encoding via libvpx [no]
-#   --enable-libvvenc          enable H.266/VVC encoding via vvenc [no]
-#   --enable-libwebp           enable WebP encoding via libwebp [no]
-#   --enable-libx264           enable H.264 encoding via x264 [no]
-#   --enable-libx265           enable HEVC encoding via x265 [no]
-#   --enable-libxeve           enable EVC encoding via libxeve [no]
-#   --enable-libxevd           enable EVC decoding via libxevd [no]
-#   --enable-libxavs           enable AVS encoding via xavs [no]
-#   --enable-libxavs2          enable AVS2 encoding via xavs2 [no]
-#   --enable-libxvid           enable Xvid encoding via xvidcore,
-#                              native MPEG-4/Xvid encoder exists [no]
-#   --enable-libxml2           enable XML parsing using the C library libxml2, needed
-#                              for dash and imf demuxing support [no]
-#   --enable-libzimg           enable z.lib, needed for zscale filter [no]
-#   --enable-libzmq            enable message passing via libzmq [no]
-#   --enable-libzvbi           enable teletext support via libzvbi [no]
-#   --enable-lv2               enable LV2 audio filtering [no]
-#   --enable-decklink          enable Blackmagic DeckLink I/O support [no]
-#   --enable-mbedtls           enable mbedTLS, needed for https support
-#                              if openssl, gnutls or libtls is not used [no]
-#   --enable-mediacodec        enable Android MediaCodec support [no]
-#   --enable-mediafoundation   enable encoding via MediaFoundation [auto]
-#   --enable-libmysofa         enable libmysofa, needed for sofalizer filter [no]
-#   --enable-ohcodec           enable OpenHarmony Codec support [no]
-#   --enable-openal            enable OpenAL 1.1 capture support [no]
-#   --enable-opencl            enable OpenCL processing [no]
-#   --enable-opengl            enable OpenGL rendering [no]
-#   --enable-openssl           enable openssl, needed for https support
-#                              if gnutls, libtls or mbedtls is not used [no]
-#   --enable-pocketsphinx      enable PocketSphinx, needed for asr filter [no]
-#   --enable-vapoursynth       enable VapourSynth demuxer [no]
-#   --enable-whisper           enable whisper filter [no]
-
-# External library support:
-
-#   Using any of the following switches will allow FFmpeg to link to the
-#   corresponding external library. All the components depending on that library
-#   will become enabled, if all their other dependencies are met and they are not
-#   explicitly disabled. E.g. --enable-libopus will enable linking to
-#   libopus and allow the libopus encoder to be built, unless it is
-#   specifically disabled with --disable-encoder=libopus.
-
-#   Note that only the system libraries are auto-detected. All the other external
-#   libraries must be explicitly enabled.
-
-#   Also note that the following help text describes the purpose of the libraries
-#   themselves, not all their features will necessarily be usable by FFmpeg.
-
-#   --disable-alsa           disable ALSA support [autodetect]
-#   --disable-appkit         disable Apple AppKit framework [autodetect]
-#   --disable-avfoundation   disable Apple AVFoundation framework [autodetect]
-#   --enable-avisynth        enable reading of AviSynth script files [no]
-#   --disable-bzlib          disable bzlib [autodetect]
-#   --disable-coreimage      disable Apple CoreImage framework [autodetect]
-#   --disable-iconv          disable iconv [autodetect]
-#   --enable-libxcb          enable X11 grabbing using XCB [autodetect]
-#   --enable-libxcb-shm      enable X11 grabbing shm communication [autodetect]
-#   --enable-libxcb-xfixes   enable X11 grabbing mouse rendering [autodetect]
-#   --enable-libxcb-shape    enable X11 grabbing shape rendering [autodetect]
-#   --disable-lzma           disable lzma [autodetect]
-#   --enable-mediafoundation enable encoding via MediaFoundation [auto]
-#   --disable-metal          disable Apple Metal framework [autodetect]
-#   --disable-sndio          disable sndio support [autodetect]
-#   --disable-schannel       disable SChannel SSP, needed for TLS support on
-#                            Windows if openssl and gnutls are not used [autodetect]
-#   --disable-sdl2           disable sdl2 [autodetect]
-#   --disable-securetransport disable Secure Transport, needed for TLS support
-#                            on OSX if openssl and gnutls are not used [autodetect]
-#   --disable-xlib           disable xlib [autodetect]
-#   --disable-zlib           disable zlib [autodetect]
-
-#   The following libraries provide various hardware acceleration features:
-#   --disable-amf            disable AMF video encoding code [autodetect]
-#   --disable-audiotoolbox   disable Apple AudioToolbox code [autodetect]
-#   --enable-cuda-nvcc       enable Nvidia CUDA compiler [no]
-#   --disable-cuda-llvm      disable CUDA compilation using clang [autodetect]
-#   --disable-cuvid          disable Nvidia CUVID support [autodetect]
-#   --disable-d3d11va        disable Microsoft Direct3D 11 video acceleration code [autodetect]
-#   --disable-d3d12va        disable Microsoft Direct3D 12 video acceleration code [autodetect]
-#   --disable-dxva2          disable Microsoft DirectX 9 video acceleration code [autodetect]
-#   --disable-ffnvcodec      disable dynamically linked Nvidia code [autodetect]
-#   --disable-libdrm         disable DRM code (Linux) [autodetect]
-#   --enable-libmfx          enable Intel MediaSDK (AKA Quick Sync Video) code via libmfx [no]
-#   --enable-libvpl          enable Intel oneVPL code via libvpl if libmfx is not used [no]
-#   --enable-libnpp          enable Nvidia Performance Primitives-based code [no]
-#   --enable-mmal            enable Broadcom Multi-Media Abstraction Layer (Raspberry Pi) via MMAL [no]
-#   --disable-nvdec          disable Nvidia video decoding acceleration (via hwaccel) [autodetect]
-#   --disable-nvenc          disable Nvidia video encoding code [autodetect]
-#   --enable-omx             enable OpenMAX IL code [no]
-#   --enable-omx-rpi         enable OpenMAX IL code for Raspberry Pi [no]
-#   --enable-rkmpp           enable Rockchip Media Process Platform code [no]
-#   --disable-v4l2-m2m       disable V4L2 mem2mem code [autodetect]
-#   --disable-vaapi          disable Video Acceleration API (mainly Unix/Intel) code [autodetect]
-#   --disable-vdpau          disable Nvidia Video Decode and Presentation API for Unix code [autodetect]
-#   --disable-videotoolbox   disable VideoToolbox code [autodetect]
-#   --disable-vulkan         disable Vulkan code [autodetect]
-#   --enable-vulkan-static   statically link to libvulkan [no]
-
-	if [[ $build_svt_hevc = y ]]; then
-		# SVT-HEVC patches and enable
-		git apply "$src_dir/SVT-HEVC_git/ffmpeg_plugin/master-0001-lavc-svt_hevc-add-libsvt-hevc-encoder-wrapper.patch"
-		config_options+=" --enable-libsvthevc"
-	fi
-
-	if [[ $build_svt_vp9 == "y" ]]; then
-		# SVT-VP9 patches and enable
-		git apply "$src_dir/SVT-VP9_git/ffmpeg_plugin/master-0001-Add-ability-for-ffmpeg-to-run-svt-vp9.patch"
-	fi
 	# SVT-AV1
 	git apply "$src_dir/SVT-AV1_git/.gitlab/workflows/linux/ffmpeg_n7_fix.patch" >/dev/null 2>&1
 	patch_exists=$?
 	if [[ $patch_exists != 0 ]]; then
 		config_options+=" --disable-libsvtav1"
+  else
+    truthy $enable_libsvtav1 && config_options+=" --enable-libsvtav1"                 # enable AV1 encoding via SVT [no]
 	fi
 
-	if [[ ${GPL_ENABLED,,} =~ ^(y|yes|1|true|on)$ ]]; then
-		config_options+=" --enable-gpl --enable-frei0r --enable-librubberband --enable-libvidstab --enable-libx265 --enable-avisynth --enable-libxvid --enable-libdavs2"
-		if [[ $host_target != 'i686-w64-mingw32' ]]; then
-			config_options+=" --enable-libxavs2"
-		fi
+	if truthy $GPL_ENABLED; then
+		config_options+=" --enable-gpl"
+  else
+    truthy $enable_decklink && config_options+=" --enable-decklink"                   # enable Blackmagic DeckLink I/O support [no]
+    truthy $enable_libfdk_aac && config_options+=" --enable-libfdk-aac"               # enable AAC de/encoding via libfdk-aac [no]
+    # ----------------------------- hardware features ----------------------------- 
+    truthy $disable_cuda_llvm && config_options+=" --disable-cuda-llvm"               # disable CUDA compilation using clang [autodetect]
+    truthy $disable_cuvid && config_options+=" --disable-cuvid"                       # disable Nvidia CUVID support [autodetect]
+    truthy $disable_ffnvcodec && config_options+=" --disable-ffnvcodec"               # disable dynamically linked Nvidia code [autodetect]
+    truthy $disable_nvdec && config_options+=" --disable-nvdec"                       # disable Nvidia video decoding acceleration (via hwaccel) [autodetect]
+    truthy $disable_nvenc && config_options+=" --disable-nvenc"                       # disable Nvidia video encoding code [autodetect]
+    truthy $disable_vdpau && config_options+=" --disable-vdpau"                       # disable Nvidia Video Decode and Presentation API for Unix code [autodetect]
+    truthy $enable_cuda_nvcc && config_options+=" --enable-cuda-nvcc"                 # enable Nvidia CUDA compiler [no]
+    truthy $enable_libnpp && config_options+=" --enable-libnpp"                       # enable Nvidia Performance Primitives-based code [no]
+    # --------------------------- linux/unix features -----------------------------    
+    if [[ $FFMPEG_KIT_BUILD_TYPE == "linux" ]]; then
+    truthy $disable_mmal && config_options+=" --disable-mmal"                         # enable Broadcom Multi-Media Abstraction Layer (Raspberry Pi) via MMAL [no]
+    truthy $disable_omx_rpi && config_options+=" --disable-omx-rpi"                   # enable OpenMAX IL code for Raspberry Pi [no]
+    fi
+    # ----------------------------- windows features ------------------------------ 
+    if [[ $FFMPEG_KIT_BUILD_TYPE == "windows" ]]; then
+    truthy $disable_d3d11va && config_options+=" --disable-d3d11va"                   # disable Microsoft Direct3D 11 video acceleration code [autodetect]
+    truthy $disable_d3d12va && config_options+=" --disable-d3d12va"                   # disable Microsoft Direct3D 12 video acceleration code [autodetect]
+    truthy $disable_dxva2 && config_options+=" --disable-dxva2"                       # disable Microsoft DirectX 9 video acceleration code [autodetect]
+    truthy $disable_schannel && config_options+=" --disable-schannel"                 # disable SChannel SSP, needed for TLS support on Windows if openssl and gnutls are not used [autodetect]
+    ! truthy $disable_mediafoundation && config_options+=" --enable-mediafoundation"  # enable encoding via MediaFoundation [auto]
+    fi
+    # ------------------------------ apple features -------------------------------     
+    if [[ $FFMPEG_KIT_BUILD_TYPE == "apple" ]]; then
+    truthy $disable_avfoundation && config_options+=" --disable-avfoundation"         # disable Apple AVFoundation framework [autodetect]
+    truthy $disable_appkit && config_options+=" --disable-appkit"                     # disable Apple AppKit framework [autodetect]
+    truthy $disable_audiotoolbox && config_options+=" --disable-audiotoolbox"         # disable Apple AudioToolbox code [autodetect]
+    truthy $disable_coreimage && config_options+=" --disable-coreimage"               # disable Apple CoreImage framework [autodetect]
+    truthy $disable_metal && config_options+=" --disable-metal"                       # disable Apple Metal framework [autodetect]
+    truthy $disable_securetransport && config_options+=" --disable-securetransport"   # disable Secure Transport, needed for TLS support on OSX if openssl and gnutls are not used [autodetect]
+    truthy $disable_videotoolbox && config_options+=" --disable-videotoolbox"         # disable VideoToolbox code [autodetect]
+    fi
 	fi
 
 	if [[ "$do_debug_build" == "y" || -n $FFMPEG_KIT_DEBUG ]]; then
@@ -1253,4 +1244,11 @@ clean_builds() {
 		echo -e "INFO: Deleting ${ffmpeg_kit_bundle}..."
 		remove_path -rf "${ffmpeg_kit_bundle}"
 	fi
+}
+
+list_libraries() {
+  download_ffmpeg
+  change_dir "$src_dir/ffmpeg"
+  ./configure --help
+  exit 0
 }

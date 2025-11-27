@@ -24,6 +24,7 @@ build_dlfcn() {
 }
 #--enable-libxavs (from build_libxavs) - AVS video encoding.
 build_libxavs() {
+  if [[ $disable_libxavs != 1 && $enable_libxavs == 1 ]]; then
 	change_dir "$src_dir"
 	do_git_checkout https://github.com/Distrotech/xavs.git xavs_git
 	change_dir "$src_dir/xavs_git"
@@ -37,9 +38,11 @@ build_libxavs() {
 		remove_path -f NUL # cygwin causes windows explorer to not be able to delete this folder if it has this oddly named file in it...
 	fi
 	change_dir "$src_dir"
+	fi
 }
 #--enable-libdavs2 (from build_libdavs2) - AVS2 video decoding.
 build_libdavs2() {
+  if [[ $disable_libdavs2 != 1 && $enable_libdavs2 == 1 ]]; then
 	change_dir "$src_dir"
 	do_git_checkout https://github.com/pkuvcl/davs2.git
 	change_dir "$src_dir/davs2_git/build/linux"
@@ -50,9 +53,11 @@ build_libdavs2() {
 	fi
 	do_make_and_make_install
 	change_dir "$src_dir"
+	fi
 }
 #--enable-libxavs2 (from build_libxavs2) - AVS2 video encoding.
 build_libxavs2() {
+  if [[ $disable_libxavs2 != 1 && $enable_libxavs2 == 1 ]]; then
 	if [[ $host_target != 'i686-w64-mingw32' ]]; then
 		change_dir "$src_dir"
 		do_git_checkout https://github.com/pkuvcl/xavs2.git xavs2_git
@@ -67,6 +72,7 @@ build_libxavs2() {
 		do_make_and_make_install
 		change_dir "$src_dir"
 	fi
+	fi
 }
 
 build_mingw_std_threads() {
@@ -76,8 +82,9 @@ build_mingw_std_threads() {
 	cp *.h "$mingw_w64_x86_64_prefix/include"
 	change_dir "$src_dir"
 }
-
+#   --disable-zlib           disable zlib [autodetect]
 build_zlib() {
+  if [[ $disable_zlib != 1 ]]; then
 	change_dir "$src_dir"
 	do_git_checkout https://github.com/madler/zlib.git zlib_git
 	change_dir "$src_dir/zlib_git"
@@ -88,9 +95,11 @@ build_zlib() {
 	do_make_and_make_install "$compiler_flags ARFLAGS=rcs"
 	unset ARFLAGS
 	change_dir "$src_dir"
+  fi
 }
 #--enable-libcaca (from build_libcaca) - Textual display of video.
 build_libcaca() {
+  if [[ $disable_libcaca != 1 && $enable_libcaca == 1 ]]; then
 	change_dir "$src_dir"
 	do_git_checkout https://github.com/cacalabs/libcaca.git libcaca_git 813baea7a7bc28986e474541dd1080898fac14d7
 	change_dir "$src_dir/libcaca_git"
@@ -102,6 +111,7 @@ build_libcaca() {
 	generic_configure "--libdir=$mingw_w64_x86_64_prefix/lib --disable-csharp --disable-java --disable-cxx --disable-python --disable-ruby --disable-doc --disable-cocoa --disable-ncurses"
 	do_make_and_make_install
 	change_dir "$src_dir"
+	fi
 }
 
 build_bzip2() {
@@ -118,26 +128,31 @@ build_bzip2() {
 	fi
 	change_dir "$src_dir"
 }
-
-build_liblzma() {
+#   --disable-lzma           disable lzma [autodetect]
+build_lzma() {
+  if [[ $disable_lzma != 1 ]]; then
 	change_dir "$src_dir"
 	download_and_unpack_file https://sourceforge.net/projects/lzmautils/files/xz-5.8.1.tar.xz
 	change_dir "$src_dir/xz-5.8.1"
 	generic_configure "--disable-xz --disable-xzdec --disable-lzmadec --disable-lzmainfo --disable-scripts --disable-doc --disable-nls"
 	do_make_and_make_install
 	change_dir "$src_dir"
+  fi
 }
-
+#   --disable-iconv          disable iconv [autodetect]
 build_iconv() {
+  if [[ $disable_iconv != 1 ]]; then
 	change_dir "$src_dir"
 	download_and_unpack_file https://ftp.gnu.org/pub/gnu/libiconv/libiconv-1.18.tar.gz
 	change_dir "$src_dir/libiconv-1.18"
 	generic_configure "--disable-nls"
 	do_make "install-lib" # No need for 'do_make_install', because 'install-lib' already has install-instructions.
 	change_dir "$src_dir"
+  fi
 }
-
+#   --disable-sdl2           disable sdl2 [autodetect]
 build_sdl2() {
+  if [[ $disable_sdl2 != 1 ]]; then
 	change_dir "$src_dir"
 	download_and_unpack_file https://www.libsdl.org/release/SDL2-2.32.10.tar.gz
 	change_dir "$src_dir/SDL2-2.32.10"
@@ -153,9 +168,12 @@ build_sdl2() {
 	fi
 	reset_cflags
 	change_dir "$src_dir"
+  fi
 }
 #--enable-amf (headers from build_amd_amf_headers) - AMD AMF hardware encoding.
-build_amd_amf_headers() {
+#   --disable-amf            disable AMF video encoding code [autodetect]
+build_amf() {
+  if [[ $disable_amf != 1 ]]; then
 	change_dir "$src_dir"
 	# was https://github.com/GPUOpen-LibrariesAndSDKs/AMF.git too big
 	# or https://github.com/DeadSix27/AMF smaller
@@ -171,9 +189,11 @@ build_amd_amf_headers() {
 		create_touch_file 0 "already_installed"
 	fi
 	change_dir "$src_dir"
+	fi
 }
 #--enable-libvpl (from build_libvpl) - Intel oneVPL (Quick Sync Video) support.
 build_libvpl() {
+  if [[ $disable_libvpl != 1 && $enable_libvpl == 1 ]]; then
 	change_dir "$src_dir"
 	# build_intel_qsv_mfx
 	do_git_checkout https://github.com/intel/libvpl.git libvpl_git # f8d9891
@@ -185,36 +205,56 @@ build_libvpl() {
 	do_ninja_and_ninja_install
 	sed -i.bak "s/Libs: .*/& -lstdc++/" "$PKG_CONFIG_PATH/vpl.pc"
 	change_dir "$src_dir"
-}
-#--enable-nvenc & --enable-cuvid (headers from build_nv_headers) - NVIDIA hardware encoding/decoding.
-build_nv_headers() {
-	change_dir "$src_dir"
-	if [[ $ffmpeg_git_checkout_version == *"n6.0"* ]] || [[ $ffmpeg_git_checkout_version == *"n5"* ]] || [[ $ffmpeg_git_checkout_version == *"n4"* ]] || [[ $ffmpeg_git_checkout_version == *"n3"* ]] || [[ $ffmpeg_git_checkout_version == *"n2"* ]]; then
-		# nv_headers for old versions
-		do_git_checkout https://github.com/FFmpeg/nv-codec-headers.git nv-codec-headers_git n12.0.16.1
-	else
-		do_git_checkout https://github.com/FFmpeg/nv-codec-headers.git
 	fi
+}
+# (headers from build_nv_headers) - NVIDIA hardware encoding/decoding.
+# --enable-nvenc 
+# --enable-cuvid 
+# --disable-cuvid 
+# --disable-nvdec          disable Nvidia video decoding acceleration (via hwaccel) [autodetect]
+# --disable-nvenc          disable Nvidia video encoding code [autodetect]
+build_nvenc() {
+  if [[ $enable_nvenc == 1 || $enable_cuvid == 1 ]] && [[ $disable_cuvid != 1 && $disable_nvdec != 1 && $disable_nvenc != 1 ]]; then
+	change_dir "$src_dir"
+	do_git_checkout https://github.com/FFmpeg/nv-codec-headers.git
 	change_dir "$src_dir/nv-codec-headers_git"
 	do_make_install "PREFIX=$mingw_w64_x86_64_prefix" # just copies in headers
 	change_dir "$src_dir"
+  else
+  echo
+  echo -e "WARNING: disabling one NVIDIA HW flags disables all!"
+  echo
+	fi
+}
+
+build_cuvid() {
+  build_nvenc
 }
 #--enable-libzimg (from build_libzimg) - High-quality zscale scaling filter.
 build_libzimg() {
+  if [[ $disable_libzimg != 1 && $enable_libzimg == 1 ]]; then
 	change_dir "$src_dir"
 	do_git_checkout_and_make_install https://github.com/sekrit-twc/zimg.git zimg_git
 	change_dir "$src_dir"
+	fi
 }
 #--enable-libopenjpeg (from build_libopenjpeg) - JPEG 2000 support.
 build_libopenjpeg() {
+  if [[ $disable_libopenjpeg != 1 && $enable_libopenjpeg == 1 ]]; then
 	change_dir "$src_dir"
 	do_git_checkout https://github.com/uclouvain/openjpeg.git openjpeg_git
 	change_dir "$src_dir/openjpeg_git"
 	do_cmake_and_install "-DCMAKE_CROSSCOMPILING=1 -DOPJ_BIG_ENDIAN=0 -DBUILD_CODEC=0"
 	change_dir "$src_dir"
+	fi
 }
 #--enable-opengl (from build_glew and build_glfw) - OpenGL rendering support.
+build_opengl() {
+  build_glew
+  build_glfw
+}
 build_glew() {
+  if [[ $disable_opengl != 1 && $enable_opengl == 1 ]]; then
 	change_dir "$src_dir"
 	download_and_unpack_file https://sourceforge.net/projects/glew/files/glew/2.2.0/glew-2.2.0.tgz glew-2.2.0
 	change_dir "$src_dir/glew-2.2.0/build"
@@ -223,14 +263,16 @@ build_glew() {
 	do_cmake_from_build_dir ./cmake "$cmake_params" # "-DWITH_FFMPEG=0 -DOPENCV_GENERATE_PKGCONFIG=1 -DHAVE_DSHOW=0"
 	do_make_and_make_install
 	change_dir "$src_dir"
+	fi
 }
-#--enable-opengl (from build_glew and build_glfw) - OpenGL rendering support.
 build_glfw() {
+  if [[ $disable_opengl != 1 && $enable_opengl == 1 ]]; then
 	change_dir "$src_dir"
 	download_and_unpack_file https://github.com/glfw/glfw/releases/download/3.4/glfw-3.4.zip glfw-3.4
 	change_dir "$src_dir/glfw-3.4"
 	do_cmake_and_install "-DGLFW_BUILD_WAYLAND=OFF -DGLFW_BUILD_X11=OFF -DGLFW_BUILD_WIN32=ON"
 	change_dir "$src_dir"
+	fi
 }
 
 build_libpng() {
@@ -240,6 +282,7 @@ build_libpng() {
 }
 #--enable-libwebp (from build_libwebp) - WebP image encoding.
 build_libwebp() {
+  if [[ $disable_libwebp != 1 && $enable_libwebp == 1 ]]; then
 	change_dir "$src_dir"
 	do_git_checkout https://chromium.googlesource.com/webm/libwebp.git libwebp_git
 	change_dir "$src_dir/libwebp_git"
@@ -249,15 +292,18 @@ build_libwebp() {
 	do_make_and_make_install
 	unset LIBPNG_CONFIG
 	change_dir "$src_dir"
+	fi
 }
 #--enable-libxml2 (from build_libxml2) - XML parsing for DASH manifests.
 build_libxml2() {
+  if [[ $disable_libxml2 != 1 && $enable_libxml2 == 1 ]]; then
 	change_dir "$src_dir"
 	do_git_checkout https://gitlab.gnome.org/GNOME/libxml2.git libxml2_git
 	change_dir "$src_dir/libxml2_git"
 	generic_configure "--with-ftp=no --with-http=no --with-python=no"
 	do_make_and_make_install
 	change_dir "$src_dir"
+	fi
 }
 
 build_brotli() {
@@ -275,8 +321,28 @@ build_brotli() {
   sed -i.bak 's/Libs.*$/Libs: -L${libdir} -lbrotlienc/' "$PKG_CONFIG_PATH"/libbrotlienc.pc
 	change_dir "$src_dir"
 }
+#--enable-libfreetype (from build_harfbuzz, which calls build_freetype) - Font rendering for the drawtext filter.
+build_libfreetype() {
+  if [[ $disable_libfreetype != 1 && $enable_libfreetype == 1 ]]; then
+	activate_meson
+	change_dir "$src_dir"
+	do_git_checkout https://github.com/freetype/freetype.git freetype_git
+	change_dir "$src_dir/freetype_git"
+	local config_options=""
+	if [[ -e $PKG_CONFIG_PATH/harfbuzz.pc ]]; then
+		local config_options+=" -Dharfbuzz=enabled"
+	fi
+	local meson_options="$config_options"
+	# get_local_meson_cross_with_propeties
+	meson_options+=" --cross-file=$(get_meson_cross_file)"
+	do_meson "$meson_options" "setup build"
+	do_ninja_and_ninja_install
+	change_dir "$src_dir"
+	fi
+}
 #--enable-libharfbuzz (from build_harfbuzz) - Complex text shaping for drawtext.
-build_harfbuzz() {
+build_libharfbuzz() {
+  if [[ $disable_libharfbuzz != 1 && $enable_libharfbuzz == 1 ]]; then
 	change_dir "$src_dir"
 	activate_meson
 	build_freetype
@@ -295,9 +361,11 @@ build_harfbuzz() {
 	deactivate
 	sed -i.bak 's/-lfreetype.*/-lfreetype -lharfbuzz -lpng -lbz2/' "$PKG_CONFIG_PATH/freetype2.pc"
 	sed -i.bak 's/-lharfbuzz.*/-lfreetype -lharfbuzz -lpng -lbz2/' "$PKG_CONFIG_PATH/harfbuzz.pc"
+	fi
 }
 #--enable-libvmaf (from build_libvmaf) - Netflix's VMAF video quality metric filter.
 build_libvmaf() {
+  if [[ $disable_libvmaf != 1 && $enable_libvmaf == 1 ]]; then
 	change_dir "$src_dir"
 	do_git_checkout https://github.com/Netflix/vmaf.git vmaf_git
 	activate_meson
@@ -310,9 +378,11 @@ build_libvmaf() {
 	sed -i.bak "s/Libs: .*/& -lstdc++/" "$PKG_CONFIG_PATH/libvmaf.pc"
 	deactivate
 	change_dir "$src_dir"
+	fi
 }
 #--enable-libfontconfig (from build_fontconfig) - System font discovery for the drawtext filter.
-build_fontconfig() {
+build_libfontconfig() {
+  if [[ $disable_libfontconfig != 1 && $enable_libfontconfig == 1 ]]; then
 	activate_meson
 	change_dir "$src_dir"
 	do_git_checkout https://gitlab.freedesktop.org/fontconfig/fontconfig.git fontconfig_git # meson build for fontconfig no good
@@ -325,9 +395,11 @@ build_fontconfig() {
 	# generic_configure "--enable-iconv --enable-libxml2 --disable-docs --with-libiconv" # Use Libxml2 instead of Expat; will find libintl from gettext on 2nd pass build and ffmpeg rejects it
 	# do_make_and_make_install
 	change_dir "$src_dir"
+	fi
 }
 #--enable-gmp (from build_gmp) - For RTMPE support.
 build_gmp() {
+  if [[ $disable_gmp != 1 && $enable_gmp == 1 ]]; then
 	change_dir "$src_dir"
 	download_and_unpack_file https://ftp.gnu.org/pub/gnu/gmp/gmp-6.3.0.tar.xz
 	change_dir "$src_dir/gmp-6.3.0"
@@ -338,6 +410,7 @@ build_gmp() {
 	unset CPP_FOR_BUILD
 	do_make_and_make_install
 	change_dir "$src_dir"
+	fi
 }
 
 build_libnettle() {
@@ -375,6 +448,7 @@ build_zstd() {
 }
 #--enable-gnutls (from build_gnutls) - For HTTPS and other secure protocols.
 build_gnutls() {
+  if [[ $disable_gnutls != 1 && $enable_gnutls == 1 ]]; then
 	change_dir "$src_dir"
 	download_and_unpack_file https://www.gnupg.org/ftp/gcrypt/gnutls/v3.8/gnutls-3.8.9.tar.xz # v3.8.10 not found by ffmpeg with identical .pc?
 	change_dir "$src_dir/gnutls-3.8.9"
@@ -387,6 +461,7 @@ build_gnutls() {
 	reset_cflags
 	sed -i.bak 's/-lgnutls.*/-lgnutls -lcrypt32 -lnettle -lhogweed -lgmp -liconv -lunistring/' "$PKG_CONFIG_PATH/gnutls.pc"
 	change_dir "$src_dir"
+	fi
 }
 
 build_curl() {
@@ -414,21 +489,25 @@ build_libogg() {
 }
 #--enable-libvorbis (from build_libvorbis) - Vorbis audio encoding/decoding.
 build_libvorbis() {
+  if [[ $disable_libvorbis != 1 && $enable_libvorbis == 1 ]]; then
 	change_dir "$src_dir"
 	do_git_checkout https://github.com/xiph/vorbis.git
 	change_dir "$src_dir/vorbis_git"
 	generic_configure "--disable-docs --disable-examples --disable-oggtest"
 	do_make_and_make_install
 	change_dir "$src_dir"
+	fi
 }
 #--enable-libopus (from build_libopus) - Opus audio encoding/decoding.
 build_libopus() {
+  if [[ $disable_libopus != 1 && $enable_libopus == 1 ]]; then
 	change_dir "$src_dir"
 	do_git_checkout https://github.com/xiph/opus.git opus_git origin/main
 	change_dir "$src_dir/opus_git"
 	generic_configure "--disable-doc --disable-extra-programs --disable-stack-protector"
 	do_make_and_make_install
 	change_dir "$src_dir"
+	fi
 }
 
 build_libspeexdsp() {
@@ -441,6 +520,7 @@ build_libspeexdsp() {
 }
 #--enable-libspeex (from build_libspeex) - Speex speech audio codec.
 build_libspeex() {
+  if [[ $disable_libspeex != 1 && $enable_libspeex == 1 ]]; then
 	change_dir "$src_dir"
 	do_git_checkout https://github.com/xiph/speex.git
 	change_dir "$src_dir/speex_git"
@@ -451,18 +531,25 @@ build_libspeex() {
 	unset SPEEXDSP_CFLAGS
 	unset SPEEXDSP_LIBS
 	change_dir "$src_dir"
+	fi
 }
 #--enable-libtheora (from build_libtheora) - Theora video encoding.
 build_libtheora() {
+  if [[ $disable_libtheora != 1 && $enable_libtheora == 1 ]]; then
 	change_dir "$src_dir"
 	do_git_checkout https://github.com/xiph/theora.git
 	change_dir "$src_dir/theora_git"
 	generic_configure "--disable-doc --disable-spec --disable-oggtest --disable-vorbistest --disable-examples --disable-asm" # disable asm: avoid [theora @ 0x1043144a0]error in unpack_block_qpis in 64 bit... [OK OS X 64 bit tho...]
 	do_make_and_make_install
 	change_dir "$src_dir"
+	fi
 }
 #--enable-libgsm (Note: This is built as part of build_libsndfile in your script).
+build_libgsm() {
+  build_libsndfile  
+}
 build_libsndfile() {
+  if [[ $disable_libgsm != 1 && $enable_libgsm == 1 ]]; then
 	change_dir "$src_dir"
 	do_git_checkout https://github.com/libsndfile/libsndfile.git
 	change_dir "$src_dir/libsndfile_git"
@@ -475,6 +562,7 @@ build_libsndfile() {
 		echo -e "already installed GSM 6.10 ..."
 	fi
 	change_dir "$src_dir"
+	fi
 }
 
 build_mpg123() {
@@ -485,7 +573,8 @@ build_mpg123() {
 	change_dir "$src_dir"
 }
 #--enable-libmp3lame (from build_lame) - High-quality MP3 audio encoding.
-build_lame() {
+build_libmp3lame() {
+  if [[ $disable_libmp3lame != 1 && $enable_libmp3lame == 1 ]]; then
 	change_dir "$src_dir"
 	do_svn_checkout https://svn.code.sf.net/p/lame/svn/trunk/lame lame_svn r6525 # anything other than r6525 fails
 	change_dir "$src_dir/lame_svn"
@@ -493,9 +582,11 @@ build_lame() {
 	generic_configure "--enable-nasm --enable-libmpg123"
 	do_make_and_make_install
 	change_dir "$src_dir"
+	fi
 }
 #--enable-libtwolame (from build_twolame) - MP2 audio encoding.
-build_twolame() {
+build_libtwolame() {
+  if [[ $disable_libtwolame != 1 && $enable_libtwolame == 1 ]]; then
 	change_dir "$src_dir"
 	do_git_checkout https://github.com/njh/twolame.git twolame_git "origin/main"
 	change_dir "$src_dir/twolame_git"
@@ -506,9 +597,11 @@ build_twolame() {
 	generic_configure_make_install
 	cpu_count=$original_cpu_count
 	change_dir "$src_dir"
+	fi
 }
 #--enable-libopenmpt (from build_openmpt) - OpenMPT tracker music library.
-build_openmpt() {
+build_libopenmpt() {
+  if [[ $disable_libopenmpt != 1 && $enable_libopenmpt == 1 ]]; then
 	build_flac
 	change_dir "$src_dir"
 	do_git_checkout https://github.com/OpenMPT/openmpt.git openmpt_git # OpenMPT-1.30
@@ -519,26 +612,32 @@ build_openmpt() {
       NO_SDL2=0 NO_SNDFILE=0 NO_FLAC=0 EXAMPLES=0 OPENMPT123=0 TEST=0" # OPENMPT123=1 >>> fail
 	sed -i.bak 's/Libs.private.*/& -lrpcrt4/' "$PKG_CONFIG_PATH/libopenmpt.pc"
 	change_dir "$src_dir"
+	fi
 }
-#--enable-libopencore-amrnb (from build_libopencore) - AMR-NB audio codec.
-build_libopencore() {
+# --enable-libopencore-amrnb (from build_libopencore) - AMR-NB audio codec.
+# --enable-libopencore-amrwb enable AMR-WB decoding via libopencore-amrwb [no]
+build_libopencore_amrnb() {
+  if [[ $disable_libopencore_amrnb != 1 && $enable_libopencore_amrnb == 1 || $enable_libopencore_amrwb == 1 ]]; then
 	change_dir "$src_dir"
 	generic_download_and_make_and_install https://sourceforge.net/projects/opencore-amr/files/opencore-amr/opencore-amr-0.1.6.tar.gz
 	change_dir "$src_dir"
-	generic_download_and_make_and_install https://sourceforge.net/projects/opencore-amr/files/vo-amrwbenc/vo-amrwbenc-0.1.3.tar.gz
-	change_dir "$src_dir"
+	fi
 }
+
 #--enable-libilbc (from build_libilbc) - iLBC speech audio codec.
 build_libilbc() {
+  if [[ $disable_libilbc != 1 && $enable_libilbc == 1 ]]; then
 	change_dir "$src_dir"
 	do_git_checkout https://github.com/TimothyGu/libilbc.git libilbc_git
 	change_dir "$src_dir/libilbc_git"
 	do_cmake "-B build -GNinja"
 	do_ninja_and_ninja_install
 	change_dir "$src_dir"
+	fi
 }
 #--enable-libmodplug (from build_libmodplug) - ModPlug tracker music library.
 build_libmodplug() {
+  if [[ $disable_libmodplug != 1 && $enable_libmodplug == 1 ]]; then
 	change_dir "$src_dir"
 	do_git_checkout https://github.com/Konstanty/libmodplug.git
 	change_dir "libmodplug_git"
@@ -550,18 +649,22 @@ build_libmodplug() {
 	fi
 	generic_configure_make_install # or could use cmake I guess
 	change_dir "$src_dir"
+	fi
 }
 #--enable-libgme (from build_libgme) - Game Music Emu library.
 build_libgme() {
+  if [[ $disable_libgme != 1 && $enable_libgme == 1 ]]; then
 	# do_git_checkout https://bitbucket.org/mpyne/game-music-emu.git
 	change_dir "$src_dir"
 	download_and_unpack_file https://bitbucket.org/mpyne/game-music-emu/downloads/game-music-emu-0.6.3.tar.xz
 	change_dir "$src_dir/game-music-emu-0.6.3"
 	do_cmake_and_install "-DENABLE_UBSAN=0"
 	change_dir "$src_dir"
+	fi
 }
 #--enable-libbluray (from build_libbluray) - Reading Blu-ray discs.
 build_libbluray() {
+  if [[ $disable_libbluray != 1 && $enable_libbluray == 1 ]]; then
 	change_dir "$src_dir"
 	do_git_checkout https://code.videolan.org/videolan/libbluray.git
 	activate_meson
@@ -575,9 +678,11 @@ build_libbluray() {
 	sed -i.bak 's/-lbluray.*/-lbluray -lstdc++ -lssp -lgdi32/' "$PKG_CONFIG_PATH/libbluray.pc"
 	deactivate
 	change_dir "$src_dir"
+	fi
 }
 #--enable-libbs2b (from build_libbs2b) - Bauer stereophonic-to-binaural DSP.
 build_libbs2b() {
+  if [[ $disable_libbs2b != 1 && $enable_libbs2b == 1 ]]; then
 	change_dir "$src_dir"
 	download_and_unpack_file https://downloads.sourceforge.net/project/bs2b/libbs2b/3.1.0/libbs2b-3.1.0.tar.gz
 	change_dir "$src_dir/libbs2b-3.1.0"
@@ -587,18 +692,22 @@ build_libbs2b() {
 	generic_configure_make_install
 	unset LIBS
 	change_dir "$src_dir"
+	fi
 }
 #--enable-libsoxr (from build_libsoxr) - High-quality audio resampling.
 build_libsoxr() {
+  if [[ $disable_libsoxr != 1 && $enable_libsoxr == 1 ]]; then
 	change_dir "$src_dir"
 	do_git_checkout https://github.com/chirlu/soxr.git soxr_git
 	change_dir "$src_dir/soxr_git"
 	do_cmake_and_install "-DWITH_OPENMP=0 -DBUILD_TESTS=0 -DBUILD_EXAMPLES=0"
 	change_dir "$src_dir"
+	fi
 }
 
 #--enable-libflite (from build_libflite) - Flite text-to-speech synthesis.
 build_libflite() {
+  if [[ $disable_libflite != 1 && $enable_libflite == 1 ]]; then
 	change_dir "$src_dir"
 	do_git_checkout https://github.com/festvox/flite.git flite_git
 	change_dir "$src_dir/flite_git"
@@ -614,15 +723,18 @@ build_libflite() {
 		# cp -rf ./bin/*.exe $mingw_w64_x86_64_prefix/bin # if want .exe's uncomment
 	fi
 	change_dir "$src_dir"
+	fi
 }
 #--enable-libsnappy (from build_libsnappy) - Snappy compression, for hap encoding.
 build_libsnappy() {
+  if [[ $disable_libsnappy != 1 && $enable_libsnappy == 1 ]]; then
 	change_dir "$src_dir"
 	do_git_checkout https://github.com/google/snappy.git snappy_git # got weird failure once 1.1.8
 	change_dir "$src_dir/snappy_git"
 	do_cmake_and_install "-DBUILD_BINARY=OFF -DCMAKE_BUILD_TYPE=Release -DSNAPPY_BUILD_TESTS=OFF -DSNAPPY_BUILD_BENCHMARKS=OFF" # extra params from deadsix27 and from new cMakeLists.txt content
 	remove_path -f "$mingw_w64_x86_64_prefix/lib/libsnappy.dll.a"                                                               # unintall shared :|
 	change_dir "$src_dir"
+	fi
 }
 
 build_vamp_plugin() {
@@ -656,6 +768,7 @@ build_fftw() {
 }
 #--enable-chromaprint (from build_chromaprint) - Audio fingerprinting.
 build_chromaprint() {
+  if [[ $disable_chromaprint != 1 && $enable_chromaprint == 1 ]]; then
 	echo -e "$mingw_w64_x86_64_prefix"
 	build_fftw
 	change_dir "$src_dir"
@@ -663,6 +776,7 @@ build_chromaprint() {
 	change_dir "$src_dir/chromaprint"
 	do_cmake_and_install "-DCMAKE_BUILD_TYPE=Release -DBUILD_TOOLS=OFF -DBUILD_TESTS=OFF -DFFT_LIB=fftw3 -DCMAKE_TOOLCHAIN_FILE=$(get_generic_cmake_toolchain)"
 	change_dir "$src_dir"
+	fi
 }
 
 build_libsamplerate() {
@@ -675,6 +789,7 @@ build_libsamplerate() {
 }
 #--enable-librubberband (from build_librubberband) - High-quality audio time-stretching.
 build_librubberband() {
+  if [[ $disable_librubberband != 1 && $enable_librubberband == 1 ]]; then
 	change_dir "$src_dir"
 	do_git_checkout https://github.com/breakfastquay/rubberband.git rubberband_git 18c06ab8c431854056407c467f4755f761e36a8e
 	change_dir "$src_dir/rubberband_git"
@@ -684,9 +799,11 @@ build_librubberband() {
 	do_make "install-static AR=${cross_prefix}ar" # No need for 'do_make_install', because 'install-static' already has install-instructions.
 	sed -i.bak 's/-lrubberband.*$/-lrubberband -lfftw3 -lsamplerate -lstdc++/' "$PKG_CONFIG_PATH/rubberband.pc"
 	change_dir "$src_dir"
+	fi
 }
 #--enable-frei0r (from build_frei0r) - External frei0r video filter plugins.
 build_frei0r() {
+  if [[ $disable_frei0r != 1 && $enable_frei0r == 1 ]]; then
 	#do_git_checkout https://github.com/dyne/frei0r.git
 	#cd frei0r_git
 	change_dir "$src_dir"
@@ -714,6 +831,7 @@ build_frei0r() {
 		create_touch_file 0 "$archive.done" # for those with no 7z so it won't restrip every time
 	fi
 	change_dir "$src_dir"
+	fi
 }
 
 build_svt_hevc() {
@@ -738,7 +856,8 @@ build_svt_vp9() {
 	fi
 }
 #--enable-libsvtav1 (from build_svt_av1) - High-performance AV1 video encoding.
-build_svt_av1() {
+build_libsvtav1() {
+  if [[ $disable_libsvtav1 != 1 && $enable_libsvtav1 == 1 ]]; then
 	if [[ "$bits_target" != "32" ]]; then
 		build_cpuinfo
 		change_dir "$src_dir"
@@ -748,17 +867,21 @@ build_svt_av1() {
 		do_ninja_and_ninja_install
 		change_dir "$src_dir"
 	fi
+	fi
 }
 #--enable-libvidstab (from build_vidstab) - Video stabilization filters.
-build_vidstab() {
+build_libvidstab() {
+  if [[ $disable_libvidstab != 1 && $enable_libvidstab == 1 ]]; then
 	change_dir "$src_dir"
 	do_git_checkout https://github.com/georgmartius/vid.stab.git vid.stab_git
 	change_dir "$src_dir/vid.stab_git"
 	do_cmake_and_install "-DUSE_OMP=0" # '-DUSE_OMP' is on by default, but somehow libgomp ('cygwin_local_install/lib/gcc/i686-pc-cygwin/5.4.0/include/omp.h') can't be found, so '-DUSE_OMP=0' to prevent a compilation error.
 	change_dir "$src_dir"
+	fi
 }
 #--enable-libmysofa (from build_libmysofa) - Sofalizer filter for HRTF audio.
 build_libmysofa() {
+  if [[ $disable_libmysofa != 1 && $enable_libmysofa == 1 ]]; then
 	change_dir "$src_dir"
 	do_git_checkout https://github.com/hoene/libmysofa.git libmysofa_git "origin/main"
 	change_dir "$src_dir/libmysofa_git"
@@ -766,41 +889,51 @@ build_libmysofa() {
 	do_cmake "$cmake_params"
 	do_make_and_make_install
 	change_dir "$src_dir"
+	fi
 }
 #--enable-decklink (from build_libdecklink) - Blackmagic DeckLink I/O support.
-build_libdecklink() {
+build_decklink() {
+  if [[ $disable_decklink != 1 && $enable_decklink == 1 ]]; then
 	change_dir "$src_dir"
 	do_git_checkout https://gitlab.com/m-ab-s/decklink-headers.git decklink-headers_git 47d84f8d272ca6872b5440eae57609e36014f3b6
 	change_dir "$src_dir/decklink-headers_git"
 	do_make_install "PREFIX=$mingw_w64_x86_64_prefix"
 	change_dir "$src_dir"
+	fi
 }
 #--enable-libzvbi (from build_zvbi) - Teletext support.
-build_zvbi() {
+build_libzvbi() {
+  if [[ $disable_libzvbi != 1 && $enable_libzvbi == 1 ]]; then
 	change_dir "$src_dir"
 	do_git_checkout https://github.com/zapping-vbi/zvbi.git zvbi_git
 	change_dir "$src_dir/zvbi_git"
 	generic_configure "--disable-dvb --disable-bktr --disable-proxy --disable-nls --without-doxygen --disable-examples --disable-tests --without-libiconv-prefix"
 	do_make_and_make_install
 	change_dir "$src_dir"
+	fi
 }
 #--enable-libfribidi (from build_fribidi) - Bidirectional text support for drawtext.
-build_fribidi() {
+build_libfribidi() {
+  if [[ $disable_libfribidi != 1 && $enable_libfribidi == 1 ]]; then
 	change_dir "$src_dir"
 	download_and_unpack_file https://github.com/fribidi/fribidi/releases/download/v1.0.16/fribidi-1.0.16.tar.xz # Get c2man errors building from repo
 	change_dir "$src_dir/fribidi-1.0.16"
 	generic_configure "--disable-debug --disable-deprecated --disable-docs"
 	do_make_and_make_install
 	change_dir "$src_dir"
+	fi
 }
 #--enable-libass (from build_libass) - Advanced subtitle rendering (.ass, .ssa).
 build_libass() {
+  if [[ $disable_libass != 1 && $enable_libass == 1 ]]; then
 	change_dir "$src_dir"
 	do_git_checkout_and_make_install https://github.com/libass/libass.git
 	change_dir "$src_dir"
+	fi
 }
 #--enable-libxvid (from build_libxvid) - Xvid (MPEG-4) video encoding.
 build_libxvid() {
+  if [[ $disable_libxvid != 1 && $enable_libxvid == 1 ]]; then
 	change_dir "$src_dir"
 	download_and_unpack_file https://downloads.xvid.com/downloads/xvidcore-1.3.7.tar.gz xvidcore
 	change_dir "$src_dir/xvidcore/build/generic"
@@ -808,9 +941,11 @@ build_libxvid() {
 	do_configure "--host=$host_target --prefix=$mingw_w64_x86_64_prefix" # no static option...
 	do_make_and_make_install
 	change_dir "$src_dir"
+	fi
 }
 #--enable-libsrt (from build_libsrt) - SRT secure reliable transport protocol.
 build_libsrt() {
+  if [[ $disable_libsrt != 1 && $enable_libsrt == 1 ]]; then
 	# do_git_checkout https://github.com/Haivision/srt.git # might be able to use these days...?
 	change_dir "$src_dir"
 	download_and_unpack_file https://github.com/Haivision/srt/archive/v1.5.4.tar.gz srt-1.5.4
@@ -822,9 +957,11 @@ build_libsrt() {
 	do_cmake "-DUSE_ENCLIB=gnutls -DENABLE_SHARED=OFF -DENABLE_CXX11=OFF"
 	do_make_and_make_install
 	change_dir "$src_dir"
+	fi
 }
 #--enable-libaribcaption (from build_libaribcaption) - ARIB caption decoding.
 build_libaribcaption() {
+  if [[ $disable_libaribcaption != 1 && $enable_libaribcaption == 1 ]]; then
 	if [[ $ffmpeg_git_checkout_version != *"n6.0"* ]] && [[ $ffmpeg_git_checkout_version != *"n5"* ]] && [[ $ffmpeg_git_checkout_version != *"n4"* ]] && [[ $ffmpeg_git_checkout_version != *"n3"* ]] && [[ $ffmpeg_git_checkout_version != *"n2"* ]]; then
 		change_dir "$src_dir"
 		do_git_checkout https://github.com/xqq/libaribcaption
@@ -834,15 +971,19 @@ build_libaribcaption() {
 		do_make_and_make_install
 		change_dir "$src_dir"
 	fi
+	fi
 }
 #--enable-libaribb24 (from build_libaribb24) - ARIB caption decoding.
 build_libaribb24() {
+  if [[ $disable_libaribb24 != 1 && $enable_libaribb24 == 1 ]]; then
 	change_dir "$src_dir"
 	do_git_checkout_and_make_install https://github.com/nkoriyama/aribb24
 	change_dir "$src_dir"
+	fi
 }
 #--enable-libtesseract (from build_libtesseract) - OCR filter for reading text from video.
 build_libtesseract() {
+  if [[ $disable_libtesseract != 1 && $enable_libtesseract == 1 ]]; then
 	build_libtiff
 	build_libleptonica
 	build_libarchive
@@ -860,9 +1001,11 @@ build_libtesseract() {
 	fi
 	reset_cppflags
 	change_dir "$src_dir"
+	fi
 }
 #--enable-liblensfun (from build_lensfun) - Lens correction filter.
-build_lensfun() {
+build_liblensfun() {
+  if [[ $disable_liblensfun != 1 && $enable_liblensfun == 1 ]]; then
 	build_glib
 	change_dir "$src_dir"
 	do_git_checkout "https://github.com/lensfun/lensfun.git" "lensfun_git"
@@ -876,9 +1019,11 @@ build_lensfun() {
 	reset_cppflags
 	unset CXXFLAGS
 	change_dir "$src_dir"
+	fi
 }
 #--enable-libtensorflow (from build_libtensorflow) - TensorFlow support for AI filters.
 build_libtensorflow() {
+  if [[ $disable_libtensorflow != 1 && $enable_libtensorflow == 1 ]]; then
 	change_dir "$src_dir"
 	if [[ ! -e Tensorflow ]]; then
 		create_dir "$src_dir/Tensorflow"
@@ -891,9 +1036,11 @@ build_libtensorflow() {
 		echo -e "Tensorflow already installed"
 	fi
 	change_dir "$src_dir"
+	fi
 }
 #--enable-libvpx (from build_libvpx) - VP8/VP9 video encoding/decoding.
 build_libvpx() {
+  if [[ $disable_libvpx != 1 && $enable_libvpx == 1 ]]; then
 	change_dir "$src_dir"
 	do_git_checkout https://chromium.googlesource.com/webm/libvpx.git libvpx_git "origin/main"
 	change_dir "$src_dir/libvpx_git"
@@ -910,9 +1057,11 @@ build_libvpx() {
 	do_make_and_make_install
 	unset CROSS
 	change_dir "$src_dir"
+	fi
 }
 #--enable-libx265 (from build_libx265) - HEVC (H.265) video encoding.
 build_libx265() {
+  if [[ $disable_libx265 != 1 && $enable_libx265 == 1 ]]; then
 	change_dir "$src_dir"
 	local checkout_dir=x265
 	local remote="https://bitbucket.org/multicoreware/x265_git"
@@ -979,9 +1128,11 @@ END
 EOF
 	make install # force reinstall in case you just switched from stable to not :|
 	change_dir "$src_dir"
+	fi
 }
 #--enable-libopenh264 (from build_libopenh264) - H.264 video encoding from Cisco.
 build_libopenh264() {
+  if [[ $disable_libopenh264 != 1 && $enable_libopenh264 == 1 ]]; then
 	change_dir "$src_dir"
 	do_git_checkout "https://github.com/cisco/openh264.git" openh264_git v2.6.0 #75b9fcd2669c75a99791 # wels/codec_api.h weirdness
 	change_dir "$src_dir/openh264_git"
@@ -994,9 +1145,11 @@ build_libopenh264() {
 	# TODO: Allow shared library build
 	do_make "$compiler_flags OS=mingw_nt ARCH=$arch ASM=yasm install-static"
 	change_dir "$src_dir"
+  fi
 }
 # --enable-libaom (from build_libaom) - AV1 video encoding/decoding.
 build_libaom() {
+  if [[ $disable_libaom != 1 && $enable_libaom == 1 ]]; then
 	change_dir "$src_dir"
 	do_git_checkout https://aomedia.googlesource.com/aom aom_git
 	if [ "$bits_target" = "32" ]; then
@@ -1009,9 +1162,11 @@ build_libaom() {
 	do_cmake_from_build_dir "$src_dir/aom_git" "$config_options"
 	do_make_and_make_install
 	change_dir "$src_dir"
+	fi
 }
 #--enable-libdav1d (from build_dav1d) - High-performance AV1 video decoding.
-build_dav1d() {
+build_libdav1d() {
+  if [[ $disable_libdav1d != 1 && $enable_libdav1d == 1 ]]; then
 	change_dir "$src_dir"
 	do_git_checkout https://code.videolan.org/videolan/dav1d.git libdav1d
 	activate_meson
@@ -1029,24 +1184,29 @@ build_dav1d() {
 	cpu_count=$original_cpu_count
 	deactivate
 	change_dir "$src_dir"
+	fi
 }
-#--enable-vulkan (from build_vulkan) - Vulkan support.
+# --enable-vulkan (from build_vulkan) - Vulkan support.
+# --disable-vulkan         disable Vulkan code [autodetect]
 build_vulkan() {
+  if [[ $disable_vulkan != 1 ]]; then
 	change_dir "$src_dir"
 	do_git_checkout https://github.com/KhronosGroup/Vulkan-Headers.git Vulkan-Headers_git v1.4.326
 	change_dir "$src_dir/Vulkan-Headers_git"
 	do_cmake_and_install "-DCMAKE_BUILD_TYPE=Release -DVULKAN_HEADERS_ENABLE_MODULE=NO -DVULKAN_HEADERS_ENABLE_TESTS=NO -DVULKAN_HEADERS_ENABLE_INSTALL=YES"
 	change_dir "$src_dir"
+	fi
 }
 #--enable-libplacebo (from build_libplacebo) - Advanced video rendering library (Vulkan/OpenGL).
 build_libplacebo() {
+  if [[ $disable_libplacebo != 1 && $enable_libplacebo == 1 ]]; then
 	build_vulkan_loader
 	build_lcms
 	build_libunwind
 	build_libxxhash
 	build_spirv-cross
 	build_libdovi
-	build_shaderc
+	build_libshaderc
 	change_dir "$src_dir"
 	do_git_checkout https://code.videolan.org/videolan/libplacebo.git libplacebo_git #515da9548ad734d923c7d0988398053f87b454d5
 	activate_meson
@@ -1056,17 +1216,24 @@ build_libplacebo() {
 	local config_options=""
 	local config_options+=" -Dvulkan-registry=$mingw_w64_x86_64_prefix/share/vulkan/registry/vk.xml"
 	# TODO: Allow shared library build
-	local meson_options="-Ddemos=false -Dbench=false -Dfuzz=false -Dvulkan=enabled -Dvk-proc-addr=disabled -Dshaderc=enabled -Dglslang=disabled -Dc_link_args=-static -Dcpp_link_args=-static $config_options" # https://mesonbuild.com/Dependencies.html#shaderc trigger use of shaderc_combined
-	# get_local_meson_cross_with_propeties
+	local meson_options="-Ddemos=false -Dbench=false -Dfuzz=false -Dvulkan=enabled -Dvk-proc-addr=disabled -Dglslang=disabled -Dc_link_args=-static -Dcpp_link_args=-static $config_options" # https://mesonbuild.com/Dependencies.html#shaderc trigger use of shaderc_combined
+	if [[ $disable_libshaderc != 1 && $enable_libshaderc == 1 ]]; then
+    meson_options+=" -Dshaderc=enabled"
+  else
+    meson_options+=" -Dshaderc=disabled"
+  fi
+  # get_local_meson_cross_with_propeties
 	meson_options+=" --cross-file=$(get_meson_cross_file)"
 	do_meson "$meson_options" "setup build"
 	do_ninja_and_ninja_install
 	sed -i.bak 's/-lplacebo.*$/-lplacebo -lm -lshlwapi -lunwind -lxxhash -lversion -lstdc++/' "$PKG_CONFIG_PATH/libplacebo.pc"
 	deactivate
 	change_dir "$src_dir"
+	fi
 }
 #--enable-avisynth (from build_avisynth) - AviSynth script support.
 build_avisynth() {
+  if [[ $disable_avisynth != 1 && $enable_avisynth == 1 ]]; then
 	change_dir "$src_dir"
 	do_git_checkout https://github.com/AviSynth/AviSynthPlus.git avisynth_git
 	create_dir "$src_dir/avisynth_git/avisynth-build"
@@ -1074,15 +1241,18 @@ build_avisynth() {
 	do_cmake_from_build_dir "$src_dir/avisynth_git" -DHEADERS_ONLY:bool=on
 	do_make "$compiler_flags VersionGen install"
 	change_dir "$src_dir"
+	fi
 }
 #--enable-libvvenc (from build_libvvenc) - VVC (H.266) video encoding.
 build_libvvenc() {
+  if [[ $disable_libvvenc != 1 && $enable_libvvenc == 1 ]]; then
 	change_dir "$src_dir"
 	do_git_checkout https://github.com/fraunhoferhhi/vvenc.git libvvenc_git
 	change_dir "$src_dir/libvvenc_git"
 	do_cmake "-B build -DCMAKE_BUILD_TYPE=Release -DVVENC_ENABLE_LINK_TIME_OPT=OFF -DVVENC_INSTALL_FULLFEATURE_APP=ON -GNinja"
 	do_ninja_and_ninja_install
 	change_dir "$src_dir"
+	fi
 }
 
 build_libvvdec() {
@@ -1095,6 +1265,7 @@ build_libvvdec() {
 }
 #--enable-libx264 (from build_libx264) - High-quality H.264 video encoding.
 build_libx264() {
+  if [[ $disable_libx264 != 1 && $enable_libx264 == 1 ]]; then
 	change_dir "$src_dir"
 	local checkout_dir="x264"
 	if [[ $build_x264_with_libav == "y" ]]; then
@@ -1151,6 +1322,7 @@ build_libx264() {
 	unset LAVF_CFLAGS
 	unset SWSCALE_LIBS
 	change_dir "$src_dir"
+	fi
 }
 
 #     --enable-libcodec2 (Low-bitrate speech/video codec)
@@ -1174,6 +1346,7 @@ build_libcodec2() {
 
 #     --enable-libjxl (JPEG XL image format)
 build_libjxl() {
+  if [[ $disable_libjxl != 1 && $enable_libjxl == 1 ]]; then
 	change_dir "$src_dir"
 	local lib="libjxl"
 	do_git_checkout https://github.com/libjxl/libjxl
@@ -1186,11 +1359,12 @@ build_libjxl() {
 	do_cmake_from_build_dir "$src_dir/$lib" "$cmake_params"
 	do_make_and_make_install
 	change_dir "$src_dir"
+	fi
 }
 
 #     --enable-libkvazaar (Alternative HEVC/H.265 encoder)
 build_libkvazaar() {
-	echo --enable-libkvazaar
+  if [[ $disable_libkvazaar != 1 && $enable_libkvazaar == 1 ]]; then
 	local lib="kvazaar"
 	change_dir "$src_dir"
 	do_git_checkout https://github.com/ultravideo/kvazaar
@@ -1203,11 +1377,13 @@ build_libkvazaar() {
 	do_cmake_from_build_dir "$src_dir/$lib" "$cmake_params"
 	do_make_and_make_install
 	change_dir "$src_dir"
+	fi
 }
 
 #     --enable-librav1e (Alternative AV1 encoder written in Rust)
 build_librav1e() { #cant get it to work
- 	echo --enable-librav1e
+  if [[ $disable_librav1e != 1 && $enable_librav1e == 1 ]]; then
+ 	echo "TODO --enable-librav1e"
 	local lib="librav1e"
 # 	# https://github.com/xiph/rav1e
 # 	change_dir "$src_dir"
@@ -1215,10 +1391,12 @@ build_librav1e() { #cant get it to work
 # 	change_dir "$src_dir/rav1e" 1
 # 	cargo_build_and_install
 # 	change_dir "$src_dir"
+	fi
 }
 
 #     --enable-libxeve (EVC encoder)
 build_libxeve() {
+  if [[ $disable_libxeve != 1 && $enable_libxeve == 1 ]]; then
 	local lib="xeve"
 	# encoder
 	# https://github.com/mpeg5/xeve
@@ -1244,10 +1422,12 @@ EOF
 	do_cmake_from_build_dir "$src_dir/$lib" "$cmake_params"
 	do_make_and_make_install
 	change_dir "$src_dir"
+	fi
 }
 
 #     --enable-libxevd (EVC decoder)
 build_libxevd() {
+  if [[ $disable_libxevd != 1 && $enable_libxevd == 1 ]]; then
 	local lib="xevd"
 	# decoder
 	# https://github.com/mpeg5/xevd
@@ -1273,10 +1453,13 @@ EOF
 	do_cmake_from_build_dir "$src_dir/$lib" "$cmake_params"
 	do_make_and_make_install
 	change_dir "$src_dir"
+	fi
 }
 
 #     --enable-ladspa (LADSPA audio plugins) An API standard for audio plugins. not needed?
 build_ladspa() {
+  if [[ $disable_ladspa != 1 && $enable_ladspa == 1 ]]; then
+  echo "Only available in Android build"
 # 		# linux only
 # 		#  http://www.ladspa.org/download/ladspa_sdk_1.17.tgz
 	local lib="ladspa"
@@ -1284,25 +1467,31 @@ build_ladspa() {
 # 		do_git_checkout "https://salsa.debian.org/multimedia-team/ladspa-sdk" "$lib"
 # 		change_dir "$src_dir/$lib"
 # 		change_dir "$src_dir"
+	fi
 }
 
 #     --enable-lv2 (LV2 audio plugins) An API standard for audio plugins for audio production. not needed?
 build_lv2() {
-    echo --enable-lv2
+  if [[ $disable_lv2 != 1 && $enable_lv2 == 1 ]]; then
+    echo "TODO --enable-lv2"
 		# https://gitlab.com/lv2/lv2
 		local lib="lv2"
+	fi
 }
 
 #     --enable-libcelt (CELT audio decoder) A legacy audio codec that has been superseded by Opus. not needed?
 build_libcelt() {
-    echo --enable-libcelt
+  if [[ $disable_libcelt != 1 && $enable_libcelt == 1 ]]; then
+    echo "TODO --enable-libcelt"
 		# https://github.com/xiph/opus
 		local lib="libcelt"
+	fi
 }
 
 #     --enable-libcdio (Audio CD grabbing) Library for CD-ROM and CD-image access. not needed?
 build_libcdio() {
-	echo --enable-libcdio
+  if [[ $disable_libcdio != 1 && $enable_libcdio == 1 ]]; then
+	echo "TODO --enable-libcdio"
 		# https://github.com/libcdio/libcdio
 	local lib="libcdio"
 	# change_dir "$src_dir"
@@ -1313,10 +1502,12 @@ build_libcdio() {
   #   fi
   #   generic_configure_make_install "--without-vcd-info --without-cddb"
 	# change_dir "$src_dir"
+	fi
 }
 
 #     --enable-libfdk-aac The Fraunhofer FDK AAC library.
 build_libfdk_aac() {
+  if [[ $disable_libfdk_aac != 1 && $enable_libfdk_aac == 1 ]]; then
 	change_dir "$src_dir"
 		local checkout_dir=fdk-aac_git
     if [[ -n $fdk_aac_git_checkout_version ]]; then
@@ -1331,32 +1522,39 @@ build_libfdk_aac() {
     fi
     generic_configure_make_install
   change_dir "$src_dir"
+	fi
 }
 
 #     --enable-libjack (JACK audio server support). not needed?
 build_libjack() {
-    echo --enable-libjack
+  if [[ $disable_libjack != 1 && $enable_libjack == 1 ]]; then
+    echo "TODO --enable-libjack"
 		# https://github.com/jackaudio/jack2
+	fi
 }
 #     --enable-libpulse (PulseAudio support). not needed?
 build_libpulse() {
-    echo --enable-libpulse
+  if [[ $disable_libpulse != 1 && $enable_libpulse == 1 ]]; then
+    echo "TODO --enable-libpulse"
 		# https://gitlab.freedesktop.org/pulseaudio/pulseaudio
+	fi
 }
 
 #     --enable-libshine (Fixed-point MP3 encoder)
 build_libshine() {
-	echo --enable-libshine
+  if [[ $disable_libshine != 1 && $enable_libshine == 1 ]]; then
 	# https://github.com/toots/shine 
 	change_dir "$src_dir"
 	do_git_checkout https://github.com/toots/shine
 	change_dir "$src_dir/shine"
 	generic_configure_make_install
 	change_dir "$src_dir"
+	fi
 }
 
 #     --enable-openal (OpenAL audio capture)
 build_openal() {
+  if [[ $disable_openal != 1 && $enable_openal == 1 ]]; then
 	# https://github.com/kcat/openal-soft
 	local lib="openal-soft"
 	change_dir "$src_dir"
@@ -1376,10 +1574,12 @@ build_openal() {
 	do_cmake_from_build_dir "$src_dir/$lib" "$cmake_params"
 	do_make_and_make_install
 	change_dir "$src_dir"
+	fi
 }
 
 #     --enable-pocketsphinx (PocketSphinx speech recognition for the asr filter)
 build_pocketsphinx() {
+  if [[ $disable_pocketsphinx != 1 && $enable_pocketsphinx == 1 ]]; then
 	# https://github.com/cmusphinx/pocketsphinx
 	local lib="pocketsphinx"
 	change_dir "$src_dir"
@@ -1393,9 +1593,11 @@ build_pocketsphinx() {
 	do_cmake_from_build_dir "$src_dir/$lib" "$cmake_params"
 	do_make_and_make_install
 	change_dir "$src_dir"
+	fi
 }
 #     --enable-whisper (OpenAI Whisper speech recognition for the whisper filter)
 build_whisper() {
+  if [[ $disable_whisper != 1 && $enable_whisper == 1 ]]; then
 	# https://github.com/ggerganov/whisper.cpp
 	local lib="whisper.cpp"
 	change_dir "$src_dir"
@@ -1418,127 +1620,167 @@ build_whisper() {
 	do_cmake_from_build_dir "$src_dir/$lib" "$cmake_params"
 	do_make_and_make_install
 	change_dir "$src_dir"
+	fi
 }
 
 #region TODO: LOW PRIORITY
 
 #     --enable-gcrypt (Required for RTMPE as an alternative to OpenSSL)
 build_gcrypt() {
-	echo --enable-gcrypt
+  if [[ $disable_gcrypt != 1 && $enable_gcrypt == 1 ]]; then
+	echo "TODO --enable-gcrypt"
 	# https://dev.gnupg.org/source/libgcrypt
 	local lib="gcrypt"
+	fi
 }
 #     --enable-librist (RIST protocol for reliable streaming)
 build_librist() {
-	echo --enable-librist
+  if [[ $disable_librist != 1 && $enable_librist == 1 ]]; then
+	echo "TODO --enable-librist"
 	# https://code.videolan.org/rist/librist
 	local lib="librist"
+	fi
 }
 #     --enable-librtmp (RTMP/RTMPE support via the librtmp library)
 build_librtmp() {
-	echo --enable-librtmp
+  if [[ $disable_librtmp != 1 && $enable_librtmp == 1 ]]; then
+	echo "TODO --enable-librtmp"
 	# https://git.ffmpeg.org/rtmpdump
 	local lib="librtmp"
+	fi
 }
 #     --enable-librabbitmq (RabbitMQ messaging)
 build_librabbitmq() {
-	echo --enable-librabbitmq
+  if [[ $disable_librabbitmq != 1 && $enable_librabbitmq == 1 ]]; then
+	echo "TODO --enable-librabbitmq"
 	# https://github.com/alanxz/rabbitmq-c
 	local lib="librabbitmq"
+	fi
 }
 #     --enable-libsmbclient (Samba protocol for Windows file sharing)
 build_libsmbclient() {
-	echo --enable-libsmbclient
+  if [[ $disable_libsmbclient != 1 && $enable_libsmbclient == 1 ]]; then
+	echo "TODO --enable-libsmbclient"
 	# https://git.samba.org/samba.git
 	local lib="libsmbclient"
+	fi
 }
 #     --enable-libssh (SFTP protocol support; your script builds libssh2, which is a different library)
 build_libssh() {
-	echo --enable-libssh
+  if [[ $disable_libssh != 1 && $enable_libssh == 1 ]]; then
+	echo "TODO --enable-libssh"
 	# https://git.libssh.org/projects/libssh
 	local lib="libssh"
+	fi
 }
 #     --enable-libtls (LibreSSL support)
 build_libtls() {
-	echo --enable-libtls
+  if [[ $disable_libtls != 1 && $enable_libtls == 1 ]]; then
+	echo "TODO --enable-libtls"
 	# https://github.com/libressl/libressl
 	local lib="libtls"
+	fi
 }
 #     --enable-libzmq (ZeroMQ messaging)
 build_libzmq() {
-	echo --enable-libzmq
+  if [[ $disable_libzmq != 1 && $enable_libzmq == 1 ]]; then
+	echo "TODO --enable-libzmq"
 	# https://github.com/zeromq/libzmq
 	local lib="libzmq"
+	fi
 }
 #     --enable-mbedtls (mbedTLS for HTTPS, alternative to GnuTLS/OpenSSL)
 build_mbedtls() {
-	echo --enable-mbedtls
+  if [[ $disable_mbedtls != 1 && $enable_mbedtls == 1 ]]; then
+	echo "TODO --enable-mbedtls"
 	# https://github.com/Mbed-TLS/mbedtls
 	local lib="mbedtls"
+	fi
 }
 
 #     --enable-jni (Java Native Interface, for Android integration)
 build_jni() {
-	echo --enable-jni
+  if [[ $disable_jni != 1 && $enable_jni == 1 ]]; then
+	echo "Only available on Android build"
 	local lib="jni"
+	fi
 }
 #     --enable-ohcodec (OpenHarmony Codec support)
 build_ohcodec() {
-	echo --enable-ohcodec
+  if [[ $disable_ohcodec != 1 && $enable_ohcodec == 1 ]]; then
+	echo "Only available on Harmony build"
 	local lib="ohcodec"
+	fi
 }
 #     --enable-mediacodec (Android MediaCodec support)
 build_mediacodec() {
-	echo --enable-mediacodec
+  if [[ $disable_mediacodec != 1 && $enable_mediacodec == 1 ]]; then
+	echo "Only available on Android build"
 	local lib="mediacodec"
+	fi
 }
 #     --enable-mediafoundation (Windows MediaFoundation support)
 build_mediafoundation() {
-	echo --enable-mediafoundation
+  if [[ $disable_mediafoundation != 1 && $enable_mediafoundation == 1 ]]; then
+	echo "Only available on Windows build"
 	local lib="mediafoundation"
+	fi
 }
 
 #     --enable-libdc1394 (FireWire camera support)
 build_libdc1394() {
-	echo --enable-libdc1394
+  if [[ $disable_libdc1394 != 1 && $enable_libdc1394 == 1 ]]; then
+	echo "TODO --enable-libdc1394"
 	# https://github.com/damienfirmonte/libdc1394
 	local lib="libdc1394"
+	fi
 }
 #     --enable-libiec61883 (Another FireWire library)
 build_libiec61883() {
-	echo --enable-libiec61883
+  if [[ $disable_libiec61883 != 1 && $enable_libiec61883 == 1 ]]; then
+	echo "TODO --enable-libiec61883"
 	# https://github.com/Mint-Fan/libiec61883
 	local lib="libiec61883"
+	fi
 }
 #     --enable-libv4l2 (Video4Linux2 for device capture on Linux)
 build_libv4l2() {
-	echo --enable-libv4l2
+  if [[ $disable_libv4l2 != 1 && $enable_libv4l2 == 1 ]]; then
+	echo "Only available for Linux build"
 	# https://git.linuxtv.org/v4l-utils
 	local lib="libv4l2"
+	fi
 }
 #     --enable-opencl (OpenCL for GPU-based processing)
 build_opencl() {
-	echo --enable-opencl
+  if [[ $disable_opencl != 1 && $enable_opencl == 1 ]]; then
+	echo "TODO --enable-opencl"
 	# https://github.com/KhronosGroup/OpenCL-Headers
 	local lib="opencl"
+	fi
 }
 
 #     --enable-libopenvino (Intel's OpenVINO toolkit)
 build_libopenvino() {
-	echo --enable-libopenvino
+  if [[ $disable_libopenvino != 1 && $enable_libopenvino == 1 ]]; then
+	echo "TODO --enable-libopenvino"
 	# https://github.com/openvinotoolkit/openvino
 	local lib="openvino"
+	fi
 }
 #     --enable-libtorch (PyTorch)
 build_libtorch() {
-	echo --enable-libtorch
+  if [[ $disable_libtorch != 1 && $enable_libtorch == 1 ]]; then
+	echo "TODO --enable-libtorch"
 	# https://github.com/pytorch/pytorch
 	local lib="pytorch"
+	fi
 }
 #endregion
 
 #     --enable-lcms2 (LittleCMS v2 for color management; your script has a build_lcms but not one specifically for v2)
 build_lcms2() {
+  if [[ $disable_lcms2 != 1 && $enable_lcms2 == 1 ]]; then
 	# https://github.com/mm2/Little-CMS
 	local lib="Little-CMS"
 	activate_meson
@@ -1551,25 +1793,31 @@ build_lcms2() {
 	do_meson "$meson_options" "setup build"
 	do_ninja_and_ninja_install
 	change_dir "$src_dir"
+	fi
 }
 
 # TODO LOW PRIORITY
 #     --enable-libglslang (For compiling GLSL to SPIR-V, used in GPU filters). not needed?
 build_libglslang() {
-	echo --enable-libglslang
+  if [[ $disable_libglslang != 1 && $enable_libglslang == 1 ]]; then
+	echo "TODO --enable-libglslang"
 	# https://github.com/KhronosGroup/glslang
 	local lib="glslang"
+	fi
 }
 
 # TODO LOW PRIORITY
 #     --enable-libklvanc (Kernel Labs VANC processing). not needed?
 build_libklvanc() {
-	echo --enable-libklvanc
+  if [[ $disable_libklvanc != 1 && $enable_libklvanc == 1 ]]; then
+	echo "TODO --enable-libklvanc"
 	# https://github.com/stoth68000/libklvanc
 	local lib="libklvanc"
+	fi
 }
 #     --enable-liblc3 (LC3 audio codec)
 build_liblc3() {
+  if [[ $disable_liblc3 != 1 && $enable_liblc3 == 1 ]]; then
 	# https://github.com/google/liblc3
 	local lib="liblc3"
 	activate_meson
@@ -1582,9 +1830,11 @@ build_liblc3() {
 	change_dir "$src_dir/$lib/build"
 	do_meson "" "install"
 	change_dir "$src_dir"
+	fi
 }
 #     --enable-liblcevc-dec (LCEVC decoder)
-build_liblcevc() {
+build_liblcevc_dec() {
+  if [[ $disable_liblcevc_dec != 1 && $enable_liblcevc_dec == 1 ]]; then
 	# https://github.com/v-novaltd/LCEVCdec
 	local lib="liblcevc"
 	change_dir "$src_dir"
@@ -1598,8 +1848,7 @@ build_liblcevc() {
 -DVN_SDK_DOCS=OFF \
 -DVN_SDK_SAMPLE_SOURCE=OFF \
 -DVN_SDK_PIPELINE_VULKAN=OFF \
--DVN_SDK_PIPELINE_LEGACY=OFF
-"
+-DVN_SDK_PIPELINE_LEGACY=OFF"
 	local target_proc=AMD64
 	if [ "$bits_target" = "32" ]; then
 		target_proc=X86
@@ -1607,9 +1856,11 @@ build_liblcevc() {
 	do_cmake_from_build_dir "$src_dir/$lib" "$cmake_params"
 	do_make_and_make_install
 	change_dir "$src_dir"
+	fi
 }
 #     --enable-liboapv (APV encoder)
 build_liboapv() {
+  if [[ $disable_liboapv != 1 && $enable_liboapv == 1 ]]; then
 	# https://github.com/AcademySoftwareFoundation/openapv
 	local lib="liboapv"
 	change_dir "$src_dir"
@@ -1628,20 +1879,22 @@ build_liboapv() {
 	do_cmake_from_build_dir "$src_dir/$lib" "$cmake_params"
 	do_make_and_make_install
 	change_dir "$src_dir"
+	fi
 }
 #     --enable-libqrencode (QR code generation)
 build_libqrencode() {
+  if [[ $disable_libqrencode != 1 && $enable_libqrencode == 1 ]]; then
 	# https://github.com/fukuchi/libqrencode
 	local lib="libqrencode"
 	change_dir "$src_dir"
 	do_git_checkout https://github.com/fukuchi/libqrencode "$lib"
 	change_dir "$src_dir/$lib/build" 1
 	local cmake_params=" -DCMAKE_TOOLCHAIN_FILE=$(get_generic_cmake_toolchain) \
-  -DCMAKE_BUILD_TYPE=Release \
-  -DWITH_TOOLS=NO \
-  -DWITH_TESTS=NO \
-  -DWITHOUT_PNG=YES \
-  -DBUILD_SHARED_LIBS=NO"
+-DCMAKE_BUILD_TYPE=Release \
+-DWITH_TOOLS=NO \
+-DWITH_TESTS=NO \
+-DWITHOUT_PNG=YES \
+-DBUILD_SHARED_LIBS=NO"
 	local target_proc=AMD64
 	if [ "$bits_target" = "32" ]; then
 		target_proc=X86
@@ -1649,9 +1902,11 @@ build_libqrencode() {
 	do_cmake_from_build_dir "$src_dir/$lib" "$cmake_params"
 	do_make_and_make_install
 	change_dir "$src_dir"
+	fi
 }
 #     --enable-libquirc (QR code decoding)
 build_libquirc() {
+  if [[ $disable_libquirc != 1 && $enable_libquirc == 1 ]]; then
 	# https://github.com/dlbeer/quirc
 	local lib="libquirc"
 	change_dir "$src_dir"
@@ -1664,6 +1919,7 @@ build_libquirc() {
 	export STRIP="${cross_prefix}strip"
 	export RANLIB="${cross_prefix}ranlib"
 	export TOOLCHAIN_PATH=$mingw_bin_path
+  # path to remove demo app build because it requires some unnecessary dependencies
 	if git apply --reverse --check --ignore-space-change --ignore-whitespace --verbose "$WINPATCHDIR/libquirc_Makefile.patch" >/dev/null 2>&1; then
     echo "INFO: Patch already applied. Skipping."
 	else
@@ -1673,11 +1929,13 @@ build_libquirc() {
 	fi
 	do_make_and_make_install "CC=${CC} AR=${AR} AS=${AS} CXX=${CXX} STRIP=${STRIP} RANLIB=${RANLIB}"' libquirc.a LDFLAGS="-static"'" PREFIX=${mingw_w64_x86_64_prefix}" "PREFIX=${mingw_w64_x86_64_prefix}"
 	change_dir "$src_dir"
+	fi
 }
 
 # TODO LOW PRIORITY - needs a bunch of deps
 #     --enable-librsvg (SVG image rendering). not needed?
 build_librsvg() {
+  if [[ $disable_librsvg != 1 && $enable_librsvg == 1 ]]; then
 # 	# https://github.com/GNOME/librsvg
 	local lib="librsvg"
 # 	activate_meson
@@ -1697,10 +1955,12 @@ build_librsvg() {
 # 	change_dir "$src_dir/$lib/build"
 # 	do_ninja_and_ninja_install
 # 	change_dir "$src_dir"
+	fi
 }
 
 #     --enable-libuavs3d (AVS3 decoder)
 build_libuavs3d() {
+  if [[ $disable_libuavs3d != 1 && $enable_libuavs3d == 1 ]]; then
 	# https://github.com/uavs3/uavs3d
 	local lib="libuavs3d"
 	change_dir "$src_dir"
@@ -1717,10 +1977,11 @@ build_libuavs3d() {
 	do_cmake_from_build_dir "$src_dir/$lib" "$cmake_params"
 	do_make_and_make_install
 	change_dir "$src_dir"
+	fi
 }
 #     --enable-vapoursynth (VapourSynth script support)
 build_vapoursynth() {
-	echo --enable-vapoursynth
+  if [[ $disable_vapoursynth != 1 && $enable_vapoursynth == 1 ]]; then
 	# https://github.com/vapoursynth/vapoursynth
 	local lib="vapoursynth"
 	activate_meson
@@ -1729,6 +1990,7 @@ build_vapoursynth() {
 	change_dir "$src_dir/$lib"
 	copy_path "src/vsscript/vsscript.cpp" "src/vsscript/vsscript.cpp.bak"
 	sed -i 's/#include <Windows.h>/#include <windows.h>/' src/vsscript/vsscript.cpp
+  # patch to load windows python dependencies
 	if git apply --reverse --check --ignore-space-change --ignore-whitespace --verbose "$WINPATCHDIR/vapoursynth_meson_build.patch" >/dev/null 2>&1; then
     echo "INFO: Patch already applied. Skipping."
 	else
@@ -1744,6 +2006,256 @@ build_vapoursynth() {
 	do_meson "$meson_options" "setup build"
 	do_ninja_and_ninja_install
 	change_dir "$src_dir"
+	fi
+}
+
+#   --disable-metal          disable Apple Metal framework [autodetect]
+build_metal() {
+  if [[ $disable_metal != 1 ]]; then
+    echo "TODO --enable-metal"
+    echo "Only available on Apple build"
+    
+  fi
+}
+#   --disable-sndio          disable sndio support [autodetect]
+build_sndio () {
+  if [[ $disable_sndio != 1 ]]; then
+    echo "TODO --enable-sndio"
+    # https://github.com/openbsd/src/tree/master/lib/libsndio
+  fi
+}
+#   --disable-schannel       disable SChannel SSP, needed for TLS support on Windows if openssl and gnutls are not used [autodetect]
+build_schannel () {
+  if [[ $disable_schannel != 1 ]]; then
+    echo "TODO --enable-schannel"
+    echo "Only available on Windows build"
+  fi
+}
+#   --disable-securetransport disable Secure Transport, needed for TLS support on OSX if openssl and gnutls are not used [autodetect]
+build_securetransport () {
+  if [[ $disable_securetransport != 1 && $enable_securetransport == 1 ]]; then
+    echo "TODO --enable-securetransport"
+    echo "Only available on Apple build"
+  fi
+}
+#   --disable-xlib           disable xlib [autodetect]
+build_xlib () {
+  if [[ $disable_xlib != 1 ]]; then
+    echo "TODO --enable-xlib"
+    # https://github.com/mirror/libX11
+  fi
+}
+#   --disable-v4l2-m2m       disable V4L2 mem2mem code [autodetect]
+build_v4l2_m2m () {
+  if [[ $disable_v4l2_m2m != 1 ]]; then
+    echo "TODO --enable-v4l2-m2m"
+    echo "Only available on Linux build"
+  fi
+}
+#   --disable-vaapi          disable Video Acceleration API (mainly Unix/Intel) code [autodetect]
+build_vaapi () {
+  if [[ $disable_vaapi != 1 ]]; then
+    echo "TODO --enable-vaapi"
+    # https://github.com/intel/libva
+  fi
+}
+#   --disable-vdpau          disable Nvidia Video Decode and Presentation API for Unix code [autodetect]
+build_vdpau () {
+  if [[ $disable_vdpau != 1 ]]; then
+    echo "TODO --enable-vdpau"
+    # https://gitlab.freedesktop.org/vdpau/libvdpau
+  fi
+}
+#   --disable-videotoolbox   disable VideoToolbox code [autodetect]
+build_videotoolbox () {
+  if [[ $disable_videotoolbox != 1 ]]; then
+    echo "TODO --enable-videotoolbox"
+    echo "Only available on Apple build"
+  fi
+}
+#   --disable-alsa           disable ALSA support [autodetect]
+build_alsa() {
+  if [[ $disable_alsa != 1 ]]; then
+    echo "TODO --enable-alsa"
+    echo "Only available on Linux build"
+    # https://github.com/alsa-project/alsa-lib
+  fi
+}
+#   --disable-appkit         disable Apple AppKit framework [autodetect]
+build_appkit() {
+  if [[ $disable_appkit != 1 ]]; then
+    echo "TODO --enable-appkit"
+    echo "Only available on Apple build"
+  fi
+}
+#   --disable-audiotoolbox   disable Apple AudioToolbox code [autodetect]
+build_audiotoolbox() {
+  if [[ $disable_audiotoolbox != 1 ]]; then
+    echo "TODO --enable-audiotoolbox"
+    echo "Only available on Apple build"
+  fi
+}
+#   --disable-avfoundation   disable Apple AVFoundation framework [autodetect]
+build_avfoundation() {
+  if [[ $disable_avfoundation != 1 ]]; then
+    echo "TODO --enable-avfoundation"
+    echo "Only available on Apple build"
+  fi
+}
+#   --disable-bzlib          disable bzlib [autodetect]
+build_bzlib() {
+  if [[ $disable_bzlib != 1 ]]; then
+    echo "TODO --enable-bzlib"
+    # https://github.com/ImageMagick/bzip2
+  fi
+}
+#   --disable-coreimage      disable Apple CoreImage framework [autodetect]
+build_coreimage() {
+  if [[ $disable_coreimage != 1 ]]; then
+    echo "TODO --enable-coreimage"
+    echo "Only available on Apple build"
+  fi
+}
+#   --disable-cuda-llvm      disable CUDA compilation using clang [autodetect]
+build_cuda_llvm() {
+  if [[ $disable_cuda_llvm != 1 ]]; then
+    echo "TODO --enable-cuda-llvm"
+    # https://github.com/openbsd/src/tree/master/lib/libsndio
+  fi
+}
+#   --enable-cuda-nvcc       enable Nvidia CUDA compiler [no]
+build_cuda_nvcc() {
+  if [[ $disable_cuda_nvcc != 1 && $enable_cuda_nvcc == 1 ]]; then
+    echo "TODO --enable-cuda-nvcc"
+    # https://github.com/openbsd/src/tree/master/lib/libsndio
+  fi
+}
+#   --disable-d3d11va        disable Microsoft Direct3D 11 video acceleration code [autodetect]
+build_d3d11va() {
+  if [[ $disable_d3d11va != 1 ]]; then
+    echo "TODO --enable-d3d11va"
+    echo "Only available on Windows build"
+  fi
+}
+#   --disable-d3d12va        disable Microsoft Direct3D 12 video acceleration code [autodetect]
+build_d3d12va() {
+  if [[ $disable_d3d12va != 1 ]]; then
+    echo "TODO --enable-d3d12va"
+    echo "Only available on Windows build"
+  fi
+}
+#   --disable-dxva2          disable Microsoft DirectX 9 video acceleration code [autodetect]
+build_dxva2() {
+  if [[ $disable_dxva2 != 1 ]]; then
+    echo "TODO --enable-dxva2"
+    echo "Only available on Windows build"
+  fi
+}
+#   --disable-ffnvcodec      disable dynamically linked Nvidia code [autodetect]
+build_ffnvcodec() {
+  if [[ $disable_ffnvcodec != 1 ]]; then
+    echo "TODO --enable-ffnvcodec"
+    # https://github.com/openbsd/src/tree/master/lib/libsndio
+  fi
+}
+#   --disable-libdrm         disable DRM code (Linux) [autodetect]
+build_libdrm() {
+  if [[ $disable_libdrm != 1 ]]; then
+    echo "TODO --enable-libdrm"
+    # https://gitlab.freedesktop.org/mesa/libdrm
+  fi
+}
+#   --enable-libmfx          enable Intel MediaSDK (AKA Quick Sync Video) code via libmfx [no]
+build_libmfx() {
+  if [[ $disable_libmfx != 1 && $enable_libmfx == 1 ]]; then
+    echo "WARNING: Library has been archived and has security issues."
+    # https://github.com/Intel-Media-SDK/MediaSDK
+  fi
+}
+#   --enable-libnpp          enable Nvidia Performance Primitives-based code [no]
+build_libnpp() {
+  if [[ $disable_libnpp != 1 && $enable_libnpp == 1 ]]; then
+    echo "TODO --enable-libnpp"
+    # https://developer.download.nvidia.com/compute/cuda/redist/
+  fi
+}
+#   --enable-libopencv       enable video filtering via libopencv [no]
+build_libopencv() {
+  if [[ $disable_libopencv != 1 && $enable_libopencv == 1 ]]; then
+    #https://github.com/opencv/opencv
+    build_mingw_std_threads
+    #do_git_checkout https://github.com/opencv/opencv.git # too big :|
+    change_dir "$src_dir"
+    download_and_unpack_file https://github.com/opencv/opencv/archive/3.4.5.zip opencv-3.4.5
+    create_dir "$src_dir/opencv-3.4.5/build"
+    #change_dir "$src_dir/opencv-3.4.5"
+    apply_patch "file://$WINPATCHDIR/opencv.detection_based.patch"
+    change_dir "$src_dir"
+    change_dir "$src_dir/opencv-3.4.5/build"
+    # could do more here, it seems to think it needs its own internal libwebp etc...
+    cpu_count=1
+    do_cmake_from_build_dir "$src_dir/opencv-3.4.5" "-DWITH_FFMPEG=0 -DOPENCV_GENERATE_PKGCONFIG=1 -DHAVE_DSHOW=0" # https://stackoverflow.com/q/40262928/32453, no pkg config by default on "windows", who cares ffmpeg
+    do_make_and_make_install
+    cp unix-install/opencv.pc "$PKG_CONFIG_PATH"
+    cpu_count=$original_cpu_count
+    change_dir "$src_dir"
+  fi
+}
+
+#   --enable-libshaderc      enable GLSL->SPIRV compilation via libshaderc [no]
+build_libshaderc() {
+  if [[ $disable_libshaderc != 1 && $enable_libshaderc == 1 ]]; then
+	change_dir "$src_dir"
+	do_git_checkout https://github.com/google/shaderc.git shaderc_git 3a44d5d7850da3601aa43d523a3d228f045fb43d
+	change_dir "$src_dir/shaderc_git"
+	./utils/git-sync-deps
+	# TODO: Allow shared library build
+	do_cmake "-B build -DCMAKE_BUILD_TYPE=release -GNinja -DSHADERC_SKIP_EXAMPLES=ON -DSHADERC_SKIP_TESTS=ON -DSPIRV_SKIP_TESTS=ON -DSHADERC_SKIP_COPYRIGHT_CHECK=ON -DENABLE_EXCEPTIONS=ON -DENABLE_GLSLANG_BINARIES=OFF -DSPIRV_SKIP_EXECUTABLES=ON -DSPIRV_TOOLS_BUILD_STATIC=ON -DBUILD_SHARED_LIBS=OFF"
+	do_ninja_and_ninja_install
+	cp build/libshaderc_util/libshaderc_util.a "$mingw_w64_x86_64_prefix/lib"
+	sed -i.bak "s/Libs: .*/& -lstdc++/" "$PKG_CONFIG_PATH/shaderc_combined.pc"
+	sed -i.bak "s/Libs: .*/& -lstdc++/" "$PKG_CONFIG_PATH/shaderc_static.pc"
+	change_dir "$src_dir"
+  fi
+}
+#   --enable-libvo-amrwbenc  enable AMR-WB encoding via libvo-amrwbenc [no]
+build_libvo_amrwbenc() {
+  if [[ $disable_libvo_amrwbenc != 1 && $enable_libvo_amrwbenc == 1 ]]; then
+    change_dir "$src_dir"
+    generic_download_and_make_and_install https://sourceforge.net/projects/opencore-amr/files/vo-amrwbenc/vo-amrwbenc-0.1.3.tar.gz
+	  change_dir "$src_dir"
+  fi
+}
+#   --enable-libxcb          enable X11 grabbing using XCB [autodetect]
+build_libxcb() {
+  if [[ $disable_libxcb != 1 ]]; then
+    echo "TODO --enable-libxcb"
+    # https://gitlab.freedesktop.org/xorg/lib/libxcb
+  fi
+}
+#   --enable-libxcb-shape    enable X11 grabbing shape rendering [autodetect]
+build_libxcb_shape() {
+  if [[ $disable_libxcb_shape != 1 ]]; then
+    echo "TODO --enable-libxcb-shape"
+    build_libxcb
+    # https://gitlab.freedesktop.org/xorg/lib/libxcb
+  fi
+}
+#   --enable-libxcb-shm      enable X11 grabbing shm communication [autodetect]
+build_libxcb_shm() {
+  if [[ $disable_libxcb_shm != 1 ]]; then
+    echo "TODO --enable-libxcb-shm"
+    build_libxcb
+    # https://gitlab.freedesktop.org/xorg/lib/libxcb
+  fi
+}
+#   --enable-libxcb-xfixes   enable X11 grabbing mouse rendering [autodetect]
+build_libxcb_xfixes() {
+  if [[ $disable_libxcb_xfixes != 1 ]]; then
+    echo "TODO --enable-libxcb-xfixes"
+    build_libxcb
+    # https://gitlab.freedesktop.org/xorg/lib/libxcb
+  fi
 }
 
 #endregion
@@ -1771,7 +2283,7 @@ build_libjsoncpp() {
 	fi
 	local config_options=""
 	local meson_options="$config_options"
-	build_meson_cross_jsoncpp
+	get_meson_cross_jsoncpp
 	meson_options+=" --cross-file=${src_dir}/jsoncpp/meson-cross-jsoncpp.mingw.txt"
 	do_meson "$meson_options" "setup build"
 	do_ninja_and_ninja_install
@@ -1894,23 +2406,6 @@ build_libssh2() {
 	generic_download_and_make_and_install https://github.com/libssh2/libssh2/releases/download/libssh2-1.11.1/libssh2-1.11.1.tar.gz
 	change_dir "$src_dir"
 }
-#--enable-libfreetype (from build_harfbuzz, which calls build_freetype) - Font rendering for the drawtext filter.
-build_freetype() {
-	activate_meson
-	change_dir "$src_dir"
-	do_git_checkout https://github.com/freetype/freetype.git freetype_git
-	change_dir "$src_dir/freetype_git"
-	local config_options=""
-	if [[ -e $PKG_CONFIG_PATH/harfbuzz.pc ]]; then
-		local config_options+=" -Dharfbuzz=enabled"
-	fi
-	local meson_options="$config_options"
-	# get_local_meson_cross_with_propeties
-	meson_options+=" --cross-file=$(get_meson_cross_file)"
-	do_meson "$meson_options" "setup build"
-	do_ninja_and_ninja_install
-	change_dir "$src_dir"
-}
 
 build_cpuinfo() {
 	change_dir "$src_dir"
@@ -1982,20 +2477,6 @@ build_libdovi() {
 	change_dir "$src_dir"
 }
 
-build_shaderc() {
-	change_dir "$src_dir"
-	do_git_checkout https://github.com/google/shaderc.git shaderc_git 3a44d5d7850da3601aa43d523a3d228f045fb43d
-	change_dir "$src_dir/shaderc_git"
-	./utils/git-sync-deps
-	# TODO: Allow shared library build
-	do_cmake "-B build -DCMAKE_BUILD_TYPE=release -GNinja -DSHADERC_SKIP_EXAMPLES=ON -DSHADERC_SKIP_TESTS=ON -DSPIRV_SKIP_TESTS=ON -DSHADERC_SKIP_COPYRIGHT_CHECK=ON -DENABLE_EXCEPTIONS=ON -DENABLE_GLSLANG_BINARIES=OFF -DSPIRV_SKIP_EXECUTABLES=ON -DSPIRV_TOOLS_BUILD_STATIC=ON -DBUILD_SHARED_LIBS=OFF"
-	do_ninja_and_ninja_install
-	cp build/libshaderc_util/libshaderc_util.a "$mingw_w64_x86_64_prefix/lib"
-	sed -i.bak "s/Libs: .*/& -lstdc++/" "$PKG_CONFIG_PATH/shaderc_combined.pc"
-	sed -i.bak "s/Libs: .*/& -lstdc++/" "$PKG_CONFIG_PATH/shaderc_static.pc"
-	change_dir "$src_dir"
-}
-
 build_libjpeg_turbo() {
 	change_dir "$src_dir"
 	do_git_checkout https://github.com/libjpeg-turbo/libjpeg-turbo libjpeg-turbo_git "origin/main"
@@ -2009,6 +2490,16 @@ build_libjpeg_turbo() {
 	do_cmake_and_install "$cmake_params"
 	change_dir "$src_dir"
 }
+
+#endregion
+
+#region WINDOWS TOOLCHAIN FILES
+
+#===============================================================================================
+#
+#                        WINDOWS TOOLCHAIN FILES
+#
+#===============================================================================================
 
 get_generic_cmake_toolchain() {
 	if [[ ! -e "$src_dir/$target_name-toolchain.cmake" ]]; then
@@ -2038,7 +2529,7 @@ EOF
 	echo "$src_dir/$target_name-toolchain.cmake"
 }
 
-build_meson_cross_jsoncpp() {
+get_meson_cross_jsoncpp() {
 	local cpu_family="x86_64"
 	if [ "$bits_target" = 32 ]; then
 		cpu_family="x86"
@@ -2142,408 +2633,389 @@ EOF
 #
 #===============================================================================================
 
-build_opencv() {
-	build_mingw_std_threads
-	#do_git_checkout https://github.com/opencv/opencv.git # too big :|
-	change_dir "$src_dir"
-	download_and_unpack_file https://github.com/opencv/opencv/archive/3.4.5.zip opencv-3.4.5
-	create_dir "$src_dir/opencv-3.4.5/build"
-	#change_dir "$src_dir/opencv-3.4.5"
-	apply_patch "file://$WINPATCHDIR/opencv.detection_based.patch"
-	change_dir "$src_dir"
-	change_dir "$src_dir/opencv-3.4.5/build"
-	# could do more here, it seems to think it needs its own internal libwebp etc...
-	cpu_count=1
-	do_cmake_from_build_dir "$src_dir/opencv-3.4.5" "-DWITH_FFMPEG=0 -DOPENCV_GENERATE_PKGCONFIG=1 -DHAVE_DSHOW=0" # https://stackoverflow.com/q/40262928/32453, no pkg config by default on "windows", who cares ffmpeg
-	do_make_and_make_install
-	cp unix-install/opencv.pc "$PKG_CONFIG_PATH"
-	cpu_count=$original_cpu_count
-	change_dir "$src_dir"
-}
+# build_facebooktransform360() {
+# 	build_opencv
+# 	change_dir "$src_dir"
+# 	do_git_checkout https://github.com/facebook/transform360.git
+# 	change_dir "$src_dir/transform360_git"
+# 	apply_patch "file://$WINPATCHDIR/transform360.pi.diff" -p1
+# 	#change_dir "$src_dir"
+# 	change_dir "$src_dir/transform360_git/Transform360"
+# 	do_cmake ""
+# 	sed -i.bak "s/isystem/I/g" CMakeFiles/Transform360.dir/includes_CXX.rsp # weird stdlib.h error
+# 	do_make_and_make_install
+# 	change_dir "$src_dir"
+# }
 
-build_facebooktransform360() {
-	build_opencv
-	change_dir "$src_dir"
-	do_git_checkout https://github.com/facebook/transform360.git
-	change_dir "$src_dir/transform360_git"
-	apply_patch "file://$WINPATCHDIR/transform360.pi.diff" -p1
-	#change_dir "$src_dir"
-	change_dir "$src_dir/transform360_git/Transform360"
-	do_cmake ""
-	sed -i.bak "s/isystem/I/g" CMakeFiles/Transform360.dir/includes_CXX.rsp # weird stdlib.h error
-	do_make_and_make_install
-	change_dir "$src_dir"
-}
+# build_lsmash() { # an MP4 library
+# 	change_dir "$src_dir"
+# 	do_git_checkout https://github.com/l-smash/l-smash.git l-smash
+# 	change_dir l-smash
+# 	do_configure "--prefix=$mingw_w64_x86_64_prefix --cross-prefix=$cross_prefix"
+# 	do_make_and_make_install
+# 	change_dir "$src_dir"
+# }
 
-build_lsmash() { # an MP4 library
-	change_dir "$src_dir"
-	do_git_checkout https://github.com/l-smash/l-smash.git l-smash
-	change_dir l-smash
-	do_configure "--prefix=$mingw_w64_x86_64_prefix --cross-prefix=$cross_prefix"
-	do_make_and_make_install
-	change_dir "$src_dir"
-}
+# build_libdvdread() {
+# 	build_libdvdcss
+# 	change_dir "$src_dir"
+# 	download_and_unpack_file http://dvdnav.mplayerhq.hu/releases/libdvdread-4.9.9.tar.xz # last revision before 5.X series so still works with MPlayer
+# 	change_dir "$src_dir/libdvdread-4.9.9"
+# 	# XXXX better CFLAGS here...
+# 	generic_configure "CFLAGS=-DHAVE_DVDCSS_DVDCSS_H LDFLAGS=-ldvdcss --enable-dlfcn" # vlc patch: "--enable-libdvdcss" # XXX ask how I'm *supposed* to do this to the dvdread peeps [svn?]
+# 	do_make_and_make_install
+# 	sed -i.bak 's/-ldvdread.*/-ldvdread -ldvdcss/' "$PKG_CONFIG_PATH/dvdread.pc"
+# 	change_dir "$src_dir"
+# }
 
-build_libdvdread() {
-	build_libdvdcss
-	change_dir "$src_dir"
-	download_and_unpack_file http://dvdnav.mplayerhq.hu/releases/libdvdread-4.9.9.tar.xz # last revision before 5.X series so still works with MPlayer
-	change_dir "$src_dir/libdvdread-4.9.9"
-	# XXXX better CFLAGS here...
-	generic_configure "CFLAGS=-DHAVE_DVDCSS_DVDCSS_H LDFLAGS=-ldvdcss --enable-dlfcn" # vlc patch: "--enable-libdvdcss" # XXX ask how I'm *supposed* to do this to the dvdread peeps [svn?]
-	do_make_and_make_install
-	sed -i.bak 's/-ldvdread.*/-ldvdread -ldvdcss/' "$PKG_CONFIG_PATH/dvdread.pc"
-	change_dir "$src_dir"
-}
+# build_libdvdnav() {
+# 	change_dir "$src_dir"
+# 	download_and_unpack_file http://dvdnav.mplayerhq.hu/releases/libdvdnav-4.2.1.tar.xz # 4.2.1. latest revision before 5.x series [?]
+# 	change_dir "$src_dir/libdvdnav-4.2.1"
+# 	if [[ ! -f ./configure ]]; then
+# 		./autogen.sh
+# 	fi
+# 	generic_configure_make_install
+# 	sed -i.bak 's/-ldvdnav.*/-ldvdnav -ldvdread -ldvdcss -lpsapi/' "$PKG_CONFIG_PATH/dvdnav.pc" # psapi for dlfcn ... [hrm?]
+# 	change_dir "$src_dir"
+# }
 
-build_libdvdnav() {
-	change_dir "$src_dir"
-	download_and_unpack_file http://dvdnav.mplayerhq.hu/releases/libdvdnav-4.2.1.tar.xz # 4.2.1. latest revision before 5.x series [?]
-	change_dir "$src_dir/libdvdnav-4.2.1"
-	if [[ ! -f ./configure ]]; then
-		./autogen.sh
-	fi
-	generic_configure_make_install
-	sed -i.bak 's/-ldvdnav.*/-ldvdnav -ldvdread -ldvdcss -lpsapi/' "$PKG_CONFIG_PATH/dvdnav.pc" # psapi for dlfcn ... [hrm?]
-	change_dir "$src_dir"
-}
+# build_libdvdcss() {
+# 	change_dir "$src_dir"
+# 	generic_download_and_make_and_install https://download.videolan.org/pub/videolan/libdvdcss/1.2.13/libdvdcss-1.2.13.tar.bz2
+# }
 
-build_libdvdcss() {
-	change_dir "$src_dir"
-	generic_download_and_make_and_install https://download.videolan.org/pub/videolan/libdvdcss/1.2.13/libdvdcss-1.2.13.tar.bz2
-}
+# build_libproxy() {
+# 	# NB this lacks a .pc file still
+# 	change_dir "$src_dir"
+# 	download_and_unpack_file https://libproxy.googlecode.com/files/libproxy-0.4.11.tar.gz
+# 	change_dir "$src_dir/libproxy-0.4.11"
+# 	sed -i.bak "s/= recv/= (void *) recv/" libmodman/test/main.cpp # some compile failure
+# 	do_cmake_and_install
+# 	change_dir "$src_dir"
+# }
 
-build_libproxy() {
-	# NB this lacks a .pc file still
-	change_dir "$src_dir"
-	download_and_unpack_file https://libproxy.googlecode.com/files/libproxy-0.4.11.tar.gz
-	change_dir "$src_dir/libproxy-0.4.11"
-	sed -i.bak "s/= recv/= (void *) recv/" libmodman/test/main.cpp # some compile failure
-	do_cmake_and_install
-	change_dir "$src_dir"
-}
+# build_lua() {
+# 	change_dir "$src_dir"
+# 	download_and_unpack_file https://www.lua.org/ftp/lua-5.3.3.tar.gz
+# 	change_dir "$src_dir/lua-5.3.3"
+# 	export AR="${cross_prefix}ar rcu"                                    # needs rcu parameter so have to call it out different :|
+# 	# TODO: Allow shared library build
+# 	do_make "CC=${cross_prefix}gcc RANLIB=${cross_prefix}ranlib generic" # generic == "generic target" and seems to result in a static build, no .exe's blah blah the mingw option doesn't even build liblua.a
+# 	unset AR
+# 	do_make_install "INSTALL_TOP=$mingw_w64_x86_64_prefix" "generic install"
+# 	cp etc/lua.pc "$PKG_CONFIG_PATH"
+# 	change_dir "$src_dir"
+# }
 
-build_lua() {
-	change_dir "$src_dir"
-	download_and_unpack_file https://www.lua.org/ftp/lua-5.3.3.tar.gz
-	change_dir "$src_dir/lua-5.3.3"
-	export AR="${cross_prefix}ar rcu"                                    # needs rcu parameter so have to call it out different :|
-	# TODO: Allow shared library build
-	do_make "CC=${cross_prefix}gcc RANLIB=${cross_prefix}ranlib generic" # generic == "generic target" and seems to result in a static build, no .exe's blah blah the mingw option doesn't even build liblua.a
-	unset AR
-	do_make_install "INSTALL_TOP=$mingw_w64_x86_64_prefix" "generic install"
-	cp etc/lua.pc "$PKG_CONFIG_PATH"
-	change_dir "$src_dir"
-}
+# build_libhdhomerun() {
+# 	exit_message 1 "unable to build libhdhomerun at the moment" # still broken unfortunately, for cross compile :|
+# 	change_dir "$src_dir"
+# 	download_and_unpack_file https://download.silicondust.com/hdhomerun/libhdhomerun_20150826.tgz libhdhomerun
+# 	change_dir "$src_dir/libhdhomerun"
+# 	do_make "CROSS_COMPILE=$cross_prefix OS=Windows_NT"
+# 	change_dir "$src_dir"
+# }
 
-build_libhdhomerun() {
-	exit_message 1 "unable to build libhdhomerun at the moment" # still broken unfortunately, for cross compile :|
-	change_dir "$src_dir"
-	download_and_unpack_file https://download.silicondust.com/hdhomerun/libhdhomerun_20150826.tgz libhdhomerun
-	change_dir "$src_dir/libhdhomerun"
-	do_make "CROSS_COMPILE=$cross_prefix OS=Windows_NT"
-	change_dir "$src_dir"
-}
+# build_dvbtee_app() {
+# 	build_iconv # said it needed it
+# 	build_curl  # it "can use this" so why not
+# 	#  build_libhdhomerun # broken but possible dependency apparently :|
+# 	change_dir "$src_dir"
+# 	do_git_checkout https://github.com/mkrufky/libdvbtee.git libdvbtee_git
+# 	change_dir "$src_dir/libdvbtee_git"
+# 	# checkout its submodule, apparently required
+# 	if [ ! -e libdvbpsi/bootstrap ]; then
+# 		remove_path -rf libdvbpsi # remove placeholder
+# 		do_git_checkout https://github.com/mkrufky/libdvbpsi.git
+# 		change_dir libdvbpsi_git
+# 		generic_configure_make_install # library dependency submodule... TODO don't install it, just leave it local :)
+# 		change_dir ..
+# 	fi
+# 	generic_configure
+# 	do_make # not install since don't have a dependency on the library
+# 	change_dir "$src_dir"
+# }
 
-build_dvbtee_app() {
-	build_iconv # said it needed it
-	build_curl  # it "can use this" so why not
-	#  build_libhdhomerun # broken but possible dependency apparently :|
-	change_dir "$src_dir"
-	do_git_checkout https://github.com/mkrufky/libdvbtee.git libdvbtee_git
-	change_dir "$src_dir/libdvbtee_git"
-	# checkout its submodule, apparently required
-	if [ ! -e libdvbpsi/bootstrap ]; then
-		remove_path -rf libdvbpsi # remove placeholder
-		do_git_checkout https://github.com/mkrufky/libdvbpsi.git
-		change_dir libdvbpsi_git
-		generic_configure_make_install # library dependency submodule... TODO don't install it, just leave it local :)
-		change_dir ..
-	fi
-	generic_configure
-	do_make # not install since don't have a dependency on the library
-	change_dir "$src_dir"
-}
+# build_qt() {
+# 	build_libjpeg_turbo # libjpeg a dependency [?]
+# 	unset CFLAGS        # it makes something of its own first, which runs locally, so can't use a foreign arch, or maybe it can, but not important enough: http://stackoverflow.com/a/18775859/32453 XXXX could look at this
+# 	#download_and_unpack_file http://pkgs.fedoraproject.org/repo/pkgs/qt/qt-everywhere-opensource-src-4.8.7.tar.gz/d990ee66bf7ab0c785589776f35ba6ad/qt-everywhere-opensource-src-4.8.7.tar.gz # untested
+# 	#cd qt-everywhere-opensource-src-4.8.7
+# 	# download_and_unpack_file http://download.qt-project.org/official_releases/qt/5.1/5.1.1/submodules/qtbase-opensource-src-5.1.1.tar.xz qtbase-opensource-src-5.1.1 # not officially supported seems...so didn't try it
+# 	change_dir "$src_dir"
+# 	download_and_unpack_file http://pkgs.fedoraproject.org/repo/pkgs/qt/qt-everywhere-opensource-src-4.8.5.tar.gz/1864987bdbb2f58f8ae8b350dfdbe133/qt-everywhere-opensource-src-4.8.5.tar.gz
+# 	change_dir qt-everywhere-opensource-src-4.8.5
+# 	apply_patch "file://$WINPATCHDIR/imageformats.patch"
+# 	apply_patch "file://$WINPATCHDIR/qt-win64.patch"
+# 	# vlc's configure options...mostly
+# 	# TODO: Allow shared library build
+# 	do_configure "-static -release -fast -no-exceptions -no-stl -no-sql-sqlite -no-qt3support -no-gif -no-libmng -qt-libjpeg -no-libtiff -no-qdbus -no-openssl -no-webkit -sse -no-script -no-multimedia -no-phonon -opensource -no-scripttools -no-opengl -no-script -no-scripttools -no-declarative -no-declarative-debug -opensource -no-s60 -host-little-endian -confirm-license -xplatform win32-g++ -device-option CROSS_COMPILE=$cross_prefix -prefix $mingw_w64_x86_64_prefix -prefix-install -nomake examples"
+# 	if [ ! -f 'already_qt_maked_k' ]; then
+# 		make sub-src -j "$(get_cpu_count)"
+# 		make install sub-src                                                                      # let it fail, baby, it still installs a lot of good stuff before dying on mng...? huh wuh?
+# 		cp ./plugins/imageformats/libqjpeg.a "$mingw_w64_x86_64_prefix/lib" || exit_message 1 "could not copy ./plugins/imageformats/libqjpeg.a"             # I think vlc's install is just broken to need this [?]
+# 		cp ./plugins/accessible/libqtaccessiblewidgets.a "$mingw_w64_x86_64_prefix/lib" || exit_message 1 "could not copy ./plugins/accessible/libqtaccessiblewidgets.a" # this feels wrong...
+# 		# do_make_and_make_install "sub-src" # sub-src might make the build faster? # complains on mng? huh?
+# 		create_touch_file 0 'already_qt_maked_k'
+# 	fi
+# 	# vlc needs an adjust .pc file? huh wuh?
+# 	sed -i.bak 's/Libs: -L${libdir} -lQtGui/Libs: -L${libdir} -lcomctl32 -lqjpeg -lqtaccessiblewidgets -lQtGui/' "$PKG_CONFIG_PATH/QtGui.pc" # sniff
+# 	change_dir "$src_dir"
+# 	reset_cflags
+# }
 
-build_qt() {
-	build_libjpeg_turbo # libjpeg a dependency [?]
-	unset CFLAGS        # it makes something of its own first, which runs locally, so can't use a foreign arch, or maybe it can, but not important enough: http://stackoverflow.com/a/18775859/32453 XXXX could look at this
-	#download_and_unpack_file http://pkgs.fedoraproject.org/repo/pkgs/qt/qt-everywhere-opensource-src-4.8.7.tar.gz/d990ee66bf7ab0c785589776f35ba6ad/qt-everywhere-opensource-src-4.8.7.tar.gz # untested
-	#cd qt-everywhere-opensource-src-4.8.7
-	# download_and_unpack_file http://download.qt-project.org/official_releases/qt/5.1/5.1.1/submodules/qtbase-opensource-src-5.1.1.tar.xz qtbase-opensource-src-5.1.1 # not officially supported seems...so didn't try it
-	change_dir "$src_dir"
-	download_and_unpack_file http://pkgs.fedoraproject.org/repo/pkgs/qt/qt-everywhere-opensource-src-4.8.5.tar.gz/1864987bdbb2f58f8ae8b350dfdbe133/qt-everywhere-opensource-src-4.8.5.tar.gz
-	change_dir qt-everywhere-opensource-src-4.8.5
-	apply_patch "file://$WINPATCHDIR/imageformats.patch"
-	apply_patch "file://$WINPATCHDIR/qt-win64.patch"
-	# vlc's configure options...mostly
-	# TODO: Allow shared library build
-	do_configure "-static -release -fast -no-exceptions -no-stl -no-sql-sqlite -no-qt3support -no-gif -no-libmng -qt-libjpeg -no-libtiff -no-qdbus -no-openssl -no-webkit -sse -no-script -no-multimedia -no-phonon -opensource -no-scripttools -no-opengl -no-script -no-scripttools -no-declarative -no-declarative-debug -opensource -no-s60 -host-little-endian -confirm-license -xplatform win32-g++ -device-option CROSS_COMPILE=$cross_prefix -prefix $mingw_w64_x86_64_prefix -prefix-install -nomake examples"
-	if [ ! -f 'already_qt_maked_k' ]; then
-		make sub-src -j "$(get_cpu_count)"
-		make install sub-src                                                                      # let it fail, baby, it still installs a lot of good stuff before dying on mng...? huh wuh?
-		cp ./plugins/imageformats/libqjpeg.a "$mingw_w64_x86_64_prefix/lib" || exit_message 1 "could not copy ./plugins/imageformats/libqjpeg.a"             # I think vlc's install is just broken to need this [?]
-		cp ./plugins/accessible/libqtaccessiblewidgets.a "$mingw_w64_x86_64_prefix/lib" || exit_message 1 "could not copy ./plugins/accessible/libqtaccessiblewidgets.a" # this feels wrong...
-		# do_make_and_make_install "sub-src" # sub-src might make the build faster? # complains on mng? huh?
-		create_touch_file 0 'already_qt_maked_k'
-	fi
-	# vlc needs an adjust .pc file? huh wuh?
-	sed -i.bak 's/Libs: -L${libdir} -lQtGui/Libs: -L${libdir} -lcomctl32 -lqjpeg -lqtaccessiblewidgets -lQtGui/' "$PKG_CONFIG_PATH/QtGui.pc" # sniff
-	change_dir "$src_dir"
-	reset_cflags
-}
-
-build_vlc() {
-	# currently broken, since it got too old for libavcodec and I didn't want to build its own custom one yet to match, and now it's broken with gcc 5.2.0 seemingly
-	# call out dependencies here since it's a lot, plus hierarchical FTW!
-	# should be ffmpeg 1.1.1 or some odd?
-	echo -e "not building vlc, broken dependencies or something weird"
-	return
-	# vlc's own dependencies:
-	build_lua
-	build_libdvdread
-	build_libdvdnav
-	build_libx265
-	build_libjpeg_turbo
-	build_ffmpeg
-	build_qt
-	change_dir "$src_dir"
-	# currently vlc itself currently broken :|
-	do_git_checkout https://github.com/videolan/vlc.git
-	change_dir vlc_git
-	#apply_patch file://$WINPATCHDIR/vlc_localtime_s.patch # git revision needs it...
-	# outdated and patch doesn't apply cleanly anymore apparently...
-	#if [[ "$non_free" = "y" ]]; then
-	#  apply_patch https://raw.githubusercontent.com/gcsx/ffmpeg-windows-build-helpers/patch-5/patches/priorize_avcodec.patch
-	#fi
-	if [[ ! -f "configure" ]]; then
-		./bootstrap
-	fi
-	export DVDREAD_LIBS='-ldvdread -ldvdcss -lpsapi'
-	do_configure "--disable-libgcrypt --disable-a52 --host=$host_target --disable-lua --disable-mad --enable-qt --disable-sdl --disable-mod" # don't have lua mingw yet, etc. [vlc has --disable-sdl [?]] x265 disabled until we care enough... Looks like the bluray problem was related to the BLURAY_LIBS definition. [not sure what's wrong with libmod]
-	remove_path -f "$(find . -name "*.exe")"                                                                                                 # try to force a rebuild...though there are tons of .a files we aren't rebuilding as well FWIW...:|
-	remove_path -f already_ran_make*                                                                                                         # try to force re-link just in case...
-	do_make
-	# do some gymnastics to avoid building the mozilla plugin for now [couldn't quite get it to work]
-	#sed -i.bak 's_git://git.videolan.org/npapi-vlc.git_https://github.com/rdp/npapi-vlc.git_' Makefile # this wasn't enough...following lines instead...
-	sed -i.bak "s/package-win-common: package-win-install build-npapi/package-win-common: package-win-install/" Makefile
-	sed -i.bak "s/.*cp .*builddir.*npapi-vlc.*//g" Makefile
-	make package-win-common # not do_make, fails still at end, plus this way we get new vlc.exe's
-	echo -e "
+# build_vlc() {
+# 	# currently broken, since it got too old for libavcodec and I didn't want to build its own custom one yet to match, and now it's broken with gcc 5.2.0 seemingly
+# 	# call out dependencies here since it's a lot, plus hierarchical FTW!
+# 	# should be ffmpeg 1.1.1 or some odd?
+# 	echo -e "not building vlc, broken dependencies or something weird"
+# 	return
+# 	# vlc's own dependencies:
+# 	build_lua
+# 	build_libdvdread
+# 	build_libdvdnav
+# 	build_libx265
+# 	build_libjpeg_turbo
+# 	build_ffmpeg
+# 	build_qt
+# 	change_dir "$src_dir"
+# 	# currently vlc itself currently broken :|
+# 	do_git_checkout https://github.com/videolan/vlc.git
+# 	change_dir vlc_git
+# 	#apply_patch file://$WINPATCHDIR/vlc_localtime_s.patch # git revision needs it...
+# 	# outdated and patch doesn't apply cleanly anymore apparently...
+# 	#if [[ "$non_free" = "y" ]]; then
+# 	#  apply_patch https://raw.githubusercontent.com/gcsx/ffmpeg-windows-build-helpers/patch-5/patches/priorize_avcodec.patch
+# 	#fi
+# 	if [[ ! -f "configure" ]]; then
+# 		./bootstrap
+# 	fi
+# 	export DVDREAD_LIBS='-ldvdread -ldvdcss -lpsapi'
+# 	do_configure "--disable-libgcrypt --disable-a52 --host=$host_target --disable-lua --disable-mad --enable-qt --disable-sdl --disable-mod" # don't have lua mingw yet, etc. [vlc has --disable-sdl [?]] x265 disabled until we care enough... Looks like the bluray problem was related to the BLURAY_LIBS definition. [not sure what's wrong with libmod]
+# 	remove_path -f "$(find . -name "*.exe")"                                                                                                 # try to force a rebuild...though there are tons of .a files we aren't rebuilding as well FWIW...:|
+# 	remove_path -f already_ran_make*                                                                                                         # try to force re-link just in case...
+# 	do_make
+# 	# do some gymnastics to avoid building the mozilla plugin for now [couldn't quite get it to work]
+# 	#sed -i.bak 's_git://git.videolan.org/npapi-vlc.git_https://github.com/rdp/npapi-vlc.git_' Makefile # this wasn't enough...following lines instead...
+# 	sed -i.bak "s/package-win-common: package-win-install build-npapi/package-win-common: package-win-install/" Makefile
+# 	sed -i.bak "s/.*cp .*builddir.*npapi-vlc.*//g" Makefile
+# 	make package-win-common # not do_make, fails still at end, plus this way we get new vlc.exe's
+# 	echo -e "
 
 
-     vlc success, created a file like ${PWD}/vlc-xxx-git/vlc.exe
+#      vlc success, created a file like ${PWD}/vlc-xxx-git/vlc.exe
 
 
 
-"
-	change_dir "$src_dir"
-	unset DVDREAD_LIBS
-}
+# "
+# 	change_dir "$src_dir"
+# 	unset DVDREAD_LIBS
+# }
 
-build_mplayer() {
-	# pre requisites
-	build_libjpeg_turbo
-	build_libdvdread
-	build_libdvdnav
+# build_mplayer() {
+# 	# pre requisites
+# 	build_libjpeg_turbo
+# 	build_libdvdread
+# 	build_libdvdnav
 
-	download_and_unpack_file https://sourceforge.net/projects/mplayer-edl/files/mplayer-export-snapshot.2014-05-19.tar.bz2 mplayer-export-2014-05-19
-	change_dir mplayer-export-2014-05-19
-	do_git_checkout https://github.com/FFmpeg/FFmpeg ffmpeg d43c303038e9bd # known compatible commit
-	export LDFLAGS='-lpthread -ldvdnav -ldvdread -ldvdcss'                 # not compat with newer dvdread possibly? huh wuh?
-	export CFLAGS=-DHAVE_DVDCSS_DVDCSS_H
-	do_configure "--enable-cross-compile --host-cc=cc --cc=${cross_prefix}gcc --windres=${cross_prefix}windres --ranlib=${cross_prefix}ranlib --ar=${cross_prefix}ar --as=${cross_prefix}as --nm=${cross_prefix}nm --enable-runtime-cpudetection --extra-cflags=$CFLAGS --with-dvdnav-config=$mingw_w64_x86_64_prefix/bin/dvdnav-config --disable-dvdread-internal --disable-libdvdcss-internal --disable-w32threads --enable-pthreads --extra-libs=-lpthread --enable-debug --enable-ass-internal --enable-dvdread --enable-dvdnav --disable-libvpx-lavc" # haven't reported the ldvdcss thing, think it's to do with possibly it not using dvdread.pc [?] XXX check with trunk
-	# disable libvpx didn't work with its v1.5.0 some reason :|
-	unset LDFLAGS
-	reset_cflags
-	sed -i.bak "s/HAVE_PTHREAD_CANCEL 0/HAVE_PTHREAD_CANCEL 1/g" config.h # mplayer doesn't set this up right?
-	touch -t 201203101513 config.h                                        # the above line change the modify time for config.h--forcing a full rebuild *every time* yikes!
-	# try to force re-link just in case...
-	remove_path -f *.exe
-	remove_path -f already_ran_make* # try to force re-link just in case...
-	do_make
-	cp mplayer.exe mplayer_debug.exe
-	"${cross_prefix}strip" mplayer.exe
-	echo -e "built ${PWD}/{mplayer,mencoder,mplayer_debug}.exe"
-	change_dir "$src_dir"
-}
+# 	download_and_unpack_file https://sourceforge.net/projects/mplayer-edl/files/mplayer-export-snapshot.2014-05-19.tar.bz2 mplayer-export-2014-05-19
+# 	change_dir mplayer-export-2014-05-19
+# 	do_git_checkout https://github.com/FFmpeg/FFmpeg ffmpeg d43c303038e9bd # known compatible commit
+# 	export LDFLAGS='-lpthread -ldvdnav -ldvdread -ldvdcss'                 # not compat with newer dvdread possibly? huh wuh?
+# 	export CFLAGS=-DHAVE_DVDCSS_DVDCSS_H
+# 	do_configure "--enable-cross-compile --host-cc=cc --cc=${cross_prefix}gcc --windres=${cross_prefix}windres --ranlib=${cross_prefix}ranlib --ar=${cross_prefix}ar --as=${cross_prefix}as --nm=${cross_prefix}nm --enable-runtime-cpudetection --extra-cflags=$CFLAGS --with-dvdnav-config=$mingw_w64_x86_64_prefix/bin/dvdnav-config --disable-dvdread-internal --disable-libdvdcss-internal --disable-w32threads --enable-pthreads --extra-libs=-lpthread --enable-debug --enable-ass-internal --enable-dvdread --enable-dvdnav --disable-libvpx-lavc" # haven't reported the ldvdcss thing, think it's to do with possibly it not using dvdread.pc [?] XXX check with trunk
+# 	# disable libvpx didn't work with its v1.5.0 some reason :|
+# 	unset LDFLAGS
+# 	reset_cflags
+# 	sed -i.bak "s/HAVE_PTHREAD_CANCEL 0/HAVE_PTHREAD_CANCEL 1/g" config.h # mplayer doesn't set this up right?
+# 	touch -t 201203101513 config.h                                        # the above line change the modify time for config.h--forcing a full rebuild *every time* yikes!
+# 	# try to force re-link just in case...
+# 	remove_path -f *.exe
+# 	remove_path -f already_ran_make* # try to force re-link just in case...
+# 	do_make
+# 	cp mplayer.exe mplayer_debug.exe
+# 	"${cross_prefix}strip" mplayer.exe
+# 	echo -e "built ${PWD}/{mplayer,mencoder,mplayer_debug}.exe"
+# 	change_dir "$src_dir"
+# }
 
-build_mp4box() { # like build_gpac
-	# This script only builds the gpac_static lib plus MP4Box. Other tools inside
-	# specify revision until this works: https://sourceforge.net/p/gpac/discussion/287546/thread/72cf332a/
-	do_git_checkout https://github.com/gpac/gpac.git mp4box_gpac_git
-	change_dir mp4box_gpac_git
-	# are these tweaks needed? If so then complain to the mp4box people about it?
-	sed -i.bak "s/has_dvb4linux=\"yes\"/has_dvb4linux=\"no\"/g" configure
-	# XXX do I want to disable more things here?
-	# ./prebuilt/cross_compilers/mingw-w64-i686/bin/i686-w64-mingw32-sdl-config
-	# TODO: Allow shared library build
-	generic_configure "  --cross-prefix=${cross_prefix} --target-os=MINGW32 --extra-cflags=-Wno-format --static-build --static-bin --disable-oss-audio --extra-ldflags=-municode --disable-x11 --sdl-cfg=${cross_prefix}sdl-config"
-	./check_revision.sh
-	# I seem unable to pass 3 libs into the same config line so do it with sed...
-	sed -i.bak "s/EXTRALIBS=.*/EXTRALIBS=-lws2_32 -lwinmm -lz/g" config.mak
-	change_dir src
-	do_make "$compiler_flags"
-	change_dir ..
-	remove_path -f ./bin/gcc/MP4Box* # try and force a relink/rebuild of the .exe
-	change_dir applications/mp4box
-	remove_path -f already_ran_make* # ??
-	do_make "$compiler_flags"
-	change_dir ../..
-	# copy it every time just in case it was rebuilt...
-	cp ./bin/gcc/MP4Box ./bin/gcc/MP4Box.exe # it doesn't name it .exe? That feels broken somehow...
-	echo -e "built $(readlink -f ./bin/gcc/MP4Box.exe)"
-	change_dir "$src_dir"
-}
+# build_mp4box() { # like build_gpac
+# 	# This script only builds the gpac_static lib plus MP4Box. Other tools inside
+# 	# specify revision until this works: https://sourceforge.net/p/gpac/discussion/287546/thread/72cf332a/
+# 	do_git_checkout https://github.com/gpac/gpac.git mp4box_gpac_git
+# 	change_dir mp4box_gpac_git
+# 	# are these tweaks needed? If so then complain to the mp4box people about it?
+# 	sed -i.bak "s/has_dvb4linux=\"yes\"/has_dvb4linux=\"no\"/g" configure
+# 	# XXX do I want to disable more things here?
+# 	# ./prebuilt/cross_compilers/mingw-w64-i686/bin/i686-w64-mingw32-sdl-config
+# 	# TODO: Allow shared library build
+# 	generic_configure "  --cross-prefix=${cross_prefix} --target-os=MINGW32 --extra-cflags=-Wno-format --static-build --static-bin --disable-oss-audio --extra-ldflags=-municode --disable-x11 --sdl-cfg=${cross_prefix}sdl-config"
+# 	./check_revision.sh
+# 	# I seem unable to pass 3 libs into the same config line so do it with sed...
+# 	sed -i.bak "s/EXTRALIBS=.*/EXTRALIBS=-lws2_32 -lwinmm -lz/g" config.mak
+# 	change_dir src
+# 	do_make "$compiler_flags"
+# 	change_dir ..
+# 	remove_path -f ./bin/gcc/MP4Box* # try and force a relink/rebuild of the .exe
+# 	change_dir applications/mp4box
+# 	remove_path -f already_ran_make* # ??
+# 	do_make "$compiler_flags"
+# 	change_dir ../..
+# 	# copy it every time just in case it was rebuilt...
+# 	cp ./bin/gcc/MP4Box ./bin/gcc/MP4Box.exe # it doesn't name it .exe? That feels broken somehow...
+# 	echo -e "built $(readlink -f ./bin/gcc/MP4Box.exe)"
+# 	change_dir "$src_dir"
+# }
 
-build_libMXF() {
-	download_and_unpack_file https://sourceforge.net/projects/ingex/files/1.0.0/libMXF/libMXF-src-1.0.0.tgz "libMXF-src-1.0.0"
-	change_dir libMXF-src-1.0.0
-	apply_patch "file://$WINPATCHDIR/libMXF.diff"
-	do_make "MINGW_CC_PREFIX=$cross_prefix"
-	#
-	# Manual equivalent of make install. Enable it if desired. We shouldn't need it in theory since we never use libMXF.a file and can just hand pluck out the *.exe files already...
-	#
-	#cp libMXF/lib/libMXF.a $mingw_w64_x86_64_prefix/lib/libMXF.a
-	#cp libMXF++/libMXF++/libMXF++.a $mingw_w64_x86_64_prefix/lib/libMXF++.a
-	#mv libMXF/examples/writeaviddv50/writeaviddv50 libMXF/examples/writeaviddv50/writeaviddv50.exe
-	#mv libMXF/examples/writeavidmxf/writeavidmxf libMXF/examples/writeavidmxf/writeavidmxf.exe
-	#cp libMXF/examples/writeaviddv50/writeaviddv50.exe $mingw_w64_x86_64_prefix/bin/writeaviddv50.exe
-	#cp libMXF/examples/writeavidmxf/writeavidmxf.exe $mingw_w64_x86_64_prefix/bin/writeavidmxf.exe
-	change_dir "$src_dir"
-}
+# build_libMXF() {
+# 	download_and_unpack_file https://sourceforge.net/projects/ingex/files/1.0.0/libMXF/libMXF-src-1.0.0.tgz "libMXF-src-1.0.0"
+# 	change_dir libMXF-src-1.0.0
+# 	apply_patch "file://$WINPATCHDIR/libMXF.diff"
+# 	do_make "MINGW_CC_PREFIX=$cross_prefix"
+# 	#
+# 	# Manual equivalent of make install. Enable it if desired. We shouldn't need it in theory since we never use libMXF.a file and can just hand pluck out the *.exe files already...
+# 	#
+# 	#cp libMXF/lib/libMXF.a $mingw_w64_x86_64_prefix/lib/libMXF.a
+# 	#cp libMXF++/libMXF++/libMXF++.a $mingw_w64_x86_64_prefix/lib/libMXF++.a
+# 	#mv libMXF/examples/writeaviddv50/writeaviddv50 libMXF/examples/writeaviddv50/writeaviddv50.exe
+# 	#mv libMXF/examples/writeavidmxf/writeavidmxf libMXF/examples/writeavidmxf/writeavidmxf.exe
+# 	#cp libMXF/examples/writeaviddv50/writeaviddv50.exe $mingw_w64_x86_64_prefix/bin/writeaviddv50.exe
+# 	#cp libMXF/examples/writeavidmxf/writeavidmxf.exe $mingw_w64_x86_64_prefix/bin/writeavidmxf.exe
+# 	change_dir "$src_dir"
+# }
 
-build_lsw() {
-	# Build L-Smash-Works, which are AviSynth plugins based on lsmash/ffmpeg
-	#build_ffmpeg static # dependency, assume already built since it builds before this does...
-	build_lsmash # dependency
-	do_git_checkout https://github.com/VFR-maniac/L-SMASH-Works.git lsw
-	change_dir lsw/VapourSynth
-	do_configure "--prefix=$mingw_w64_x86_64_prefix --cross-prefix=$cross_prefix --target-os=mingw"
-	do_make_and_make_install
-	# AviUtl is 32bit-only
-	if [ "$bits_target" = "32" ]; then
-		change_dir ../AviUtl
-		do_configure "--prefix=$mingw_w64_x86_64_prefix --cross-prefix=$cross_prefix"
-		do_make
-	fi
-	change_dir "$src_dir"
-}
+# build_lsw() {
+# 	# Build L-Smash-Works, which are AviSynth plugins based on lsmash/ffmpeg
+# 	#build_ffmpeg static # dependency, assume already built since it builds before this does...
+# 	build_lsmash # dependency
+# 	do_git_checkout https://github.com/VFR-maniac/L-SMASH-Works.git lsw
+# 	change_dir lsw/VapourSynth
+# 	do_configure "--prefix=$mingw_w64_x86_64_prefix --cross-prefix=$cross_prefix --target-os=mingw"
+# 	do_make_and_make_install
+# 	# AviUtl is 32bit-only
+# 	if [ "$bits_target" = "32" ]; then
+# 		change_dir ../AviUtl
+# 		do_configure "--prefix=$mingw_w64_x86_64_prefix --cross-prefix=$cross_prefix"
+# 		do_make
+# 	fi
+# 	change_dir "$src_dir"
+# }
 
 
-build_librtmfp() {
-	# needs some version of openssl...
-	# build_openssl_1_0_2 # fails OS X
-	build_openssl_1_1_1 # fails WSL
-	change_dir "$src_dir"
-	do_git_checkout https://github.com/MonaSolutions/librtmfp.git
-	change_dir "$src_dir/librtmfp_git/include/Base"
-	do_git_checkout https://github.com/meganz/mingw-std-threads.git mingw-std-threads # our g++ apparently doesn't have std::mutex baked in...weird...this replaces it...
-	change_dir "$src_dir"
-	change_dir "$src_dir/librtmfp_git"
-	apply_patch "file://$WINPATCHDIR/rtmfp.static.cross.patch" -p1  # works e48efb4f
-	apply_patch "file://$WINPATCHDIR/rtmfp_capitalization.diff" -p1 # cross for windows needs it if on linux...
-	apply_patch "file://$WINPATCHDIR/librtmfp_xp.diff.diff" -p1     # cross for windows needs it if on linux...
-	do_make "$compiler_flags GPP=${cross_prefix}g++"
-	do_make_install "prefix=$mingw_w64_x86_64_prefix PKGCONFIGPATH=$PKG_CONFIG_PATH"
-	sed -i.bak 's/-lrtmfp.*/-lrtmfp -lstdc++ -lws2_32 -liphlpapi/' "$PKG_CONFIG_PATH/librtmfp.pc"
-	change_dir "$src_dir"
-}
+# build_librtmfp() {
+# 	# needs some version of openssl...
+# 	# build_openssl_1_0_2 # fails OS X
+# 	build_openssl_1_1_1 # fails WSL
+# 	change_dir "$src_dir"
+# 	do_git_checkout https://github.com/MonaSolutions/librtmfp.git
+# 	change_dir "$src_dir/librtmfp_git/include/Base"
+# 	do_git_checkout https://github.com/meganz/mingw-std-threads.git mingw-std-threads # our g++ apparently doesn't have std::mutex baked in...weird...this replaces it...
+# 	change_dir "$src_dir"
+# 	change_dir "$src_dir/librtmfp_git"
+# 	apply_patch "file://$WINPATCHDIR/rtmfp.static.cross.patch" -p1  # works e48efb4f
+# 	apply_patch "file://$WINPATCHDIR/rtmfp_capitalization.diff" -p1 # cross for windows needs it if on linux...
+# 	apply_patch "file://$WINPATCHDIR/librtmfp_xp.diff.diff" -p1     # cross for windows needs it if on linux...
+# 	do_make "$compiler_flags GPP=${cross_prefix}g++"
+# 	do_make_install "prefix=$mingw_w64_x86_64_prefix PKGCONFIGPATH=$PKG_CONFIG_PATH"
+# 	sed -i.bak 's/-lrtmfp.*/-lrtmfp -lstdc++ -lws2_32 -liphlpapi/' "$PKG_CONFIG_PATH/librtmfp.pc"
+# 	change_dir "$src_dir"
+# }
 
-build_openssl_1_0_2() {
-	change_dir "$src_dir"
-	download_and_unpack_file https://www.openssl.org/source/openssl-1.0.2p.tar.gz
-	change_dir "$src_dir/openssl-1.0.2p"
-	apply_patch "file://$WINPATCHDIR/openssl-1.0.2l_lib-only.diff"
-	export CC="${cross_prefix}gcc"
-	export AR="${cross_prefix}ar"
-	export RANLIB="${cross_prefix}ranlib"
-	local config_options="--prefix=$mingw_w64_x86_64_prefix zlib "
-	if [ "$1" = "dllonly" ]; then
-		config_options+="shared "
-	else
-		config_options+="no-shared no-dso "
-	fi
-	if [ "$bits_target" = "32" ]; then
-		config_options+="mingw" # Build shared libraries ('libeay32.dll' and 'ssleay32.dll') if "dllonly" is specified.
-		local arch=x86
-	else
-		config_options+="mingw64" # Build shared libraries ('libeay64.dll' and 'ssleay64.dll') if "dllonly" is specified.
-		local arch=x86_64
-	fi
-	do_configure "$config_options" ./Configure
-	if [[ ! -f Makefile_1 ]]; then
-		sed -i_1 "s/-O3/-O2/" Makefile # Change CFLAGS (OpenSSL's 'Configure' already creates a 'Makefile.bak').
-	fi
-	if [ "$1" = "dllonly" ]; then
-		do_make "build_libs"
+# build_openssl_1_0_2() {
+# 	change_dir "$src_dir"
+# 	download_and_unpack_file https://www.openssl.org/source/openssl-1.0.2p.tar.gz
+# 	change_dir "$src_dir/openssl-1.0.2p"
+# 	apply_patch "file://$WINPATCHDIR/openssl-1.0.2l_lib-only.diff"
+# 	export CC="${cross_prefix}gcc"
+# 	export AR="${cross_prefix}ar"
+# 	export RANLIB="${cross_prefix}ranlib"
+# 	local config_options="--prefix=$mingw_w64_x86_64_prefix zlib "
+# 	if [ "$1" = "dllonly" ]; then
+# 		config_options+="shared "
+# 	else
+# 		config_options+="no-shared no-dso "
+# 	fi
+# 	if [ "$bits_target" = "32" ]; then
+# 		config_options+="mingw" # Build shared libraries ('libeay32.dll' and 'ssleay32.dll') if "dllonly" is specified.
+# 		local arch=x86
+# 	else
+# 		config_options+="mingw64" # Build shared libraries ('libeay64.dll' and 'ssleay64.dll') if "dllonly" is specified.
+# 		local arch=x86_64
+# 	fi
+# 	do_configure "$config_options" ./Configure
+# 	if [[ ! -f Makefile_1 ]]; then
+# 		sed -i_1 "s/-O3/-O2/" Makefile # Change CFLAGS (OpenSSL's 'Configure' already creates a 'Makefile.bak').
+# 	fi
+# 	if [ "$1" = "dllonly" ]; then
+# 		do_make "build_libs"
 
-		create_dir "$src_dir/redist" # Strip and pack shared libraries.
-		archive="$src_dir/redist/openssl-${arch}-v1.0.2l.7z"
-		if [[ ! -f $archive ]]; then
-			for sharedlib in *.dll; do
-				# shellcheck disable=SC2086
-				"${cross_prefix}strip" $sharedlib
-			done
-			sed "s/$/\r/" LICENSE >LICENSE.txt
-			7z a -mx=9 "$archive" *.dll LICENSE.txt && remove_path -f LICENSE.txt
-		fi
-	else
-		do_make_and_make_install
-	fi
-	unset CC
-	unset AR
-	unset RANLIB
-	change_dir "$src_dir"
-}
+# 		create_dir "$src_dir/redist" # Strip and pack shared libraries.
+# 		archive="$src_dir/redist/openssl-${arch}-v1.0.2l.7z"
+# 		if [[ ! -f $archive ]]; then
+# 			for sharedlib in *.dll; do
+# 				# shellcheck disable=SC2086
+# 				"${cross_prefix}strip" $sharedlib
+# 			done
+# 			sed "s/$/\r/" LICENSE >LICENSE.txt
+# 			7z a -mx=9 "$archive" *.dll LICENSE.txt && remove_path -f LICENSE.txt
+# 		fi
+# 	else
+# 		do_make_and_make_install
+# 	fi
+# 	unset CC
+# 	unset AR
+# 	unset RANLIB
+# 	change_dir "$src_dir"
+# }
 
-build_openssl_1_1_1() {
-	change_dir "$src_dir"
-	download_and_unpack_file https://www.openssl.org/source/openssl-1.1.1.tar.gz
-	change_dir "$src_dir/openssl-1.1.1"
-	export CC="${cross_prefix}gcc"
-	export AR="${cross_prefix}ar"
-	export RANLIB="${cross_prefix}ranlib"
-	local config_options="--prefix=$mingw_w64_x86_64_prefix zlib "
-	if [ "$1" = "dllonly" ]; then
-		config_options+="shared no-engine "
-	else
-		config_options+="no-shared no-dso no-engine "
-	fi
-	if [[ $(uname) =~ 5.1 ]] || [[ $(uname) =~ 6.0 ]]; then
-		config_options+="no-async " # "Note: on older OSes, like CentOS 5, BSD 5, and Windows XP or Vista, you will need to configure with no-async when building OpenSSL 1.1.0 and above. The configuration system does not detect lack of the Posix feature on the platforms." (https://wiki.openssl.org/index.php/Compilation_and_Installation)
-	fi
-	if [ "$bits_target" = "32" ]; then
-		config_options+="mingw" # Build shared libraries ('libcrypto-1_1.dll' and 'libssl-1_1.dll') if "dllonly" is specified.
-		local arch=x86
-	else
-		config_options+="mingw64" # Build shared libraries ('libcrypto-1_1-x64.dll' and 'libssl-1_1-x64.dll') if "dllonly" is specified.
-		local arch=x86_64
-	fi
-	do_configure "$config_options" ./Configure
-	if [[ ! -f Makefile.bak ]]; then # Change CFLAGS.
-		sed -i.bak "s/-O3/-O2/" Makefile
-	fi
-	do_make "build_libs"
-	if [ "$1" = "dllonly" ]; then
-		create_dir "$src_dir/redist" # Strip and pack shared libraries.
-		archive="$src_dir/redist/openssl-${arch}-v1.1.0f.7z"
-		if [[ ! -f $archive ]]; then
-			for sharedlib in *.dll; do
-				# shellcheck disable=SC2086
-				"${cross_prefix}strip" $sharedlib
-			done
-			sed "s/$/\r/" LICENSE >LICENSE.txt
-			7z a -mx=9 "$archive" *.dll LICENSE.txt && remove_path -f LICENSE.txt
-		fi
-	else
-		do_make_install "" "install_dev"
-	fi
-	unset CC
-	unset AR
-	unset RANLIB
-	change_dir "$src_dir"
-}
+# build_openssl_1_1_1() {
+# 	change_dir "$src_dir"
+# 	download_and_unpack_file https://www.openssl.org/source/openssl-1.1.1.tar.gz
+# 	change_dir "$src_dir/openssl-1.1.1"
+# 	export CC="${cross_prefix}gcc"
+# 	export AR="${cross_prefix}ar"
+# 	export RANLIB="${cross_prefix}ranlib"
+# 	local config_options="--prefix=$mingw_w64_x86_64_prefix zlib "
+# 	if [ "$1" = "dllonly" ]; then
+# 		config_options+="shared no-engine "
+# 	else
+# 		config_options+="no-shared no-dso no-engine "
+# 	fi
+# 	if [[ $(uname) =~ 5.1 ]] || [[ $(uname) =~ 6.0 ]]; then
+# 		config_options+="no-async " # "Note: on older OSes, like CentOS 5, BSD 5, and Windows XP or Vista, you will need to configure with no-async when building OpenSSL 1.1.0 and above. The configuration system does not detect lack of the Posix feature on the platforms." (https://wiki.openssl.org/index.php/Compilation_and_Installation)
+# 	fi
+# 	if [ "$bits_target" = "32" ]; then
+# 		config_options+="mingw" # Build shared libraries ('libcrypto-1_1.dll' and 'libssl-1_1.dll') if "dllonly" is specified.
+# 		local arch=x86
+# 	else
+# 		config_options+="mingw64" # Build shared libraries ('libcrypto-1_1-x64.dll' and 'libssl-1_1-x64.dll') if "dllonly" is specified.
+# 		local arch=x86_64
+# 	fi
+# 	do_configure "$config_options" ./Configure
+# 	if [[ ! -f Makefile.bak ]]; then # Change CFLAGS.
+# 		sed -i.bak "s/-O3/-O2/" Makefile
+# 	fi
+# 	do_make "build_libs"
+# 	if [ "$1" = "dllonly" ]; then
+# 		create_dir "$src_dir/redist" # Strip and pack shared libraries.
+# 		archive="$src_dir/redist/openssl-${arch}-v1.1.0f.7z"
+# 		if [[ ! -f $archive ]]; then
+# 			for sharedlib in *.dll; do
+# 				# shellcheck disable=SC2086
+# 				"${cross_prefix}strip" $sharedlib
+# 			done
+# 			sed "s/$/\r/" LICENSE >LICENSE.txt
+# 			7z a -mx=9 "$archive" *.dll LICENSE.txt && remove_path -f LICENSE.txt
+# 		fi
+# 	else
+# 		do_make_install "" "install_dev"
+# 	fi
+# 	unset CC
+# 	unset AR
+# 	unset RANLIB
+# 	change_dir "$src_dir"
+# }
 
 
 # build_intel_qsv_mfx() {

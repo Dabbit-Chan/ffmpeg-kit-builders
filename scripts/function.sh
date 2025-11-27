@@ -2,9 +2,6 @@
 
 # shellcheck disable=SC2317,SC2129,SC1091,SC2120,SC2035,SC2016
 
-#echo -e ${SCRIPTDIR}/source.sh
-#echo -e "${SCRIPTDIR}/variable.sh"
-
 source "${SCRIPTDIR}/source.sh"
 
 # 1. exit code
@@ -805,7 +802,7 @@ display_version() {
 
 	echo -e "\
 $COMMAND v$(get_ffmpeg_kit_version)
-Copyright (c) 2018-2022 Taner Sener\n\
+Copyright (c) 2025 Akash Patel\n\
 License LGPLv3.0: GNU LGPL version 3 or later\n\
 <https://www.gnu.org/licenses/lgpl-3.0.en.html>\n\
 This is free software: you can redistribute it and/or modify it under the terms of the \
@@ -2656,6 +2653,41 @@ array_index_of() {
 	echo -e "DEBUG: $search_string could not be found in build steps.\n $(print_build_steps)" | tee -a "$LOG_FILE"
 	exit 1 # Not found
 	return 1
+}
+
+concat_array() {
+    local array_name="$1"
+    local separator="${2:- }"
+    local -n arr="$array_name"
+    
+    if [ ${#arr[@]} -eq 0 ]; then
+        echo ""
+        return
+    fi
+    
+    local result=""
+    printf -v result "%s$separator" "${arr[@]}"
+    echo "${result%$separator}"
+}
+
+# Check if value is truthy
+# Returns 0 (success) for truthy values, 1 (failure) for falsey values
+truthy() {
+  local value="$1"
+  case "${value,,}" in
+    y|yes|1|true|on) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+# Check if value is falsey  
+# Returns 0 (success) for falsey values, 1 (failure) for truthy values
+falsey() {
+  local value="$1"
+  case "${value,,}" in
+    y|yes|1|true|on) return 1 ;;
+    *) return 0 ;;
+  esac
 }
 
 #region WINDOWS GENERIC FUNCTIONS

@@ -1,9 +1,6 @@
 #!/bin/bash
 
-# shellcheck disable=SC2317
-# shellcheck disable=SC1091
-# shellcheck disable=SC2120
-# shellcheck disable=SC2034
+#shellcheck disable=SC2317,SC1091,SC2120,SC2034
 
 # DIRECTORY DEFINITIONS
 export FFMPEG_KIT_TMPDIR="${BASEDIR}/.tmp"
@@ -180,20 +177,6 @@ export build_amd_amf=y
 export original_cflags='-mtune=generic -O3 -pipe'                # -DUNICODE -D_UNICODE' # high compatible by default, see #219, some other good options are listed below, or you could use -march=native to target your local box:
 export original_cppflags='-U_FORTIFY_SOURCE -D_FORTIFY_SOURCE=3' # Needed for mingw-w64 7 as FORTIFY_SOURCE is now partially implemented, but not actually working
 export original_ldflags=""                                       #'-municode'
-# if you specify a march it needs to first so x264's configure will use it :| [ is that still the case ?]
-# original_cflags='-march=znver2 -O3 -pipe'
-#flags=$(cat /proc/cpuinfo | grep flags)
-#if [[ $flags =~ "ssse3" ]]; then # See https://gcc.gnu.org/onlinedocs/gcc/x86-Options.html, https://gcc.gnu.org/onlinedocs/gcc/Optimize-Options.html and https://stackoverflow.com/questions/19689014/gcc-difference-between-o3-and-os.
-#  original_cflags='-march=core2 -O2'
-#elif [[ $flags =~ "sse3" ]]; then
-#  original_cflags='-march=prescott -O2'
-#elif [[ $flags =~ "sse2" ]]; then
-#  original_cflags='-march=pentium4 -O2'
-#elif [[ $flags =~ "sse" ]]; then
-#  original_cflags='-march=pentium3 -O2 -mfpmath=sse -msse'
-#else
-#  original_cflags='-mtune=generic -O2'
-#fi
 export ffmpeg_git_checkout_version="release/8.0"
 export build_ismindex=n
 export GPL_ENABLED=y
@@ -206,7 +189,7 @@ export build_svt_vp9=n
 export build_dependencies_only=n
 export cpu_count=$(nproc)
 export original_cpu_count=$(nproc) # save it away for some that revert it temporarily
-
+export enable_nonfree=""
 export PKG_CONFIG_LIBDIR= # disable pkg-config from finding [and using] normal linux system installed libs [yikes]
 export original_path=$PATH
 
@@ -219,23 +202,24 @@ export BUILD_STEPS=(
 "build_zlib" \
 "build_libcaca" \
 "build_bzip2" \
-"build_liblzma" \
+"build_lzma" \
 "build_iconv" \
 "build_sdl2" \
-"build_amd_amf_headers" \
+"build_amf" \
 "build_libvpl" \
-"build_nv_headers" \
+"build_nvenc" \
+"build_cuvid" \
 "build_libzimg" \
 "build_libopenjpeg" \
-"build_glew" \
-"build_glfw" \
+"build_opengl" \
 "build_libpng" \
 "build_libwebp" \
 "build_libxml2" \
 "build_brotli" \
-"build_harfbuzz" \
+"build_libfreetype" \
+"build_libharfbuzz" \
 "build_libvmaf" \
-"build_fontconfig" \
+"build_libfontconfig" \
 "build_gmp" \
 "build_libnettle" \
 "build_unistring" \
@@ -249,12 +233,13 @@ export BUILD_STEPS=(
 "build_libspeexdsp" \
 "build_libspeex" \
 "build_libtheora" \
-"build_libsndfile" \
+"build_libgsm" \
 "build_mpg123" \
-"build_lame" \
-"build_twolame" \
-"build_openmpt" \
-"build_libopencore" \
+"build_libmp3lame" \
+"build_libtwolame" \
+"build_libopenmpt" \
+"build_libopencore_amrnb" \
+"build_libvo_amrwbenc" \
 "build_libilbc" \
 "build_libmodplug" \
 "build_libgme" \
@@ -271,27 +256,28 @@ export BUILD_STEPS=(
 "build_frei0r" \
 "build_svt_hevc" \
 "build_svt_vp9" \
-"build_svt_av1" \
-"build_vidstab" \
+"build_libsvtav1" \
+"build_libvidstab" \
 "build_libmysofa" \
-"build_libdecklink" \
-"build_zvbi" \
-"build_fribidi" \
+"build_decklink" \
+"build_libzvbi" \
+"build_libfribidi" \
 "build_libass" \
 "build_libxvid" \
 "build_libsrt" \
 "build_libaribcaption" \
 "build_libaribb24" \
 "build_libtesseract" \
-"build_lensfun" \
+"build_liblensfun" \
 "build_libtensorflow" \
 "build_libvpx" \
 "build_libx265" \
 "build_libopenh264" \
 "build_libaom" \
-"build_dav1d" \
+"build_libdav1d" \
 "build_vulkan" \
 "build_libplacebo" \
+"build_libshaderc" \
 "build_avisynth" \
 "build_libvvenc" \
 "build_libvvdec" \
@@ -310,10 +296,11 @@ export BUILD_STEPS=(
 "build_whisper" \
 "build_lcms2" \
 "build_liblc3" \
-"build_liblcevc" \
+"build_liblcevc_dec" \
 "build_liboapv" \
 "build_libqrencode" \
 "build_libuavs3d" \
 "build_vapoursynth" \
 "build_libquirc" \
-"build_librsvg")
+"build_librsvg"
+"build_libopencv")
