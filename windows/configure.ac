@@ -115,8 +115,8 @@ if test "x$target_os_clean" = "xwindows"; then
         LIBRARY_EXT="dll"
         ARCHIVE_EXT="dll.a"  # Import libraries for MinGW
     else
-        LIBRARY_EXT="lib"    # Windows static libraries use .lib
-        ARCHIVE_EXT="lib"
+        LIBRARY_EXT="a"    # MinGW static libraries use .a
+        ARCHIVE_EXT="a"
     fi
     
     # Additional Windows flags
