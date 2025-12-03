@@ -41,7 +41,7 @@ Build Options:
 	--ffmpeg-git-checkout=[https://github.com/FFmpeg/FFmpeg.git]  if you want to clone FFmpeg from other repositories
 	--ffmpeg-source-dir=[default empty]                           specifiy the directory of ffmpeg source code. When 
                                                                 specified, git will not be used.
-	--compiler-flavors=[multi|win32|win64]                        multi is both win32 and win64
+	--compiler-flavors|flavor=[win32|win64]                       win32 or win64
 	--cflags=$original_cflags                                     [default works on any cpu, see README for options]
 	--git-get-latest=[y]                                          [do a git pull for latest code from repositories like 
                                                                 FFmpeg--can force a rebuild if changes are detected]

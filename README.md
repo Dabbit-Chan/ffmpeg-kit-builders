@@ -1,256 +1,185 @@
-# FFmpegKit ![GitHub release](https://img.shields.io/badge/release-v6.0-blue.svg) ![Maven Central](https://img.shields.io/maven-central/v/com.arthenica/ffmpeg-kit-min) ![CocoaPods](https://img.shields.io/cocoapods/v/ffmpeg-kit-ios-min) ![pub](https://img.shields.io/pub/v/ffmpeg_kit_flutter.svg) ![npm](https://img.shields.io/npm/v/ffmpeg-kit-react-native.svg)
+# Windows Build Process Documentation
 
-## Notice
-FFmpegKit has been officially retired. There will be no further `ffmpeg-kit` releases.
+## Overview
 
-See [Saying Goodbye to FFmpegKit @ medium](https://medium.com/@tanersener/saying-goodbye-to-ffmpegkit-33ae939767e1) to learn why we made this decision.
+This document describes the Windows cross-compilation build system for FFmpeg and FFmpegKit. The system builds Windows binaries (DLLs and executables) on a Linux host using MinGW-w64 cross-compilers, handling the complete build pipeline from toolchain installation through dependency compilation to final bundle creation.
 
-All previously released `ffmpeg-kit` binaries will be removed according to the following schedule.
+## Quick Start
 
-| FFmpegKit Version |  Available Until   |
-|:-----------------:|:------------------:|
-|   Less than 6.0   | February 1st, 2025 |
-|        6.0        |  April 1st, 2025   |
+### Prerequisites
 
-Thank you for your support and interest in this project.
+- Linux host (Ubuntu/Debian recommended)
+- Minimum 600MB RAM, 2GB+ recommended for parallel builds
+- 285GB available disk space for full build with all dependencies 
+- Basic build tools: git, make, cmake, ninja, meson, pkg-config
 
-If you're looking for a replacement, please check out the community-maintained forks available through the package managers below.
+### Basic Usage
 
-|                          Platform                           |
-|:-------------------------------------------------------:|
-| [Android](https://central.sonatype.com/search?q=ffmpeg+kit) |
-| [Flutter](https://pub.dev/packages?q=ffmpeg+kit) |
-| [React Native](https://www.npmjs.com/search?q=ffmpeg%20kit) |
+```bash
+# Build for Windows (both 32-bit and 64-bit)
+./windows.sh --compiler-flavors=multi --enable-shared
 
-<img src="https://github.com/arthenica/ffmpeg-kit/blob/main/docs/assets/ffmpeg-kit-icon-v9.png" width="240">
+# Build only 64-bit static libraries
+./windows.sh --compiler-flavors=win64 --enable-static
 
-`FFmpegKit` is a collection of tools to use `FFmpeg`<sup>1</sup> in `Android`, `iOS`, `Linux`, `macOS`, `tvOS`, `Flutter` and `React Native` applications.
+# Build with GPL libraries
+./windows.sh --enable-gpl=y --compiler-flavors=win64
+```
 
-It includes scripts to build `FFmpeg` native libraries, a wrapper library to run `FFmpeg`/`FFprobe` commands in
- applications and 8 prebuilt binary packages available at [Github](https://github.com/arthenica/ffmpeg-kit/releases),
- [Maven Central](https://search.maven.org), [CocoaPods](https://cocoapods.org), [pub](https://pub.dev) and [npm](https://www.npmjs.com).
+## Build Architecture
 
-### 1. Features
-- Scripts to build FFmpeg native libraries
-- `FFmpegKit` wrapper library to run `FFmpeg`/`FFprobe` commands in applications
-- Supports native platforms: Android, iOS, Linux, macOS and tvOS
-- Supports hybrid platforms: Flutter, React Native
-- Based on FFmpeg `v4.5-dev` or later with optional system and external libraries
-- 8 prebuilt binary packages available at [Github](https://github.com/arthenica/ffmpeg-kit/releases), [Maven Central](https://search.maven.org), [CocoaPods](https://cocoapods.org), [pub](https://pub.dev) and [npm](https://www.npmjs.com)
-- Licensed under `LGPL 3.0` by default, `GPL v3.0` if GPL licensed libraries are enabled
+The Windows build system consists of four primary script files implementing a six-phase build pipeline:
 
-### 2. Android
+1. **windows.sh** - Entry point and argument parsing
+2. **scripts/main-windows.sh** - Build orchestrator and phase coordination  
+3. **scripts/function-windows.sh** - Windows-specific build functions
+4. **scripts/run-windows.sh** - Individual library builders
 
-See [Android](android) to learn more about `FFmpegKit` for `Android`.
+### Build Phases
 
-### 3. iOS, macOS, tvOS
+| Phase | Function | Purpose |
+|-------|----------|---------|
+| 1 | `setup_build_environment` | Initialize paths, environment variables, architecture settings |
+| 2 | `install_cross_compiler` | Build or verify MinGW-w64 GCC 14 toolchain |
+| 3 | `build_all_ffmpeg_dependencies` | Compile 100+ external libraries sequentially |
+| 4 | `configure_ffmpeg`, `install_ffmpeg` | Configure and build FFmpeg with detected libraries |
+| 5 | `configure_ffmpeg_kit`, `install_ffmpeg_kit` | Build FFmpegKit wrapper library |
+| 6 | `create_windows_bundle` | Aggregate artifacts into relocatable bundle |
 
-See [Apple](apple) to use `FFmpegKit` on `Apple` platforms (`iOS`, `macOS`, `tvOS`).
+## Command-Line Options
 
-### 4. Flutter
+### General Options
 
-See [Flutter](flutter/flutter) to learn more about `FFmpegKit` for `Flutter`.
+| Option | Default | Description |
+|--------|---------|-------------|
+| `-h, --help` | - | Display this help and exit |
+| `-v, --version` | - | Display version and exit |
+| `-d, --debug` | - | Build with debug information |
+| `-s, --speed` | - | Optimize for speed instead of size |
+| `-f, --force` | - | Ignore warnings |
 
-### 5. Linux
+### Licensing Options
 
-See [Linux](linux) to learn more about `FFmpegKit` for `Linux`.
+| Option | Default | Description |
+|--------|---------|-------------|
+| `--enable-gpl=` | `n` | Allow building GPL libraries, created libs will be licensed under the GPLv3.0 |
 
-### 6. React Native
+### Build Options
 
-See [React Native](react-native) to learn more about `FFmpegKit` for `React Native`.
+| Option | Default | Description |
+|--------|---------|-------------|
+| `--ffmpeg-git-checkout-version=` | `release/8.0` | Build a particular version of FFmpeg (e.g., n3.1.1 or a specific git hash) |
+| `--ffmpeg-git-checkout=` | `https://github.com/FFmpeg/FFmpeg.git` | Clone FFmpeg from other repositories |
+| `--ffmpeg-source-dir=` | `[empty]` | Specify the directory of ffmpeg source code. When specified, git will not be used |
+| `--compiler-flavors=\|--flavor=` | - | Target architecture (win32 or win64) |
+| `--cflags=` | `-mtune=generic -O3 -pipe` | Compiler flags (default works on any CPU, see README for options) |
+| `--git-get-latest=` | `y` | Do a git pull for latest code from repositories like FFmpeg (can force a rebuild if changes are detected) |
+| `--prefer-stable=` | `y` | Build a few libraries from releases instead of git master |
+| `--debug` | - | Make this script print out each line as it executes |
+| `--enable-gpl=` | `y` | Set to n to do an LGPL build |
+| `--get-total-steps\|--get-step-name=` | - | Get dependency steps and step name by index |
+| `--build-only=` | - | Build only specific dependency (0.. or step/library name from get-all-steps) |
+| `--build-from=` | - | Start building dependencies from given step (0.. or step/library name) |
+| `--build-dependencies=` | `y` | Build the ffmpeg dependencies. Disable when dependencies were built once to reduce build time |
+| `--build-dependencies-only=` | `n` | Only build dependency binaries. Will not build app binaries |
+| `--build-ffmpeg-only=` | `n` | Build ffmpeg binaries only |
+| `--build-ffmpeg-kit-only=` | `n` | Build ffmpeg-kit binaries and bundle only |
+| `--enable-static\|--static` | - | Build static ffmpeg and ffmpeg-kit binaries |
+| `--enable-shared\|--shared` | `default` | Build shared ffmpeg and ffmpeg-kit binaries |
+| `--enable-nonfree\|--nonfree` | - | Build binaries will be non-redistributable |
+| `--clean-builds` | - | Clean ffmpeg and ffmpeg-kit builds based on --enable-static/--enable-shared(default) and exit |
+| `--list-libraries` | - | Lists ffmpeg configuration including extra libraries and exit |
+| `--enable-[library name]` | - | Enable extra ffmpeg libraries. Run --list-libraries and see under "External library support" |
+| `--ff-*` | - | Pass additional ffmpeg parameters prefixed by ff-* to ffmpeg configure. No additional checks done |
 
-### 7. Build Scripts
+## Environment Setup
 
-Use `android.sh`, `ios.sh`, `linux.sh`, `macos.sh` and `tvos.sh` to build `FFmpegKit` for each native platform.
+The build system configures architecture-specific paths and toolchain variables:
 
-All scripts support additional options to enable optional libraries and disable platform architectures. See
-[Building](https://github.com/arthenica/ffmpeg-kit/wiki/Building) wiki page for the details.
+### Win32 (32-bit)
+```bash
+ARCH=x86
+FULL_ARCH=i686
+host_target=i686-w64-mingw32
+bits_target=32
+```
 
-### 8. FFmpegKit Library
+### Win64 (64-bit)
+```bash
+ARCH=x86-64
+FULL_ARCH=x86_64
+host_target=x86_64-w64-mingw32
+bits_target=64
+```
 
-`FFmpegKit` is a wrapper library that allows you to easily run `FFmpeg`/`FFprobe` commands in applications. It 
-provides additional features on top of `FFmpeg` to enable platform specific resources, control how commands are 
-executed and how the results are handled.
+## Cross-Compiler Toolchain
 
-`Android` library of `FFmpegKit` has a `Java` API, `Apple` libraries (`iOS`, `macOS`, `tvOS`) have an `Objective-C`
- API, `Flutter` library comes with a `Dart` API, `Linux` library has a `C++` API and `React Native` library provides
-a `JavaScript` API with `Typescript` definitions, which are identical in terms of features and capabilities.
+The system uses MinGW-w64 GCC 14 toolchain with the following configuration:
 
-### 9. Packages
+- GCC version: 14.x (releases/gcc-14)
+- MinGW-w64 headers: master branch
+- Binutils: 2.44 (binutils-2_44-branch)
+- Target: Windows with Win32 threads
 
-There are eight different `ffmpeg-kit` packages distributed on 
-[Github](https://github.com/arthenica/ffmpeg-kit/releases), 
-[Maven Central](https://search.maven.org), [CocoaPods](https://cocoapods.org), [pub](https://pub.dev) and
- [npm](https://www.npmjs.com).
-Below you can see which system libraries and external libraries are enabled in each one of them.
+The toolchain installation typically takes 30+ minutes and produces:
+- GCC C/C++ compilers (`{host_target}-gcc`, `{host_target}-g++`)
+- GNU Binutils (`{host_target}-ar`, `{host_target}-ld`, `{host_target}-strip`)
+- MinGW-w64 runtime libraries
 
-Please remember that some parts of `FFmpeg` are licensed under the `GPL` and only `GPL` licensed `ffmpeg-kit` packages 
-include them.
+## Output Bundle Structure
 
-<table>
-<thead>
-<tr>
-<th align="center"></th>
-<th align="center"><sup>min</sup></th>
-<th align="center"><sup>min-gpl</sup></th>
-<th align="center"><sup>https</sup></th>
-<th align="center"><sup>https-gpl</sup></th>
-<th align="center"><sup>audio</sup></th>
-<th align="center"><sup>video</sup></th>
-<th align="center"><sup>full</sup></th>
-<th align="center"><sup>full-gpl</sup></th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td align="center"><sup>external libraries</sup></td>
-<td align="center">-</td>
-<td align="center"><sup>vid.stab</sup><br><sup>x264</sup><br><sup>x265</sup><br><sup>xvidcore</sup></td>
-<td align="center"><sup>gmp</sup><br><sup>gnutls</sup></td>
-<td align="center"><sup>gmp</sup><br><sup>gnutls</sup><br><sup>vid.stab</sup><br><sup>x264</sup><br><sup>x265</sup><br><sup>xvidcore</sup></td>
-<td align="center"><sup>lame</sup><br><sup>libilbc</sup><br><sup>libvorbis</sup><br><sup>opencore-amr</sup><br><sup>opus</sup><br><sup>shine</sup><br><sup>soxr</sup><br><sup>speex</sup><br><sup>twolame</sup><br><sup>vo-amrwbenc</sup></td>
-<td align="center"><sup>dav1d</sup><br><sup>fontconfig</sup><br><sup>freetype</sup><br><sup>fribidi</sup><br><sup>kvazaar</sup><br><sup>libass</sup><br><sup>libiconv</sup><br><sup>libtheora</sup><br><sup>libvpx</sup><br><sup>libwebp</sup><br><sup>snappy</sup><br><sup>zimg</sup></td>
-<td align="center"><sup>dav1d</sup><br><sup>fontconfig</sup><br><sup>freetype</sup><br><sup>fribidi</sup><br><sup>gmp</sup><br><sup>gnutls</sup><br><sup>kvazaar</sup><br><sup>lame</sup><br><sup>libass</sup><br><sup>libiconv</sup><br><sup>libilbc</sup><br><sup>libtheora</sup><br><sup>libvorbis</sup><br><sup>libvpx</sup><br><sup>libwebp</sup><br><sup>libxml2</sup><br><sup>opencore-amr</sup><br><sup>opus</sup><br><sup>shine</sup><br><sup>snappy</sup><br><sup>soxr</sup><br><sup>speex</sup><br><sup>twolame</sup><br><sup>vo-amrwbenc</sup><br><sup>zimg</sup></td>
-<td align="center"><sup>dav1d</sup><br><sup>fontconfig</sup><br><sup>freetype</sup><br><sup>fribidi</sup><br><sup>gmp</sup><br><sup>gnutls</sup><br><sup>kvazaar</sup><br><sup>lame</sup><br><sup>libass</sup><br><sup>libiconv</sup><br><sup>libilbc</sup><br><sup>libtheora</sup><br><sup>libvorbis</sup><br><sup>libvpx</sup><br><sup>libwebp</sup><br><sup>libxml2</sup><br><sup>opencore-amr</sup><br><sup>opus</sup><br><sup>shine</sup><br><sup>snappy</sup><br><sup>soxr</sup><br><sup>speex</sup><br><sup>twolame</sup><br><sup>vid.stab</sup><br><sup>vo-amrwbenc</sup><br><sup>x264</sup><br><sup>x265</sup><br><sup>xvidcore</sup><br><sup>zimg</sup></td>
-</tr>
-<tr>
-<td align="center"><sup>android system libraries</sup></td>
-<td align="center" colspan=8><sup>zlib</sup><br><sup>MediaCodec</sup></td>
-</tr>
-<tr>
-<td align="center"><sup>ios system libraries</sup></td>
-<td align="center" colspan=8><sup>bzip2</sup><br><sup>AudioToolbox</sup><br><sup>AVFoundation</sup><br><sup>iconv</sup><br><sup>VideoToolbox</sup><br><sup>zlib</sup></td>
-</tr>
-<tr>
-<tr>
-<td align="center"><sup>macos system libraries</sup></td>
-<td align="center" colspan=8><sup>bzip2</sup><br><sup>AudioToolbox</sup><br><sup>AVFoundation</sup><br><sup>Core Image</sup><br><sup>iconv</sup><br><sup>OpenCL</sup><br><sup>OpenGL</sup><br><sup>VideoToolbox</sup><br><sup>zlib</sup></td>
-</tr>
-<tr>
-<td align="center"><sup>tvos system libraries</sup></td>
-<td align="center" colspan=8><sup>bzip2</sup><br><sup>AudioToolbox</sup><br><sup>iconv</sup><br><sup>VideoToolbox</sup><br><sup>zlib</sup></td>
-</tr>
-</tbody>
-</table>
+The final Windows bundle contains a complete, relocatable distribution:
 
- - `AVFoundation` is not available on `tvOS`
- - `VideoToolbox` is not available on LTS releases of `iOS` and `tvOS`
- - `zimg` is supported since `v4.5.1`
+```
+prebuilt/bundle-windows-{arch}/
+├── ffmpeg-kit/
+│   ├── include/          # FFmpeg and FFmpegKit headers
+│   ├── lib/              # DLLs and import libraries
+│   ├── bin/              # Executables (ffmpeg.exe, ffprobe.exe)
+│   ├── pkgconfig/        # Pkg-config files with bundle-relative paths
+│   └── LICENSE/          # All dependency licenses
+```
 
-### 10. Versions
+## Supported Libraries
 
-`FFmpegKit` binaries generated use the same major and minor version numbers as the upstream `FFmpeg` project. The
-third and last number in the version string, if exists, is specific to `FFmpegKit`. It shows different releases from
-the same `FFmpeg` release branch. 
+The build system supports 100+ external libraries including:
 
-`dev` part in the version string indicates that `FFmpeg` source code is cloned from the `FFmpeg` `master` branch and
-the exact version number of `FFmpeg` is obtained using the `git describe --tags` command.
+### Core Libraries
+- zlib, bzip2, lzma - Compression
+- libx264, libx265 - Video encoding
+- libopus, libvorbis - Audio encoding
+- libass - Subtitle support
+- And more...
 
-|    Platforms     |                                 FFmpegKit Version                                 | FFmpeg Version | Release Date |
-|:----------------:|:---------------------------------------------------------------------------------:|:--------------:|:------------:|
-|     Flutter      |   [6.0.3](https://github.com/arthenica/ffmpeg-kit/releases/tag/flutter.v6.0.3)    |      6.0       | Sep 19, 2023 |
-|   React Native   | [6.0.2](https://github.com/arthenica/ffmpeg-kit/releases/tag/react.native.v6.0.2) |      6.0       | Sep 19, 2023 |
-|     Flutter      |   [6.0.2](https://github.com/arthenica/ffmpeg-kit/releases/tag/flutter.v6.0.2)    |      6.0       | Sep 03, 2023 |
-|   React Native   | [6.0.1](https://github.com/arthenica/ffmpeg-kit/releases/tag/react.native.v6.0.1) |      6.0       | Sep 03, 2023 |
-|     Flutter      |   [6.0.1](https://github.com/arthenica/ffmpeg-kit/releases/tag/flutter.v6.0.1)    |      6.0       | Sep 03, 2023 |
-|   React Native   | [6.0.0](https://github.com/arthenica/ffmpeg-kit/releases/tag/react.native.v6.0.0) |      6.0       | Aug 27, 2023 |
-|     Flutter      |   [6.0.0](https://github.com/arthenica/ffmpeg-kit/releases/tag/flutter.v6.0.0)    |      6.0       | Aug 27, 2023 |
-|      Android<br>Apple       |         [6.0](https://github.com/arthenica/ffmpeg-kit/releases/tag/v6.0)          |      6.0       | Aug 21, 2023 |
-|   React Native   | [5.1.0](https://github.com/arthenica/ffmpeg-kit/releases/tag/react.native.v5.1.0) |     5.1.2      | Oct 02, 2022 |
-|     Flutter      |   [5.1.0](https://github.com/arthenica/ffmpeg-kit/releases/tag/flutter.v5.1.0)    |     5.1.2      | Oct 02, 2022 |
-|     Android<br>Apple      |         [5.1](https://github.com/arthenica/ffmpeg-kit/releases/tag/v5.1)          |     5.1.2      | Sep 29, 2022 |
-|   React Native   | [4.5.2](https://github.com/arthenica/ffmpeg-kit/releases/tag/react.native.v4.5.2) |  4.5-dev-3393  | May 25, 2022 |
-|     Flutter      |   [4.5.1](https://github.com/arthenica/ffmpeg-kit/releases/tag/flutter.v4.5.1)    |  4.5-dev-3393  | Jan 02, 2022 |
-|   React Native   | [4.5.1](https://github.com/arthenica/ffmpeg-kit/releases/tag/react.native.v4.5.1) |  4.5-dev-3393  | Jan 02, 2022 |
-|     Android      |       [4.5.1](https://github.com/arthenica/ffmpeg-kit/releases/tag/v4.5.1)        |  4.5-dev-3393  | Jan 01, 2022 |
-|      Apple       |       [4.5.1](https://github.com/arthenica/ffmpeg-kit/releases/tag/v4.5.1)        |  4.5-dev-3393  | Dec 30, 2021 |
-|     Flutter      |   [4.5.0](https://github.com/arthenica/ffmpeg-kit/releases/tag/flutter.v4.5.0)    |  4.5-dev-2008  | Oct 05, 2021 |
-|   React Native   | [4.5.0](https://github.com/arthenica/ffmpeg-kit/releases/tag/react.native.v4.5.0) |  4.5-dev-2008  | Oct 01, 2021 |
-| Android<br>Apple |         [4.5](https://github.com/arthenica/ffmpeg-kit/releases/tag/v4.5)          |  4.5-dev-2008  | Sep 18, 2021 |
-| Android<br>Apple |         [4.4](https://github.com/arthenica/ffmpeg-kit/releases/tag/v4.4)          |  4.4-dev-3015  | Mar 03, 2021 |
+### Advanced Features
+- chromaprint - Audio fingerprinting
+- frei0r - Video filters
+- libvidstab - Video stabilization
+- librubberband - Audio time-stretching
+- And more...
 
-### 11. LTS Releases
+## Troubleshooting
 
-`FFmpegKit` binaries are published in two release variants: `Main Release` and `LTS Release`. 
+### Common Issues
 
-- Main releases include complete functionality of the library and support the latest SDK/API features.
+1. **Insufficient Memory**: Build requires minimum 600MB RAM
+2. **Toolchain Build Fails**: Ensure 30+ minutes available for GCC compilation
+3. **Missing Dependencies**: Install required build tools on host system
 
-- LTS releases are customized to support a wider range of devices. They are built using older API/SDK versions, so some features are not available on them.
+### Build Logs
 
-This table shows the differences between two variants.
+All build operations are logged to `build.log` in the repository root.
 
-|        | Main Release |                        LTS Release                        |
-| :----: | :----: |:---------------------------------------------------------:|
-| Android API Level | 24 |                            16                             | 
-| Android Camera Access | Yes |                             -                             |
-| Android Architectures | arm-v7a-neon<br/>arm64-v8a<br/>x86<br/>x86-64 | arm-v7a<br/>arm-v7a-neon<br/>arm64-v8a<br/>x86<br/>x86-64 |
-| iOS Min SDK | 12.1 |                            10                             |
-| iOS VideoToolbox | Yes |                             -                             |
-| iOS AVFoundation | Yes |                             -                             |
-| iOS Architectures | arm64<br/>arm64-simulator<br/>arm64-mac-catalyst<br/>x86-64<br/>x86-64-mac-catalyst |            armv7<br/>arm64<br/>i386<br/>x86-64            |
-| iOS Bundle Format | XCFrameworks |                        Frameworks                         |
-| Mac Catalyst Min Version | 14.0 |                             -                             |
-| macOS Min SDK | 10.15 |                           10.12                           |
-| macOS AVFoundation | Yes |                             -                             |
-| macOS Architectures | arm64<br/>x86-64 |                          x86-64                           |
-| macOS Bundle Format | XCFrameworks |                        Frameworks                         |
-| tvOS Min SDK | 11.0 |                           10.0                            |
-| tvOS VideoToolbox | Yes |                             -                             |
-| tvOS Architectures | arm64<br/>x86-64<br/>arm64-simulator |                     arm64<br/>x86-64                      |
-| tvOS Bundle Format | XCFrameworks |                        Frameworks                         |
+## Notes
 
-### 12. Documentation
+- The build system only supports cross-compilation from Linux to Windows
+- Static and shared builds cannot be mixed in a single build
+- GPL-enabled builds produce GPLv3-licensed binaries
+- Bundle is fully relocatable with no hardcoded absolute paths
 
-A more detailed documentation is available under [Wiki](https://github.com/arthenica/ffmpeg-kit/wiki).
+## Notes
 
-### 13. Test Applications
-
-You can see how `FFmpegKit` is used inside an application by running test applications created under 
-[FFmpegKit Test](https://github.com/arthenica/ffmpeg-kit-test) project.
-
-All applications are identical and supports command execution, video encoding, accessing https urls, encoding audio,
-burning subtitles, video stabilisation, pipe operations and concurrent command execution.
-
-### 14. License
-
-`FFmpegKit` library alone is licensed under the `LGPL v3.0`.
-
-`FFmpegKit` bundles (`.aar` archives, `frameworks`, `xcframeworks`), which include both  `FFmpegKit` and `FFmpeg`
-libraries, are also licensed under the `LGPL v3.0`. However, if the source code is built using the optional
-`--enable-gpl` flag or prebuilt binaries with `-gpl` postfix are used, then `FFmpegKit` bundles become subject to the
-`GPL v3.0`. Because, `FFmpeg` is licensed under the `GPL v3.0` in those bundles. And that makes the whole bundle
-effectively subject to the `GPL v3.0`.
-
-`FFmpegKit` build scripts always configure `FFmpeg` with `--enable-version3` option. And never enable non-free
-libraries. Thus, `FFmpeg` libraries created by `FFmpegKit` are licensed under the `LGPL v3.0` by default. Only when
-`--enable-gpl` is provided they become subject to `GPL v3.0`. That is how prebuilt binaries with `-gpl` postfix are
-compiled.
-
-Refer to [Licenses](https://github.com/arthenica/ffmpeg-kit/wiki/Licenses) to see the licenses of all libraries.
-[Trademark](https://github.com/arthenica/ffmpeg-kit/wiki/Trademark) lists the trademarks used in the `FFmpegKit`
-documentation.
-
-### 15. Patents
-
-It is not clearly explained in their documentation, but it is believed that `FFmpeg`, `kvazaar`, `x264` and `x265`
-include algorithms which are subject to software patents. If you live in a country where software algorithms are
-patentable then you'll probably need to pay royalty fees to patent holders. We are not lawyers though, so we recommend
-that you seek legal advice first. See [FFmpeg Patent Mini-FAQ](https://ffmpeg.org/legal.html).
-
-`openh264` clearly states that it uses patented algorithms. Therefore, if you build `ffmpeg-kit` with `openh264` and
-distribute that library, then you are subject to pay MPEG LA licensing fees. Refer to
-[OpenH264 FAQ](https://www.openh264.org/faq.html) page for the details.
-
-### 16. Trademarks
-
-<sup>1</sup> `FFmpeg` is a trademark of [Fabrice Bellard](http://www.bellard.org/). `FFmpegKit` is an independent project and not affiliated with the `FFmpeg` trademark holder.
-
-### 17. Contributing
-
-See our [CONTRIBUTING](CONTRIBUTING.md) guide.
-
-### 18. See Also
-
-- [FFmpeg API Documentation](https://ffmpeg.org/doxygen/4.0/index.html)
-- [FFmpeg Wiki](https://trac.ffmpeg.org/wiki/WikiStart)
-- [FFmpeg External Library Licenses](https://www.ffmpeg.org/doxygen/4.0/md_LICENSE.html)
+- Default values are shown in the tables where applicable
+- Options marked with `-` have no default value (they are flags)
+- The `--ff-*` options allow direct passthrough to FFmpeg's configure script but may conflict with other explicit flags
+- Use `--list-libraries` to see all available external libraries that can be enabled with `--enable-[library name]`

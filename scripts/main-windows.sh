@@ -83,22 +83,19 @@ pick_compiler_flavors() {
 		fi
 		cat <<'EOF'
 What version of MinGW-w64 would you like to build, update, or clean?
-  1. Both Win32 and Win64
-  2. Win32 (32-bit only)
-  3. Win64 (64-bit only)
-  4. Exit
+  1. Win32 (32-bit only)
+  2. Win64 (64-bit only)
+  3. Exit
 EOF
 		echo -e -n 'Input your choice [1-4]: '
 		read -r compiler_flavors
 	done
 	case "$compiler_flavors" in
-	1) compiler_flavors=multi ;;
-	2) compiler_flavors=win32 ;;
-	3) compiler_flavors=win64 ;;
-	multi) compiler_flavors=multi ;;
+	1) compiler_flavors=win32 ;;
+	2) compiler_flavors=win64 ;;
 	win32) compiler_flavors=win32 ;;
 	win64) compiler_flavors=win64 ;;
-	4)
+	3)
 		echo -e "exiting"
 		exit 0
 		;;
