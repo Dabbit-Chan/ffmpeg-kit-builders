@@ -760,7 +760,7 @@ configure_ffmpeg() {
 	
 	change_dir "$ffmpeg_source_dir" || return 1
 
-	if [[ $BUILD_FORCE == "1" ]]; then
+	if truthy "$BUILD_FORCE"; then
 		remove_path -f "${ffmpeg_source_dir}/already_configured_$(get_build_type)"*
 	fi
 
@@ -775,12 +775,11 @@ configure_ffmpeg() {
 	local postpend_configure_opts=""
 	local init_options=""
 
-	init_options+=" --pkg-config=pkg-config"
+	[[ $target_platform == "windows" ]] && init_options+=" --target-os=mingw32"
+  init_options+=" --pkg-config=pkg-config"
 	init_options+=" --pkg-config-flags=--static"
 	init_options+=" --enable-version3"
 	init_options+=" --arch=$arch"
-	#init_options+=" --target-os=$compiler_flavors"
-	init_options+=" --target-os=mingw32"
 	init_options+=" --cross-prefix=$cross_prefix"
 	init_options+=" --prefix=$install_prefix"
 	init_options+=" --extra-cflags=-DLIBTWOLAME_STATIC"
@@ -828,12 +827,14 @@ configure_ffmpeg() {
   truthy "$disable_jni" && config_options+=" --disable-jni"                           # enable JNI support [no]
   truthy "$disable_ladspa" && config_options+=" --disable-ladspa"                     # enable LADSPA audio filtering [no]
   truthy "$disable_mediacodec" && config_options+=" --disable-mediacodec"             # enable Android MediaCodec support [no]
+  truthy "$enable_libsmbclient" && config_options+=" --enable-libsmbclient"           # enable Samba protocol via libsmbclient [no]
   fi
   #------------------------------------------------------------------------------    
   # ----------------------------- harmony features ------------------------------     
   #------------------------------------------------------------------------------    
   if [[ $target_platform == "harmony" ]]; then
   truthy "$disable_ohcodec" && config_options+=" --disable-ohcodec"                   # enable OpenHarmony Codec support [no]
+  truthy "$enable_libsmbclient" && config_options+=" --enable-libsmbclient"           # enable Samba protocol via libsmbclient [no]
   fi
   #------------------------------------------------------------------------------    
   # --------------------------- linux/unix features -----------------------------     
@@ -852,6 +853,7 @@ configure_ffmpeg() {
   truthy "$disable_v4l2_m2m" && config_options+=" --disable-v4l2-m2m"                 # disable V4L2 mem2mem code [autodetect]
   truthy "$disable_vaapi" && config_options+=" --disable-vaapi"                       # disable Video Acceleration API (mainly Unix/Intel) code [autodetect]
   truthy "$disable_xlib" && config_options+=" --disable-xlib"                         # disable xlib [autodetect]
+  truthy "$enable_libsmbclient" && config_options+=" --enable-libsmbclient"           # enable Samba protocol via libsmbclient [no]
   fi
   #------------------------------------------------------------------------------
   # ----------------------------- hardware features ----------------------------- 
@@ -871,11 +873,16 @@ configure_ffmpeg() {
   #------------------------------------------------------------------------------
   # -------------------------- cross-platform features --------------------------
   #------------------------------------------------------------------------------ 
+# XXX --disable-sndio MinGW/Windows not supported 
+# truthy "$disable_sndio" && config_options+=" --disable-sndio"                       # disable sndio support [autodetect]
+# TODO --enable-libjack
+# truthy "$enable_libjack" && config_options+=" --enable-libjack"                     # enable JACK audio sound server [no]
+# XXX --enable-libtorch ABI mismatch
+# truthy "$enable_libtorch" && config_options+=" --enable-libtorch"                   # enable Torch as one DNN backend [no]
   truthy "$disable_bzlib" && config_options+=" --disable-bzlib"                       # disable bzlib [autodetect]
   truthy "$disable_iconv" && config_options+=" --disable-iconv"                       # disable iconv [autodetect]
   truthy "$disable_lzma" && config_options+=" --disable-lzma"                         # disable lzma [autodetect]
   truthy "$disable_sdl2" && config_options+=" --disable-sdl2"                         # disable sdl2 [autodetect]
-  truthy "$disable_sndio" && config_options+=" --disable-sndio"                       # disable sndio support [autodetect]
   truthy "$disable_zlib" && config_options+=" --disable-zlib"                         # disable zlib [autodetect]
   truthy "$enable_libvo_amrwbenc" && config_options+=" --enable-libvo-amrwbenc"       # enable AMR-WB encoding via libvo-amrwbenc [no]
   truthy "$enable_libopencore_amrnb" && config_options+=" --enable-libopencore-amrnb" # enable AMR-NB de/encoding via libopencore-amrnb [no]
@@ -910,7 +917,6 @@ configure_ffmpeg() {
   truthy "$enable_libgsm" && config_options+=" --enable-libgsm"                       # enable GSM de/encoding via libgsm [no]
   truthy "$enable_libharfbuzz" && config_options+=" --enable-libharfbuzz"             # enable libharfbuzz, needed for drawtext filter [no]
   truthy "$enable_libilbc" && config_options+=" --enable-libilbc"                     # enable iLBC de/encoding via libilbc [no]
-  truthy "$enable_libjack" && config_options+=" --enable-libjack"                     # enable JACK audio sound server [no]
   truthy "$enable_libjxl" && config_options+=" --enable-libjxl"                       # enable JPEG XL de/encoding via libjxl [no]
   truthy "$enable_libklvanc" && config_options+=" --enable-libklvanc"                 # enable Kernel Labs VANC processing [no]
   truthy "$enable_libkvazaar" && config_options+=" --enable-libkvazaar"               # enable HEVC encoding via libkvazaar [no]
@@ -938,7 +944,6 @@ configure_ffmpeg() {
   truthy "$enable_librubberband" && config_options+=" --enable-librubberband"         # enable rubberband needed for rubberband filter [no]
   truthy "$enable_libshaderc" && config_options+=" --enable-libshaderc"               # enable GLSL->SPIRV compilation via libshaderc [no]
   truthy "$enable_libshine" && config_options+=" --enable-libshine"                   # enable fixed-point MP3 encoding via libshine [no]
-  truthy "$enable_libsmbclient" && config_options+=" --enable-libsmbclient"           # enable Samba protocol via libsmbclient [no]
   truthy "$enable_libsnappy" && config_options+=" --enable-libsnappy"                 # enable Snappy compression, needed for hap encoding [no]
   truthy "$enable_libsoxr" && config_options+=" --enable-libsoxr"                     # enable Include libsoxr resampling [no]
   truthy "$enable_libspeex" && config_options+=" --enable-libspeex"                   # enable Speex de/encoding via libspeex [no]
@@ -949,7 +954,6 @@ configure_ffmpeg() {
   truthy "$enable_libtesseract" && config_options+=" --enable-libtesseract"           # enable Tesseract, needed for ocr filter [no]
   truthy "$enable_libtheora" && config_options+=" --enable-libtheora"                 # enable Theora encoding via libtheora [no]
   truthy "$enable_libtls" && config_options+=" --enable-libtls"                       # enable LibreSSL (via libtls), needed for https support if openssl, gnutls or mbedtls is not used [no]
-  truthy "$enable_libtorch" && config_options+=" --enable-libtorch"                   # enable Torch as one DNN backend [no]
   truthy "$enable_libtwolame" && config_options+=" --enable-libtwolame"               # enable MP2 encoding via libtwolame [no]
   truthy "$enable_libuavs3d" && config_options+=" --enable-libuavs3d"                 # enable AVS3 decoding via libuavs3d [no]
   truthy "$enable_libvidstab" && config_options+=" --enable-libvidstab"               # enable video stabilization using vid.stab [no]
@@ -985,16 +989,19 @@ configure_ffmpeg() {
 
 	if truthy "$GPL_ENABLED"; then
 		config_options+=" --enable-gpl"
-  else
+  elif [[ -n $enable_nonfree ]]; then 
+    #------------------------------------------------------------------------------
+    # ------------------------ non-free non-gpl libraries -------------------------
+    #------------------------------------------------------------------------------ 
     truthy "$enable_decklink" && config_options+=" --enable-decklink"                   # enable Blackmagic DeckLink I/O support [no]
     truthy "$enable_libfdk_aac" && config_options+=" --enable-libfdk-aac"               # enable AAC de/encoding via libfdk-aac [no]
     # ----------------------------- hardware features ----------------------------- 
-    truthy "$disable_cuda_llvm" && config_options+=" --disable-cuda-llvm"               # disable CUDA compilation using clang [autodetect]
-    truthy "$disable_cuvid" && config_options+=" --disable-cuvid"                       # disable Nvidia CUVID support [autodetect]
-    truthy "$disable_ffnvcodec" && config_options+=" --disable-ffnvcodec"               # disable dynamically linked Nvidia code [autodetect]
-    truthy "$disable_nvdec" && config_options+=" --disable-nvdec"                       # disable Nvidia video decoding acceleration (via hwaccel) [autodetect]
-    truthy "$disable_nvenc" && config_options+=" --disable-nvenc"                       # disable Nvidia video encoding code [autodetect]
-    truthy "$disable_vdpau" && config_options+=" --disable-vdpau"                       # disable Nvidia Video Decode and Presentation API for Unix code [autodetect]
+    truthy "$enable_cuda_llvm" && config_options+=" --enable-cuda-llvm"                 # enable CUDA compilation using clang [autodetect]
+    truthy "$enable_cuvid" && config_options+=" --enable-cuvid"                         # enable Nvidia CUVID support [autodetect]
+    truthy "$enable_ffnvcodec" && config_options+=" --enable-ffnvcodec"                 # enable dynamically linked Nvidia code [autodetect]
+    truthy "$enable_nvdec" && config_options+=" --enable-nvdec"                         # enable Nvidia video decoding acceleration (via hwaccel) [autodetect]
+    truthy "$enable_nvenc" && config_options+=" --enable-nvenc"                         # enable Nvidia video encoding code [autodetect]
+    truthy "$enable_vdpau" && config_options+=" --enable-vdpau"                         # enable Nvidia Video Decode and Presentation API for Unix code [autodetect]
     truthy "$enable_cuda_nvcc" && config_options+=" --enable-cuda-nvcc"                 # enable Nvidia CUDA compiler [no]
     truthy "$enable_libnpp" && config_options+=" --enable-libnpp"                       # enable Nvidia Performance Primitives-based code [no]
     # --------------------------- linux/unix features -----------------------------    
@@ -1004,21 +1011,21 @@ configure_ffmpeg() {
     fi
     # ----------------------------- windows features ------------------------------ 
     if [[ $target_platform == "windows" ]]; then
-    truthy "$disable_d3d11va" && config_options+=" --disable-d3d11va"                   # disable Microsoft Direct3D 11 video acceleration code [autodetect]
-    truthy "$disable_d3d12va" && config_options+=" --disable-d3d12va"                   # disable Microsoft Direct3D 12 video acceleration code [autodetect]
-    truthy "$disable_dxva2" && config_options+=" --disable-dxva2"                       # disable Microsoft DirectX 9 video acceleration code [autodetect]
-    truthy "$disable_schannel" && config_options+=" --disable-schannel"                 # disable SChannel SSP, needed for TLS support on Windows if openssl and gnutls are not used [autodetect]
+    truthy "$enable_d3d11va" && config_options+=" --enable-d3d11va"                     # enable Microsoft Direct3D 11 video acceleration code [autodetect]
+    truthy "$enable_d3d12va" && config_options+=" --enable-d3d12va"                     # enable Microsoft Direct3D 12 video acceleration code [autodetect]
+    truthy "$enable_dxva2" && config_options+=" --enable-dxva2"                         # enable Microsoft DirectX 9 video acceleration code [autodetect]
+    truthy "$enable_schannel" && config_options+=" --enable-schannel"                   # enable SChannel SSP, needed for TLS support on Windows if openssl and gnutls are not used [autodetect]
     ! truthy "$disable_mediafoundation" && config_options+=" --enable-mediafoundation"  # enable encoding via MediaFoundation [auto]
     fi
     # ------------------------------ apple features -------------------------------     
     if [[ $target_platform == "apple" ]]; then
-    truthy "$disable_avfoundation" && config_options+=" --disable-avfoundation"         # disable Apple AVFoundation framework [autodetect]
-    truthy "$disable_appkit" && config_options+=" --disable-appkit"                     # disable Apple AppKit framework [autodetect]
-    truthy "$disable_audiotoolbox" && config_options+=" --disable-audiotoolbox"         # disable Apple AudioToolbox code [autodetect]
-    truthy "$disable_coreimage" && config_options+=" --disable-coreimage"               # disable Apple CoreImage framework [autodetect]
-    truthy "$disable_metal" && config_options+=" --disable-metal"                       # disable Apple Metal framework [autodetect]
-    truthy "$disable_securetransport" && config_options+=" --disable-securetransport"   # disable Secure Transport, needed for TLS support on OSX if openssl and gnutls are not used [autodetect]
-    truthy "$disable_videotoolbox" && config_options+=" --disable-videotoolbox"         # disable VideoToolbox code [autodetect]
+    truthy "$enable_avfoundation" && config_options+=" --enable-avfoundation"           # enable Apple AVFoundation framework [autodetect]
+    truthy "$enable_appkit" && config_options+=" --enable-appkit"                       # enable Apple AppKit framework [autodetect]
+    truthy "$enable_audiotoolbox" && config_options+=" --enable-audiotoolbox"           # enable Apple AudioToolbox code [autodetect]
+    truthy "$enable_coreimage" && config_options+=" --enable-coreimage"                 # enable Apple CoreImage framework [autodetect]
+    truthy "$enable_metal" && config_options+=" --enable-metal"                         # enable Apple Metal framework [autodetect]
+    truthy "$enable_securetransport" && config_options+=" --enable-securetransport"     # enable Secure Transport, needed for TLS support on OSX if openssl and gnutls are not used [autodetect]
+    truthy "$enable_videotoolbox" && config_options+=" --enable-videotoolbox"           # enable VideoToolbox code [autodetect]
     fi
 	fi
 
@@ -1039,7 +1046,7 @@ configure_ffmpeg_kit() {
 	local TYPE_POSTFIX="$(get_build_type)"
 	local FFMPEG_KIT_VERSION=$(get_ffmpeg_kit_version)
 
-	if [[ $BUILD_FORCE == "1" ]]; then
+	if truthy "$BUILD_FORCE"; then
 		remove_path -rf "${BASEDIR}"/windows/already_configured_*
 		remove_path -rf "$ffmpeg_kit_install"
 	fi
@@ -1071,7 +1078,7 @@ configure_ffmpeg_kit() {
 	local config_options="--prefix=${ffmpeg_kit_install}"
 
 	config_options+=" --host=${host_target}"
-	if [[ ${build_ffmpeg_static,,} =~ ^(y|yes|1|true|on)$ ]]; then
+	if truthy "$build_ffmpeg_static"; then
 		config_options+=" --enable-static"
 		config_options+=" --disable-shared"
 	else

@@ -355,9 +355,10 @@ build_libfreetype() {
 	if [[ -e $PKG_CONFIG_PATH/harfbuzz.pc ]]; then
 		local config_options+=" -Dharfbuzz=enabled"
 	fi
+  local cross_file=$(get_meson_cross_file)
 	local meson_options="$config_options"
 	# get_local_meson_cross_with_propeties
-	meson_options+=" --cross-file=$(get_meson_cross_file)"
+	meson_options+=" --cross-file=$cross_file"
 	do_meson "$meson_options" "setup build"
 	do_ninja_and_ninja_install
 	change_dir "$src_dir"
@@ -373,8 +374,8 @@ build_libharfbuzz() {
 	change_dir "$src_dir/harfbuzz_git"
 	if [[ ! -f DUN ]]; then
 		local meson_options="-Dglib=disabled -Dgobject=disabled -Dcairo=disabled -Dicu=disabled -Dtests=disabled -Dintrospection=disabled -Ddocs=disabled"
-		# get_local_meson_cross_with_propeties
-		meson_options+=" --cross-file=$(get_meson_cross_file)"
+		local cross_file=$(get_meson_cross_file)
+		meson_options+=" --cross-file=$cross_file"
 		do_meson "$meson_options" "setup build"
 		do_ninja_and_ninja_install
 		create_touch_file 0 DUN
@@ -394,8 +395,8 @@ build_libvmaf() {
 	activate_meson
 	change_dir "$src_dir/vmaf_git/libvmaf"
 	local meson_options="-Denable_float=true -Dbuilt_in_models=true -Denable_tests=false -Denable_docs=false"
-	# get_local_meson_cross_with_propeties
-	meson_options+=" --cross-file=$(get_meson_cross_file)"
+	local cross_file=$(get_meson_cross_file)
+	meson_options+=" --cross-file=$cross_file"
 	do_meson "$meson_options" "setup build"
 	do_ninja_and_ninja_install
 	sed -i.bak "s/Libs: .*/& -lstdc++/" "$PKG_CONFIG_PATH/libvmaf.pc"
@@ -411,8 +412,8 @@ build_libfontconfig() {
 	do_git_checkout https://gitlab.freedesktop.org/fontconfig/fontconfig.git fontconfig_git # meson build for fontconfig no good
 	change_dir "$src_dir/fontconfig_git"
 	local meson_options="-Ddoc=disabled -Diconv=enabled -Dxml-backend=libxml2 -Dtests=disabled"
-	# get_local_meson_cross_with_propeties
-	meson_options+=" --cross-file=$(get_meson_cross_file)"
+	local cross_file=$(get_meson_cross_file)
+	meson_options+=" --cross-file=$cross_file"
 	do_meson "$meson_options" "setup build"
 	do_ninja_and_ninja_install
 	# generic_configure "--enable-iconv --enable-libxml2 --disable-docs --with-libiconv" # Use Libxml2 instead of Expat; will find libintl from gettext on 2nd pass build and ffmpeg rejects it
@@ -698,8 +699,8 @@ build_libbluray() {
 	change_dir "$src_dir/libbluray_git"
 	apply_patch "https://raw.githubusercontent.com/m-ab-s/mabs-patches/master/libbluray/0001-dec-prefix-with-libbluray-for-now.patch" -p1
 	local meson_options="-Denable_examples=false -Dbdj_jar=disabled --wrap-mode=default"
-	# get_local_meson_cross_with_propeties
-	meson_options+=" --cross-file=$(get_meson_cross_file)"
+	local cross_file=$(get_meson_cross_file)
+	meson_options+=" --cross-file=$cross_file"
 	do_meson "$meson_options" "setup build"
 	do_ninja_and_ninja_install # "CPPFLAGS=\"-Ddec_init=libbr_dec_init\""
 	sed -i.bak 's/-lbluray.*/-lbluray -lstdc++ -lssp -lgdi32/' "$PKG_CONFIG_PATH/libbluray.pc"
@@ -1182,8 +1183,8 @@ build_libdav1d() {
 	fi
 	cpu_count=1 # XXX report :|
 	local meson_options="-Denable_tests=false -Denable_examples=false"
-	# get_local_meson_cross_with_propeties
-	meson_options+=" --cross-file=$(get_meson_cross_file)"
+	local cross_file=$(get_meson_cross_file)
+	meson_options+=" --cross-file=$cross_file"
 	do_meson "$meson_options" "setup build"
 	do_ninja_and_ninja_install
 	copy_path "$src_dir/build/src/libdav1d.a" "$mingw_w64_x86_64_prefix/lib" || exit_message 1 "could not copy $src_dir/build/src/libdav1d.a" # avoid 'run ranlib' weird failure, possibly older meson's https://github.com/mesonbuild/meson/issues/4138 :|
@@ -1235,8 +1236,8 @@ build_libplacebo() {
   else
     meson_options+=" -Dshaderc=disabled"
   fi
-  # get_local_meson_cross_with_propeties
-	meson_options+=" --cross-file=$(get_meson_cross_file)"
+  local cross_file=$(get_meson_cross_file)
+	meson_options+=" --cross-file=$cross_file"
 	do_meson "$meson_options" "setup build"
 	do_ninja_and_ninja_install
 	sed -i.bak 's/-lplacebo.*$/-lplacebo -lm -lshlwapi -lunwind -lxxhash -lversion -lstdc++/' "$PKG_CONFIG_PATH/libplacebo.pc"
@@ -1517,8 +1518,9 @@ build_lv2() {
     change_dir "$src_dir"
     do_git_checkout https://github.com/lv2/lv2 "$lib" # meson build for fontconfig no good
     change_dir "$src_dir/$lib"
+    local cross_file=$(get_meson_cross_file)
     local meson_options="-Dtests=disabled -Ddocs=disabled -Donline_docs=false"
-    meson_options+=" --cross-file=$(get_meson_cross_file)"
+    meson_options+=" --cross-file=$cross_file"
     do_meson "$meson_options" "setup build"
     do_ninja_and_ninja_install
     change_dir "$src_dir"
@@ -1757,8 +1759,9 @@ build_librist() {
 		copy_path "contrib/time-shim.c" "contrib/time-shim.c.bak"
 		git apply --ignore-space-change --ignore-whitespace --verbose "$WINPATCHDIR/librist_time-shim.diff" > >(redirect_output) 2>&1 || exit_message 1 "unable to patch makefile"
 	fi
+  local cross_file=$(get_meson_cross_file)
   local meson_options="-Ddefault_library=static -Duse_mbedtls=true -Dbuilt_tools=false -Dtest=false"
-	meson_options+=" --cross-file=$(get_meson_cross_file)"
+	meson_options+=" --cross-file=$cross_file"
   do_meson "$meson_options" "setup build"
 	do_ninja_and_ninja_install
   change_dir "$src_dir"
@@ -2037,25 +2040,22 @@ build_opencl() {
 #     --enable-libopenvino (Intel's OpenVINO toolkit)
 build_libopenvino() {
   if [[ $disable_libopenvino != 1 && $enable_libopenvino == 1 ]]; then
-    # TODO ABI Mismatch --enable-libopenvino"
-	  echo "TODO --enable-libopenvino"
     # https://github.com/openvinotoolkit/openvino # compiling from source fails and is complicated. using pre-built binaries
     # pre-compiled https://storage.openvinotoolkit.org/repositories/openvino/packages/2025.4/windows/openvino_toolkit_windows_2025.4.0.20398.8fdad55727d_x86_64.zip
     local lib="libopenvino"
-    echo -e "WARNING: [disabled] Using $lib may cause segmentation faults due to ABI mismatch (mingw vs mscv)" >>"$LOG_FILE"
-    # change_dir "$src_dir/$lib" 1
-    # download_and_unpack_file "https://storage.openvinotoolkit.org/repositories/openvino/packages/2025.4/windows/openvino_toolkit_windows_2025.4.0.20398.8fdad55727d_x86_64.zip" "$lib"
-    # if ! check_pkg_config_batch "$mingw_w64_x86_64_prefix/lib/pkgconfig/*openvino*.pc" > >(redirect_output) 2>&1; then
-    #   convert_msvc_to_mingw -t="$src_dir/$lib/$lib/openvino_toolkit_windows_2025.4.0.20398.8fdad55727d_x86_64/runtime" -c="$cross_prefix" -o="$lib" -i="mingw-bundle" > >(redirect_output) 2>&1
-    #   change_dir "$src_dir/$lib/mingw-bundle/"
-    #   sed -i "s|^prefix=.*|prefix=${mingw_w64_x86_64_prefix}|g" "$src_dir/$lib/mingw-bundle/lib/pkgconfig/$lib.pc"
-    #   [[ -d "bin" ]] && (cp -rv bin/* "$mingw_w64_x86_64_prefix/bin/" > >(redirect_output) 2>&1 || exit_message 1 "could not install mingw-pcre bin")
-    #   [[ -d "include" ]] && (cp -rv include/* "$mingw_w64_x86_64_prefix/include/" > >(redirect_output) 2>&1 || exit_message 1 "could not install mingw-pcre include")
-    #   [[ -d "lib" ]] && (cp -rv lib/* "$mingw_w64_x86_64_prefix/lib/" > >(redirect_output) 2>&1 || exit_message 1 "could not install mingw-pcre lib")
-    #   [[ -d "share" ]] && (cp -rv share/* "$mingw_w64_x86_64_prefix/share/" > >(redirect_output) 2>&1 || exit_message 1 "could not install mingw-pcre share")
-    # fi
-    # change_dir "$src_dir"
-    # remove_path -rf "$src_dir/$lib/mingw-bundle/"
+    change_dir "$src_dir/$lib" 1
+    download_and_unpack_file "https://storage.openvinotoolkit.org/repositories/openvino/packages/2025.4/windows/openvino_toolkit_windows_2025.4.0.20398.8fdad55727d_x86_64.zip" "$lib"
+    if ! check_pkg_config_batch "$mingw_w64_x86_64_prefix/lib/pkgconfig/*openvino*.pc" > >(redirect_output) 2>&1; then
+      convert_msvc_to_mingw -t="$src_dir/$lib/$lib/openvino_toolkit_windows_2025.4.0.20398.8fdad55727d_x86_64/runtime" -c="$cross_prefix" -o="$lib" -i="mingw-bundle" > >(redirect_output) 2>&1
+      change_dir "$src_dir/$lib/mingw-bundle/"
+      sed -i "s|^prefix=.*|prefix=${mingw_w64_x86_64_prefix}|g" "$src_dir/$lib/mingw-bundle/lib/pkgconfig/$lib.pc"
+      [[ -d "bin" ]] && (cp -rv bin/* "$mingw_w64_x86_64_prefix/bin/" > >(redirect_output) 2>&1 || exit_message 1 "could not install mingw-pcre bin")
+      [[ -d "include" ]] && (cp -rv include/* "$mingw_w64_x86_64_prefix/include/" > >(redirect_output) 2>&1 || exit_message 1 "could not install mingw-pcre include")
+      [[ -d "lib" ]] && (cp -rv lib/* "$mingw_w64_x86_64_prefix/lib/" > >(redirect_output) 2>&1 || exit_message 1 "could not install mingw-pcre lib")
+      [[ -d "share" ]] && (cp -rv share/* "$mingw_w64_x86_64_prefix/share/" > >(redirect_output) 2>&1 || exit_message 1 "could not install mingw-pcre share")
+    fi
+    change_dir "$src_dir"
+    remove_path -rf "$src_dir/$lib/mingw-bundle/"
 	fi
 }
 #     --enable-libtorch (PyTorch)
@@ -2091,8 +2091,9 @@ build_lcms2() {
 	change_dir "$src_dir"
 	do_git_checkout https://github.com/mm2/Little-CMS "$lib" # meson build for fontconfig no good
 	change_dir "$src_dir/$lib"
+  local cross_file=$(get_meson_cross_file)
 	local meson_options="-Dtests=disabled -Dutils=false"
-	meson_options+=" --cross-file=$(get_meson_cross_file)"
+	meson_options+=" --cross-file=$cross_file"
 	do_meson "$meson_options" "setup build"
 	do_ninja_and_ninja_install
 	change_dir "$src_dir"
@@ -2211,8 +2212,9 @@ build_liblc3() {
 	change_dir "$src_dir"
 	do_git_checkout https://github.com/google/liblc3 "$lib"
 	change_dir "$src_dir/$lib"
+  local cross_file=$(get_meson_cross_file)
 	local meson_options="-Dtools=false -Dpython=false"
-	meson_options+=" --cross-file=$(get_meson_cross_file)"
+	meson_options+=" --cross-file=$cross_file"
 	generic_meson "$meson_options"
 	change_dir "$src_dir/$lib/build"
 	do_meson "" "install"
@@ -2343,7 +2345,8 @@ build_librsvg() {
 -Dcpp_args=\"-DCAIRO_WIN32_STATIC_BUILD -DGLIB_STATIC_COMPILATION\" \
 -Dc_link_args=\"-lssp -lmsvcrt -lstdc++\" \
 -Dcpp_link_args=\"-lssp -lmsvcrt -lstdc++\""
-	meson_options+=" --cross-file=$(get_meson_cross_file)"
+  local cross_file=$(get_meson_cross_file)
+	meson_options+=" --cross-file=$cross_file"
 	generic_meson "$meson_options"
 	change_dir "$src_dir/$lib/build" 1
 	do_meson "" "install"
@@ -2395,7 +2398,8 @@ build_vapoursynth() {
 	change_dir "$src_dir/$lib/python_dep" 1
 	download_and_unpack_file "https://www.nuget.org/api/v2/package/python/3.12.0" > >(redirect_output) 2>&1 || exit_message 1 "unable to download python"
 	change_dir "$src_dir/$lib"
-	local meson_options="--cross-file=$(get_meson_cross_file) -D b_lto=false"
+  local cross_file=$(get_meson_cross_file)
+	local meson_options="--cross-file=$cross_file -D b_lto=false"
 	do_meson "$meson_options" "setup build"
 	do_ninja_and_ninja_install
 	change_dir "$src_dir"
@@ -2413,7 +2417,7 @@ build_metal() {
 build_sndio () {
   if [[ $disable_sndio != 1 && $enable_sndio == 1 ]]; then
 		# TODO No MinGW/Windows support --enable-sndio"
-    echo "TODO --enable-sndio"
+    echo "WARNING: Library does not have MinGW/windows support. Unable to enable on Windows currently."
     # https://github.com/ratchov/sndio
     local lib="sndio"
   fi
@@ -2540,6 +2544,7 @@ build_cuda_nvcc() {
       [[ -d "share" ]] && (cp -rv share/* "$mingw_w64_x86_64_prefix/share/" > >(redirect_output) 2>&1 || exit_message 1 "could not install $lib share")
     fi
     change_dir "$src_dir"
+    remove_path -rf "$src_dir/$lib/mingw-bundle/"
   fi
 }
 #   --disable-d3d11va        disable Microsoft Direct3D 11 video acceleration code [autodetect]
@@ -2780,7 +2785,8 @@ build_pango() {
 -Dcpp_link_args=\"-lssp -lmsvcrt\""
   # disable tools - not needed for ffmpeg
   sed -i "s/subdir('utils')/# subdir('utils')/g" meson.build
-	meson_options+=" --cross-file=$(get_meson_cross_file) --libdir=$mingw_w64_x86_64_prefix/lib"
+  local cross_file=$(get_meson_cross_file)
+	meson_options+=" --cross-file=$cross_file --libdir=$mingw_w64_x86_64_prefix/lib"
 	generic_meson "$meson_options"
 	change_dir "$src_dir/$lib/build" 1
 	do_meson "" "install"
@@ -2796,8 +2802,9 @@ build_pixman() {
 	change_dir "$src_dir"
 	do_git_checkout https://gitlab.freedesktop.org/pixman/pixman "$lib"
 	change_dir "$src_dir/$lib"
+  local cross_file=$(get_meson_cross_file)
 	local meson_options="-Dtests=disabled -Ddemos=disabled"
-	meson_options+=" --cross-file=$(get_meson_cross_file)"
+	meson_options+=" --cross-file=$cross_file"
 	generic_meson "$meson_options"
 	change_dir "$src_dir/$lib/build" 1
 	do_meson "" "install"
@@ -2813,8 +2820,9 @@ build_cairo() {
 	change_dir "$src_dir"
 	do_git_checkout https://gitlab.freedesktop.org/cairo/cairo "$lib"
 	change_dir "$src_dir/$lib"
+  local cross_file=$(get_meson_cross_file)
 	local meson_options="-Dtests=disabled -Dgtk_doc=false"
-	meson_options+=" --cross-file=$(get_meson_cross_file)"
+	meson_options+=" --cross-file=$cross_file"
 	generic_meson "$meson_options"
 	change_dir "$src_dir/$lib/build" 1
 	do_meson "" "install"
@@ -2907,9 +2915,10 @@ build_glib() {
 	do_git_checkout https://github.com/GNOME/glib.git glib_git
 	activate_meson
 	change_dir "$src_dir/glib_git"
+  local cross_file=$(get_meson_cross_file)
 	local meson_options="--force-fallback-for=libpcre -Dforce_posix_threads=true -Dman-pages=disabled -Dsysprof=disabled -Dglib_debug=disabled -Dtests=false --wrap-mode=default"
 	# get_local_meson_cross_with_propeties
-	meson_options+=" --cross-file=$(get_meson_cross_file)"
+	meson_options+=" --cross-file=$cross_file"
 	do_meson "$meson_options" "setup build"
 	do_ninja_and_ninja_install
 	sed -i.bak 's/-lglib-2.0.*$/-lglib-2.0 -lintl -lws2_32 -lwinmm -lm -liconv -lole32/' "$PKG_CONFIG_PATH/glib-2.0.pc"
@@ -3307,7 +3316,7 @@ EOF
     if [[ -n "$variant_name" ]]; then
         local custom_filepath="$(pwd)/$target_name-meson-cross.mingw.${variant_name}.txt"
         # Always overwrite the variant with a fresh copy of the base
-        cp "$base_filepath" "$custom_filepath"
+        cp "$base_filepath" "$custom_filepath" 2>"$LOG_FILE"
         # Append custom options if provided
         if [[ -n "$extra_content" ]]; then
             # Add a newline for safety

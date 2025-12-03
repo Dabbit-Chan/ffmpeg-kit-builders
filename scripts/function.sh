@@ -3015,7 +3015,7 @@ get_valid_remote() {
   
   # Get all refs at once
   local all_refs
-  if ! all_refs=$(git ls-remote "$repo_url"); then
+  if ! all_refs=$(git ls-remote "$repo_url") > >(redirect_output) 2>&1; then
     echo -e "DEBUG: Cannot access repository: $repo_url" >>"$LOG_FILE"
     return 1
   fi
@@ -3128,10 +3128,11 @@ do_git_checkout() {
 		to_dir=$(basename "$repo_url" | sed s/\.git/_git/) # http://y/abc.git -> abc_git
 	fi
 	if [ -d "$to_dir" ] && is_valid_git_dir "$to_dir"; then
-    echo -e "INFO: Directory already exists $to_dir. Fetching git instead" >>"$LOG_FILE"
+    echo -e "INFO: Directory already exists $to_dir." >>"$LOG_FILE"
 		change_dir "$to_dir"
 		if [[ $git_get_latest = "y" ]]; then
-			git fetch # want this for later...
+      echo -e "INFO: Fetching git instead" >>"$LOG_FILE"
+			git fetch --quiet >>"$LOG_FILE" # want this for later...
 		else
 			echo -e "INFO: not doing git get latest pull for latest code $to_dir" >>"$LOG_FILE" # too slow'ish...
 		fi
@@ -3527,7 +3528,7 @@ do_cmake_and_install() {
 activate_meson() {
 	echo -e "INFO: Activating meson" >>"$LOG_FILE"
 	change_dir "$src_dir" # requires python3-full
-	get_meson_cross_file
+	local cross_file=$(get_meson_cross_file)
 	if [[ ! -e meson_git ]]; then
 		do_git_checkout https://github.com/mesonbuild/meson.git meson_git 1.9.1
 	fi
