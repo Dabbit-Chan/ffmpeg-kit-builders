@@ -1,0 +1,22 @@
+diff --git a/contrib/time-shim.c b//contrib/time-shim.c
+index 17c7aee..e6777a9 100755
+--- a/contrib/time-shim.c
++++ b/contrib/time-shim.c
+@@ -79,7 +79,7 @@ static inline int lc_set_errno(int result)
+     }
+     return 0;
+ }
+-
++#if 0
+ int clock_gettime(clockid_t clock_id, struct timespec *tp)
+ {
+     uint64_t t;
+@@ -146,7 +146,7 @@ int clock_gettime(clockid_t clock_id, struct timespec *tp)
+ 
+     return lc_set_errno(EINVAL);
+ }
+-
++#endif
+ #endif
+ 
+ #ifdef __APPLE__

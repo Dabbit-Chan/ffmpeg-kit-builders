@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
 
-# shellcheck disable=SC2317,SC1091,SC1090,SC2120
+# shellcheck disable=SC2317,SC1091,SC1090,SC2120,SC2250,SC2292
 
 # ffmpeg windows cross compile helper/download script, see github repo README
 # Copyright (C) 2025 Akash Patel, the script is under the GPLv3, but output FFmpeg's executables aren't
 # set -x
 
 export BASEDIR="$(pwd)"
-export FFMPEG_KIT_BUILD_TYPE="windows"
+export target_platform="windows"
 export SCRIPTDIR="${BASEDIR}/scripts"
 export LOG_FILE="${BASEDIR}/build.log"
 
@@ -18,7 +18,7 @@ source "${SCRIPTDIR}/run-windows.sh"
 
 require_sudo
 
-chown -R 777 "$LOG_FILE"
+chown -R "$USER:$USER" "$LOG_FILE"
 
 remove_path -f "$LOG_FILE"
 
@@ -64,7 +64,7 @@ Build Options:
                                                                 [--enable-static|--enable-shared(default)] and exit
   --list-libraries                                              lists ffmpeg configeration including extra libraries and exit
 	--enable-[library name]                                       enable extra ffmpeg libraries. Run --list-libraries 
-                                                                and see under "External library support" to get a list.
+                                                                and see under \"External library support\" to get a list.
   --ff-*                                                        pass additional ffmpeg parameters prefixed by ff-[*] to 
                                                                 pass them directly to ffmpeg configure build statement.
                                                                 Be careful when using this. No additional checks are done 
@@ -208,7 +208,7 @@ while [ $# -gt 0 ]; do
 		export build_ffmpeg_kit_bundle_only="${1#*=}"
 		shift
 		;;
-	--compiler-flavors=*)
+	--compiler-flavors=*|--flavor=*)
 		export compiler_flavors="${1#*=}"
 		shift
 		;;
@@ -234,6 +234,7 @@ while [ $# -gt 0 ]; do
 	--get-total-steps | --get-all-steps | --get-step-name=*) exit 0 ;; # Handled above, just consume and ignore here
 	--clean-builds)
 		export clean_builds=y
+    shift
 		break
 		;;
   --list-libraries)
@@ -241,15 +242,22 @@ while [ $# -gt 0 ]; do
     shift
     break
     ;;
+  --run-only=*)
+    export run_only="${1#*=}"
+    shift
+    break
+    ;;
 	--enable-*)
 		LIBRARY_NAME="${1#--enable-}"
     VAR_NAME="enable_${LIBRARY_NAME//-/_}"
     declare "$VAR_NAME=1"
+    shift
     ;;
   --disable-*)
 		LIBRARY_NAME="${1#--disable-}"
     VAR_NAME="disable_${LIBRARY_NAME//-/_}"
     declare "$VAR_NAME=1"
+    shift
     ;;
   --ff-*)
     # Store original
@@ -257,6 +265,7 @@ while [ $# -gt 0 ]; do
     # Store extracted value
     VALUE="${1#--ff-}"
     ff_flags_values+=("$VALUE")
+    shift
     ;;
 	--)
 		shift

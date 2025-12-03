@@ -184,8 +184,6 @@ export build_x264_with_libav=n # To build x264 with Libavformat.
 export ffmpeg_git_checkout="https://github.com/FFmpeg/FFmpeg.git"
 export ffmpeg_source_dir=
 export install_prefix=
-export build_svt_hevc=n
-export build_svt_vp9=n
 export build_dependencies_only=n
 export cpu_count=$(nproc)
 export original_cpu_count=$(nproc) # save it away for some that revert it temporarily
@@ -201,7 +199,7 @@ export BUILD_STEPS=(
 "build_mingw_std_threads" \
 "build_zlib" \
 "build_libcaca" \
-"build_bzip2" \
+"build_bzlib" \
 "build_lzma" \
 "build_iconv" \
 "build_sdl2" \
@@ -225,6 +223,7 @@ export BUILD_STEPS=(
 "build_unistring" \
 "build_libidn2" \
 "build_zstd" \
+"build_openssl" \
 "build_gnutls" \
 "build_curl" \
 "build_libogg" \
@@ -302,5 +301,21 @@ export BUILD_STEPS=(
 "build_libuavs3d" \
 "build_vapoursynth" \
 "build_libquirc" \
-"build_librsvg"
-"build_libopencv")
+"build_librsvg" \
+"build_libopencv" \
+"build_librav1e" \
+"build_gcrypt" \
+"build_librist" \
+"build_lv2" \
+"build_libcdio" \
+"build_libpulse" \
+"build_librtmp" \
+"build_librabbitmq" \
+"build_libssh" \
+"build_libtls" \
+"build_libzmq" \
+"build_mbedtls" \
+"build_opencl" \
+"build_libglslang" \
+"build_libklvanc" \
+"build_vulkan_static")

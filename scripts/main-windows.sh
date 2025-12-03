@@ -68,7 +68,7 @@ EOL
 }
 
 pick_compiler_flavors() {
-	if [[ ! -z $1 ]]; then
+	if [[ -n $1 ]]; then
 		compiler_flavors=$1
 	fi
 	while [[ ! "$compiler_flavors" =~ ^([1-4]|multi|win32|win64)$ ]]; do
@@ -122,7 +122,11 @@ check_missing_packages # do this first since it's annoying to go through prompts
 intro                  # remember to always run the intro, since it adjust pwd
 check_cross_compiler
 
-if [[ -n "$build_only" ]]; then
+if [[ -n $run_only ]]; then
+  echo -e "INFO: --- Executing single function: $run_only ---\n" | tee -a "$LOG_FILE"
+  eval "$run_only" || exit_message 1 "unable to run $run_only"
+  echo -e "INFO: --- Done executing single function: $run_only ---\n" | tee -a "$LOG_FILE"
+elif [[ -n "$build_only" ]]; then
 	if [[ $(is_integer "$build_only") != 0 ]]; then
     index=$(array_index_of "$build_only" "${BUILD_STEPS[@]}")
 	else
@@ -130,10 +134,10 @@ if [[ -n "$build_only" ]]; then
 	fi
 	# Now, call the single requested build function by its index
 	step_name="${BUILD_STEPS[$index]}"
-	echo -e "--- Executing single build step: $step_name ---" | tee -a "$LOG_FILE"
+	echo -e "INFO: --- Executing single build step: $step_name ---\n" | tee -a "$LOG_FILE"
 	echo -e "WARNING: This may fail if previous dependencies havent been built yet." | tee -a "$LOG_FILE"
 	build_ffmpeg_dependency_only "$step_name"
-	echo -e "--- Done building single build step: $step_name ---" | tee -a "$LOG_FILE"
+	echo -e "INFO: --- Done building single build step: $step_name ---\n" | tee -a "$LOG_FILE"
 elif [[ -n "$build_from" ]]; then
 	if [[ $(is_integer "$build_from") != 0 ]]; then
     index=$(array_index_of "$build_from" "${BUILD_STEPS[@]}")
@@ -142,10 +146,10 @@ elif [[ -n "$build_from" ]]; then
 	fi
 	# Now, call the single requested build function by its index
 	step_name="${BUILD_STEPS[$index]}"
-	echo -e "--- Building dependencies from step: $step_name ---" | tee -a "$LOG_FILE"
+	echo -e "INFO: --- Building dependencies from step: $step_name ---\n" | tee -a "$LOG_FILE"
 	echo -e "WARNING: This may fail if previous dependencies havent been built yet." | tee -a "$LOG_FILE"
 	build_all_ffmpeg_dependencies "$step_name"
-	echo -e "--- Done building dependencies from step: $step_name ---" | tee -a "$LOG_FILE"
+	echo -e "INFO: --- Done building dependencies from step: $step_name ---\n" | tee -a "$LOG_FILE"
 else
 	change_dir "$work_dir" || exit 1
 

@@ -81,81 +81,145 @@ arg_error()
     error_exit "$error_msg, see --help for options" "$error_msg"
 }
 
-execute()
-{
-    local info_msg="$1"
-    local error_msg="$2"
-    shift 2
-
-    if [ ! "$error_msg" ]; then
-        error_msg="error"
-    fi
-
-    if [ "$info_msg" ]; then
-        printf "(%d/%d): %s\n" "$CURRENT_STEP" "$TOTAL_STEPS" "$info_msg"
-        CURRENT_STEP=$((CURRENT_STEP + 1))
-    fi
-    "$@" >>"$LOG_FILE" 2>&1 || error_exit "$error_msg, check $LOG_FILE for details"
+# 1. info_msg
+# 2. error_msg
+# 3. no_exit
+execute() {
+	local info_msg="$1"
+	local error_msg="$2"
+	local no_exit="$3"
+	shift 3
+  # shellcheck disable=SC2244
+	if [ ! "$error_msg" ]; then
+		error_msg="error"
+	fi
+  echo "INFO: Executing: $@" >>"$LOG_FILE"
+	if [[ $no_exit != "true" ]]; then
+		"$@" 1>>"$LOG_FILE" 2>&1 || error_exit "$error_msg, check $LOG_FILE for details"
+	else
+		echo -e "${info_msg}" >>"$LOG_FILE"
+		"$@" 1>>"$LOG_FILE" 2>&1
+	fi
 }
 
-create_dir()
-{
-    local path="$1"
+# 1. path
+create_dir() {
+	local path="$1"
 
-    if [ -z "$path" ]; then
-        error_exit "ERROR: path argument is required"
-    fi
+	echo -e "DEBUG: creating path ${path}" >>"$LOG_FILE"
 
-    execute "INFO: creating path: '$path'" "ERROR: unable to create directory '$path'" \
-        mkdir -p "$path"
-    
-    execute "INFO: updating path permissions: '$path'" "ERROR: unable to update permissions on '$path'" \
-        sudo chown -R "$USER":"$USER" "$path"
+	if [ -z "$path" ]; then
+		error_exit "ERROR: path argument is required"
+	fi
+
+	if [[ ! -e "$path" ]]; then
+		execute "INFO: creating path: '$path'" "ERROR: unable to create directory '$path'" "true" \
+			sudo mkdir "-pv" "$path"
+	else
+		echo -e "DEBUG: directory already exists, skipping creation." >>"$LOG_FILE"
+	fi
+  execute "INFO: updating path permissions: '$path'" "ERROR: unable to update permissions on '$path'" "true" \
+    chmod -R a+rwx "$path"
 }
 
 # 1. options
 # @. paths
 remove_path() {
-	local options=$1
-	shift 1 # Remove options, leaving only paths
-
-	echo -e "DEBUG: removing paths: $*" 1>>"$LOG_FILE" 2>&1
-
-	if [ $# -eq 0 ]; then
-		echo -e "ERROR: at least one path argument is required" 1>>"$LOG_FILE" 2>&1
-		return 1
-	fi
-
-	for path in "$@"; do
-		echo -e "DEBUG: processing path: $path" 1>>"$LOG_FILE" 2>&1
-
-		if [[ -e "$path" ]]; then
-			if [ -z "$path" ]; then
-				echo -e "ERROR: path argument is required" 1>>"$LOG_FILE" 2>&1
-				continue
-			fi
-			execute "INFO: updating path permissions: '$path'" "ERROR: unable to update permissions on '$path'" "true" \
-				chown -R "$USER":"$USER" "$path"
-			execute "INFO: updating path permissions: '$path'" "ERROR: unable to update permissions on '$path'" "true" \
-				sudo chmod -R 755 "$path"
-			execute "INFO: removing path: '$path'" "ERROR: unable to remove path '$path'" "true" \
-				rm "$options" "$path"
-		else
-			echo -e "INFO: path ${path} does not exist" 1>>"$LOG_FILE" 2>&1
-		fi
-	done
-}
-
-change_dir()
-{
-    local path="$1"
+    local recursive=false force=false other_options=()
+    local paths=()
     
-    if [ -z "$path" ]; then
-        error_exit "ERROR: path argument is required"
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            -r|--recursive)
+                recursive=true
+                ;;
+            -f|--force)
+                force=true
+                ;;
+            --)
+                shift
+                paths+=("$@")
+                break
+                ;;
+            -*)
+                other_options+=("$1")
+                ;;
+            *)
+                paths+=("$1")
+                ;;
+        esac
+        shift
+    done
+
+    local rm_options=()
+    [[ "$recursive" == true ]] && rm_options+=(-r)
+    [[ "$force" == true ]] && rm_options+=(-f)
+    rm_options+=("${other_options[@]}")
+
+    if [ ${#paths[@]} -eq 0 ]; then
+        echo -e "ERROR: at least one path argument is required" >>"$LOG_FILE"
+        return 1
     fi
 
-    execute "INFO: changing to path: '$path'" "ERROR: unable to cd to directory '$path'" \
-        cd "$path"
+    for path in "${paths[@]}"; do
+        if [[ -z "$path" ]]; then
+            echo -e "ERROR: empty path argument" >>"$LOG_FILE"
+            return 1
+        fi
+        
+        if [[ "$path" == "/" || "$path" == "$HOME" || "$path" == "~" || "$path" == "." || "$path" == ".." ]]; then
+            echo -e "ERROR: dangerous path '$path' - refusing to remove" >>"$LOG_FILE"
+            return 1
+        fi
+    done
+
+    # Process each path
+    for path in "${paths[@]}"; do
+        echo -e "DEBUG: processing path: '$path'" >>"$LOG_FILE"
+
+        if [[ -e "$path" ]]; then
+            # For directories, ensure recursive flag is set
+            if [[ -d "$path" && "$recursive" != true ]]; then
+                echo -e "WARNING: '$path' is a directory but recursive option not set. Adding -r flag for removal." >>"$LOG_FILE"
+                rm_options+=(-r)
+            fi
+            execute "INFO: updating path permissions: '$path'" "ERROR: unable to update permissions on '$path'" "true" \
+              chmod -R a+rwx "$path"
+            execute "INFO: removing path: '$path'" "ERROR: unable to remove path '$path'" "true" \
+                rm "${rm_options[@]}" "$path"
+        else
+            echo -e "INFO: path '$path' does not exist" >>"$LOG_FILE"
+            if [[ "$force" != true ]]; then
+                echo -e "WARNING: path '$path' not found and force flag not set" >>"$LOG_FILE"
+            fi
+        fi
+    done
+}
+
+# 1. path
+# 2. create if not exists
+change_dir() {
+	local path="$1"
+	local create="$2"
+	if [ -z "$path" ]; then
+		error_exit "ERROR: path argument is required"
+	fi
+
+	if [[ -e "$path" ]]; then
+		execute "INFO: changing to path: '$(realpath "$path")'" "ERROR: unable to cd to directory '$(realpath "$path")'" "true" \
+			cd "$path"
+		if [[ ! -r "$path" ]] || [[ ! -w "$path" ]] || [[ ! -x "$path" ]]; then
+      execute "INFO: updating path permissions: '$path'" "ERROR: unable to update permissions on '$path'" "true" \
+        chmod -R a+rwx "$path"
+		fi
+	else
+		echo -e "INFO: path '$path' does not exist" >>"$LOG_FILE"
+		if [[ -n $create ]]; then
+			echo -e "INFO: creating '$path'" >>"$LOG_FILE"
+			create_dir "$path"
+			change_dir "$path"
+		fi
+	fi
 }
 
 download_sources()
@@ -170,17 +234,17 @@ download_sources()
             echo "MinGW-w64 branch mismatch: found '$current_mingw_branch', need '$MINGW_W64_BRANCH' - re-downloading"
             remove_path -rf "$SRC_PATH/mingw-w64"
             execute "downloading MinGW-w64 source" "" \
-                git clone --depth 1 -b "$MINGW_W64_BRANCH" \
+                git clone -b "$MINGW_W64_BRANCH" --recurse-submodules --single-branch \
                     https://github.com/mingw-w64/mingw-w64 mingw-w64
         else
             echo "MinGW-w64 branch correct: '$MINGW_W64_BRANCH' - updating"
             change_dir "$SRC_PATH/mingw-w64"
             execute "updating MinGW-w64 source" "" \
-                git fetch --depth 1 origin "$MINGW_W64_BRANCH" && git reset --hard FETCH_HEAD
+                git fetch origin -b "$MINGW_W64_BRANCH" --recurse-submodules && git reset --hard FETCH_HEAD
         fi
     else
         execute "downloading MinGW-w64 source" "" \
-            git clone --depth 1 -b "$MINGW_W64_BRANCH" \
+            git clone -b "$MINGW_W64_BRANCH" --recurse-submodules --single-branch \
                 https://github.com/mingw-w64/mingw-w64 mingw-w64
     fi
 
@@ -191,17 +255,17 @@ download_sources()
             echo "Binutils branch mismatch: found '$current_binutils_branch', need '$BINUTILS_BRANCH' - re-downloading"
             remove_path -rf "$SRC_PATH/binutils"
             execute "downloading Binutils source" "" \
-                git clone --depth 1 -b "$BINUTILS_BRANCH" \
+                git clone -b "$BINUTILS_BRANCH" --recurse-submodules --single-branch \
                     https://github.com/bminor/binutils-gdb binutils
         else
             echo "Binutils branch correct: '$BINUTILS_BRANCH' - updating"
             change_dir "$SRC_PATH/binutils"
             execute "updating Binutils source" "" \
-                git fetch --depth 1 origin "$BINUTILS_BRANCH" && git reset --hard FETCH_HEAD
+                git fetch origin -b "$BINUTILS_BRANCH" --recurse-submodules && git reset --hard FETCH_HEAD
         fi
     else
         execute "downloading Binutils source" "" \
-            git clone --depth 1 -b "$BINUTILS_BRANCH" \
+            git clone -b "$BINUTILS_BRANCH" --recurse-submodules --single-branch \
                 https://github.com/bminor/binutils-gdb binutils
     fi
 
@@ -212,17 +276,17 @@ download_sources()
             echo "GCC branch mismatch: found '$current_gcc_branch', need '$GCC_BRANCH' - re-downloading"
             remove_path -rf "$SRC_PATH/gcc"
             execute "downloading GCC source" "" \
-                git clone --depth 1 -b "$GCC_BRANCH" \
+                git clone -b "$GCC_BRANCH" --recurse-submodules  --single-branch \
                     https://gcc.gnu.org/git/gcc.git gcc
         else
             echo "GCC branch correct: '$GCC_BRANCH' - updating"
             change_dir "$SRC_PATH/gcc"
             execute "updating GCC source" "" \
-                git fetch --depth 1 origin "$GCC_BRANCH" && git reset --hard FETCH_HEAD
+                git fetch origin -b "$GCC_BRANCH" --recurse-submodules && git reset --hard FETCH_HEAD
         fi
     else
         execute "downloading GCC source" "" \
-            git clone --depth 1 -b "$GCC_BRANCH" \
+            git clone -b "$GCC_BRANCH" --recurse-submodules  --single-branch \
                 https://gcc.gnu.org/git/gcc.git gcc
     fi
 
@@ -308,7 +372,11 @@ build()
         "$SRC_PATH/mingw-w64/mingw-w64-crt/configure" --build="$BUILD" \
             --host="$host" --prefix="$prefix/$host" \
             --with-default-msvcrt=$LINKED_RUNTIME \
-            --with-sysroot="$prefix/$host" $crt_lib
+            --with-sysroot="$prefix/$host" $crt_lib \
+            --with-tools="gendef" \
+            --with-libraries="libmangle,winpthreads" \
+            --disable-shared \
+            --enable-static
 
     execute "($arch): building MinGW-w64 CRT" "" \
         make -j $JOB_COUNT
