@@ -875,8 +875,6 @@ configure_ffmpeg() {
   #------------------------------------------------------------------------------ 
 # XXX --disable-sndio MinGW/Windows not supported 
 # truthy "$disable_sndio" && config_options+=" --disable-sndio"                       # disable sndio support [autodetect]
-# TODO --enable-libjack
-# truthy "$enable_libjack" && config_options+=" --enable-libjack"                     # enable JACK audio sound server [no]
 # XXX --enable-libtorch ABI mismatch
 # truthy "$enable_libtorch" && config_options+=" --enable-libtorch"                   # enable Torch as one DNN backend [no]
   truthy "$disable_bzlib" && config_options+=" --disable-bzlib"                       # disable bzlib [autodetect]
@@ -917,6 +915,7 @@ configure_ffmpeg() {
   truthy "$enable_libgsm" && config_options+=" --enable-libgsm"                       # enable GSM de/encoding via libgsm [no]
   truthy "$enable_libharfbuzz" && config_options+=" --enable-libharfbuzz"             # enable libharfbuzz, needed for drawtext filter [no]
   truthy "$enable_libilbc" && config_options+=" --enable-libilbc"                     # enable iLBC de/encoding via libilbc [no]
+  truthy "$enable_libjack" && config_options+=" --enable-libjack"                     # enable JACK audio sound server [no]
   truthy "$enable_libjxl" && config_options+=" --enable-libjxl"                       # enable JPEG XL de/encoding via libjxl [no]
   truthy "$enable_libklvanc" && config_options+=" --enable-libklvanc"                 # enable Kernel Labs VANC processing [no]
   truthy "$enable_libkvazaar" && config_options+=" --enable-libkvazaar"               # enable HEVC encoding via libkvazaar [no]
