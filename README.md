@@ -16,11 +16,14 @@ This document describes the Windows cross-compilation build system for FFmpeg an
 ### Basic Usage
 
 ```bash
-# Build for Windows (both 32-bit and 64-bit)
-./windows.sh --compiler-flavors=multi --enable-shared
+# Build for Windows 64-bit with shared libraries and force rebuild of dependencies
+./windows.sh --compiler-flavors=win64 --enable-shared -f
 
 # Build only 64-bit static libraries
 ./windows.sh --compiler-flavors=win64 --enable-static
+
+# Build only 64-bit static libraries with chromaprint support
+./windows.sh --compiler-flavors=win64 --enable-static --enable-chromaprint
 
 # Build with GPL libraries
 ./windows.sh --enable-gpl=y --compiler-flavors=win64
