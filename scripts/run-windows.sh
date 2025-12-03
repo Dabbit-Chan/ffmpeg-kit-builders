@@ -226,8 +226,10 @@ build_libvpl() {
 # --disable-nvdec          disable Nvidia video decoding acceleration (via hwaccel) [autodetect]
 # --enable-nvenc 
 # --disable-nvenc          disable Nvidia video encoding code [autodetect]
+# --enable-ffnvcodec
+# --disable-ffnvcodec      disable dynamically linked Nvidia code [autodetect]
 build_nvenc() {
-  if [[ $enable_nvenc == 1 || $enable_cuvid == 1 || $enable_nvdec == 1 ]]; then
+  if [[ $enable_nvenc == 1 || $enable_cuvid == 1 || $enable_nvdec == 1 || $enable_ffnvcodec == 1 ]]; then
   echo "WARNING: Including this library will make the binaries non-redistributable"
 	change_dir "$src_dir"
 	do_git_checkout https://github.com/FFmpeg/nv-codec-headers.git
@@ -239,6 +241,9 @@ build_nvenc() {
   echo -e "WARNING: disabling one NVIDIA HW flags disables all!"
   echo
 	fi
+}
+build_ffnvcodec() {
+	build_nvenc
 }
 build_nvdec() {
   build_nvenc
@@ -1821,7 +1826,7 @@ build_libsmbclient() {
     if [[ $target_platform == "windows" ]]; then
       echo "INFO: SMB support already built into $target_platform. Seperate library not needed." && return 0
     fi
-		# TODO --enable-libsmbclient - Not needed for windows"
+		# TODO NON-WINDOWS --enable-libsmbclient - Not needed for windows"
 	echo "TODO --enable-libsmbclient"
   echo "Not needed for Windows. Windows has SMB built into the Operating System."
 	# https://git.samba.org/samba.git
@@ -2514,9 +2519,20 @@ build_cuda_llvm() {
 build_cuda_nvcc() {
   if [[ $disable_cuda_nvcc != 1 && $enable_cuda_nvcc == 1 ]]; then
     echo "WARNING: Including this library will make the binaries non-redistributable"
-		# TODO --enable-cuda-nvcc"
-    echo "TODO --enable-cuda-nvcc"
-    # https://github.com/openbsd/src/tree/master/lib/libsndio
+    # https://developer.download.nvidia.com/compute/cuda/redist/cuda_nvcc/windows-x86_64/cuda_nvcc-windows-x86_64-13.0.88-archive.zip
+    local lib="cuda-nvcc"
+    download_and_unpack_file https://developer.download.nvidia.com/compute/cuda/redist/cuda_nvcc/windows-x86_64/cuda_nvcc-windows-x86_64-13.0.88-archive.zip "$lib"
+    change_dir "$src_dir/$lib"
+    if ! check_pkg_config_batch "$mingw_w64_x86_64_prefix/lib/pkgconfig/$lib*.pc" > >(redirect_output) 2>&1; then
+      convert_msvc_to_mingw -t="$src_dir/$lib/cuda_nvcc-windows-x86_64-13.0.88-archive" -c="$cross_prefix" -o="$lib" -i="mingw-bundle" > >(redirect_output) 2>&1
+      change_dir "$src_dir/$lib/mingw-bundle/"
+      sed -i "s|^prefix=.*|prefix=${mingw_w64_x86_64_prefix}|g" "$src_dir/$lib/mingw-bundle/lib/pkgconfig/$lib.pc"
+      [[ -d "bin" ]] && (cp -rv bin/* "$mingw_w64_x86_64_prefix/bin/" > >(redirect_output) 2>&1 || exit_message 1 "could not install $lib bin")
+      [[ -d "include" ]] && (cp -rv include/* "$mingw_w64_x86_64_prefix/include/" > >(redirect_output) 2>&1 || exit_message 1 "could not install $lib include")
+      [[ -d "lib" ]] && (cp -rv lib/* "$mingw_w64_x86_64_prefix/lib/" > >(redirect_output) 2>&1 || exit_message 1 "could not install $lib lib")
+      [[ -d "share" ]] && (cp -rv share/* "$mingw_w64_x86_64_prefix/share/" > >(redirect_output) 2>&1 || exit_message 1 "could not install $lib share")
+    fi
+    change_dir "$src_dir"
   fi
 }
 #   --disable-d3d11va        disable Microsoft Direct3D 11 video acceleration code [autodetect]
@@ -2538,15 +2554,6 @@ build_dxva2() {
   if [[ $disable_dxva2 != 1 && $enable_dxva2 == 1 ]]; then
     echo "WARNING: Including this library will make the binaries non-redistributable"
     echo "Only available on Windows build"
-  fi
-}
-#   --disable-ffnvcodec      disable dynamically linked Nvidia code [autodetect]
-build_ffnvcodec() {
-  if [[ $disable_ffnvcodec != 1 && $enable_ffnvcodec == 1 ]]; then
-    echo "WARNING: Including this library will make the binaries non-redistributable"
-		# TODO --enable-ffnvcodec"
-    echo "TODO --enable-ffnvcodec"
-    # https://github.com/openbsd/src/tree/master/lib/libsndio
   fi
 }
 #   --disable-libdrm         disable DRM code (Linux) [autodetect]
@@ -2598,9 +2605,20 @@ build_libmfx() {
 build_libnpp() {
   if [[ $disable_libnpp != 1 && $enable_libnpp == 1 ]]; then
     echo "WARNING: Including this library will make the binaries non-redistributable"
-		# TODO --enable-libnpp"
-    echo "TODO --enable-libnpp"
-    # https://developer.download.nvidia.com/compute/cuda/redist/
+    local lib="libnpp"
+    # https://developer.download.nvidia.com/compute/cuda/redist/libnpp/windows-x86_64/libnpp-windows-x86_64-13.0.1.2-archive.zip
+    download_and_unpack_file https://developer.download.nvidia.com/compute/cuda/redist/libnpp/windows-x86_64/libnpp-windows-x86_64-13.0.1.2-archive.zip "$lib"
+    change_dir "$src_dir/$lib"
+    if ! check_pkg_config_batch "$mingw_w64_x86_64_prefix/lib/pkgconfig/$lib*.pc" > >(redirect_output) 2>&1; then
+      convert_msvc_to_mingw -t="$src_dir/$lib/libnpp-windows-x86_64-13.0.1.2-archive" -c="$cross_prefix" -o="$lib" -i="mingw-bundle" > >(redirect_output) 2>&1
+      change_dir "$src_dir/$lib/mingw-bundle/"
+      sed -i "s|^prefix=.*|prefix=${mingw_w64_x86_64_prefix}|g" "$src_dir/$lib/mingw-bundle/lib/pkgconfig/$lib.pc"
+      [[ -d "bin" ]] && (cp -rv bin/* "$mingw_w64_x86_64_prefix/bin/" > >(redirect_output) 2>&1 || exit_message 1 "could not install $lib bin")
+      [[ -d "include" ]] && (cp -rv include/* "$mingw_w64_x86_64_prefix/include/" > >(redirect_output) 2>&1 || exit_message 1 "could not install $lib include")
+      [[ -d "lib" ]] && (cp -rv lib/* "$mingw_w64_x86_64_prefix/lib/" > >(redirect_output) 2>&1 || exit_message 1 "could not install $lib lib")
+      [[ -d "share" ]] && (cp -rv share/* "$mingw_w64_x86_64_prefix/share/" > >(redirect_output) 2>&1 || exit_message 1 "could not install $lib share")
+    fi
+    change_dir "$src_dir"
   fi
 }
 #   --enable-libopencv       enable video filtering via libopencv [no]

@@ -318,4 +318,6 @@ export BUILD_STEPS=(
 "build_opencl" \
 "build_libglslang" \
 "build_libklvanc" \
-"build_vulkan_static")
+"build_vulkan_static" \
+"build_libnpp" \
+"build_cuda_nvcc")
