@@ -403,7 +403,7 @@ build_libvmaf() {
 	change_dir "$src_dir"
 	fi
 }
-#--enable-libfontconfig (from build_fontconfig) - System font discovery for the drawtext filter.
+#--enable-libfontconfig - System font discovery for the drawtext filter.
 build_libfontconfig() {
   if [[ $disable_libfontconfig != 1 && $enable_libfontconfig == 1 ]]; then
 	activate_meson
@@ -1493,7 +1493,7 @@ EOF
 	fi
 }
 
-#     --enable-ladspa (LADSPA audio plugins) An API standard for audio plugins. not needed?
+#     --enable-ladspa (LADSPA audio plugins) An API standard for audio plugins.
 build_ladspa() {
   if [[ $disable_ladspa != 1 && $enable_ladspa == 1 ]]; then
   # TODO: LINUX --enable-ladspa
@@ -1508,7 +1508,7 @@ build_ladspa() {
 	fi
 }
 
-#     --enable-lv2 (LV2 audio plugins) An API standard for audio plugins for audio production. not needed?
+#     --enable-lv2 (LV2 audio plugins) An API standard for audio plugins for audio production.
 build_lv2() {
   if [[ $disable_lv2 != 1 && $enable_lv2 == 1 ]]; then
 		# https://github.com/lv2/lv2
@@ -1525,7 +1525,7 @@ build_lv2() {
 	fi
 }
 
-#     --enable-libcelt (CELT audio decoder) A legacy audio codec that has been superseded by Opus. not needed?
+#     --enable-libcelt (CELT audio decoder) A legacy audio codec that has been superseded by Opus.
 build_libcelt() {
   if [[ $disable_libcelt != 1 && $enable_libcelt == 1 ]]; then
     echo -e "The celt codec design and implementation have been merged into
@@ -1543,7 +1543,7 @@ We apologize for any inconvenience this has caused.
 	fi
 }
 
-#     --enable-libcdio (Audio CD grabbing) Library for CD-ROM and CD-image access. not needed?
+#     --enable-libcdio (Audio CD grabbing) Library for CD-ROM and CD-image access.
 build_libcdio() {
   if [[ $disable_libcdio != 1 && $enable_libcdio == 1 ]]; then
 		# https://github.com/libcdio/libcdio
@@ -1584,7 +1584,7 @@ build_libfdk_aac() {
 	fi
 }
 
-#     --enable-libjack (JACK audio server support). not needed?
+#     --enable-libjack (JACK audio server support).
 build_libjack() {
   if [[ $disable_libjack != 1 && $enable_libjack == 1 ]]; then
 		# TODO --enable-libjack - uses waf script. not sure how to set up yet
@@ -1592,7 +1592,7 @@ build_libjack() {
 		# https://github.com/jackaudio/jack2
 	fi
 }
-#     --enable-libpulse (PulseAudio support). not needed?
+#     --enable-libpulse (PulseAudio support).
 build_libpulse() {
   if [[ $disable_libpulse != 1 && $enable_libpulse == 1 ]]; then
 		# https://github.com/pulseaudio/pulseaudio
@@ -2099,7 +2099,7 @@ build_lcms2() {
 	fi
 }
 
-#     --enable-libglslang (For compiling GLSL to SPIR-V, used in GPU filters). not needed?
+#     --enable-libglslang (For compiling GLSL to SPIR-V, used in GPU filters).
 build_libglslang() {
   if [[ $disable_libglslang != 1 && $enable_libglslang == 1 ]]; then
   # https://github.com/KhronosGroup/SPIRV-Headers
@@ -2165,7 +2165,7 @@ EOF
 	fi
 }
 
-#     --enable-libklvanc (Kernel Labs VANC processing). not needed?
+#     --enable-libklvanc (Kernel Labs VANC processing).
 build_libklvanc() {
   if [[ $disable_libklvanc != 1 && $enable_libklvanc == 1 ]]; then
 	# https://github.com/stoth68000/libklvanc
@@ -2319,28 +2319,35 @@ build_libquirc() {
 	fi
 }
 
-# TODO --enable-librsvg (SVG image rendering). not needed?
+# --enable-librsvg (SVG image rendering).
 build_librsvg() {
+  build_pixman
+  build_cairo
+  build_pango
   if [[ $disable_librsvg != 1 && $enable_librsvg == 1 ]]; then
 # 	# https://github.com/GNOME/librsvg
 	local lib="librsvg"
-# 	activate_meson
-# 	change_dir "$src_dir"
-# 	do_git_checkout https://github.com/GNOME/librsvg "$lib"
-# 	change_dir "$src_dir/$lib"
-# 	local meson_options="-Ddefault_library=static \
-# -Ddocs=disabled \
-# -Dintrospection=disabled \
-# -Dvala=disabled \
-# -Dpixbuf-loader=disabled \
-# -Dtests=false \
-# -Dtriplet=x86_64-pc-windows-gnu"
-# 	meson_options+=" --cross-file=$(get_meson_cross_file)"
-# 	#export PATH="$HOME/.cargo/bin:$PATH"
-# 	do_meson "$meson_options" "setup build"
-# 	change_dir "$src_dir/$lib/build"
-# 	do_ninja_and_ninja_install
-# 	change_dir "$src_dir"
+	activate_meson
+	change_dir "$src_dir"
+	do_git_checkout https://github.com/GNOME/librsvg "$lib"
+	change_dir "$src_dir/$lib" 1
+	local meson_options="-Ddocs=disabled \
+-Dintrospection=disabled \
+-Dvala=disabled \
+-Davif=disabled \
+-Dpixbuf-loader=disabled \
+-Dtests=false \
+-Drsvg-convert=disabled \
+-Dtriplet=x86_64-pc-windows-gnu \
+-Dc_args=\"-DCAIRO_WIN32_STATIC_BUILD -DGLIB_STATIC_COMPILATION\" \
+-Dcpp_args=\"-DCAIRO_WIN32_STATIC_BUILD -DGLIB_STATIC_COMPILATION\" \
+-Dc_link_args=\"-lssp -lmsvcrt -lstdc++\" \
+-Dcpp_link_args=\"-lssp -lmsvcrt -lstdc++\""
+	meson_options+=" --cross-file=$(get_meson_cross_file)"
+	generic_meson "$meson_options"
+	change_dir "$src_dir/$lib/build" 1
+	do_meson "" "install"
+	change_dir "$src_dir"
 	fi
 }
 
@@ -2747,6 +2754,73 @@ build_libdvdnav() {
 #                        WINDOWS FFMPEG BUILD SECONDARY DEPENDENCIES
 #
 #===============================================================================================
+
+build_pango() {
+  if [[ $disable_librsvg != 1 && $enable_librsvg == 1 ]]; then
+  #build_harfbuzz
+  #build_freetype
+  #build_libfontconfig
+ 	# https://gitlab.gnome.org/GNOME/pango
+	local lib="pango"
+  activate_meson
+	change_dir "$src_dir"
+	do_git_checkout https://gitlab.gnome.org/GNOME/pango "$lib"
+	change_dir "$src_dir/$lib"
+  export PKG_CONFIG_PATH="$mingw_w64_x86_64_prefix/lib/pkgconfig"
+	local meson_options="-Ddocumentation=false \
+-Dgtk_doc=false \
+-Dman-pages=false \
+-Dbuild-testsuite=false \
+-Dbuild-examples=false \
+-Dintrospection=disabled \
+-Dxft=disabled \
+-Dc_args=\"-DCAIRO_WIN32_STATIC_BUILD -DGLIB_STATIC_COMPILATION\" \
+-Dcpp_args=\"-DCAIRO_WIN32_STATIC_BUILD -DGLIB_STATIC_COMPILATION\" \
+-Dc_link_args=\"-lssp -lmsvcrt\" \
+-Dcpp_link_args=\"-lssp -lmsvcrt\""
+  # disable tools - not needed for ffmpeg
+  sed -i "s/subdir('utils')/# subdir('utils')/g" meson.build
+	meson_options+=" --cross-file=$(get_meson_cross_file) --libdir=$mingw_w64_x86_64_prefix/lib"
+	generic_meson "$meson_options"
+	change_dir "$src_dir/$lib/build" 1
+	do_meson "" "install"
+	change_dir "$src_dir"
+	fi
+}
+
+build_pixman() {
+  if [[ $disable_librsvg != 1 && $enable_librsvg == 1 ]]; then
+ 	# https://gitlab.freedesktop.org/pixman/pixman
+	local lib="pixman"
+  activate_meson
+	change_dir "$src_dir"
+	do_git_checkout https://gitlab.freedesktop.org/pixman/pixman "$lib"
+	change_dir "$src_dir/$lib"
+	local meson_options="-Dtests=disabled -Ddemos=disabled"
+	meson_options+=" --cross-file=$(get_meson_cross_file)"
+	generic_meson "$meson_options"
+	change_dir "$src_dir/$lib/build" 1
+	do_meson "" "install"
+	change_dir "$src_dir"
+	fi
+}
+
+build_cairo() {
+  if [[ $disable_librsvg != 1 && $enable_librsvg == 1 ]]; then
+ 	# https://gitlab.freedesktop.org/cairo/cairo
+	local lib="cairo"
+  activate_meson
+	change_dir "$src_dir"
+	do_git_checkout https://gitlab.freedesktop.org/cairo/cairo "$lib"
+	change_dir "$src_dir/$lib"
+	local meson_options="-Dtests=disabled -Dgtk_doc=false"
+	meson_options+=" --cross-file=$(get_meson_cross_file)"
+	generic_meson "$meson_options"
+	change_dir "$src_dir/$lib/build" 1
+	do_meson "" "install"
+	change_dir "$src_dir"
+	fi
+}
 
 build_libgpg_error() {
   # https://github.com/gpg/libgpg-error
