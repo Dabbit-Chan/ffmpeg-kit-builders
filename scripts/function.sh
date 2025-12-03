@@ -3221,7 +3221,43 @@ confirm_libgcc_eh() {
         cp "$file" "${file%/*}/libgcc_eh.a" && echo "Created: ${file%/*}/libgcc_eh.a"
     done < <(find "$search_dir" -name "libgcc.a" -type f -print0 2>/dev/null)
 }
-
+# 1. configure_options
+# 2. configure_name
+# 2. configure_env
+# 4. touch_postfix
+do_python() {
+	local configure_options="$1"
+	local configure_name=$2
+	local configure_env="$3"
+	local touch_postfix=""
+	[[ -n $4 ]] && touch_postfix="_$4"
+	if [[ -z "${configure_name[*]}" ]]; then
+		configure_name=("./waf" "configure -v")
+	fi
+  if [[ "${configure_name[*]}" == *"waf"* ]]; then
+    [[ -d "waflib" ]] && remove_path -rf waflib
+    echo -e "DEBUG: updating waf to latest version..."
+    wget https://waf.io/waf-2.1.9 -O waf > >(redirect_output) 2>&1
+    chmod +x waf
+  fi
+  # shellcheck disable=SC2206,SC2128
+  configure_command=(python ${configure_name[*]})
+	local cur_dir2=$(pwd)
+	local english_name=$(basename "$cur_dir2")
+	local touch_name=$(get_small_touchfile_name "already_built_python$touch_postfix" "$configure_options ${configure_command[*]} $LDFLAGS $CFLAGS")
+	if [[ $BUILD_FORCE == "1" ]]; then
+		remove_path -f "already_built_python$touch_postfix"*
+	fi
+	if [ ! -f "$touch_name" ]; then
+		remove_path -f already_* # reset
+		echo -e "INFO: Using python: $english_name ($PWD) as PATH=$PATH ${configure_env}\n ${configure_command[*]} $configure_options" >>"$LOG_FILE"
+		# shellcheck disable=SC1078,SC2086
+		eval "${configure_command[*]} $configure_options" > >(redirect_output) 2>&1 || exit_message 1 "could not run configure ${configure_command[*]}"
+		create_touch_file 0 "$touch_name"
+	else
+		echo -e "INFO: Already used python $(basename "$cur_dir2")" >>"$LOG_FILE"
+	fi
+}
 # shellcheck disable=SC2086
 # 1. extra_build_args
 # 2. extra_install_args
@@ -3285,6 +3321,7 @@ do_cargo_install() {
 # 1. configure_options
 # 2. configure_name
 # 3. touch_postfix
+# shellcheck disable=2178,2128
 do_configure() {
 	local configure_options="$1"
 	local configure_name="$2"
@@ -3548,6 +3585,7 @@ activate_meson() {
 # 2. configure_name
 # 2. configure_env
 # 4. touch_postfix
+# shellcheck disable=2178
 do_meson() {
 	local configure_options="$1"
 	local configure_name="$2"
@@ -3555,7 +3593,7 @@ do_meson() {
 	local touch_postfix=""
 	[[ -n $4 ]] && touch_postfix="_$4"
 	local configure_noclean=""
-	if [[ "$configure_name" == "" || "$configure_name" == "setup build" ]]; then
+	if [[ -z "${configure_command[*]}" || "${configure_command[*]}" == "setup build" ]]; then
 		configure_name=("setup" "build")
 		configure_options+=" --unity=off --warnlevel=0"
 	fi

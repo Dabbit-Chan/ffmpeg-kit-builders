@@ -1586,12 +1586,67 @@ build_libfdk_aac() {
 	fi
 }
 
+build_tre() {
+  if [[ $disable_libjack != 1 && $enable_libjack == 1 ]]; then
+  # https://github.com/laurikari/tre
+    local lib="tre"
+    change_dir "$src_dir"
+    do_git_checkout https://github.com/laurikari/tre "$lib" "TRE 0.9.0" # meson build for fontconfig no good
+    change_dir "$src_dir/$lib"
+    if git apply --reverse --check --ignore-space-change --ignore-whitespace --verbose "$WINPATCHDIR/tre_tre-internal.diff" >/dev/null 2>&1; then
+      echo "INFO: Patch already applied. Skipping." >>"$LOG_FILE"
+    else
+      echo "INFO: Applying patch tre_tre-internal.diff..." >>"$LOG_FILE"
+      copy_path "lib/tre-internal.h" "lib/tre-internal.h.bak"
+      git apply --ignore-space-change --ignore-whitespace --verbose "$WINPATCHDIR/tre_tre-internal.diff" > >(redirect_output) 2>&1 || exit_message 1 "unable to patch makefile"
+    fi
+    generic_configure_make_install "--disable-nls"
+    change_dir "$src_dir"
+  fi
+}
+
+build_portaudio() {
+  if [[ $disable_libjack != 1 && $enable_libjack == 1 ]]; then
+  # https://github.com/PortAudio/portaudio
+    local lib="portaudio"
+    change_dir "$src_dir"
+    do_git_checkout https://github.com/PortAudio/portaudio "$lib" "v19.7.0" # meson build for fontconfig no good
+    change_dir "$src_dir/$lib"
+    if [[ ! -d "$src_dir/$lib/opt/asiosdk/common" ]]; then
+      download_and_unpack_file "https://download.steinberg.net/sdk_downloads/ASIO-SDK_2.3.4_2025-10-15.zip"
+      create_dir "opt"
+      mv -f "ASIOSDK" "opt/asiosdk"
+    fi 
+    generic_configure_make_install "--with-winapi=wmme,directx,wasapi,asio --with-asiodir=$src_dir/$lib/opt/asiosdk"
+    change_dir "$src_dir"
+  fi
+}
+
 #     --enable-libjack (JACK audio server support).
 build_libjack() {
   if [[ $disable_libjack != 1 && $enable_libjack == 1 ]]; then
-		# TODO --enable-libjack - uses waf script. not sure how to set up yet
-    echo "TODO --enable-libjack"
+    build_tre
+    build_portaudio
 		# https://github.com/jackaudio/jack2
+    local lib="libjack"
+    change_dir "$src_dir"
+    do_git_checkout https://github.com/jackaudio/jack2 "$lib" "v1.9.22" # meson build for fontconfig no good
+    change_dir "$src_dir/$lib"
+    export CC="${cross_prefix}gcc"
+    export CXX="${cross_prefix}g++"
+    export AR="${cross_prefix}ar"
+    export WINDRES="${cross_prefix}windres"
+    export STRIP="${cross_prefix}strip"
+    export CFLAGS="-static -O3 -I$mingw_w64_x86_64_prefix/include -L$mingw_w64_x86_64_prefix/lib"
+    export CXXFLAGS="-static -O3 -I$mingw_w64_x86_64_prefix/include -L$mingw_w64_x86_64_prefix/lib"
+    sed -i "/opt.load('xcode6')/d" wscript
+    sed -i "/conf.load('xcode6')/d" wscript
+    sed -i "s/type='str'/type=str/g" wscript
+    sed -i "s/type='int'/type=int/g" wscript
+    sed -i "s/Utils.unversioned_sys_platform()/'win32'/g" wscript
+    do_python '--prefix="$mingw_w64_x86_64_prefix" --platform="win32" --db="no" --check-c-compiler=gcc --check-cxx-compiler=g++'
+    do_python "" "./waf build -v"
+    do_python "" "./waf install -v"
 	fi
 }
 #     --enable-libpulse (PulseAudio support).
