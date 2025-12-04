@@ -1,7 +1,9 @@
 #!/bin/bash
 
+# shellcheck disable=SC2317,SC1091,SC1090,SC2120
+
 # SET BUILD FLAGS
-CROSS_FILE="${BASEDIR}"/prebuilt/src/"${LIB_NAME}"/package/crossfiles/$ARCH-$FFMPEG_KIT_BUILD_TYPE.meson
+CROSS_FILE="${BASEDIR}/prebuilt/src/${LIB_NAME}"/package/crossfiles/$ARCH-$target_platform.meson
 
 create_mason_cross_file "$CROSS_FILE" || return 1
 
@@ -19,7 +21,7 @@ meson "${BUILD_DIR}" \
 
 cd "${BUILD_DIR}" || return 1
 
-ninja -j$(get_cpu_count) || return 1
+ninja -j"$(get_cpu_count)" || return 1
 
 ninja install || return 1
 

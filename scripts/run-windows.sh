@@ -1881,8 +1881,8 @@ build_librabbitmq() {
 #     --enable-libsmbclient (Samba protocol for Windows file sharing)
 build_libsmbclient() {
   if [[ $disable_libsmbclient != 1 && $enable_libsmbclient == 1 ]]; then
-    if [[ $target_platform == "windows" ]]; then
-      echo "INFO: SMB support already built into $target_platform. Seperate library not needed." && return 0
+    if [[ $host_platform == "windows" ]]; then
+      echo "INFO: SMB support already built into $host_platform. Seperate library not needed." && return 0
     fi
 		# TODO NON-WINDOWS --enable-libsmbclient - Not needed for windows"
 	echo "TODO --enable-libsmbclient"
@@ -3177,16 +3177,16 @@ build_svt_vp9() {
 # Example: get_generic_cmake_toolchain "rabbitmq" CMAKE_C_FLAGS_INIT="-static -Wno-error"
 get_generic_cmake_toolchain() {
     local variant="$1"
-    local base_filename="$target_name-toolchain.cmake"
+    local base_filename="$host_name-toolchain.cmake"
     local base_filepath="$src_dir/$base_filename"
     shift
     # Determine filename based on variant presence
-    local toolchain_filename="$target_name-toolchain.cmake"
+    local toolchain_filename="$host_name-toolchain.cmake"
     if [[ -n "$variant" ]]; then
-      toolchain_filename="$target_name-toolchain-$variant.cmake"
+      toolchain_filename="$host_name-toolchain-$variant.cmake"
       local toolchain_path="$(pwd)/$toolchain_filename"
     else
-      toolchain_filename="$target_name-toolchain.cmake"
+      toolchain_filename="$host_name-toolchain.cmake"
       local toolchain_path="$src_dir/$toolchain_filename"
     fi
     # Only generate if it doesn't exist
@@ -3325,7 +3325,7 @@ echo "${src_dir}/jsoncpp/meson-cross-jsoncpp.mingw.txt"
 get_meson_cross_file() {
     local variant_name="$1"      # e.g., "librist"
     local extra_content="$2"     # e.g., "[built-in options]..."
-    local base_filename="$target_name-meson-cross.mingw.txt"
+    local base_filename="$host_name-meson-cross.mingw.txt"
     local base_filepath="$src_dir/$base_filename"
     # 1. Generate the BASE file if it doesn't exist (Standard Logic)
     if [[ ! -e "$base_filepath" ]]; then
@@ -3369,7 +3369,7 @@ EOF
     fi
     # 2. Handle Custom Variant logic
     if [[ -n "$variant_name" ]]; then
-        local custom_filepath="$(pwd)/$target_name-meson-cross.mingw.${variant_name}.txt"
+        local custom_filepath="$(pwd)/$host_name-meson-cross.mingw.${variant_name}.txt"
         # Always overwrite the variant with a fresh copy of the base
         cp "$base_filepath" "$custom_filepath" 2>"$LOG_FILE"
         # Append custom options if provided
@@ -3391,7 +3391,7 @@ get_local_meson_cross_with_propeties() {
 	if [[ -z $local_dir ]]; then
 		local_dir="."
 	fi
-	copy_path "$src_dir/$target_name-meson-cross.mingw.txt" "$local_dir"
+	copy_path "$src_dir/$host_name-meson-cross.mingw.txt" "$local_dir"
 	cat >>meson-cross.mingw.txt <<EOF
 EOF
 }
