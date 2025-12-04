@@ -16,8 +16,7 @@ export SCRIPTDIR="$BASEDIR/scripts"
 export WINPATCHDIR="$SCRIPTDIR/windows/patches"
 
 # variables with their defaults
-export BUILD_FORCE="0"
-export clean_builds=
+export build_force="0"
 export build_ffmpeg_static=n
 export build_ffmpeg_shared=y
 export build_ffmpeg_kit_only=n
@@ -33,14 +32,11 @@ export prefer_stable=y # Only for x264 and x265.
 export build_amd_amf=y
 export ffmpeg_git_checkout_version="release/8.0"
 export build_ismindex=n
-export GPL_ENABLED=y
+export enable_gpl=y
 export build_x264_with_libav=n # To build x264 with Libavformat.
 export ffmpeg_git_checkout="https://github.com/FFmpeg/FFmpeg.git"
-export ffmpeg_source_dir=
-export ffmpeg_install_prefix=
 export cpu_count=$(nproc)
 export original_cpu_count=$(nproc) # save it away for some that revert it temporarily
-export enable_nonfree=""
 export PKG_CONFIG_LIBDIR= # disable pkg-config from finding [and using] normal linux system installed libs [yikes]
 export original_path=$PATH
 

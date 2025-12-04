@@ -234,7 +234,7 @@ while [ $# -gt 0 ]; do
 		shift
 		;;
 	-f | --force)
-		export BUILD_FORCE="1"
+		export build_force="1"
 		shift
 		;;
   --host-platform=*|--host=*)
@@ -271,7 +271,7 @@ while [ $# -gt 0 ]; do
 		shift
 		;;
 	--enable-gpl=*)
-		export GPL_ENABLED="${1#*=}"
+		export enable_gpl="${1#*=}"
 		shift
 		;;
 	--build-dependencies=*)
