@@ -4,3 +4,5 @@
 *.lo
 /.libs/
 *.la
+aclocal.m4
+Makefile.in
