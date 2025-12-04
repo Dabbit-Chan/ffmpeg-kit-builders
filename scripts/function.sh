@@ -1018,16 +1018,55 @@ do_svn_checkout() {
 		else
 			svn checkout -r "$desired_revision" "$repo_url" "$to_dir".tmp > >(redirect_output) 2>&1 || exit_message 1 "could not checkout $desired_revision $repo_url"
 		fi
-		mv "$to_dir".tmp "$to_dir"
-    chmod -R a+rwx "$to_dir"
+		mv "$to_dir".tmp "$to_dir" 2>"$LOG_FILE"
+    chmod -R a+rwx "$to_dir" 2>"$LOG_FILE"
 	else
-    chmod -R a+rwx "$to_dir"
-		change_dir "$to_dir"
-		echo -e "INFO: not updating snv $to_dir since usually svn repo's aren't updated frequently enough..." >>"$LOG_FILE"
-		# XXX accomodate for desired revision here if I ever uncomment the next line...
-		# svn up
-		change_dir ..
+    if truthy "$build_force"; then
+      svn_hard_reset "$to_dir"
+		elif truthy "$git_get_latest"; then
+      echo -e "INFO: Fetching git instead" >>"$LOG_FILE"
+			svn update > >(redirect_output) 2>&1 # want this for later...
+		else
+      chmod -R a+rwx "$to_dir" 2>"$LOG_FILE"
+      change_dir "$to_dir"
+      change_dir ..
+    fi
 	fi
+}
+
+svn_hard_reset() {
+    # Get the absolute path of the target
+    local target_path
+    if command -v realpath >/dev/null 2>&1; then
+        target_path=$(realpath "$1" 2>/dev/null) || return
+    else
+        # Fallback for systems without realpath (like macOS)
+        target_path=$(cd -- "$1" && pwd 2>/dev/null) || return
+    fi
+    
+    [ -z "$target_path" ] && return
+    
+    # Get current directory
+    local current_path
+    current_path=$(pwd)
+    
+    # Only proceed if we're in the target directory
+    if [ "$current_path" = "$target_path" ]; then
+        # Ensure we're in a git repository
+        if svn info >/dev/null 2>&1; then
+            svn revert -R . > >(redirect_output) 2>&1                                  # Revert all tracked changes
+            svn status | grep '^?' | cut -c9- | xargs rm -rf  > >(redirect_output) 2>&1 # Remove untracked files
+            svn update  > >(redirect_output) 2>&1                                       # Get latest from repo
+        else
+            echo "ERROR: Not a git repository" >&2
+            return 1
+        fi
+    else
+        echo "ERROR: Current directory is not the target directory" >&2
+        echo "  Current: $current_path" >&2
+        echo "  Target:  $target_path" >&2
+        return 1
+    fi
 }
 
 get_valid_remote() {
@@ -1154,8 +1193,9 @@ do_git_checkout() {
 	if [ -d "$to_dir" ] && is_valid_git_dir "$to_dir"; then
     echo -e "INFO: Directory already exists $to_dir." >>"$LOG_FILE"
 		change_dir "$to_dir"
-    
-		if [[ $git_get_latest = "y" ]]; then
+    if truthy "$build_force"; then
+      git_hard_reset "$to_dir"
+		elif truthy "$git_get_latest"; then
       echo -e "INFO: Fetching git instead" >>"$LOG_FILE"
 			git fetch --quiet >>"$LOG_FILE" # want this for later...
 		else
@@ -1168,8 +1208,8 @@ do_git_checkout() {
     fi
 		echo -e "INFO: Downloading $repo_url $desired_branch into $to_dir" >>"$LOG_FILE"
 		retry_git_or_die "$repo_url" "$to_dir" "$desired_branch"
-    mv "$to_dir.tmp" "$to_dir"
-		chmod -R a+rwx "$to_dir"
+    mv "$to_dir.tmp" "$to_dir" 2>"$LOG_FILE"
+		chmod -R a+rwx "$to_dir" 2>"$LOG_FILE"
     change_dir "$to_dir"
 	fi
 }
@@ -1194,8 +1234,8 @@ git_hard_reset() {
     if [ "$current_path" = "$target_path" ]; then
         # Ensure we're in a git repository
         if git rev-parse --git-dir >/dev/null 2>&1; then
-            git reset --hard
-            git clean -fd
+            git reset --hard > >(redirect_output) 2>&1
+            git clean -fd > >(redirect_output) 2>&1
         else
             echo "ERROR: Not a git repository" >&2
             return 1
@@ -2545,6 +2585,64 @@ configure_ffmpeg() {
 	do_configure "$init_options$config_options$postpend_configure_opts" "./configure" "$(get_build_type)" || exit_message 1 "unable to configure ffmpeg. see $LOG_FILE for details."
 
 	echo -e "INFO: Done configuering ffmpeg" | tee -a "$LOG_FILE"
+}
+
+build_exists() {
+	shared_build_exists=0
+	static_build_exists=0
+
+	# Check shared build
+	local build_dir="$work_dir/$(get_ffmpeg_directory shared)" #ffmpeg_install_prefix
+	echo -e "INFO: Checking $build_dir" >>"$LOG_FILE"
+	if [[ -d "$build_dir" && -d "$build_dir/bin" ]]; then
+		echo -e "INFO: Checking binaries in $build_dir/bin..." >>"$LOG_FILE"
+		check_binaries=0
+		if find "$build_dir/bin" -maxdepth 1 -type f \( -name '*.a' -o -name '*.dll' -o -name '*.so' -o -name '*.dylib' -o -name '*.lib' -o -name '*.exe' \) -print -quit | grep -q .; then
+			check_binaries=1
+		fi
+		[[ $check_binaries -eq 1 ]] && shared_build_exists=1
+	fi
+	build_dir="$work_dir/$(get_ffmpeg_directory static)" #ffmpeg_install_prefix
+	echo -e "INFO: Checking $build_dir" >>"$LOG_FILE"
+	# Check static build
+	if [[ -d "$build_dir" && -d "$build_dir/bin" ]]; then
+		echo -e "INFO: Checking binaries in $build_dir/bin..." >>"$LOG_FILE"
+		check_binaries=0
+		if find "$build_dir/bin" -maxdepth 1 -type f \( -name '*.a' -o -name '*.dll' -o -name '*.so' -o -name '*.dylib' -o -name '*.lib' -o -name '*.exe' \) -print -quit | grep -q .; then
+			check_binaries=1
+		fi
+		[[ $check_binaries -eq 1 ]] && static_build_exists=1
+	fi
+
+	echo -e "INFO: Checking if build already exists..." | tee -a "$LOG_FILE"
+
+	if truthy "$build_ffmpeg_static"; then
+		echo -e "INFO: Static build requested..." | tee -a "$LOG_FILE"
+		if [[ $static_build_exists == 0 ]] || truthy "$build_force"; then
+			build_dir="$work_dir/$(get_ffmpeg_directory static)" #ffmpeg_install_prefix
+			echo -e "INFO: Static build does not exist or force requested. (Re-)configuring Ffmpeg for static build..." | tee -a "$LOG_FILE"
+			# shellcheck disable=SC2129
+			remove_path -rf "$build_dir" 
+			remove_path -f "${ffmpeg_source_dir}/already_"* 
+			return 1
+		else
+			echo -e "INFO: Static build already exists at $build_dir" | tee -a "$LOG_FILE"
+      return 0
+		fi
+	elif truthy "$build_ffmpeg_shared"; then
+		echo -e "INFO: Shared build requested..." | tee -a "$LOG_FILE"
+		if [[ $shared_build_exists == 0 ]] || truthy "$build_force"; then
+			build_dir="$work_dir/$(get_ffmpeg_directory shared)" #ffmpeg_install_prefix
+			echo -e "INFO: Shared build does not exist or force requested. (Re-)configuring Ffmpeg for shared build..." | tee -a "$LOG_FILE"
+			# shellcheck disable=SC2129
+			remove_path -rf "$build_dir" 
+			remove_path -f "${ffmpeg_source_dir}/already_"* 
+			return 1
+		else
+			echo -e "INFO: Shared build already exists at $build_dir" | tee -a "$LOG_FILE"
+      return 0
+		fi
+	fi
 }
 
 #endregion

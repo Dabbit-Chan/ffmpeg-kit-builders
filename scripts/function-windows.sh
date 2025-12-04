@@ -150,64 +150,7 @@ install_cross_compiler() {
 	echo -e "INFO: Done building (or already built) MinGW-w64 cross-compiler(s) successfully..." | tee -a "$LOG_FILE"
 }
 
-check_builds() {
-	shared_build_exists=0
-	static_build_exists=0
-
-	# Check shared build
-	local build_dir="$work_dir/$(get_ffmpeg_directory shared)" #ffmpeg_install_prefix
-	echo -e "INFO: Checking $build_dir" >>"$LOG_FILE"
-	if [[ -d "$build_dir" && -d "$build_dir/bin" ]]; then
-		echo -e "INFO: Checking binaries in $build_dir/bin..." >>"$LOG_FILE"
-		check_binaries=0
-		if find "$build_dir/bin" -maxdepth 1 -type f \( -name '*.a' -o -name '*.dll' -o -name '*.so' -o -name '*.dylib' -o -name '*.lib' -o -name '*.exe' \) -print -quit | grep -q .; then
-			check_binaries=1
-		fi
-		[[ $check_binaries -eq 1 ]] && shared_build_exists=1
-	fi
-	build_dir="$work_dir/$(get_ffmpeg_directory static)" #ffmpeg_install_prefix
-	echo -e "INFO: Checking $build_dir" >>"$LOG_FILE"
-	# Check static build
-	if [[ -d "$build_dir" && -d "$build_dir/bin" ]]; then
-		echo -e "INFO: Checking binaries in $build_dir/bin..." >>"$LOG_FILE"
-		check_binaries=0
-		if find "$build_dir/bin" -maxdepth 1 -type f \( -name '*.a' -o -name '*.dll' -o -name '*.so' -o -name '*.dylib' -o -name '*.lib' -o -name '*.exe' \) -print -quit | grep -q .; then
-			check_binaries=1
-		fi
-		[[ $check_binaries -eq 1 ]] && static_build_exists=1
-	fi
-
-	echo -e "INFO: Checking if build already exists..." | tee -a "$LOG_FILE"
-
-	if truthy "$build_ffmpeg_static"; then
-		echo -e "INFO: Static build requested..." | tee -a "$LOG_FILE"
-		if [[ $static_build_exists == 0 || "$build_force" -eq 1 ]]; then
-			build_dir="$work_dir/$(get_ffmpeg_directory static)" #ffmpeg_install_prefix
-			echo -e "INFO: Static build does not exist or force requested. (Re-)configuring Ffmpeg for static build..." | tee -a "$LOG_FILE"
-			# shellcheck disable=SC2129
-			remove_path -rf "$build_dir" 
-			remove_path -f "${ffmpeg_source_dir}/already_"* 
-			configure_ffmpeg 
-		else
-			echo -e "INFO: Static build already exists at $build_dir" | tee -a "$LOG_FILE"
-		fi
-	elif truthy "$build_ffmpeg_shared"; then
-		echo -e "INFO: Shared build requested..." | tee -a "$LOG_FILE"
-		if [[ $shared_build_exists == 0 || "$build_force" -eq 1 ]]; then
-			build_dir="$work_dir/$(get_ffmpeg_directory shared)" #ffmpeg_install_prefix
-			echo -e "INFO: Shared build does not exist or force requested. (Re-)configuring Ffmpeg for shared build..." | tee -a "$LOG_FILE"
-			# shellcheck disable=SC2129
-			remove_path -rf "$build_dir" 
-			remove_path -f "${ffmpeg_source_dir}/already_"* 
-			configure_ffmpeg
-		else
-			echo -e "INFO: Shared build already exists at $build_dir" | tee -a "$LOG_FILE"
-		fi
-	fi
-}
-
 install_ffmpeg() {
-	check_builds
 	echo -e "INFO: Installing ffmpeg if not installed" | tee -a "$LOG_FILE"
 	change_dir "$ffmpeg_source_dir"
 

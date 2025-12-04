@@ -48,6 +48,7 @@ else
 		echo -e "INFO: Building ffmpeg only..." | tee -a "$LOG_FILE"
 		echo -e "WARNING: This may fail if previous dependencies havent been built yet." | tee -a "$LOG_FILE"
 		download_ffmpeg
+    build_exists || configure_ffmpeg
 		install_ffmpeg
 	elif truthy "$build_ffmpeg_kit_only"; then
 		echo -e "INFO: Building ffmpeg-kit only..." | tee -a "$LOG_FILE"
@@ -57,11 +58,12 @@ else
 		create_windows_bundle
 	else
 		echo -e "INFO: Building all..." | tee -a "$LOG_FILE"
-		build_all_ffmpeg_dependencies 
-		download_ffmpeg               
-		install_ffmpeg                
-		configure_ffmpeg_kit          
-		install_ffmpeg_kit            
+		build_all_ffmpeg_dependencies
+		download_ffmpeg
+    build_exists || configure_ffmpeg
+		install_ffmpeg
+		configure_ffmpeg_kit
+		install_ffmpeg_kit
 		create_windows_bundle
 	fi
 fi
