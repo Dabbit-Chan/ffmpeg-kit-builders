@@ -412,7 +412,7 @@ CXX=${cross_prefix}g++"
 setup_linux_environment() {
     export host_target="$host_arch-$host_platform-gnu"
     export dependency_install_prefix="$work_dir/libraries"
-    export PKG_CONFIG_PATH="$PKG_CONFIG_PATH:$dependency_install_prefix/lib/pkgconfig:$dependency_install_prefix/lib/$host_target/pkgconfig:$work_dir/pkgconfig"
+    export PKG_CONFIG_PATH="$PKG_CONFIG_PATH:$dependency_install_prefix/share/pkgconfig:$dependency_install_prefix/lib/pkgconfig:$dependency_install_prefix/lib/$host_target/pkgconfig:$work_dir/pkgconfig"
     export PATH="$ffmpeg_install_prefix:$dependency_install_prefix:$original_path"
 }
 
@@ -844,9 +844,9 @@ check_missing_packages() {
 		# In RHEL this should always be set anyway. But not so sure about CentOS
 		VENDOR="redhat"
 	fi
-  # apt install autoconf-archive autoconf autogen automake autopoint bc bison bzip2 cargo clang cmake coreutils curl cvs ed ed flex g++ gcc gettext git gperf help2man libtool libtool-bin make meson nasm p7zip-full patch pax pkg-config python3 python3-setuptools python3-venv ragel subversion unzip wget xz-utils yasm zlib1g-dev libglib2.0-dev libglib2.0-dev-bin sudo apt install binutils llvm lld
+  # apt install autoconf-archive autoconf autogen automake autopoint bc bison bzip2 cargo clang cmake coreutils curl cvs ed ed flex g++ gcc gettext git gperf help2man libtool libtool-bin make meson nasm p7zip-full patch pax pkg-config python3 python3-setuptools python3-venv ragel subversion unzip wget xz-utils yasm zlib1g-dev libglib2.0-dev libglib2.0-dev-bin sudo apt install binutils llvm lld xutils-dev
 	# zeranoe's build scripts use wget, though we don't here...
-	local check_packages=('ragel' 'curl' 'pkg-config' 'make' 'git' 'svn' 'gcc' 'autoconf' 'automake' 'yasm' 'cvs' 'flex' 'bison' 'makeinfo' 'g++' 'ed' 'pax' 'unzip' 'patch' 'wget' 'xz' 'nasm' 'gperf' 'autogen' 'bzip2' 'realpath' 'clang' 'python3' 'python3-venv' 'bc' 'autopoint' 'zstd' 'glib-mkenums' 'ld' 'ld.lld')
+	local check_packages=('ragel' 'curl' 'pkg-config' 'make' 'git' 'svn' 'gcc' 'autoconf' 'automake' 'yasm' 'cvs' 'flex' 'bison' 'makeinfo' 'g++' 'ed' 'pax' 'unzip' 'patch' 'wget' 'xz' 'nasm' 'gperf' 'autogen' 'bzip2' 'realpath' 'clang' 'python3' 'python3-venv' 'bc' 'autopoint' 'zstd' 'glib-mkenums' 'ld' 'ld.lld' 'xutils-dev')
 	# autoconf-archive is just for leptonica FWIW
 	# I'm not actually sure if VENDOR being set to centos is a thing or not. On all the centos boxes I can test on it's not been set at all.
 	# that being said, if it where set I would imagine it would be set to centos... And this contition will satisfy the "Is not initially set"
@@ -858,11 +858,7 @@ check_missing_packages() {
 	check_packages+=('libtoolize') # the rest of the world
 	# Use hash to check if the packages exist or not. Type is a bash builtin which I'm told behaves differently between different versions of bash.
 	for package in "${check_packages[@]}"; do
-    if [[ $package == "python3-venv" ]]; then
-      dpkg -s python3-venv >/dev/null 2>&1 || missing_packages=("$package" "${missing_packages[@]}")
-    else
-		  hash "$package" &>/dev/null || missing_packages=("$package" "${missing_packages[@]}")
-    fi
+		  hash "$package" &>/dev/null || dpkg -s "$package" &>/dev/null || missing_packages=("$package" "${missing_packages[@]}")
 	done
 	if [ "${VENDOR}" = "redhat" ] || [ "${VENDOR}" = "centos" ]; then
 		if [ -n "$(hash cmake 2>&1)" ] && [ -n "$(hash cmake3 2>&1)" ]; then missing_packages=('cmake' "${missing_packages[@]}"); fi
@@ -1457,7 +1453,7 @@ do_configure() {
 		fi
 		if [[ ! -f $configure_name ]]; then
 			echo -e "INFO: running autoreconf to generate configure file for us..." >>"$LOG_FILE"
-			autoreconf -fiv > >(redirect_output) 2>&1 # a handful of them require this to create ./configure :|
+			autoreconf_library # a handful of them require this to create ./configure :|
 		fi
 		remove_path -f "$cur_dir2/already_"*    # reset
 		chmod -R a+rwx "$configure_name" # In non-windows environments, with devcontainers, the configuration file doesn't have execution permissions
@@ -1635,15 +1631,28 @@ do_cmake() {
 		else
 			local config_options+="-DCMAKE_SYSTEM_PROCESSOR=AMD64"
 		fi
+    if [[ $host_platform == "windows" ]]; then
+      extra_args+=" -DENABLE_STATIC_RUNTIME=1 \
+-DCMAKE_SYSTEM_NAME=Windows \
+-DCMAKE_RANLIB=${cross_prefix}ranlib \
+-DCMAKE_C_COMPILER=${cross_prefix}gcc \
+-DCMAKE_CXX_COMPILER=${cross_prefix}g++ \
+-DCMAKE_RC_COMPILER=${cross_prefix}windres"
+    fi
 		# TODO: Allow shared library build
-		local command="${build_from_dir} -DCMAKE_MESSAGE_LOG_LEVEL=ERROR -DENABLE_STATIC_RUNTIME=1 -DCMAKE_SYSTEM_NAME=Windows -DCMAKE_FIND_ROOT_PATH=$dependency_install_prefix -DCMAKE_FIND_ROOT_PATH_MODE_PROGRAM=NEVER -DCMAKE_FIND_ROOT_PATH_MODE_LIBRARY=ONLY -DCMAKE_FIND_ROOT_PATH_MODE_INCLUDE=ONLY -DCMAKE_RANLIB=${cross_prefix}ranlib -DCMAKE_C_COMPILER=${cross_prefix}gcc -DCMAKE_CXX_COMPILER=${cross_prefix}g++ -DCMAKE_RC_COMPILER=${cross_prefix}windres -DCMAKE_INSTALL_PREFIX=$dependency_install_prefix $config_options"
+		local command="${build_from_dir} -DCMAKE_MESSAGE_LOG_LEVEL=ERROR \
+-DCMAKE_FIND_ROOT_PATH=$dependency_install_prefix \
+-DCMAKE_FIND_ROOT_PATH_MODE_PROGRAM=NEVER \
+-DCMAKE_FIND_ROOT_PATH_MODE_LIBRARY=ONLY \
+-DCMAKE_FIND_ROOT_PATH_MODE_INCLUDE=ONLY \
+-DCMAKE_INSTALL_PREFIX=$dependency_install_prefix $config_options"
 		if [[ $extra_args != *"-DBUILD_STATIC_LIBS="* && $extra_args != *"-DBUILD_SHARED_LIBS="* && $extra_args != *"-DENABLE_SHARED="* && $extra_args != *"-DENABLE_STATIC="* ]]; then
 			command+=" -DBUILD_SHARED_LIBS=0"
 		fi
 		command+=" $extra_args"
 		echo -e "INFO: do_cmake() nice running: \"${cmake_command} -G\"Unix Makefiles\" $command\"" >>"$LOG_FILE"
 		# shellcheck disable=SC2086
-		nice -n 5  ${cmake_command} -G"Unix Makefiles" $command > >(redirect_output) 2>&1 || exit_message 1 "could not run nice: \"${cmake_command} -G\"Unix Makefiles\" $command\""
+		eval "nice -n 5  ${cmake_command} -G\"Unix Makefiles\" $command" > >(redirect_output) 2>&1 || exit_message 1 "could not run nice: \"${cmake_command} -G\"Unix Makefiles\" $command\""
 		create_touch_file 1 "$touch_name"
 	fi
 }
@@ -2271,7 +2280,7 @@ build_all_ffmpeg_dependencies() {
 	if [[ -z "$start_from" ]]; then
 		skip_mode=false
 	else
-		echo -e "INFO: Starting from step: $start_from\n" | tee -a "$LOG_FILE"
+		echo -e "INFO: Starting from step: $start_from" | tee -a "$LOG_FILE"
 		skip_mode=true
 	fi
 
@@ -2283,7 +2292,7 @@ build_all_ffmpeg_dependencies() {
 		if [[ "$skip_mode" == true ]]; then
 			if [[ "$step_name" == "$start_from" ]]; then
 				skip_mode=false
-				echo -e "INFO: Building dependencies from: $step_name\n" | tee -a "$LOG_FILE"
+				echo -e "INFO: Building dependencies from: $step_name" | tee -a "$LOG_FILE"
 			else
 				((current_step++))
 				continue
@@ -2302,14 +2311,17 @@ build_ffmpeg_dependency_only() {
 	if [[ -n "$step" ]]; then
 		change_dir "$src_dir"
 		if declare -F "$step" >/dev/null; then
-			echo -e "INFO: --- Executing step: $step ---\n" | tee -a "$LOG_FILE"
+			echo -e "INFO: --- Executing step: $step ---" | tee -a "$LOG_FILE"
 			"$step" # Execute the function
-			echo -e "INFO: --- Finished executing step: $step ---\n" | tee -a "$LOG_FILE"
+      echo | tee -a "$LOG_FILE"
+			echo -e "INFO: --- Finished executing step: $step ---" | tee -a "$LOG_FILE"
 		else
+      echo | tee -a "$LOG_FILE"
 			echo -e "ERROR: Function '$step' not found." | tee -a "$LOG_FILE"
 			return 1 # Indicate an error
 		fi
 	else
+    echo | tee -a "$LOG_FILE"
 		echo -e "ERROR: Step argument is missing." | tee -a "$LOG_FILE"
 		return 1 # Indicate an error
 	fi
