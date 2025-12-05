@@ -28,33 +28,6 @@ set_toolchain_paths() {
 	export CXX="$(realpath "${cross_prefix}g++")"
 }
 
-install_pkg_config_file() {
-	local FILE_NAME="$1"
-	local SOURCE="${INSTALL_PKG_CONFIG_DIR}/${FILE_NAME}"
-	local DESTINATION="${FFMPEG_KIT_BUNDLE_PKG_CONFIG_DIRECTORY}/${FILE_NAME}"
-
-	# DELETE OLD FILE
-	if ! remove_path -rf "$DESTINATION" >>"$LOG_FILE"; then
-		exit_message 1 "DEBUG: failed\n\nSee $LOG_FILE for details"
-	fi
-
-	# INSTALL THE NEW FILE
-	if ! copy_path "$SOURCE" "$DESTINATION" >>"$LOG_FILE"; then
-		exit_message 1 "DEBUG: failed\n\nSee $LOG_FILE for details"
-	fi
-
-	prepare_inline_sed
-	# UPDATE PATHS
-	${SED_INLINE} "s|${ffmpeg_kit_install}|${ffmpeg_kit_bundle}|g" "$DESTINATION" || return 1
-	${SED_INLINE} "s|${ffmpeg_source_dir}|${ffmpeg_kit_bundle}|g" "$DESTINATION" || return 1
-}
-
-get_ffmpeg_kit_version() {
-	local FFMPEG_KIT_VERSION=$(grep -Eo 'FFmpegKitVersion = .*' "$ffmpeg_kit_src_dir/src/FFmpegKitConfig.h" | tee -a "$LOG_FILE" | grep -Eo ' \".*' | tr -d '"; ')
-
-	echo -e "${FFMPEG_KIT_VERSION}"
-}
-
 check_cross_compiler_bin() {
 	local gcc_bin="$toolchain_bin_path/$host_target-gcc"
 	if [[ -f $gcc_bin ]]; then
@@ -150,97 +123,13 @@ install_cross_compiler() {
 	echo -e "INFO: Done building (or already built) MinGW-w64 cross-compiler(s) successfully..." | tee -a "$LOG_FILE"
 }
 
-install_ffmpeg() {
-	echo -e "INFO: Installing ffmpeg if not installed" | tee -a "$LOG_FILE"
-	change_dir "$ffmpeg_source_dir"
-
-	echo -e "INFO: Making Ffmpeg $(pwd)" | tee -a "$LOG_FILE"
-
-	create_dir "$ffmpeg_install_prefix"
-
-	do_make_and_make_install "" "" "$(get_build_type)"
-
-	echo -e "INFO: Moving all binaries" | tee -a "$LOG_FILE"
-
-	{	
-    shopt -s nullglob
-    mv -- */*.a */*.dylib */*.lib */*.dll *.exe *.so "${ffmpeg_install_prefix}/bin" 2>/dev/null || true
-	} >>"$LOG_FILE"
-
-	echo -e "INFO: Done installing ffmpeg" | tee -a "$LOG_FILE"
-
-	install_ffmpeg_pkg
-}
-
-install_ffmpeg_pkg() {
-	echo -e "INFO: Checking deployment files..." | tee -a "$LOG_FILE"
-
-	required_files=(
-		"${ffmpeg_install_prefix}/lib/pkgconfig/libavformat.pc"
-		"${ffmpeg_install_prefix}/lib/pkgconfig/libswresample.pc"
-		"${ffmpeg_install_prefix}/lib/pkgconfig/libswscale.pc"
-		"${ffmpeg_install_prefix}/lib/pkgconfig/libavdevice.pc"
-		"${ffmpeg_install_prefix}/lib/pkgconfig/libavfilter.pc"
-		"${ffmpeg_install_prefix}/lib/pkgconfig/libavcodec.pc"
-		"${ffmpeg_install_prefix}/lib/pkgconfig/libavutil.pc")
-
-	check_files_exist "false" "${required_files[@]}"
-
-	echo -e "INFO: Done checking deployment files." | tee -a "$LOG_FILE"
-
-	echo -e "INFO: Installing ffmpeg pkg-config" | tee -a "$LOG_FILE"
-
-	create_dir "$INSTALL_PKG_CONFIG_DIR"
-
-	# MANUALLY COPY PKG-CONFIG FILES
-	overwrite_file "${ffmpeg_install_prefix}"/lib/pkgconfig/libavformat.pc "${INSTALL_PKG_CONFIG_DIR}/libavformat.pc" || return 1
-	overwrite_file "${ffmpeg_install_prefix}"/lib/pkgconfig/libswresample.pc "${INSTALL_PKG_CONFIG_DIR}/libswresample.pc" || return 1
-	overwrite_file "${ffmpeg_install_prefix}"/lib/pkgconfig/libswscale.pc "${INSTALL_PKG_CONFIG_DIR}/libswscale.pc" || return 1
-	overwrite_file "${ffmpeg_install_prefix}"/lib/pkgconfig/libavdevice.pc "${INSTALL_PKG_CONFIG_DIR}/libavdevice.pc" || return 1
-	overwrite_file "${ffmpeg_install_prefix}"/lib/pkgconfig/libavfilter.pc "${INSTALL_PKG_CONFIG_DIR}/libavfilter.pc" || return 1
-	overwrite_file "${ffmpeg_install_prefix}"/lib/pkgconfig/libavcodec.pc "${INSTALL_PKG_CONFIG_DIR}/libavcodec.pc" || return 1
-	overwrite_file "${ffmpeg_install_prefix}"/lib/pkgconfig/libavutil.pc "${INSTALL_PKG_CONFIG_DIR}/libavutil.pc" || return 1
-
-	# # MANUALLY ADD REQUIRED HEADERS
-	{
-		mkdir -p "${ffmpeg_install_prefix}"/include/libavutil/x86
-		mkdir -p "${ffmpeg_install_prefix}"/include/libavutil/arm
-		mkdir -p "${ffmpeg_install_prefix}"/include/libavutil/aarch64
-		mkdir -p "${ffmpeg_install_prefix}"/include/libavcodec/x86
-		mkdir -p "${ffmpeg_install_prefix}"/include/libavcodec/arm
-		overwrite_file "${ffmpeg_source_dir}"/config.h "${ffmpeg_install_prefix}"/include/config.h
-		overwrite_file "${ffmpeg_source_dir}"/libavcodec/mathops.h "${ffmpeg_install_prefix}"/include/libavcodec/mathops.h
-		overwrite_file "${ffmpeg_source_dir}"/libavcodec/x86/mathops.h "${ffmpeg_install_prefix}"/include/libavcodec/x86/mathops.h
-		overwrite_file "${ffmpeg_source_dir}"/libavcodec/arm/mathops.h "${ffmpeg_install_prefix}"/include/libavcodec/arm/mathops.h
-		overwrite_file "${ffmpeg_source_dir}"/libavformat/network.h "${ffmpeg_install_prefix}"/include/libavformat/network.h
-		overwrite_file "${ffmpeg_source_dir}"/libavformat/os_support.h "${ffmpeg_install_prefix}"/include/libavformat/os_support.h
-		overwrite_file "${ffmpeg_source_dir}"/libavformat/url.h "${ffmpeg_install_prefix}"/include/libavformat/url.h
-		overwrite_file "${ffmpeg_source_dir}"/libavutil/attributes_internal.h "${ffmpeg_install_prefix}"/include/libavutil/attributes_internal.h
-		overwrite_file "${ffmpeg_source_dir}"/libavutil/bprint.h "${ffmpeg_install_prefix}"/include/libavutil/bprint.h
-		overwrite_file "${ffmpeg_source_dir}"/libavutil/getenv_utf8.h "${ffmpeg_install_prefix}"/include/libavutil/getenv_utf8.h
-		overwrite_file "${ffmpeg_source_dir}"/libavutil/internal.h "${ffmpeg_install_prefix}"/include/libavutil/internal.h
-		overwrite_file "${ffmpeg_source_dir}"/libavutil/libm.h "${ffmpeg_install_prefix}"/include/libavutil/libm.h
-		overwrite_file "${ffmpeg_source_dir}"/libavutil/reverse.h "${ffmpeg_install_prefix}"/include/libavutil/reverse.h
-		overwrite_file "${ffmpeg_source_dir}"/libavutil/thread.h "${ffmpeg_install_prefix}"/include/libavutil/thread.h
-		overwrite_file "${ffmpeg_source_dir}"/libavutil/timer.h "${ffmpeg_install_prefix}"/include/libavutil/timer.h
-		overwrite_file "${ffmpeg_source_dir}"/libavutil/x86/asm.h "${ffmpeg_install_prefix}"/include/libavutil/x86/asm.h
-		overwrite_file "${ffmpeg_source_dir}"/libavutil/x86/timer.h "${ffmpeg_install_prefix}"/include/libavutil/x86/timer.h
-		overwrite_file "${ffmpeg_source_dir}"/libavutil/arm/timer.h "${ffmpeg_install_prefix}"/include/libavutil/arm/timer.h
-		overwrite_file "${ffmpeg_source_dir}"/libavutil/aarch64/timer.h "${ffmpeg_install_prefix}"/include/libavutil/aarch64/timer.h
-		overwrite_file "${ffmpeg_source_dir}"/compat/w32pthreads.h "${ffmpeg_install_prefix}"/include/libavutil/compat/w32pthreads.h
-		overwrite_file "${ffmpeg_source_dir}"/libavutil/wchar_filename.h "${ffmpeg_install_prefix}"/include/libavutil/wchar_filename.h
-	} >>"$LOG_FILE"
-
-	echo -e "INFO: Done installing ffmpeg pkg-config" | tee -a "$LOG_FILE"
-}
-
 configure_ffmpeg_kit() {
 	echo -e "INFO: Configuring ffmpeg kit" | tee -a "$LOG_FILE"
 	local TYPE_POSTFIX="$(get_build_type)"
 	local FFMPEG_KIT_VERSION=$(get_ffmpeg_kit_version)
 
 	if truthy "$build_force"; then
-		remove_path -rf "${BASEDIR}"/windows/already_configured_*
+		remove_path -rf "$ffmpeg_kit_src_dir"/already_configured_*
 		remove_path -rf "$ffmpeg_kit_install"
 	fi
 
@@ -248,18 +137,18 @@ configure_ffmpeg_kit() {
 
 	export PKG_CONFIG_PATH="${PKG_CONFIG_PATH}:${ffmpeg_install_prefix}/lib/pkgconfig"
 	set_toolchain_paths
-
+  
 	reset_cflags
 	reset_cppflags
-	local local_cflags="${CFLAGS} -I${ffmpeg_install_prefix}/include -L${ffmpeg_install_prefix}/bin -L${ffmpeg_install_prefix}/lib -I${ffmpeg_source_dir} -I${ffmpeg_source_dir}/compat -DHAVE_W32PTHREADS_H=1"
-	local local_cxxfalgs="${CXXFLAGS} -I${ffmpeg_install_prefix}/include -L${ffmpeg_install_prefix}/bin -L${ffmpeg_install_prefix}/lib -I${ffmpeg_source_dir} -I${ffmpeg_source_dir}/compat"
+	local local_cflags="${CFLAGS} -I${ffmpeg_install_prefix}/include -L${ffmpeg_install_prefix}/lib -I${ffmpeg_source_dir} -I${ffmpeg_source_dir}/compat -DHAVE_W32PTHREADS_H=1"
+	local local_cxxfalgs="${CXXFLAGS} -I${ffmpeg_install_prefix}/include -L${ffmpeg_install_prefix}/lib -I${ffmpeg_source_dir} -I${ffmpeg_source_dir}/compat"
 
 	change_dir "${ffmpeg_kit_src_dir}"
 	make distclean > >(redirect_output) 2>&1
 
 	local touch_name=$(get_small_touchfile_name "already_autoreconf_${TYPE_POSTFIX}" "$FFMPEG_KIT_VERSION $local_cflags $local_cxxfalgs")
 	if [ ! -f "$touch_name" ]; then
-		remove_path -f "${BASEDIR}/windows/already_autoreconf_${TYPE_POSTFIX}"*
+		remove_path -f "${ffmpeg_kit_src_dir}/already_autoreconf_${TYPE_POSTFIX}"*
 		change_dir "${ffmpeg_kit_src_dir}"
 		autoreconf_library "ffmpeg-kit" || exit_message 1 "could not autoreconf ffmpeg-kit. See $LOG_FILE for details."
 		create_touch_file 0 "$touch_name"
@@ -287,7 +176,7 @@ configure_ffmpeg_kit() {
 create_ffmpegkit_package_config() {
 	local FFMPEGKIT_VERSION="$1"
 
-	cat >"${INSTALL_PKG_CONFIG_DIR}/ffmpeg-kit.pc" <<EOF
+	cat >"${install_pkgconfig_dir}/ffmpeg-kit.pc" <<EOF
 prefix=${ffmpeg_kit_install}
 libdir=\${exec_prefix}/lib
 includedir=\${prefix}/include
@@ -308,83 +197,4 @@ Libs.private: -lstdc++ -lws2_32 -lpsapi -lole32 -lshlwapi -lgdi32 -lbcrypt -luse
 # Compiler flags for the ffmpeg-kit headers (includes jsoncpp headers if bundled)
 Cflags: -I\${includedir}
 EOF
-}
-
-install_ffmpeg_kit() {
-	echo -e "INFO: Installing ffmpeg kit to ${ffmpeg_kit_install}" | tee -a "$LOG_FILE"
-
-	change_dir "${ffmpeg_kit_src_dir}"
-	do_make_and_make_install "" "" "$(get_build_type)" || exit_message 1 "unable to make ffmpeg-kit. see $LOG_FILE for details."
-
-	create_ffmpegkit_package_config "$(get_ffmpeg_kit_version)" || return 1
-
-	echo -e "INFO: Done installing ffmpeg kit to ${ffmpeg_kit_install}" | tee -a "$LOG_FILE"
-}
-
-get_bundle_directory() {
-	local LTS_POSTFIX=""
-	if [[ -n ${FFMPEG_KIT_LTS_BUILD} ]]; then
-		LTS_POSTFIX="-lts"
-	fi
-	local TYPE_POSTFIX="$(get_build_type)"
-	echo -e "bundle-${host_name}-${TYPE_POSTFIX}${LTS_POSTFIX}"
-}
-
-create_windows_bundle() {
-	echo -e "INFO: Creating bundle" | tee -a "$LOG_FILE"
-	local TYPE_POSTFIX="$(get_build_type)"
-	local FFMPEG_KIT_VERSION=$(get_ffmpeg_kit_version)
-
-	if [[ $build_force == "1" ]]; then
-		remove_path -rf "${BASEDIR}/windows/already_bundled_${TYPE_POSTFIX}"*
-	fi
-
-	local touch_name=$(get_small_touchfile_name "already_bundled_${TYPE_POSTFIX}" "$FFMPEG_KIT_VERSION $ffmpeg_kit_bundle")
-	if [ ! -f "$touch_name" ]; then
-		export FFMPEG_KIT_BUNDLE_INCLUDE_DIRECTORY="${ffmpeg_kit_bundle}/include"
-		export FFMPEG_KIT_BUNDLE_LIB_DIRECTORY="${ffmpeg_kit_bundle}/lib"
-		export FFMPEG_KIT_BUNDLE_BIN_DIRECTORY="${ffmpeg_kit_bundle}/bin"
-		export FFMPEG_KIT_BUNDLE_PKG_CONFIG_DIRECTORY="${ffmpeg_kit_bundle}/pkgconfig"
-		remove_path "-rf" "${ffmpeg_kit_bundle}"
-		create_dir "${ffmpeg_kit_bundle}"
-		create_dir "${FFMPEG_KIT_BUNDLE_INCLUDE_DIRECTORY}"
-		create_dir "${FFMPEG_KIT_BUNDLE_LIB_DIRECTORY}"
-		create_dir "${FFMPEG_KIT_BUNDLE_BIN_DIRECTORY}"
-		create_dir "${FFMPEG_KIT_BUNDLE_PKG_CONFIG_DIRECTORY}"
-		{
-			# COPY HEADERS
-			cp -rP "${ffmpeg_kit_install}/include/"* "${FFMPEG_KIT_BUNDLE_INCLUDE_DIRECTORY}"
-			cp -rP "${ffmpeg_install_prefix}/include/"* "${FFMPEG_KIT_BUNDLE_INCLUDE_DIRECTORY}"
-
-			# COPY LIBS
-			cp -rP "${ffmpeg_kit_install}/lib/"* "${FFMPEG_KIT_BUNDLE_LIB_DIRECTORY}"
-			cp -rP "${ffmpeg_install_prefix}/lib/"* "${FFMPEG_KIT_BUNDLE_LIB_DIRECTORY}"
-
-			# COPY BINARIES
-			cp -rP "${ffmpeg_kit_install}/bin/"* "${FFMPEG_KIT_BUNDLE_BIN_DIRECTORY}"
-			cp -rP "${ffmpeg_install_prefix}/bin/"* "${FFMPEG_KIT_BUNDLE_BIN_DIRECTORY}"
-		} >>"$LOG_FILE"
-
-		install_pkg_config_file "libavformat.pc"
-		install_pkg_config_file "libswresample.pc"
-		install_pkg_config_file "libswscale.pc"
-		install_pkg_config_file "libavdevice.pc"
-		install_pkg_config_file "libavfilter.pc"
-		install_pkg_config_file "libavcodec.pc"
-		install_pkg_config_file "libavutil.pc"
-		install_pkg_config_file "ffmpeg-kit.pc"
-
-		local LICENSE_BASEDIR="${ffmpeg_kit_bundle}/licenses"
-
-		create_dir "${LICENSE_BASEDIR}"
-
-		echo -e "INFO: Copying licenses..." | tee -a "$LOG_FILE"
-		bash "${SCRIPTDIR}/extract_licenses.sh" "${src_dir}" "${LICENSE_BASEDIR}" > >(redirect_output) 2>&1
-		echo -e "INFO: Done copying licenses" | tee -a "$LOG_FILE"
-
-		copy_path "${BASEDIR}"/tools/source/SOURCE "${LICENSE_BASEDIR}/source.txt"
-		copy_path "${BASEDIR}"/tools/license/LICENSE.GPLv3 "${LICENSE_BASEDIR}"/license.txt
-		create_touch_file 0 "$touch_name"
-	fi
-	echo -e "INFO: Done creating bundle" | tee -a "$LOG_FILE"
 }

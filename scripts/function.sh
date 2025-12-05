@@ -350,7 +350,7 @@ setup_build_environment() {
     
     # Common setup for all platforms
     export src_dir="${WORKDIR}/src"
-    export INSTALL_PKG_CONFIG_DIR="${work_dir}/pkgconfig"
+    export install_pkgconfig_dir="${work_dir}/pkgconfig"
     export ffmpeg_source_dir="${src_dir}/ffmpeg"
     export ffmpeg_install_prefix="${work_dir}/$(get_ffmpeg_directory)"
     export ffmpeg_kit_install="${work_dir}/$(get_ffmpeg_kit_directory)"
@@ -396,23 +396,24 @@ STRIP=${cross_prefix}strip \
 CXX=${cross_prefix}g++"
     
     export make_prefix_options="--cc=${cross_prefix}gcc \
---ar=$(realpath "${cross_prefix}"ar) \
---as=$(realpath "${cross_prefix}"as) \
---nm=$(realpath "${cross_prefix}"nm) \
---ranlib=$(realpath "${cross_prefix}"ranlib) \
---ld=$(realpath "${cross_prefix}"ld) \
---strip=$(realpath "${cross_prefix}"strip) \
---cxx=$(realpath "${cross_prefix}"g++)"
+--ar=${cross_prefix}ar) \
+--as=${cross_prefix}as) \
+--nm=${cross_prefix}nm) \
+--ranlib=${cross_prefix}ranlib) \
+--ld=${cross_prefix}ld) \
+--strip=${cross_prefix}strip) \
+--cxx=${cross_prefix}g++)"
     
-    export original_cflags='-mtune=generic -O3 -pipe'
-    export original_cppflags='-U_FORTIFY_SOURCE -D_FORTIFY_SOURCE=3'
-    export original_ldflags=""
+    export windows_cflags='-mtune=generic -O3 -pipe'
+    export windows_cppflags='-U_FORTIFY_SOURCE -D_FORTIFY_SOURCE=3'
+    export windows_ldflags=""
 }
 
 setup_linux_environment() {
     export host_target="$host_arch-$host_platform-gnu"
     export dependency_install_prefix="$work_dir/libraries"
-    export PKG_CONFIG_PATH="$PKG_CONFIG_PATH:$dependency_install_prefix/lib/pkgconfig"
+    export PKG_CONFIG_PATH="$PKG_CONFIG_PATH:$dependency_install_prefix/lib/pkgconfig:$dependency_install_prefix/lib/$host_target/pkgconfig:$work_dir/pkgconfig"
+    export PATH="$ffmpeg_install_prefix:$dependency_install_prefix:$original_path"
 }
 
 get_ffmpeg_directory() {
@@ -783,15 +784,33 @@ list_libraries() {
 #===============================================================================================
 
 reset_cflags() {
-	export CFLAGS=$original_cflags
+  if [[ -n $original_cflags ]]; then
+    export CFLAGS=$original_cflags
+	elif [[ $host_platform == "windows" ]]; then
+    export CFLAGS=$windows_cflags
+  else
+    unset CFLAGS
+  fi
 }
 
 reset_cppflags() {
-	export CPPFLAGS=$original_cppflags
+	if [[ -n $original_cflags ]]; then
+    export CFLAGS=$original_cflags
+	elif [[ $host_platform == "windows" ]]; then
+    export CPPFLAGS=$windows_cppflags
+  else
+    unset CPPFLAGS
+  fi
 }
 
 reset_ldflags() {
-	export LDFLAGS=$original_ldflags
+	if [[ -n $original_cflags ]]; then
+    export CFLAGS=$original_cflags
+	elif [[ $host_platform == "windows" ]]; then
+    export LDFLAGS=$windows_ldflags
+  else
+    unset LDFLAGS
+  fi
 }
 
 set_box_memory_size_bytes() {
@@ -825,9 +844,9 @@ check_missing_packages() {
 		# In RHEL this should always be set anyway. But not so sure about CentOS
 		VENDOR="redhat"
 	fi
-  # apt install autoconf-archive autoconf autogen automake autopoint bc bison bzip2 cargo clang cmake coreutils curl cvs ed ed flex g++ gcc gettext git gperf help2man libtool libtool-bin make meson nasm p7zip-full patch pax pkg-config python3 python3-setuptools ragel subversion unzip wget xz-utils yasm zlib1g-dev libglib2.0-dev libglib2.0-dev-bin
+  # apt install autoconf-archive autoconf autogen automake autopoint bc bison bzip2 cargo clang cmake coreutils curl cvs ed ed flex g++ gcc gettext git gperf help2man libtool libtool-bin make meson nasm p7zip-full patch pax pkg-config python3 python3-setuptools python3-venv ragel subversion unzip wget xz-utils yasm zlib1g-dev libglib2.0-dev libglib2.0-dev-bin sudo apt install binutils llvm lld
 	# zeranoe's build scripts use wget, though we don't here...
-	local check_packages=('ragel' 'curl' 'pkg-config' 'make' 'git' 'svn' 'gcc' 'autoconf' 'automake' 'yasm' 'cvs' 'flex' 'bison' 'makeinfo' 'g++' 'ed' 'pax' 'unzip' 'patch' 'wget' 'xz' 'nasm' 'gperf' 'autogen' 'bzip2' 'realpath' 'clang' 'python3' 'bc' 'autopoint' 'zstd' 'glib-mkenums')
+	local check_packages=('ragel' 'curl' 'pkg-config' 'make' 'git' 'svn' 'gcc' 'autoconf' 'automake' 'yasm' 'cvs' 'flex' 'bison' 'makeinfo' 'g++' 'ed' 'pax' 'unzip' 'patch' 'wget' 'xz' 'nasm' 'gperf' 'autogen' 'bzip2' 'realpath' 'clang' 'python3' 'python3-venv' 'bc' 'autopoint' 'zstd' 'glib-mkenums' 'ld' 'ld.lld')
 	# autoconf-archive is just for leptonica FWIW
 	# I'm not actually sure if VENDOR being set to centos is a thing or not. On all the centos boxes I can test on it's not been set at all.
 	# that being said, if it where set I would imagine it would be set to centos... And this contition will satisfy the "Is not initially set"
@@ -839,7 +858,11 @@ check_missing_packages() {
 	check_packages+=('libtoolize') # the rest of the world
 	# Use hash to check if the packages exist or not. Type is a bash builtin which I'm told behaves differently between different versions of bash.
 	for package in "${check_packages[@]}"; do
-		hash "$package" &>/dev/null || missing_packages=("$package" "${missing_packages[@]}")
+    if [[ $package == "python3-venv" ]]; then
+      dpkg -s python3-venv >/dev/null 2>&1 || missing_packages=("$package" "${missing_packages[@]}")
+    else
+		  hash "$package" &>/dev/null || missing_packages=("$package" "${missing_packages[@]}")
+    fi
 	done
 	if [ "${VENDOR}" = "redhat" ] || [ "${VENDOR}" = "centos" ]; then
 		if [ -n "$(hash cmake 2>&1)" ] && [ -n "$(hash cmake3 2>&1)" ]; then missing_packages=('cmake' "${missing_packages[@]}"); fi
@@ -1022,6 +1045,7 @@ do_svn_checkout() {
     chmod -R a+rwx "$to_dir" 2>"$LOG_FILE"
 	else
     if truthy "$build_force"; then
+      echo -e "INFO: Force requested, resetting repository" >>"$LOG_FILE"
       svn_hard_reset "$to_dir"
 		elif truthy "$git_get_latest"; then
       echo -e "INFO: Fetching git instead" >>"$LOG_FILE"
@@ -1055,8 +1079,8 @@ svn_hard_reset() {
         # Ensure we're in a git repository
         if svn info >/dev/null 2>&1; then
             svn revert -R . > >(redirect_output) 2>&1                                  # Revert all tracked changes
-            svn status | grep '^?' | cut -c9- | xargs rm -rf  > >(redirect_output) 2>&1 # Remove untracked files
-            svn update  > >(redirect_output) 2>&1                                       # Get latest from repo
+            svn status | grep '^?' | cut -c9- | xargs rm -rf > >(redirect_output) 2>&1 # Remove untracked files
+            svn update > >(redirect_output) 2>&1                                       # Get latest from repo
         else
             echo "ERROR: Not a git repository" >&2
             return 1
@@ -1194,7 +1218,8 @@ do_git_checkout() {
     echo -e "INFO: Directory already exists $to_dir." >>"$LOG_FILE"
 		change_dir "$to_dir"
     if truthy "$build_force"; then
-      git_hard_reset "$to_dir"
+      echo -e "INFO: Force requested, resetting repository" >>"$LOG_FILE"
+      git_hard_reset "$(pwd)"
 		elif truthy "$git_get_latest"; then
       echo -e "INFO: Fetching git instead" >>"$LOG_FILE"
 			git fetch --quiet >>"$LOG_FILE" # want this for later...
@@ -1648,19 +1673,18 @@ do_cmake_and_install() {
 activate_meson() {
 	echo -e "INFO: Activating meson" >>"$LOG_FILE"
 	change_dir "$src_dir" # requires python3-full
-	local cross_file=$(get_meson_cross_file)
 	if [[ ! -e meson_git ]]; then
-		do_git_checkout https://github.com/mesonbuild/meson.git meson_git 1.9.1
+		do_git_checkout https://github.com/mesonbuild/meson.git meson "1.9.1"
 	fi
-	change_dir "$src_dir/meson_git"
-	export local_meson="$src_dir/meson_git/meson.py"
+	change_dir "$src_dir/meson"
+	export local_meson="$src_dir/meson/meson.py"
 	if [[ ! -e tutorial_env ]]; then
 		python3 -m venv tutorial_env
 		# shellcheck disable=SC1090
-		source "$src_dir/meson_git/tutorial_env/bin/activate"
+		source "$src_dir/meson/tutorial_env/bin/activate"
 		python3 -m pip install meson
 	else
-		source "$src_dir/meson_git/tutorial_env/bin/activate"
+		source "$src_dir/meson/tutorial_env/bin/activate"
 	fi
 	change_dir "$src_dir"
 }
@@ -1691,6 +1715,7 @@ do_meson() {
 	local touch_name=$(get_small_touchfile_name "already_built_meson$touch_postfix" "$configure_options ${configure_command[*]} $LDFLAGS $CFLAGS")
 	if truthy "$build_force"; then
 		remove_path -f "already_built_meson$touch_postfix"*
+    remove_path -rf "$(pwd)/build"
 	fi
 	if [ ! -f "$touch_name" ]; then
 		if [ "$configure_noclean" != "noclean" ]; then
@@ -2529,8 +2554,10 @@ configure_ffmpeg() {
   truthy "$enable_whisper" && config_options+=" --enable-whisper"                     # enable whisper filter [no]
 
   # add any additional ff prefixed flags 
-  ff_flags=$(concat_array "$ff_flags_values" " ")
-  config_options+=" $ff_flags"
+  if [[ -n $ff_flags_values ]]; then
+    ff_flags=$(concat_array "$ff_flags_values" " ")
+    config_options+=" $ff_flags"
+  fi
 
 	if truthy "$enable_gpl"; then
 		config_options+=" --enable-gpl"
@@ -2643,6 +2670,186 @@ build_exists() {
       return 0
 		fi
 	fi
+}
+
+install_ffmpeg() {
+	echo -e "INFO: Installing ffmpeg if not installed" | tee -a "$LOG_FILE"
+	change_dir "$ffmpeg_source_dir"
+
+	echo -e "INFO: Making Ffmpeg $(pwd)" | tee -a "$LOG_FILE"
+
+	create_dir "$ffmpeg_install_prefix"
+
+	do_make_and_make_install "" "" "$(get_build_type)"
+
+	echo -e "INFO: Moving all binaries" | tee -a "$LOG_FILE"
+
+	{	
+    shopt -s nullglob
+    mv -v -- */*.a */*.dylib */*.lib */*.dll *.exe *.so "${ffmpeg_install_prefix}/bin" > >(redirect_output) 2>&1 || true
+	} >>"$LOG_FILE"
+
+	echo -e "INFO: Done installing ffmpeg" | tee -a "$LOG_FILE"
+
+	install_ffmpeg_pkg
+}
+
+install_ffmpeg_pkg() {
+	echo -e "INFO: Checking deployment files..." | tee -a "$LOG_FILE"
+
+	required_files=(
+		"${ffmpeg_install_prefix}/lib/pkgconfig/libavformat.pc"
+		"${ffmpeg_install_prefix}/lib/pkgconfig/libswresample.pc"
+		"${ffmpeg_install_prefix}/lib/pkgconfig/libswscale.pc"
+		"${ffmpeg_install_prefix}/lib/pkgconfig/libavdevice.pc"
+		"${ffmpeg_install_prefix}/lib/pkgconfig/libavfilter.pc"
+		"${ffmpeg_install_prefix}/lib/pkgconfig/libavcodec.pc"
+		"${ffmpeg_install_prefix}/lib/pkgconfig/libavutil.pc")
+
+	check_files_exist "false" "${required_files[@]}"
+
+	echo -e "INFO: Done checking deployment files." | tee -a "$LOG_FILE"
+
+	echo -e "INFO: Installing ffmpeg pkg-config" | tee -a "$LOG_FILE"
+
+	create_dir "$install_pkgconfig_dir"
+
+	# MANUALLY COPY PKG-CONFIG FILES
+	overwrite_file "${ffmpeg_install_prefix}"/lib/pkgconfig/libavformat.pc "${install_pkgconfig_dir}/libavformat.pc" || return 1
+	overwrite_file "${ffmpeg_install_prefix}"/lib/pkgconfig/libswresample.pc "${install_pkgconfig_dir}/libswresample.pc" || return 1
+	overwrite_file "${ffmpeg_install_prefix}"/lib/pkgconfig/libswscale.pc "${install_pkgconfig_dir}/libswscale.pc" || return 1
+	overwrite_file "${ffmpeg_install_prefix}"/lib/pkgconfig/libavdevice.pc "${install_pkgconfig_dir}/libavdevice.pc" || return 1
+	overwrite_file "${ffmpeg_install_prefix}"/lib/pkgconfig/libavfilter.pc "${install_pkgconfig_dir}/libavfilter.pc" || return 1
+	overwrite_file "${ffmpeg_install_prefix}"/lib/pkgconfig/libavcodec.pc "${install_pkgconfig_dir}/libavcodec.pc" || return 1
+	overwrite_file "${ffmpeg_install_prefix}"/lib/pkgconfig/libavutil.pc "${install_pkgconfig_dir}/libavutil.pc" || return 1
+
+	# # MANUALLY ADD REQUIRED HEADERS
+	{
+		mkdir -p "${ffmpeg_install_prefix}"/include/libavutil/x86
+		mkdir -p "${ffmpeg_install_prefix}"/include/libavutil/arm
+		mkdir -p "${ffmpeg_install_prefix}"/include/libavutil/aarch64
+		mkdir -p "${ffmpeg_install_prefix}"/include/libavcodec/x86
+		mkdir -p "${ffmpeg_install_prefix}"/include/libavcodec/arm
+		overwrite_file "${ffmpeg_source_dir}"/config.h "${ffmpeg_install_prefix}"/include/config.h
+		overwrite_file "${ffmpeg_source_dir}"/libavcodec/mathops.h "${ffmpeg_install_prefix}"/include/libavcodec/mathops.h
+		overwrite_file "${ffmpeg_source_dir}"/libavcodec/x86/mathops.h "${ffmpeg_install_prefix}"/include/libavcodec/x86/mathops.h
+		overwrite_file "${ffmpeg_source_dir}"/libavcodec/arm/mathops.h "${ffmpeg_install_prefix}"/include/libavcodec/arm/mathops.h
+		overwrite_file "${ffmpeg_source_dir}"/libavformat/network.h "${ffmpeg_install_prefix}"/include/libavformat/network.h
+		overwrite_file "${ffmpeg_source_dir}"/libavformat/os_support.h "${ffmpeg_install_prefix}"/include/libavformat/os_support.h
+		overwrite_file "${ffmpeg_source_dir}"/libavformat/url.h "${ffmpeg_install_prefix}"/include/libavformat/url.h
+		overwrite_file "${ffmpeg_source_dir}"/libavutil/attributes_internal.h "${ffmpeg_install_prefix}"/include/libavutil/attributes_internal.h
+		overwrite_file "${ffmpeg_source_dir}"/libavutil/bprint.h "${ffmpeg_install_prefix}"/include/libavutil/bprint.h
+		overwrite_file "${ffmpeg_source_dir}"/libavutil/getenv_utf8.h "${ffmpeg_install_prefix}"/include/libavutil/getenv_utf8.h
+		overwrite_file "${ffmpeg_source_dir}"/libavutil/internal.h "${ffmpeg_install_prefix}"/include/libavutil/internal.h
+		overwrite_file "${ffmpeg_source_dir}"/libavutil/libm.h "${ffmpeg_install_prefix}"/include/libavutil/libm.h
+		overwrite_file "${ffmpeg_source_dir}"/libavutil/reverse.h "${ffmpeg_install_prefix}"/include/libavutil/reverse.h
+		overwrite_file "${ffmpeg_source_dir}"/libavutil/thread.h "${ffmpeg_install_prefix}"/include/libavutil/thread.h
+		overwrite_file "${ffmpeg_source_dir}"/libavutil/timer.h "${ffmpeg_install_prefix}"/include/libavutil/timer.h
+		overwrite_file "${ffmpeg_source_dir}"/libavutil/x86/asm.h "${ffmpeg_install_prefix}"/include/libavutil/x86/asm.h
+		overwrite_file "${ffmpeg_source_dir}"/libavutil/x86/timer.h "${ffmpeg_install_prefix}"/include/libavutil/x86/timer.h
+		overwrite_file "${ffmpeg_source_dir}"/libavutil/arm/timer.h "${ffmpeg_install_prefix}"/include/libavutil/arm/timer.h
+		overwrite_file "${ffmpeg_source_dir}"/libavutil/aarch64/timer.h "${ffmpeg_install_prefix}"/include/libavutil/aarch64/timer.h
+		overwrite_file "${ffmpeg_source_dir}"/compat/w32pthreads.h "${ffmpeg_install_prefix}"/include/libavutil/compat/w32pthreads.h
+		overwrite_file "${ffmpeg_source_dir}"/libavutil/wchar_filename.h "${ffmpeg_install_prefix}"/include/libavutil/wchar_filename.h
+	} >>"$LOG_FILE"
+
+	echo -e "INFO: Done installing ffmpeg pkg-config" | tee -a "$LOG_FILE"
+}
+
+install_ffmpeg_kit() {
+	echo -e "INFO: Installing ffmpeg kit to ${ffmpeg_kit_install}" | tee -a "$LOG_FILE"
+
+	change_dir "${ffmpeg_kit_src_dir}"
+	do_make_and_make_install "" "" "$(get_build_type)" || exit_message 1 "unable to make ffmpeg-kit. see $LOG_FILE for details."
+
+	create_ffmpegkit_package_config "$(get_ffmpeg_kit_version)" || return 1
+
+	echo -e "INFO: Done installing ffmpeg kit to ${ffmpeg_kit_install}" | tee -a "$LOG_FILE"
+}
+
+install_pkg_config_file() {
+	local FILE_NAME="$1"
+	local SOURCE="${install_pkgconfig_dir}/${FILE_NAME}"
+	local DESTINATION="${FFMPEG_KIT_BUNDLE_PKG_CONFIG_DIRECTORY}/${FILE_NAME}"
+
+	# DELETE OLD FILE
+	if ! remove_path -rf "$DESTINATION" >>"$LOG_FILE"; then
+		exit_message 1 "DEBUG: failed\n\nSee $LOG_FILE for details"
+	fi
+
+	# INSTALL THE NEW FILE
+	if ! copy_path "$SOURCE" "$DESTINATION" >>"$LOG_FILE"; then
+		exit_message 1 "DEBUG: failed\n\nSee $LOG_FILE for details"
+	fi
+
+	# UPDATE PATHS
+	sed -i "s|${ffmpeg_kit_install}|${ffmpeg_kit_bundle}|g" "$DESTINATION" || return 1
+	sed -i "s|${ffmpeg_source_dir}|${ffmpeg_kit_bundle}|g" "$DESTINATION" || return 1
+}
+
+get_ffmpeg_kit_version() {
+	local FFMPEG_KIT_VERSION=$(grep -Eo 'FFmpegKitVersion = .*' "$ffmpeg_kit_src_dir/src/FFmpegKitConfig.h" | tee -a "$LOG_FILE" | grep -Eo ' \".*' | tr -d '"; ')
+
+	echo -e "${FFMPEG_KIT_VERSION}"
+}
+
+create_ffmpeg_kit_bundle() {
+	echo -e "INFO: Creating bundle" | tee -a "$LOG_FILE"
+	local TYPE_POSTFIX="$(get_build_type)"
+	local FFMPEG_KIT_VERSION=$(get_ffmpeg_kit_version)
+
+	if [[ $build_force == "1" ]]; then
+		remove_path -rf "${ffmpeg_kit_src_dir}/already_bundled_${TYPE_POSTFIX}"*
+	fi
+
+	local touch_name=$(get_small_touchfile_name "already_bundled_${TYPE_POSTFIX}" "$FFMPEG_KIT_VERSION $ffmpeg_kit_bundle")
+	if [ ! -f "$touch_name" ]; then
+		export FFMPEG_KIT_BUNDLE_INCLUDE_DIRECTORY="${ffmpeg_kit_bundle}/include"
+		export FFMPEG_KIT_BUNDLE_LIB_DIRECTORY="${ffmpeg_kit_bundle}/lib"
+		export FFMPEG_KIT_BUNDLE_BIN_DIRECTORY="${ffmpeg_kit_bundle}/bin"
+		export FFMPEG_KIT_BUNDLE_PKG_CONFIG_DIRECTORY="${ffmpeg_kit_bundle}/pkgconfig"
+		remove_path "-rf" "${ffmpeg_kit_bundle}"
+		create_dir "${ffmpeg_kit_bundle}"
+		create_dir "${FFMPEG_KIT_BUNDLE_INCLUDE_DIRECTORY}"
+		create_dir "${FFMPEG_KIT_BUNDLE_LIB_DIRECTORY}"
+		create_dir "${FFMPEG_KIT_BUNDLE_BIN_DIRECTORY}"
+		create_dir "${FFMPEG_KIT_BUNDLE_PKG_CONFIG_DIRECTORY}"
+		{
+			# COPY HEADERS
+			cp -rP "${ffmpeg_kit_install}/include/"* "${FFMPEG_KIT_BUNDLE_INCLUDE_DIRECTORY}"
+			cp -rP "${ffmpeg_install_prefix}/include/"* "${FFMPEG_KIT_BUNDLE_INCLUDE_DIRECTORY}"
+
+			# COPY LIBS
+			cp -rP "${ffmpeg_kit_install}/lib/"* "${FFMPEG_KIT_BUNDLE_LIB_DIRECTORY}"
+			cp -rP "${ffmpeg_install_prefix}/lib/"* "${FFMPEG_KIT_BUNDLE_LIB_DIRECTORY}"
+
+			# COPY BINARIES
+			cp -rP "${ffmpeg_kit_install}/bin/"* "${FFMPEG_KIT_BUNDLE_BIN_DIRECTORY}"
+			cp -rP "${ffmpeg_install_prefix}/bin/"* "${FFMPEG_KIT_BUNDLE_BIN_DIRECTORY}"
+		} >>"$LOG_FILE"
+
+		install_pkg_config_file "libavformat.pc"
+		install_pkg_config_file "libswresample.pc"
+		install_pkg_config_file "libswscale.pc"
+		install_pkg_config_file "libavdevice.pc"
+		install_pkg_config_file "libavfilter.pc"
+		install_pkg_config_file "libavcodec.pc"
+		install_pkg_config_file "libavutil.pc"
+		install_pkg_config_file "ffmpeg-kit.pc"
+
+		local LICENSE_BASEDIR="${ffmpeg_kit_bundle}/licenses"
+
+		create_dir "${LICENSE_BASEDIR}"
+
+		echo -e "INFO: Copying licenses..." | tee -a "$LOG_FILE"
+		bash "${SCRIPTDIR}/extract_licenses.sh" "${src_dir}" "${LICENSE_BASEDIR}" > >(redirect_output) 2>&1
+		echo -e "INFO: Done copying licenses" | tee -a "$LOG_FILE"
+
+		copy_path "${BASEDIR}"/tools/source/SOURCE "${LICENSE_BASEDIR}/source.txt"
+		copy_path "${BASEDIR}"/tools/license/LICENSE.GPLv3 "${LICENSE_BASEDIR}"/license.txt
+		create_touch_file 0 "$touch_name"
+	fi
+	echo -e "INFO: Done creating bundle" | tee -a "$LOG_FILE"
 }
 
 #endregion

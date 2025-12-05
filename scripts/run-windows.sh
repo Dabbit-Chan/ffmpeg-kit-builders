@@ -2907,6 +2907,7 @@ build_lcms() {
 }
 
 build_libjsoncpp() {
+  activate_meson
 	change_dir "$src_dir"
 	do_git_checkout https://github.com/open-source-parsers/jsoncpp jsoncpp
 	change_dir "$src_dir/jsoncpp"

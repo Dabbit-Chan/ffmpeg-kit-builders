@@ -55,7 +55,7 @@ else
 		echo -e "WARNING: This may fail if previous dependencies havent been built yet." | tee -a "$LOG_FILE"
 		configure_ffmpeg_kit
 		install_ffmpeg_kit
-		create_windows_bundle
+		create_ffmpeg_kit_bundle
 	else
 		echo -e "INFO: Building all..." | tee -a "$LOG_FILE"
 		build_all_ffmpeg_dependencies
@@ -64,7 +64,7 @@ else
 		install_ffmpeg
 		configure_ffmpeg_kit
 		install_ffmpeg_kit
-		create_windows_bundle
+		create_ffmpeg_kit_bundle
 	fi
 fi
 echo -e "$(date)" | tee -a "$LOG_FILE"

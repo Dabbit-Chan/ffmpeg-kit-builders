@@ -24,7 +24,7 @@ elif [[ -n "$build_only" ]]; then
 	step_name="${BUILD_STEPS[$index]}"
 	echo -e "INFO: --- Executing single build step: $step_name ---\n" | tee -a "$LOG_FILE"
 	echo -e "WARNING: This may fail if previous dependencies havent been built yet." | tee -a "$LOG_FILE"
-	#build_ffmpeg_dependency_only "$step_name"
+	build_ffmpeg_dependency_only "$step_name"
 	echo -e "INFO: --- Done building single build step: $step_name ---\n" | tee -a "$LOG_FILE"
 elif [[ -n "$build_from" ]]; then
 	if [[ $(is_integer "$build_from") != 0 ]]; then
@@ -36,7 +36,7 @@ elif [[ -n "$build_from" ]]; then
 	step_name="${BUILD_STEPS[$index]}"
 	echo -e "INFO: --- Building dependencies from step: $step_name ---\n" | tee -a "$LOG_FILE"
 	echo -e "WARNING: This may fail if previous dependencies havent been built yet." | tee -a "$LOG_FILE"
-	#build_all_ffmpeg_dependencies "$step_name"
+	build_all_ffmpeg_dependencies "$step_name"
 	echo -e "INFO: --- Done building dependencies from step: $step_name ---\n" | tee -a "$LOG_FILE"
 else
 	change_dir "$work_dir" || exit 1
@@ -50,22 +50,22 @@ else
 		echo -e "WARNING: This may fail if previous dependencies havent been built yet." | tee -a "$LOG_FILE"
 		download_ffmpeg
     build_exists || configure_ffmpeg
-		#install_ffmpeg
+		install_ffmpeg
 	elif truthy "$build_ffmpeg_kit_only"; then
 		echo -e "INFO: Building ffmpeg-kit only..." | tee -a "$LOG_FILE"
 		echo -e "WARNING: This may fail if previous dependencies havent been built yet." | tee -a "$LOG_FILE"
-		#configure_ffmpeg_kit
-		#install_ffmpeg_kit
-		#create_linux_bundle
+		configure_ffmpeg_kit
+		install_ffmpeg_kit
+		create_ffmpeg_kit_bundle
 	else
 		echo -e "INFO: Building all..." | tee -a "$LOG_FILE"
 		#build_all_ffmpeg_dependencies
 		download_ffmpeg
     build_exists || configure_ffmpeg
-		#install_ffmpeg
-		#configure_ffmpeg_kit
-		#install_ffmpeg_kit
-		#create_linux_bundle
+		install_ffmpeg
+		configure_ffmpeg_kit
+		install_ffmpeg_kit
+		create_ffmpeg_kit_bundle
 	fi
 fi
 echo -e "$(date)" | tee -a "$LOG_FILE"

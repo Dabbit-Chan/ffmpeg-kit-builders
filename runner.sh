@@ -31,6 +31,8 @@ Licensing options:
 Build Options:
   --host-platform=*|--host=*                                    where the compiled program will run [linux|windows]
   --host-platform=*|--host=*                                    host cpu architecture [i686|x86_64] (32-bit or 64-bit)
+  --lto                                                         enable Linktime optimization
+  --lts                                                         enable long-term support build
 	--ffmpeg-git-checkout-version=[release/8.0]                   if you want to build a particular version of FFmpeg, 
                                                                 ex: n3.1.1 or a specific git hash
 	--ffmpeg-git-checkout=[https://github.com/FFmpeg/FFmpeg.git]  if you want to clone FFmpeg from other repositories
@@ -236,6 +238,10 @@ while [ $# -gt 0 ]; do
 	-f | --force)
 		export build_force="1"
 		shift
+		;;
+  --lto)
+    export enable_lto="1"
+    shift
 		;;
   --host-platform=*|--host=*)
     export host_platform="${1#*=}"
