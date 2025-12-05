@@ -244,11 +244,11 @@ while [ $# -gt 0 ]; do
     shift
 		;;
   --host-platform=*|--host=*)
-    export host_platform="${1#*=}"
+    pick_host_platform "${1#*=}"
     shift
     ;;
   --host-arch=*|--arch=*)
-    export host_arch="${1#*=}"
+    pick_host_arch "${1#*=}"
     shift
     ;;
 	--ffmpeg-git-checkout-version=*)

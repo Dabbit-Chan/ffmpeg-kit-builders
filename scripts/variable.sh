@@ -170,4 +170,16 @@ export BUILD_STEPS=(
 "build_vulkan_static" \
 "build_libnpp" \
 "build_cuda_nvcc" \
-"build_libjack")
+"build_libjack" \
+"build_alsa" \
+"build_libdc1394" \
+"build_libdrm" \
+"build_libiec61883" \
+"build_libv4l2" \
+"build_libxcb" \
+"build_libxcb_shape" \
+"build_libxcb_shm" \
+"build_libxcb_xfixes" \
+"build_rkmpp" \
+"build_vaapi" \
+"build_xlib")
