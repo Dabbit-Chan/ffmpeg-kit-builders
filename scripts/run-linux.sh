@@ -340,22 +340,40 @@ build_vulkan() {
 # build_libmfx            # config_options+= --enable-libmfx              # enable Intel MediaSDK (AKA Quick Sync Video) code via libmfx [no]
 build_libmfx() {
   if [[ $disable_libmfx != 1 && $enable_libmfx == 1 ]]; then
-  local lib="libmfx"
-  do_git_checkout https://github.com/libunwind/libunwind  libunwind
+  # https://github.com/Intel-Media-SDK/MediaSDK
+  echo "WARNING: [disabled] Library has been archived and has security issues."
   fi
 }
 # build_libvpl            # config_options+= --enable-libvpl              # enable Intel oneVPL code via libvpl if libmfx is not used [no]
 build_libvpl() {
   if [[ $disable_libvpl != 1 && $enable_libvpl == 1 ]]; then
   local lib="libvpl"
-  do_git_checkout https://github.com/intel/libvpl  libvpl # f8d9891
+  local repo="https://github.com/intel/libvpl"
+  local repo_ver="v2.15.0"
+  change_dir "$src_dir"
+	do_git_checkout "$repo" "$lib" "$repo_ver"
+  change_dir "$src_dir/$lib"
+  do_cmake "-B build -GNinja -DCMAKE_BUILD_TYPE=Release -DINSTALL_EXAMPLES=OFF -DINSTALL_DEV=ON -DBUILD_EXPERIMENTAL=OFF"
+	do_ninja_and_ninja_install
+  change_dir "$src_dir"
   fi
 }
 # build_omx               # config_options+= --enable-omx                 # enable OpenMAX IL code [no]
 build_omx() {
   if [[ $disable_omx != 1 && $enable_omx == 1 ]]; then
-  # https://github.com/tizonia/tizonia-openmax-il maybe?
-  local lib="omx"
+  local repo="https://git.code.sf.net/p/omxil/omxil"
+  local lib="libomxil-bellagio"
+  local repo_ver="0.9.1"
+  change_dir "$src_dir"
+  do_git_checkout "$repo" "$lib" "$repo_ver"
+  change_dir "$src_dir/$lib"
+  export CFLAGS="$CFLAGS -Wno-error"
+  # disable omxregister utility. not needed for ffmpeg
+  sed -i 's/bin_PROGRAMS = omxregister-bellagio/#bin_PROGRAMS = omxregister-bellagio/' src/Makefile.am
+  find . -name "configure.ac" -exec sed -i 's/-Werror//g' {} +
+  generic_configure_make_install "--disable-doc"
+  reset_cflags
+  change_dir "$src_dir"
   fi
 }
 # build_vulkan_static     # config_options+= --enable-vulkan-static       # enable statically link to libvulkan [no]

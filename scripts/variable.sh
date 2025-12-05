@@ -185,4 +185,7 @@ export BUILD_STEPS=(
 "build_xlib" \
 "build_amf" \
 "build_vulkan" \
-"build_vulkan_static")
+"build_vulkan_static" \
+"build_libmfx" \
+"build_libvpl" \
+"build_omx")

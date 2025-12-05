@@ -2648,7 +2648,7 @@ build_mmal() {
 #   --enable-libmfx          enable Intel MediaSDK (AKA Quick Sync Video) code via libmfx [no]
 build_libmfx() {
   if [[ $disable_libmfx != 1 && $enable_libmfx == 1 ]]; then
-    echo "WARNING: Library has been archived and has security issues."
+    echo "WARNING: [disabled] Library has been archived and has security issues."
     # https://github.com/Intel-Media-SDK/MediaSDK
   fi
 }
