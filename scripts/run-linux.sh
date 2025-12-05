@@ -459,15 +459,31 @@ build_sdl2() {
 # build_sndio             # config_options+= --disable-sndio              # disable sndio support [autodetect]
 build_sndio() {
   if [[ $disable_sndio != 1 && $enable_sndio == 1 ]]; then
-  local lib="sndio"
   # https://github.com/ratchov/sndio
+  local lib="sndio"
+  local repo="https://github.com/ratchov/sndio"
+  local repo_ver="v1.10.0"
+  change_dir "$src_dir"
+	do_git_checkout "$repo" "$lib" "$repo_ver"
+  change_dir "$src_dir/$lib"
+  do_configure "--prefix=$dependency_install_prefix --enable-static"
+  do_make_and_make_install
+  change_dir "$src_dir"
   fi
 }
 # build_zlib              # config_options+= --disable-zlib               # disable zlib [autodetect]
 build_zlib() {
   if [[ $disable_zlib != 1 && $enable_zlib == 1 ]]; then
+  # https://github.com/madler/zlib
   local lib="zlib"
-  do_git_checkout https://github.com/madler/zlib  zlib
+  local repo="https://github.com/madler/zlib"
+  local repo_ver="v1.3.1"
+  change_dir "$src_dir"
+	do_git_checkout "$repo" "$lib" "$repo_ver"
+  change_dir "$src_dir/$lib"
+  do_configure "--prefix=$dependency_install_prefix --static"
+  do_make_and_make_install
+  change_dir "$src_dir"
   fi
 }
 # build_libvo_amrwbenc    # config_options+= --enable-libvo-amrwbenc      # enable AMR-WB encoding via libvo-amrwbenc [no]

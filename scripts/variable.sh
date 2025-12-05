@@ -184,4 +184,5 @@ export BUILD_STEPS=(
 "build_vaapi" \
 "build_xlib" \
 "build_libmfx" \
-"build_omx")
+"build_omx" \
+"build_sndio")
