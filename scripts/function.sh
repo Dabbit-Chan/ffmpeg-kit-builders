@@ -1445,14 +1445,24 @@ do_configure() {
 		echo -e "INFO: configuring $english_name ($PWD) as $ PKG_CONFIG_PATH=$PKG_CONFIG_PATH PATH=$PATH $configure_name $configure_options" >>"$LOG_FILE" # say it now in case bootstrap fails etc.
 		echo -e "INFO: all touch files" "already_configured$touch_postfix*" touchname= "$touch_name" >>"$LOG_FILE"
 		echo -e "INFO: config options $configure_name $configure_options" >>"$LOG_FILE"
-		if [ -f bootstrap ]; then
+    if [ -f bootstrap ]; then
 			./bootstrap > >(redirect_output) 2>&1 # some need this to create ./configure :|
 		fi
 		if [[ ! -f $configure_name && -f bootstrap.sh ]]; then # fftw wants to only run this if no configure :|
 			./bootstrap.sh > >(redirect_output) 2>&1
 		fi
 		if [[ ! -f $configure_name ]]; then
-			echo -e "INFO: running autoreconf to generate configure file for us..." >>"$LOG_FILE"
+			echo -e "INFO: running autoheader, automake --force-missing --add-missing, and autoreconf to generate configure file for us..." >>"$LOG_FILE"
+      if [[ -f gitsub.sh ]]; then
+        echo "INFO: gitsub.sh found. Running gitsub.sh..."
+        ./gitsub.sh pull
+      fi
+      if [ -f autogen.sh ]; then
+        echo "INFO: autogen.sh found. Running autogen.sh..."
+			  ./autogen.sh > >(redirect_output) 2>&1 # some need this to create ./configure :|
+		  fi
+      autoheader > >(redirect_output) 2>&1
+      automake --force-missing --add-missing > >(redirect_output) 2>&1
 			autoreconf_library # a handful of them require this to create ./configure :|
 		fi
 		remove_path -f "$cur_dir2/already_"*    # reset

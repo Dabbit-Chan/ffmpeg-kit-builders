@@ -117,7 +117,7 @@ build_libcaca() {
 build_bzlib() {
 	change_dir "$src_dir"
 	download_and_unpack_file https://sourceware.org/pub/bzip2/bzip2-1.0.8.tar.gz
-	change_dir "$src_dir/bzip2-1.0.8"
+	change_dir "$src_dir/bzip2"
 	apply_patch "file://$WINPATCHDIR/bzip2-1.0.8_brokenstuff.diff"
 	if [[ ! -f ./libbz2.a ]] || [[ -f $dependency_install_prefix/lib/libbz2.a && ! $(/usr/bin/env md5sum ./libbz2.a) = $(/usr/bin/env md5sum "$dependency_install_prefix"/lib/libbz2.a) ]]; then # Not built or different build installed
 		do_make "libbz2.a $compiler_flags"

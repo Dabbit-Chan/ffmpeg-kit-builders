@@ -100,8 +100,6 @@ build_libdc1394() {
 	do_git_checkout "$repo" "$lib" "$repo_ver"
   change_dir "$src_dir/$lib"
   sed -i 's/^AM_PATH_SDL/# AM_PATH_SDL/g' configure.ac
-  autoheader
-  automake --force-missing --add-missing > >(redirect_output) 2>&1
   generic_configure_make_install
   change_dir "$src_dir"
   fi
@@ -162,21 +160,21 @@ build_libv4l2() {
 build_libxcb_shape() {
   if [[ $disable_libxcb_shape != 1 && $enable_libxcb_shape == 1 ]]; then
     build_libxcb
-    local lib="libxcb-shape"
+    echo "INFO: libxcb-shape is part of libxcb."
   fi
 }
 # build_libxcb_shm        # config_options+= --enable-libxcb-shm          # enable X11 grabbing shm communication [autodetect]
 build_libxcb_shm() {
   if [[ $disable_libxcb_shm != 1 && $enable_libxcb_shm == 1 ]]; then
     build_libxcb
-    local lib="libxcb-shm"
+    echo "INFO: libxcb-shm is part of libxcb."
   fi
 }
 # build_libxcb_xfixes     # config_options+= --enable-libxcb-xfixes       # enable X11 grabbing mouse rendering [autodetect]
 build_libxcb_xfixes() {
   if [[ $disable_libxcb_xfixes != 1 && $enable_libxcb_xfixes == 1 ]]; then
     build_libxcb
-    local lib="libxcb-xfixes"
+    echo "INFO: libxcb-xfixes is part of libxcb."
   fi
 }
 build_xcbproto() {
@@ -247,7 +245,7 @@ build_vaapi() {
   # https://github.com/intel/libva
   local lib="vaapi"
   local repo="https://github.com/intel/libva"
-  local repo_ver=" 2.22.0"
+  local repo_ver="2.22.0"
   change_dir "$src_dir"
 	do_git_checkout "$repo" "$lib" "$repo_ver"
   change_dir "$src_dir/$lib"
@@ -403,15 +401,30 @@ build_avisynth() {
 # build_bzlib             # config_options+= --disable-bzlib              # disable bzlib [autodetect]
 build_bzlib() {
   if [[ $disable_bzlib != 1 && $enable_bzlib == 1 ]]; then
-  local lib="bzlib"
-  download_and_unpack_file https://sourceware.org/pub/bzip2/bzip2-1.0.8.tar.gz
+  activate_meson
+  # https://gitlab.com/bzip2/bzip2
+  local lib="bzip2"
+  local repo="https://gitlab.com/bzip2/bzip2"
+  local repo_ver="bzip2-1.0.8"
+  change_dir "$src_dir"
+	do_git_checkout "$repo" "$lib" "$repo_ver"
+  change_dir "$src_dir/$lib"
+  do_make_and_make_install "PREFIX=$dependency_install_prefix" "PREFIX=$dependency_install_prefix"
+  change_dir "$src_dir"
   fi
 }
 # build_iconv             # config_options+= --disable-iconv              # disable iconv [autodetect]
 build_iconv() {
   if [[ $disable_iconv != 1 && $enable_iconv == 1 ]]; then
-  local lib="iconv"
-  download_and_unpack_file https://ftp.gnu.org/pub/gnu/libiconv/libiconv-1.18.tar.gz
+  # https://git.savannah.gnu.org/git/libiconv
+  local lib="libiconv"
+  local repo="https://git.savannah.gnu.org/git/libiconv"
+  local repo_ver="v1.18"
+  change_dir "$src_dir"
+	download_and_unpack_file "https://ftp.gnu.org/gnu/libiconv/libiconv-1.18.tar.gz" "$lib"
+  change_dir "$src_dir/$lib/libiconv-1.18"
+  generic_configure_make_install
+  change_dir "$src_dir"
   fi
 }
 # build_lzma              # config_options+= --disable-lzma               # disable lzma [autodetect]
