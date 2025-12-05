@@ -1534,8 +1534,8 @@ do_make_and_make_install() {
 	extra_make_options="$1"
 	extra_install_options="$2"
 	touch_postfix="$3"
-	do_make "$extra_make_options" "$touch_postfix"
-	do_make_install "$extra_install_options" "" "$touch_postfix"
+	do_make "$extra_make_options PREFIX=$dependency_install_prefix" "$touch_postfix"
+	do_make_install "$extra_install_options PREFIX=$dependency_install_prefix" "" "$touch_postfix"
 }
 # 1. extra_make_install_options
 # 2. override_make_install_options

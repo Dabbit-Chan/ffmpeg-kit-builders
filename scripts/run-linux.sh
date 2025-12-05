@@ -409,7 +409,7 @@ build_bzlib() {
   change_dir "$src_dir"
 	do_git_checkout "$repo" "$lib" "$repo_ver"
   change_dir "$src_dir/$lib"
-  do_make_and_make_install "PREFIX=$dependency_install_prefix" "PREFIX=$dependency_install_prefix"
+  do_make_and_make_install
   change_dir "$src_dir"
   fi
 }
@@ -418,10 +418,10 @@ build_iconv() {
   if [[ $disable_iconv != 1 && $enable_iconv == 1 ]]; then
   # https://git.savannah.gnu.org/git/libiconv
   local lib="libiconv"
-  local repo="https://git.savannah.gnu.org/git/libiconv"
+  local repo="https://ftp.gnu.org/gnu/libiconv/libiconv-1.18.tar.gz"
   local repo_ver="v1.18"
   change_dir "$src_dir"
-	download_and_unpack_file "https://ftp.gnu.org/gnu/libiconv/libiconv-1.18.tar.gz" "$lib"
+	download_and_unpack_file "$repo" "$lib"
   change_dir "$src_dir/$lib/libiconv-1.18"
   generic_configure_make_install
   change_dir "$src_dir"
@@ -430,8 +430,17 @@ build_iconv() {
 # build_lzma              # config_options+= --disable-lzma               # disable lzma [autodetect]
 build_lzma() {
   if [[ $disable_lzma != 1 && $enable_lzma == 1 ]]; then
-  local lib="lzma"
-  download_and_unpack_file https://sourceforge.net/projects/lzmautils/files/xz-5.8.1.tar.xz
+  echo "NOTE FROM LZMA DEV: Users of LZMA Utils should 
+  move to XZ Utils. XZ Utils support the legacy 
+  .lzma format used by LZMA Utils, and can also 
+  emulate the command line tools of LZMA Utils."
+  local lib="xz"
+  local repo="https://sourceforge.net/projects/lzmautils/files/xz-5.8.1.tar.xz"
+  change_dir "$src_dir"
+	download_and_unpack_file "$repo" "$lib"
+  change_dir "$src_dir/$lib/xz-5.8.1"
+  generic_configure_make_install
+  change_dir "$src_dir"
   fi
 }
 # build_sdl2              # config_options+= --disable-sdl2               # disable sdl2 [autodetect]
