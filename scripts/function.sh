@@ -1348,7 +1348,7 @@ do_python() {
   configure_command=(python ${configure_name[*]})
 	local cur_dir2=$(pwd)
 	local english_name=$(basename "$cur_dir2")
-	local touch_name=$(get_small_touchfile_name "already_built_python$touch_postfix" "$configure_options ${configure_command[*]} $LDFLAGS $CFLAGS")
+	local touch_name=$(get_small_touchfile_name "already_built_python_${host_name}_$touch_postfix" "$configure_options ${configure_command[*]} $LDFLAGS $CFLAGS")
 	if truthy "$build_force"; then
 		remove_path -f "already_built_python$touch_postfix"*
 	fi
@@ -1379,7 +1379,7 @@ do_cargo_build() {
   local touch_postfix=""
   [[ -n $2 ]] && touch_postfix="_$2"
 	local cur_dir2=$(pwd)
-	local touch_name=$(get_small_touchfile_name "already_configured$touch_postfix" "cargo build" "$extra_build_args")
+	local touch_name=$(get_small_touchfile_name "already_configured_${host_name}_$touch_postfix" "cargo build" "$extra_build_args")
 	if truthy "$build_force"; then
 		remove_path -f "$cur_dir2/already_configured$touch_postfix"*
 	fi
@@ -1404,7 +1404,7 @@ do_cargo_install() {
   local touch_postfix=""
   [[ -n $2 ]] && touch_postfix="_$2"
 	local cur_dir2=$(pwd)
-	local touch_name=$(get_small_touchfile_name "already_configured$touch_postfix" "cargo cinstall" "$extra_install_args")
+	local touch_name=$(get_small_touchfile_name "already_configured_${host_name}_$touch_postfix" "cargo cinstall" "$extra_install_args")
 	if truthy "$build_force"; then
 		remove_path -f "$cur_dir2/already_configured$touch_postfix"*
 	fi
@@ -1436,7 +1436,7 @@ do_configure() {
 	fi
 	local cur_dir2=$(pwd)
 	local english_name=$(basename "$cur_dir2")
-	local touch_name=$(get_small_touchfile_name "already_configured$touch_postfix" "$configure_options $configure_name")
+	local touch_name=$(get_small_touchfile_name "already_configured_${host_name}_$touch_postfix" "$configure_options $configure_name")
 	if truthy "$build_force"; then
 		remove_path -f "$cur_dir2/already_configured$touch_postfix"*
 	fi
@@ -1476,7 +1476,7 @@ do_configure() {
 do_autogen() {
   local extra_build_args="$1"
 	local cur_dir2=$(pwd)
-	local touch_name=$(get_small_touchfile_name "already_configured$touch_postfix" "autogen" "$extra_build_args")
+	local touch_name=$(get_small_touchfile_name "already_configured_${host_name}_$touch_postfix" "autogen" "$extra_build_args")
 	if truthy "$build_force"; then
 		remove_path -f "$cur_dir2/already_configured$touch_postfix"*
 	fi
@@ -1500,7 +1500,7 @@ do_make() {
 	[[ -n $2 ]] && touch_postfix="_$2"
 	extra_make_options="-j$(get_cpu_count) $extra_make_options"
 	local cur_dir2=$(pwd)
-	local touch_name=$(get_small_touchfile_name "already_ran_make$touch_postfix" "$extra_make_options")
+	local touch_name=$(get_small_touchfile_name "already_ran_make_${host_name}_$touch_postfix" "$extra_make_options")
 	if truthy "$build_force"; then
 		remove_path -f "$cur_dir2/already_ran_make$touch_postfix"*
 	fi
@@ -1540,7 +1540,7 @@ do_make_install() {
 	else
 		local make_install_options="$override_make_install_options $extra_make_install_options"
 	fi
-	local touch_name=$(get_small_touchfile_name "already_ran_make_install$touch_postfix" "$make_install_options")
+	local touch_name=$(get_small_touchfile_name "already_ran_make_install_${host_name}_$touch_postfix" "$make_install_options")
 	if truthy "$build_force"; then
 		remove_path -f "already_ran_make_install$touch_postfix"*
 	fi
@@ -1617,7 +1617,7 @@ do_cmake() {
 	if [[ -z $build_from_dir ]]; then
 		build_from_dir="."
 	fi
-	local touch_name=$(get_small_touchfile_name "already_ran_cmake$touch_postfix" "$extra_args")
+	local touch_name=$(get_small_touchfile_name "already_ran_cmake_${host_name}_$touch_postfix" "$extra_args")
 	if truthy "$build_force"; then
 		remove_path -f "already_ran_cmake$touch_postfix"*
 	fi
@@ -1721,7 +1721,7 @@ do_meson() {
 	fi
 	local cur_dir2=$(pwd)
 	local english_name=$(basename "$cur_dir2")
-	local touch_name=$(get_small_touchfile_name "already_built_meson$touch_postfix" "$configure_options ${configure_command[*]} $LDFLAGS $CFLAGS")
+	local touch_name=$(get_small_touchfile_name "already_built_meson_${host_name}_$touch_postfix" "$configure_options ${configure_command[*]} $LDFLAGS $CFLAGS")
 	if truthy "$build_force"; then
 		remove_path -f "already_built_meson$touch_postfix"*
     remove_path -rf "$(pwd)/build"
@@ -1770,7 +1770,7 @@ do_ninja_and_ninja_install() {
 	local touch_postfix=""
 	[[ -n $2 ]] && touch_postfix="_$2"
 	do_ninja "$extra_ninja_options" "$touch_postfix"
-	local touch_name=$(get_small_touchfile_name "already_ran_make_install$touch_postfix" "$extra_ninja_options")
+	local touch_name=$(get_small_touchfile_name "already_ran_make_install_${host_name}_$touch_postfix" "$extra_ninja_options")
 	if truthy "$build_force"; then
 		remove_path -f "already_ran_make_install$touch_postfix"*
 	fi
@@ -1787,7 +1787,7 @@ do_ninja() {
 	[[ -n $1 ]] && touch_postfix="_$1"
 	local extra_make_options=" -j $(get_cpu_count)"
 	local cur_dir2=$(pwd)
-	local touch_name=$(get_small_touchfile_name "already_ran_make$touch_postfix" "${extra_make_options}")
+	local touch_name=$(get_small_touchfile_name "already_ran_make_${host_name}_$touch_postfix" "${extra_make_options}")
 	if truthy "$build_force"; then
 		remove_path -f "already_ran_make$touch_postfix"*
 	fi
@@ -2814,7 +2814,7 @@ create_ffmpeg_kit_bundle() {
 		remove_path -rf "${ffmpeg_kit_src_dir}/already_bundled_${TYPE_POSTFIX}"*
 	fi
 
-	local touch_name=$(get_small_touchfile_name "already_bundled_${TYPE_POSTFIX}" "$FFMPEG_KIT_VERSION $ffmpeg_kit_bundle")
+	local touch_name=$(get_small_touchfile_name "already_bundled__${host_name}_${TYPE_POSTFIX}" "$FFMPEG_KIT_VERSION $ffmpeg_kit_bundle")
 	if [ ! -f "$touch_name" ]; then
 		export FFMPEG_KIT_BUNDLE_INCLUDE_DIRECTORY="${ffmpeg_kit_bundle}/include"
 		export FFMPEG_KIT_BUNDLE_LIB_DIRECTORY="${ffmpeg_kit_bundle}/lib"

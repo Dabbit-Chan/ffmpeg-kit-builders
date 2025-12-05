@@ -306,24 +306,36 @@ build_xlib() {
 build_amf() {
   if [[ $disable_amf != 1 && $enable_amf == 1 ]]; then
   # was https://github.com/GPUOpen-LibrariesAndSDKs/AMF
-	# or https://github.com/DeadSix27/AMF
-  local lib="amf"
+  local lib="amf_headers"
+  do_git_checkout https://github.com/GPUOpen-LibrariesAndSDKs/AMF amf_headers
+	change_dir "$src_dir/amf_headers"
+  local touch_name=$(get_small_touchfile_name "already_installed_${host_name}")
+	if [ ! -f "$touch_name" ]; then
+		if [ ! -d "$dependency_install_prefix/include/AMF" ]; then
+			create_dir "$dependency_install_prefix/include/AMF"
+		fi
+		cp -av "amf/public/include/." "$dependency_install_prefix/include/AMF" > >(redirect_output) 2>&1
+		create_touch_file 0 "$touch_name"
+  else
+    echo -e "INFO: amf headers already installed" >>"$LOG_FILE"
+	fi
+	change_dir "$src_dir"
   fi
 }
 # build_vulkan            # config_options+= --disable-vulkan             # disable Vulkan code [autodetect]
 build_vulkan() {
-  if [[ $disable_vulkan != 1 && $enable_vulkan == 1 ]]; then
-  local lib="vulkan"
-  do_git_checkout https://github.com/KhronosGroup/Vulkan-Headers  Vulkan-Headers v1.4.326
+  local extra_args="$1"
+  if [[ ($disable_vulkan != 1 && $enable_vulkan == 1) || -n $extra_args ]]; then
+  # https://github.com/KhronosGroup/Vulkan-Headers  Vulkan-Headers v1.4.326
+  local lib="Vulkan-Headers"
+  local repo="https://github.com/KhronosGroup/Vulkan-Headers"
+  local repo_ver="v1.4.335"
+  change_dir "$src_dir"
+	do_git_checkout "$repo" "$lib" "$repo_ver"
+  change_dir "$src_dir/$lib"
+  do_cmake_and_install "-DCMAKE_BUILD_TYPE=Release -DVULKAN_HEADERS_ENABLE_MODULE=NO -DVULKAN_HEADERS_ENABLE_TESTS=NO -DVULKAN_HEADERS_ENABLE_INSTALL=YES $extra_args"
+  change_dir "$src_dir"
   fi
-}
-build_vulkan_loader() {
-	change_dir "$src_dir"
-	do_git_checkout https://github.com/BtbN/Vulkan-Shim-Loader  Vulkan-Shim-Loader  9657ca8e395ef16c79b57c8bd3f4c1aebb319137
-	change_dir "$src_dir/Vulkan-Shim-Loader"
-	do_git_checkout https://github.com/KhronosGroup/Vulkan-Headers  Vulkan-Headers v1.4.326
-	do_cmake_and_install "-DCMAKE_BUILD_TYPE=Release -DVULKAN_SHIM_IMPERSONATE=ON"
-	change_dir "$src_dir"
 }
 # build_libmfx            # config_options+= --enable-libmfx              # enable Intel MediaSDK (AKA Quick Sync Video) code via libmfx [no]
 build_libmfx() {
@@ -349,8 +361,12 @@ build_omx() {
 # build_vulkan_static     # config_options+= --enable-vulkan-static       # enable statically link to libvulkan [no]
 build_vulkan_static() {
   if [[ $disable_vulkan_static != 1 && $enable_vulkan_static == 1 ]]; then
-  build_vulkan
-	build_vulkan_loader
+  local lib="Vulkan-Shim-Loader"
+	change_dir "$src_dir"
+	do_git_checkout https://github.com/BtbN/Vulkan-Shim-Loader "$lib"
+	change_dir "$src_dir/$lib"
+	build_vulkan "-DCMAKE_BUILD_TYPE=Release -DVULKAN_SHIM_IMPERSONATE=ON"
+	change_dir "$src_dir"
 	fi
 }
 #endregion---------------------------------------------------------------------

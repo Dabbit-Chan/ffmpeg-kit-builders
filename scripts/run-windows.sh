@@ -1207,7 +1207,6 @@ build_vulkan() {
 # --enable-vulkan-static         # enable statically link to libvulkan [no]
 build_vulkan_static() {
   if [[ $disable_vulkan_static != 1 && $enable_vulkan_static == 1 ]]; then
-  build_vulkan
 	build_vulkan_loader
 	fi
 }

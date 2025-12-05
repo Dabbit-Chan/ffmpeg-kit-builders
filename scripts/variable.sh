@@ -182,4 +182,7 @@ export BUILD_STEPS=(
 "build_libxcb_xfixes" \
 "build_rkmpp" \
 "build_vaapi" \
-"build_xlib")
+"build_xlib" \
+"build_amf" \
+"build_vulkan" \
+"build_vulkan_static")
