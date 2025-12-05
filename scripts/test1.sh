@@ -1,33 +1,46 @@
 #!/bin/bash
 
-# Path to your custom ffmpeg binary
-FFMPEG_PATH="/home/devcontainers/ffmpeg-kit-builders/prebuilt/windows-x86_64/bundle-windows-x86_64-static/bin/ffmpeg.exe"
+# shellcheck disable=SC2317,SC1091,SC1090,SC2120
 
-# --- DO NOT EDIT BELOW THIS LINE ---
+# parse command line parameters, if any
+
+ffmpeg_bin_path=""
+LOG_FILE="$(realpath ..)/test.log"
+
+while [ $# -gt 0 ]; do
+	ffmpeg_bin_path="$1"
+  shift 
+  break
+done
+
+if [[ ! -f $ffmpeg_bin_path ]]; then
+  echo "Invalid ffmpeg binary path" | tee -a "$LOG_FILE"
+  exit 1
+fi
 
 # Expand the path
-FFMPEG_PATH=$(eval echo "$FFMPEG_PATH")
+ffmpeg_bin_path=$(eval echo "$ffmpeg_bin_path")
 
 # Check if the ffmpeg binary exists
-if [ ! -f "$FFMPEG_PATH" ]; then
-    echo "Error: ffmpeg binary not found at $FFMPEG_PATH"
+if [ ! -f "$ffmpeg_bin_path" ]; then
+    echo "Error: ffmpeg binary not found at $ffmpeg_bin_path"
     exit 1
 fi
 
 echo "--- FFmpeg Version and Configuration ---"
-$FFMPEG_PATH -version
+$ffmpeg_bin_path -loglevel warning -version
 
-echo -e "\n--- Available Decoders ---"
-$FFMPEG_PATH -decoders | head -n 10
+echo -e "\n--- Available Decoders ---" 
+$ffmpeg_bin_path -loglevel warning -decoders 
 
-echo -e "\n--- Available Encoders ---"
-$FFMPEG_PATH -encoders | head -n 10
+echo -e "\n--- Available Encoders ---" 
+$ffmpeg_bin_path -loglevel warning -encoders 
 
-echo -e "\n--- Available Muxers ---"
-$FFMPEG_PATH -muxers | head -n 10
+echo -e "\n--- Available Muxers ---" 
+$ffmpeg_bin_path -loglevel warning -muxers 
 
-echo -e "\n--- Available Demuxers ---"
-$FFMPEG_PATH -demuxers | head -n 10
+echo -e "\n--- Available Demuxers ---" 
+$ffmpeg_bin_path -loglevel warning -demuxers 
 
-echo -e "\n--- Available Filters ---"
-$FFMPEG_PATH -filters | head -n 10
+echo -e "\n--- Available Filters ---" 
+$ffmpeg_bin_path -loglevel warning -filters 
