@@ -604,14 +604,62 @@ build_gcrypt() {
 build_gmp() {
   if [[ $disable_gmp != 1 && $enable_gmp == 1 ]]; then
   local lib="gmp"
+  local repo="https://ftp.gnu.org/pub/gnu/gmp/gmp-6.3.0.tar.xz"
+  change_dir "$src_dir"
   download_and_unpack_file https://ftp.gnu.org/pub/gnu/gmp/gmp-6.3.0.tar.xz
+  change_dir "$src_dir/$lib"
+  generic_configure_make_install "ABI=$bits_target"
+  change_dir "$src_dir"
   fi
+}
+build_libnettle() {
+  local lib="nettle"
+  local repo="https://ftp.gnu.org/gnu/nettle/nettle-3.10.2.tar.gz"
+	change_dir "$src_dir"
+	download_and_unpack_file "$repo" "$lib"
+	change_dir "$src_dir/$lib"
+	generic_configure_make_install "--disable-openssl --disable-documentation --libdir=$dependency_install_prefix/lib" # in case we have both gnutls and openssl, just use gnutls [except that gnutls uses this so...huh?
+	cp -rfv source/. destination/ 
+  change_dir "$src_dir"
+}
+build_brotli() {
+  local lib="brotli"
+  local repo="https://github.com/google/brotli"
+  local repo_ver="v1.2.0"
+	change_dir "$src_dir"
+	do_git_checkout "$repo" "$lib" "$repo_ver"
+	change_dir "$src_dir/$lib"
+	generic_configure_make_install
+	change_dir "$src_dir"
 }
 # build_gnutls            # config_options+= --enable-gnutls              # enable gnutls, needed for https support if openssl, libtls or mbedtls is not used [no]
 build_gnutls() {
   if [[ $disable_gnutls != 1 && $enable_gnutls == 1 ]]; then
+  build_brotli
+  build_libnettle
   local lib="gnutls"
-  download_and_unpack_file https://www.gnupg.org/ftp/gcrypt/gnutls/v3.8/gnutls-3.8.9.tar.xz # v3.8.10 not found by ffmpeg with identical .pc?
+  local repo="https://www.gnupg.org/ftp/gcrypt/gnutls/v3.8/gnutls-3.8.9.tar.xz"
+  change_dir "$src_dir"
+  download_and_unpack_file "$repo" "$lib" # v3.8.10 not found by ffmpeg with identical .pc?
+  change_dir "$src_dir/$lib"
+  generic_configure_make_install "--disable-cxx \
+--disable-doc \
+--disable-tools \
+--disable-tests \
+--disable-nls \
+--disable-rpath \
+--disable-libdane \
+--disable-gcc-warnings \
+--disable-code-coverage \
+--without-p11-kit \
+--with-idn \
+--without-tpm \
+--with-included-unistring \
+--with-included-libtasn1 \
+-disable-gtk-doc-html \
+--with-brotli \
+--disable-non-suiteb-curves"
+  change_dir "$src_dir"
   fi
 }
 # build_lcms2             # config_options+= --enable-lcms2               # enable ICC profile support via LittleCMS 2 [no]

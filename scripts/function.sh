@@ -1884,7 +1884,7 @@ download_and_unpack_file() {
 }
 extract_tar() {
     local archive="$1"
-    local dest_dir="${2:-./}"
+    local dest_dir="${2:-$1}"
     
     # Get unique top-level items using mapfile
     local top_items
@@ -1900,7 +1900,7 @@ extract_tar() {
 }
 extract_zip() {
     local archive="$1"
-    local dest_dir="${2:-./}"
+    local dest_dir="${2:-$1}"
     
     # Get unique top-level items using mapfile
     local top_items

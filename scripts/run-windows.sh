@@ -477,7 +477,6 @@ build_gnutls() {
 	download_and_unpack_file https://www.gnupg.org/ftp/gcrypt/gnutls/v3.8/gnutls-3.8.9.tar.xz # v3.8.10 not found by ffmpeg with identical .pc?
 	change_dir "$src_dir/gnutls-3.8.9"
 	export CFLAGS="-Wno-int-conversion"
-	local config_options=""
 	local config_options+=" --disable-non-suiteb-curves"
 	generic_configure "--disable-cxx --disable-doc --disable-tools --disable-tests --disable-nls --disable-rpath --disable-libdane --disable-gcc-warnings --disable-code-coverage
       --without-p11-kit --with-idn --without-tpm --with-included-unistring --with-included-libtasn1 -disable-gtk-doc-html --with-brotli $config_options"
