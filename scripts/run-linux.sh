@@ -516,15 +516,47 @@ build_libopencore_amrwb() {
 # build_liblcevc_dec      # config_options+= --enable-liblcevc-dec        # enable LCEVC decoding via liblcevc-dec [no]
 build_liblcevc_dec() {
   if [[ $disable_liblcevc_dec != 1 && $enable_liblcevc_dec == 1 ]]; then
-  local lib="liblcevc_dec"
   # https://github.com/v-novaltd/LCEVCdec
+  local lib="liblcevc"
+  local repo="https://github.com/v-novaltd/LCEVCdec"
+  local repo_ver="4.0.4"
+  change_dir "$src_dir"
+  do_git_checkout "$repo" "$lib" "$repo_ver"
+  change_dir "$src_dir/$lib/build" 1
+  local cmake_params="-DCMAKE_BUILD_TYPE=Release \
+-DBUILD_SHARED_LIBS=OFF \
+-DVN_SDK_EXECUTABLES=OFF \
+-DVN_SDK_UNIT_TESTS=OFF \
+-DVN_SDK_DOCS=OFF \
+-DVN_SDK_SAMPLE_SOURCE=OFF \
+-DVN_SDK_PIPELINE_VULKAN=OFF \
+-DVN_SDK_PIPELINE_LEGACY=OFF"
+  do_cmake_and_install "$cmake_params" "$src_dir/$lib"
+  change_dir "$src_dir"
   fi
+}
+build_fftw() {
+  local lib="fftw"
+  local repo="http://fftw.org/fftw-3.3.10.tar.gz"
+	change_dir "$src_dir"
+	download_and_unpack_file "$repo" "$lib"
+	change_dir "$src_dir/$lib"
+	generic_configure "--disable-doc --prefix=$dependency_install_prefix --enable-static --disable-shared"
+	do_make_and_make_install
+	change_dir "$src_dir"
 }
 # build_chromaprint       # config_options+= --enable-chromaprint         # enable audio fingerprinting with chromaprint [no]
 build_chromaprint() {
   if [[ $disable_chromaprint != 1 && $enable_chromaprint == 1 ]]; then
+  build_fftw
   local lib="chromaprint"
-  do_git_checkout https://github.com/acoustid/chromaprint  chromaprint
+  local repo="https://github.com/acoustid/chromaprint"
+  local repo_ver="v1.6.0"
+  change_dir "$src_dir"
+  do_git_checkout "$repo" "$lib" "$repo_ver"
+  change_dir "$src_dir/$lib"
+  do_cmake_and_install "-DCMAKE_BUILD_TYPE=Release -DBUILD_TOOLS=OFF -DBUILD_TESTS=OFF -DFFT_LIB=fftw3"
+  change_dir "$src_dir"
   fi
 }
 # build_frei0r            # config_options+= --enable-frei0r              # enable frei0r video filtering [no]
