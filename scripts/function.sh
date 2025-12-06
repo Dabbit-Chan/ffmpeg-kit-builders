@@ -1847,42 +1847,78 @@ download_and_unpack_file() {
     local dest_folder="$2"
     local filename
     filename=$(basename "$url")
-    local cur_dir="."
     if [[ -n "$dest_folder" ]]; then
-        cur_dir="$dest_folder"
-        if [ ! -d "$cur_dir" ]; then
-            mkdir -p "$cur_dir" || exit_message 1 "could not create dir $cur_dir"
-            chmod -R a+rwx "$cur_dir"
+        if [ ! -d "$dest_folder" ]; then
+            mkdir -p "$dest_folder" || exit_message 1 "could not create dir $dest_folder"
+            chmod -R a+rwx "$dest_folder"
         fi
     fi
-    local marker_file="$cur_dir/unpacked.successfully"
+    local marker_file="$dest_folder/unpacked.successfully"
     if [ ! -f "$marker_file" ]; then
-        echo "INFO: Downloading $url into $cur_dir" >>"$LOG_FILE"
+        echo "INFO: Downloading $url into $dest_folder" >>"$LOG_FILE"
         if [[ "$filename" == *.zst ]] && ! command -v zstd &> /dev/null; then
              exit_message 1 "zstd is not installed. Run: sudo apt-get install zstd"
         fi
-        local file_path="$cur_dir/$filename"
-        if [[ -f "$file_path" ]]; then
-            rm -f "$file_path"
+        if [[ -f "$filename" ]]; then
+            rm -f "$filename"
         fi
-        curl -4 "$url" --retry 50 -o "$file_path" -L --fail > >(redirect_output) 2>&1 || {
+        curl -4 "$url" --retry 50 -o "$filename" -L --fail > >(redirect_output) 2>&1 || {
             exit_message 1 "unable to download $url"
         }
-        echo "INFO: Unzipping $filename inside $cur_dir ..." >>"$LOG_FILE"
-        pushd "$cur_dir" > /dev/null || exit
-            if [[ "$filename" == *.zip ]]; then
-                unzip -o "$filename" > >(redirect_output) 2>&1 || exit_message 1 "unzip failed"
-            else
-                tar -xf "$filename" > >(redirect_output) 2>&1 || exit_message 1 "tar failed"
-            fi
-            rm -f "$filename"
-        popd > /dev/null || exit
-        chmod -R a+rwx "$cur_dir"
+        echo "INFO: Unzipping $filename inside $dest_folder ..." >>"$LOG_FILE"
+        if [[ "$filename" == *.zip ]]; then
+            extract_zip "$filename" "$dest_folder"
+            #unzip -o "$filename" > >(redirect_output) 2>&1 || exit_message 1 "unzip failed"
+        else
+            extract_tar "$filename" "$dest_folder"
+            #tar -xf "$filename" > >(redirect_output) 2>&1 || exit_message 1 "tar failed"
+        fi
+        rm -f "$filename"
+        chmod -R a+rwx "$dest_folder"
         create_touch_file 0 "$marker_file"
     else
-      echo "DEBUG: Archive already downloaded and extracted at $cur_dir" >>"$LOG_FILE"
-      chmod -R a+rwx "$cur_dir"
+      echo "DEBUG: Archive already downloaded and extracted at $dest_folder" >>"$LOG_FILE"
+      chmod -R a+rwx "$dest_folder"
       create_touch_file 0 "$marker_file"
+    fi
+}
+extract_tar() {
+    local archive="$1"
+    local dest_dir="${2:-./}"
+    
+    # Get unique top-level items using mapfile
+    local top_items
+    mapfile -t top_items < <(tar -tf "$archive" --strip-components=0 | cut -d/ -f1 | sort -u)
+    
+    if [[ ${#top_items[@]} -eq 1 ]]; then
+        # Single top-level directory
+        tar -xf "$archive" -C "$dest_dir" --strip-components=1
+    else
+        # Multiple items at root
+        tar -xf "$archive" -C "$dest_dir"
+    fi
+}
+extract_zip() {
+    local archive="$1"
+    local dest_dir="${2:-./}"
+    
+    # Get unique top-level items using mapfile
+    local top_items
+    mapfile -t top_items < <(unzip -Z -1 "$archive" | cut -d/ -f1 | sort -u)
+    
+    if [[ ${#top_items[@]} -eq 1 ]]; then
+        # Single top-level directory
+        mkdir -p "$dest_dir"
+        # Extract everything then move contents up one level
+        unzip -o "$archive" -d "$dest_dir"
+        # Move contents up one level
+        shopt -s dotglob  # Include hidden files
+        mv "$dest_dir/${top_items[0]}/"* "$dest_dir/" 2>/dev/null || true
+        shopt -u dotglob
+        rmdir "$dest_dir/${top_items[0]}" 2>/dev/null || true
+    else
+        # Multiple items: normal extraction
+        unzip -o "$archive" -d "$dest_dir"
     fi
 }
 # 1. extra config options

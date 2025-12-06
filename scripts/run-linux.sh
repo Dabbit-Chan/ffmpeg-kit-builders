@@ -490,14 +490,20 @@ build_zlib() {
 build_libvo_amrwbenc() {
   if [[ $disable_libvo_amrwbenc != 1 && $enable_libvo_amrwbenc == 1 ]]; then
   local lib="libvo_amrwbenc"
-  generic_download_and_make_and_install https://sourceforge.net/projects/opencore-amr/files/vo-amrwbenc/vo-amrwbenc-0.1.3.tar.gz
+  local repo="https://sourceforge.net/projects/opencore-amr/files/vo-amrwbenc/vo-amrwbenc-0.1.3.tar.gz"
+  change_dir "$src_dir"
+  generic_download_and_make_and_install "$repo" "$lib"
+  change_dir "$src_dir"
   fi
 }
 # build_libopencore_amrnb # config_options+= --enable-libopencore-amrnb   # enable AMR-NB de/encoding via libopencore-amrnb [no]
 build_libopencore_amrnb() {
   if [[ $disable_libopencore_amrnb != 1 && $enable_libopencore_amrnb == 1 ]]; then
   local lib="libopencore_amrnb"
-  generic_download_and_make_and_install https://sourceforge.net/projects/opencore-amr/files/opencore-amr/opencore-amr-0.1.6.tar.gz
+  local repo="https://sourceforge.net/projects/opencore-amr/files/opencore-amr/opencore-amr-0.1.6.tar.gz"
+  change_dir "$src_dir"
+  generic_download_and_make_and_install "$repo" "$lib"
+  change_dir "$src_dir"
   fi
 }
 # build_libopencore_amrwb # config_options+= --enable-libopencore-amrwb   # enable AMR-WB decoding via libopencore-amrwb [no]
