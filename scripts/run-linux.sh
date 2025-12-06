@@ -549,6 +549,7 @@ build_fftw() {
 build_chromaprint() {
   if [[ $disable_chromaprint != 1 && $enable_chromaprint == 1 ]]; then
   build_fftw
+  # https://github.com/acoustid/chromaprint
   local lib="chromaprint"
   local repo="https://github.com/acoustid/chromaprint"
   local repo_ver="v1.6.0"
@@ -562,15 +563,41 @@ build_chromaprint() {
 # build_frei0r            # config_options+= --enable-frei0r              # enable frei0r video filtering [no]
 build_frei0r() {
   if [[ $disable_frei0r != 1 && $enable_frei0r == 1 ]]; then
+  # https://github.com/dyne/frei0r
   local lib="frei0r"
-  #do_git_checkout https://github.com/dyne/frei0r
+  local repo="https://github.com/dyne/frei0r"
+  local repo_ver="v2.5.1"
+  change_dir "$src_dir"
+  do_git_checkout "$repo" "$lib" "$repo_dir"
+  change_dir "$src_dir/$lib/build"
+  do_cmake_and_install "-DWITHOUT_OPENCV=1"
+  change_dir "$src_dir"
   fi
+}
+build_libgpg_error() {
+  # https://github.com/gpg/libgpg-error
+  local lib="libgpg-error"
+  local repo="https://github.com/gpg/libgpg-error"
+  local repo_ver="libgpg-error-1.45"
+  change_dir "$src_dir"
+  do_git_checkout "$repo" "$lib" "$repo_ver"
+  change_dir "$src_dir/$lib"
+  generic_configure_make_install "--disable-doc --disable-nls --disable-languages --enable-install-gpg-error-config"
+  change_dir "$src_dir"
 }
 # build_gcrypt            # config_options+= --enable-gcrypt              # enable gcrypt, needed for rtmp(t)e support if openssl, librtmp or gmp is not used [no]
 build_gcrypt() {
   if [[ $disable_gcrypt != 1 && $enable_gcrypt == 1 ]]; then
-  local lib="gcrypt"
-  # https://github.com/gpg/libgcrypt
+  build_libgpg_error
+  # https://github.com/gpg/libgcrypt #repo doesnt seem to work
+  # https://www.gnupg.org/ftp/gcrypt/libgcrypt/libgcrypt-1.11.2.tar.bz2
+  local lib="libgcrypt"
+  local repo="https://www.gnupg.org/ftp/gcrypt/libgcrypt/libgcrypt-1.11.2.tar.bz2"
+  change_dir "$src_dir"
+  download_and_unpack_file "$repo" "$lib"
+  change_dir "$src_dir/$lib"
+  generic_configure_make_install "--with-libgpg-error-prefix=$dependency_install_prefix LIBS=\"-lpthread -ldl\" --disable-doc --disable-amd64-as-feature-detection"
+  change_dir "$src_dir"
   fi
 }
 # build_gmp               # config_options+= --enable-gmp                 # enable gmp, needed for rtmp(t)e support if openssl or librtmp is not used [no]
