@@ -5,8 +5,6 @@
 source "${SCRIPTDIR}/function-$host_platform.sh"
 source "${SCRIPTDIR}/run-$host_platform.sh"
 
-check_missing_packages # do this first since it's annoying to go through prompts then be rejected
-intro                  # remember to always run the intro, since it adjust pwd
 setup_build_environment
 
 

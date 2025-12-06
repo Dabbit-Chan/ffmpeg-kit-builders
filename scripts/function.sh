@@ -775,14 +775,6 @@ list_libraries() {
   exit 0
 }
 
-#region WINDOWS GENERIC FUNCTIONS
-
-#===============================================================================================
-#
-#                                   WINDOWS GENERIC FUNCTIONS
-#
-#===============================================================================================
-
 reset_cflags() {
   if [[ -n $original_cflags ]]; then
     export CFLAGS=$original_cflags
@@ -1884,7 +1876,7 @@ download_and_unpack_file() {
 }
 extract_tar() {
     local archive="$1"
-    local dest_dir="${2:-$1}"
+    local dest_dir=${2:-"$(basename "$archive" | sed s/\.tar\.*//)"}
     
     # Get unique top-level items using mapfile
     local top_items
@@ -1900,7 +1892,7 @@ extract_tar() {
 }
 extract_zip() {
     local archive="$1"
-    local dest_dir="${2:-$1}"
+    local dest_dir=${2:-"$(basename "$archive" | sed s/\.zip//)"}
     
     # Get unique top-level items using mapfile
     local top_items
@@ -1938,19 +1930,19 @@ generic_configure() {
 	do_configure "--host=$host_target --prefix=$dependency_install_prefix $options" "$configure_name" "$touch_postfix"
 }
 
-# params: url, optional "english name it will unpack to"
+# 1. url, 
+# 2. optional to_dir
+# 3. extra_configure_options
 generic_download_and_make_and_install() {
 	local url="$1"
-	local english_name="$2"
-	if [[ -z $english_name ]]; then
-		english_name=$(basename "$url" | sed s/\.tar\.*//) # remove .tar.xx, take last part of url
-	fi
+	local to_dir=${2:-"$(basename "$url" | sed s/\.tar\.*//)"}
 	local extra_configure_options="$3"
-	download_and_unpack_file "$url" "$english_name"
-	change_dir "$english_name"
+	change_dir "$src_dir"
+  download_and_unpack_file "$url" "$to_dir"
+	change_dir "$src_dir/$to_dir"
 	generic_configure "$extra_configure_options"
 	do_make_and_make_install
-	change_dir ..
+	change_dir "$src_dir"
 }
 
 # 1. extra_config_args
@@ -1969,13 +1961,17 @@ generic_configure_make_install() {
 	do_make_and_make_install "$extra_make_options" "$extra_install_options" "$touch_postfix"
 }
 # 1. git url
+# 2. optional to_dir
+# 3. version
 do_git_checkout_and_make_install() {
 	local url=$1
-	local git_checkout_name=$(basename "$url" | sed s/\.git/_git/) # http://y/abc.git -> abc_git
-	do_git_checkout "$url" "$git_checkout_name"
-	change_dir "$git_checkout_name"
+	local git_checkout_name=${2:-"$(basename "$url" | sed s/\.git//)"} # http://y/abc.git -> abc
+  local git_version="$3"
+  change_dir "$src_dir"
+	do_git_checkout "$url" "$git_checkout_name" "$git_version"
+	change_dir "$src_dir/$git_checkout_name"
 	generic_configure_make_install
-	change_dir ..
+	change_dir "$src_dir"
 }
 
 # 1. lib
@@ -2909,5 +2905,3 @@ create_ffmpeg_kit_bundle() {
 	fi
 	echo -e "INFO: Done creating bundle" | tee -a "$LOG_FILE"
 }
-
-#endregion

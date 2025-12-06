@@ -422,7 +422,7 @@ build_iconv() {
   local repo_ver="v1.18"
   change_dir "$src_dir"
 	download_and_unpack_file "$repo" "$lib"
-  change_dir "$src_dir/$lib/libiconv-1.18"
+  change_dir "$src_dir/$lib"
   generic_configure_make_install
   change_dir "$src_dir"
   fi
@@ -438,7 +438,7 @@ build_lzma() {
   local repo="https://sourceforge.net/projects/lzmautils/files/xz-5.8.1.tar.xz"
   change_dir "$src_dir"
 	download_and_unpack_file "$repo" "$lib"
-  change_dir "$src_dir/$lib/xz-5.8.1"
+  change_dir "$src_dir/$lib"
   generic_configure_make_install
   change_dir "$src_dir"
   fi
@@ -629,7 +629,16 @@ build_brotli() {
 	change_dir "$src_dir"
 	do_git_checkout "$repo" "$lib" "$repo_ver"
 	change_dir "$src_dir/$lib"
-	generic_configure_make_install
+  export CFLAGS="$CFLAGS -fPIC"
+  export CXXFLAGS="$CXXFLAGS -fPIC"
+	do_cmake_and_install "-DCMAKE_INSTALL_PREFIX=$dependency_install_prefix \
+-DCMAKE_BUILD_TYPE=Release \
+-DCMAKE_POSITION_INDEPENDENT_CODE=ON"
+  # Replace all instances of "-R" with "-Wl,-rpath," in all .pc files
+  sed -i.bak 's/Libs.*$/Libs: -L${libdir} -lbrotlicommon/' "$dependency_install_prefix"/lib/pkgconfig/libbrotlicommon.pc # remove rpaths not possible in conf
+  sed -i.bak 's/Libs.*$/Libs: -L${libdir} -lbrotlidec/' "$dependency_install_prefix"/lib/pkgconfig/libbrotlidec.pc
+  sed -i.bak 's/Libs.*$/Libs: -L${libdir} -lbrotlienc/' "$dependency_install_prefix"/lib/pkgconfig/libbrotlienc.pc
+  sed -i 's/-lbrotlidec/-lbrotlidec -lbrotlicommon/g' "$dependency_install_prefix"/lib/pkgconfig/libbrotlidec.pc
 	change_dir "$src_dir"
 }
 # build_gnutls            # config_options+= --enable-gnutls              # enable gnutls, needed for https support if openssl, libtls or mbedtls is not used [no]
@@ -666,28 +675,70 @@ build_gnutls() {
 build_lcms2() {
   if [[ $disable_lcms2 != 1 && $enable_lcms2 == 1 ]]; then
   local lib="lcms2"
-  # https://github.com/mm2/Little-CMS
+  local repo_ver="lcms2.17"
+  local repo="https://github.com/mm2/Little-CMS"
+  activate_meson
+  change_dir "$src_dir"
+  do_git_checkout "$repo" "$lib" "$repo_ver"
+  change_dir "$src_dir/$lib"
+  local meson_options="--prefix=$dependency_install_prefix -Ddefault_library=static -Dtests=disabled -Dutils=false"
+  do_meson "$meson_options" "setup build"
+  do_ninja_and_ninja_install
+  change_dir "$src_dir"
   fi
 }
 # build_libaom            # config_options+= --enable-libaom              # enable AV1 video encoding/decoding via libaom [no]
 build_libaom() {
   if [[ $disable_libaom != 1 && $enable_libaom == 1 ]]; then
-  local lib="libaom"
-  do_git_checkout https://aomedia.googlesource.com/aom aom
+    local lib="aom"
+    local repo_ver="v3.13.1"
+    local repo="https://aomedia.googlesource.com/aom"
+    change_dir "$src_dir"
+    do_git_checkout "$repo" "$lib" "$repo_ver"
+    change_dir "$src_dir/$lib"
+    local cmake_params="-B build -G Ninja \
+-DCMAKE_BUILD_TYPE=Release \
+-DBUILD_SHARED_LIBS=0 \
+-DENABLE_TESTS=0 \
+-DENABLE_EXAMPLES=0 \
+-DENABLE_DOCS=0"
+    do_cmake "$cmake_params"
+    do_ninja_and_ninja_install
+    change_dir "$src_dir"
   fi
+}
+build_libpng() {
+  local lib="libpng"
+  local repo_ver="v1.6.53"
+  local repo="https://github.com/glennrp/libpng"
+	change_dir "$src_dir"
+	do_git_checkout_and_make_install "$repo" "$lib" "$repo_ver"
+	change_dir "$src_dir"
 }
 # build_libaribb24        # config_options+= --enable-libaribb24          # enable ARIB text and caption decoding via libaribb24 [no]
 build_libaribb24() {
   if [[ $disable_libaribb24 != 1 && $enable_libaribb24 == 1 ]]; then
+  build_libpng
   local lib="libaribb24"
-  do_git_checkout_and_make_install https://github.com/nkoriyama/aribb24
+  local repo_ver="v1.0.3"
+  local repo="https://github.com/nkoriyama/aribb24"
+  change_dir "$src_dir"
+  do_git_checkout_and_make_install "$repo" "$lib" "$repo_ver"
+  change_dir "$src_dir"
   fi
 }
 # build_libaribcaption    # config_options+= --enable-libaribcaption      # enable ARIB text and caption decoding via libaribcaption [no]
 build_libaribcaption() {
   if [[ $disable_libaribcaption != 1 && $enable_libaribcaption == 1 ]]; then
+  build_libfontconfig
   local lib="libaribcaption"
-  do_git_checkout https://github.com/xqq/libaribcaption
+  local repo_ver="v1.1.1"
+  local repo="https://github.com/xqq/libaribcaption"
+  change_dir "$src_dir"
+  do_git_checkout "$repo" "$lib" "$repo_ver"
+  change_dir "$src_dir/$lib"
+  do_cmake_and_install "-DBUILD_TESTS=OFF -DBUILD_EXAMPLES=OFF"
+  change_dir "$src_dir"
   fi
 }
 # build_libass            # config_options+= --enable-libass              # enable libass subtitles rendering, needed for subtitles and ass filter [no]
@@ -788,15 +839,35 @@ build_libflite() {
 # build_libfontconfig     # config_options+= --enable-libfontconfig       # enable libfontconfig, useful for drawtext filter [no]
 build_libfontconfig() {
   if [[ $disable_libfontconfig != 1 && $enable_libfontconfig == 1 ]]; then
-  local lib="libfontconfig"
-  do_git_checkout https://gitlab.freedesktop.org/fontconfig/fontconfig fontconfig # meson build for fontconfig no good
+  build_libfreetype
+  build_libxml2
+  local lib="fontconfig"
+  local repo="https://gitlab.freedesktop.org/fontconfig/fontconfig"
+  local repo_ver="2.17.1"
+  activate_meson
+  change_dir "$src_dir"
+  do_git_checkout "$repo" "$lib"
+  change_dir "$src_dir/$lib"
+  local meson_options="--prefix=$dependency_install_prefix -Ddefault_library=static -Ddoc=disabled -Diconv=enabled -Dtests=disabled -Dxml-backend=libxml2"
+  do_meson "$meson_options" "setup build"
+  do_ninja_and_ninja_install
+  change_dir "$src_dir"
   fi
 }
 # build_libfreetype       # config_options+= --enable-libfreetype         # enable libfreetype, needed for drawtext filter [no]
 build_libfreetype() {
   if [[ $disable_libfreetype != 1 && $enable_libfreetype == 1 ]]; then
-  local lib="libfreetype"
-  do_git_checkout https://github.com/freetype/freetype freetype
+  local lib="freetype"
+  local repo="https://github.com/freetype/freetype"
+  local repo_ver="VER-2-14-1"
+  activate_meson
+  change_dir "$src_dir"
+  do_git_checkout "$repo" "$lib" "$repo_ver"
+  change_dir "$src_dir/$lib"
+  local meson_options="--prefix=$dependency_install_prefix -Ddefault_library=static -Dtests=disabled -Dharfbuzz=disabled -Dpng=disabled -Dbzip2=disabled -Dzlib=disabled"
+  do_meson "$meson_options" "setup build"
+  do_ninja_and_ninja_install
+  change_dir "$src_dir"
   fi
 }
 # build_libfribidi        # config_options+= --enable-libfribidi          # enable libfribidi, improves drawtext filter [no]
@@ -1404,7 +1475,14 @@ build_libxeve() {
 build_libxml2() {
   if [[ $disable_libxml2 != 1 && $enable_libxml2 == 1 ]]; then
   local lib="libxml2"
-  do_git_checkout https://gitlab.gnome.org/GNOME/libxml2 libxml2
+  local repo="https://gitlab.gnome.org/GNOME/libxml2"
+  local repo_ver="v2.15.1"
+  change_dir "$src_dir"
+  do_git_checkout "$repo" "$lib" "$repo_ver"
+  change_dir "$src_dir/$lib"
+  generic_configure "--with-ftp=no --with-http=no --with-python=no --with-iconv=$dependency_install_prefix" # using configure. meson doesnt work
+	do_make_and_make_install
+  change_dir "$src_dir"
   fi
 }
 # build_libxvid           # config_options+= --enable-libxvid             # enable Xvid encoding via xvidcore, native MPEG-4/Xvid encoder exists [no]

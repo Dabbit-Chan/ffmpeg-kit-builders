@@ -409,7 +409,7 @@ build_libfontconfig() {
   if [[ $disable_libfontconfig != 1 && $enable_libfontconfig == 1 ]]; then
 	activate_meson
 	change_dir "$src_dir"
-	do_git_checkout https://gitlab.freedesktop.org/fontconfig/fontconfig fontconfig # meson build for fontconfig no good
+	do_git_checkout https://gitlab.freedesktop.org/fontconfig/fontconfig fontconfig
 	change_dir "$src_dir/fontconfig"
 	local meson_options="-Ddoc=disabled -Diconv=enabled -Dxml-backend=libxml2 -Dtests=disabled"
 	local cross_file=$(get_meson_cross_file)
@@ -2792,9 +2792,9 @@ build_libdvdnav() {
 
 build_pango() {
   if [[ $disable_librsvg != 1 && $enable_librsvg == 1 ]]; then
-  #build_harfbuzz
-  #build_freetype
-  #build_libfontconfig
+  build_harfbuzz
+  build_freetype
+  build_libfontconfig
  	# https://gitlab.gnome.org/GNOME/pango
 	local lib="pango"
   activate_meson
