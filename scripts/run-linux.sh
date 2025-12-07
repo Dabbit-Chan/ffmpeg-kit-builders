@@ -747,14 +747,25 @@ build_libass() {
   build_libfribidi
   build_libharfbuzz
   local lib="libass"
-  do_git_checkout_and_make_install https://github.com/libass/libass
+  local repo="https://github.com/libass/libass"
+  local repo_ver="0.17.4"
+  do_git_checkout_and_make_install "$repo" "$lib" "$repo_ver"
   fi
 }
 # build_libbluray         # config_options+= --enable-libbluray           # enable BluRay reading using libbluray [no]
 build_libbluray() {
   if [[ $disable_libbluray != 1 && $enable_libbluray == 1 ]]; then
   local lib="libbluray"
-  do_git_checkout https://code.videolan.org/videolan/libbluray
+  local repo="https://code.videolan.org/videolan/libbluray"
+  local repo_ver="1.4.0"
+  activate_meson
+  change_dir "$src_dir"
+  do_git_checkout "$repo" "$lib" "$repo_ver"
+  change_dir "$src_dir/$lib"
+  local meson_options="--prefix=$dependency_install_prefix -Ddefault_library=static -Denable_examples=false -Dbdj_jar=disabled --wrap-mode=default"
+  do_meson "$meson_options" "setup build"
+  do_ninja_and_ninja_install
+  change_dir "$src_dir"
   fi
 }
 # build_libbs2b           # config_options+= --enable-libbs2b             # enable bs2b DSP library [no]
