@@ -63,7 +63,7 @@ build_alsa() {
   change_dir "$src_dir"
 	do_git_checkout "$repo" "$lib"
   change_dir "$src_dir/$lib"
-  generic_configure_make_install
+  generic_configure_make_install "--enable-static --disable-shared"
   change_dir "$src_dir"
 	fi 
 }
@@ -1121,11 +1121,55 @@ build_libilbc() {
 	change_dir "$src_dir"
   fi
 }
+
+build_tre() {
+# https://github.com/laurikari/tre
+  local lib="tre"
+  local repo="https://github.com/laurikari/tre"
+  local repo_ver="TRE 0.9.0"
+  change_dir "$src_dir"
+  do_git_checkout "$repo" "$lib" "$repo_ver" # meson build for fontconfig no good
+  change_dir "$src_dir/$lib"
+  generic_configure_make_install "--disable-nls"
+  change_dir "$src_dir"
+}
+
+build_portaudio() {
+# https://github.com/PortAudio/portaudio
+  local lib="portaudio"
+  local repo="https://github.com/PortAudio/portaudio"
+  local repo_ver="v19.7.0"
+  change_dir "$src_dir"
+  do_git_checkout "$repo" "$lib" "$repo_ver"  # meson build for fontconfig no good
+  change_dir "$src_dir/$lib"
+  if [[ ! -d "$src_dir/$lib/opt/asiosdk/common" ]]; then
+    download_and_unpack_file "https://download.steinberg.net/sdk_downloads/ASIO-SDK_2.3.4_2025-10-15.zip" "ASIOSDK"
+    create_dir "opt"
+    mv -f "ASIOSDK" "opt/asiosdk"
+  fi
+  change_dir "$src_dir/$lib"
+  generic_configure_make_install "--with-asiodir=$src_dir/$lib/opt/asiosdk"
+  change_dir "$src_dir"
+}
 # build_libjack           # config_options+= --enable-libjack             # enable JACK audio sound server [no]
 build_libjack() {
   if [[ $disable_libjack != 1 && $enable_libjack == 1 ]]; then
-  local lib="libjack"
   # https://github.com/jackaudio/jack2
+  #build_tre
+  #build_portaudio
+  local lib="libjack"
+  local repo="https://github.com/jackaudio/jack2"
+  local repo_ver="v19.7.0"
+  change_dir "$src_dir"
+  do_git_checkout "$repo" "$lib" "$repo_ver"
+  change_dir "$src_dir/$lib"
+  export CFLAGS="-static -O3 -I$dependency_install_prefix/include -L$dependency_install_prefix/lib"
+  export CXXFLAGS="-static -O3 -I$dependency_install_prefix/include -L$dependency_install_prefix/lib"
+  sed -i "/opt.load('xcode6')/d" wscript
+  sed -i "/conf.load('xcode6')/d" wscript
+  do_python '--prefix="$dependency_install_prefix" --platform="$host_name" --db="no" --check-c-compiler=gcc --check-cxx-compiler=g++ --static'
+  do_python "" "./waf build -v"
+  do_python "" "./waf install -v"
   fi
 }
 # build_libjxl            # config_options+= --enable-libjxl              # enable JPEG XL de/encoding via libjxl [no]

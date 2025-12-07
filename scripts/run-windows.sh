@@ -1607,8 +1607,10 @@ build_portaudio() {
   if [[ $disable_libjack != 1 && $enable_libjack == 1 ]]; then
   # https://github.com/PortAudio/portaudio
     local lib="portaudio"
+    local repo="https://github.com/PortAudio/portaudio"
+    local repo_ver="v19.7.0"
     change_dir "$src_dir"
-    do_git_checkout https://github.com/PortAudio/portaudio "$lib" "v19.7.0" # meson build for fontconfig no good
+    do_git_checkout "$repo" "$lib" "$repo_ver" # meson build for fontconfig no good
     change_dir "$src_dir/$lib"
     if [[ ! -d "$src_dir/$lib/opt/asiosdk/common" ]]; then
       download_and_unpack_file "https://download.steinberg.net/sdk_downloads/ASIO-SDK_2.3.4_2025-10-15.zip"
@@ -1628,7 +1630,7 @@ build_libjack() {
 		# https://github.com/jackaudio/jack2
     local lib="libjack"
     change_dir "$src_dir"
-    do_git_checkout https://github.com/jackaudio/jack2 "$lib" "v1.9.22" # meson build for fontconfig no good
+    do_git_checkout https://github.com/jackaudio/jack2 "$lib" "v1.9.22"
     change_dir "$src_dir/$lib"
     export CC="${cross_prefix}gcc"
     export CXX="${cross_prefix}g++"
