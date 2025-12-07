@@ -844,7 +844,18 @@ We apologize for any inconvenience this has caused.
 build_libcodec2() {
   if [[ $disable_libcodec2 != 1 && $enable_libcodec2 == 1 ]]; then
   local lib="libcodec2"
-  do_git_checkout https://github.com/drowe67/codec2
+  local repo_ver="1.2.0"
+  local repo="https://github.com/drowe67/codec2"
+  change_dir "$src_dir"
+  do_git_checkout "$repo" "$lib" "$repo_ver"
+  change_dir "$src_dir/$lib/build" 1
+  local target_proc=AMD64
+	if [ "$bits_target" = "32" ]; then
+		target_proc=X86
+	fi
+  do_cmake_from_build_dir "$src_dir/$lib" "-DUNITTEST=FALSE"
+	do_make_and_make_install
+	change_dir "$src_dir"
   fi
 }
 # build_libdav1d          # config_options+= --enable-libdav1d            # enable AV1 decoding via libdav1d [no]
