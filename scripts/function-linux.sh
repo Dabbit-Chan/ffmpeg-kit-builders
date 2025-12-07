@@ -4,10 +4,19 @@
 
 get_common_cflags() {
   if [[ -n ${FFMPEG_KIT_LTS_BUILD} ]]; then
-    local LTS_BUILD_FLAG="-DFFMPEG_KIT_LTS "
+    case $1 in
+    ffmpeg-kit)
+      echo "${linux_cflags} -DFFMPEG_KIT_LTS ${LLVM_CONFIG_CFLAGS}"
+      ;;
+    *)
+      echo "${linux_cflags} ${LLVM_CONFIG_CFLAGS}"
+      ;;
+    esac
   fi
+}
 
-  echo "-fstrict-aliasing -fPIC -DLINUX ${LTS_BUILD_FLAG} ${LLVM_CONFIG_CFLAGS}"
+get_common_cxxflags() {
+  echo "$linux_cxxflags"
 }
 
 get_size_optimization_cflags() {
@@ -100,12 +109,7 @@ get_cflags() {
     APP_FLAGS="-std=c99 -Wno-unused-function"
     ;;
   esac
-  local COMMON_FLAGS=""
-  if [[ -n ${FFMPEG_KIT_LTS_BUILD} ]]; then
-    COMMON_FLAGS="-fstrict-aliasing -fPIC -DLINUX -DFFMPEG_KIT_LTS ${LLVM_CONFIG_CFLAGS}"
-  else
-    COMMON_FLAGS="-fstrict-aliasing -fPIC -DLINUX ${LTS_BUILD_FLAG} ${LLVM_CONFIG_CFLAGS}"
-  fi
+  local COMMON_FLAGS="$(get_common_cflags)"
 
   if [[ -z ${FFMPEG_KIT_DEBUG} ]]; then
     local OPTIMIZATION_FLAGS=$(get_size_optimization_cflags "$1")
@@ -132,14 +136,14 @@ get_cxxflags() {
   fi
 
   local BUILD_DATE="-DFFMPEG_KIT_BUILD_DATE=$(date +%Y%m%d 2>>"${BASEDIR}"/build.log)"
-  local COMMON_FLAGS="-stdlib=libstdc++ -std=c++11 ${OPTIMIZATION_FLAGS} ${BUILD_DATE} $ARCH_FLAGS"
+  local COMMON_FLAGS="$(get_common_cxxflags) ${OPTIMIZATION_FLAGS} ${BUILD_DATE} $ARCH_FLAGS"
 
   case $1 in
   ffmpeg)
     if truthy "$do_debug_build"; then
-      echo "-g -stdlib=libstdc++ -std=c++11"
+      echo "-g $(get_common_cxxflags)"
     else
-      echo "${LINK_TIME_OPTIMIZATION_FLAGS} -stdlib=libstdc++ -std=c++11 -O2 -ffunction-sections -fdata-sections"
+      echo "${LINK_TIME_OPTIMIZATION_FLAGS} $(get_common_cxxflags) -O2 -ffunction-sections -fdata-sections"
     fi
     ;;
   ffmpeg-kit)
