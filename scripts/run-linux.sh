@@ -1058,7 +1058,11 @@ EOF
 build_libgme() {
   if [[ $disable_libgme != 1 && $enable_libgme == 1 ]]; then
   local lib="libgme"
-  download_and_unpack_file https://bitbucket.org/mpyne/game-music-emu/downloads/game-music-emu-0.6.3.tar.xz
+  local repo="https://bitbucket.org/mpyne/game-music-emu/downloads/game-music-emu-0.6.3.tar.xz"
+  download_and_unpack_file "$repo" "$lib"
+  change_dir "$src_dir/$lib"
+	do_cmake_and_install "-DENABLE_UBSAN=0"
+	change_dir "$src_dir"
   fi
 }
 build_libsndfile() {
@@ -1109,7 +1113,12 @@ build_libharfbuzz() {
 build_libilbc() {
   if [[ $disable_libilbc != 1 && $enable_libilbc == 1 ]]; then
   local lib="libilbc"
-  do_git_checkout https://github.com/TimothyGu/libilbc libilbc
+  local repo="https://github.com/TimothyGu/libilbc"
+  local repo_ver="v3.0.4"
+  do_git_checkout "$repo" "$lib" "$repo_ver"
+  change_dir "$src_dir/$lib"
+	do_cmake_and_install "-DENABLE_UBSAN=0"
+	change_dir "$src_dir"
   fi
 }
 # build_libjack           # config_options+= --enable-libjack             # enable JACK audio sound server [no]

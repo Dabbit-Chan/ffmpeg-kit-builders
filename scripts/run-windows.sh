@@ -683,8 +683,8 @@ build_libgme() {
   if [[ $disable_libgme != 1 && $enable_libgme == 1 ]]; then
 	# do_git_checkout https://bitbucket.org/mpyne/game-music-emu
 	change_dir "$src_dir"
-	download_and_unpack_file https://bitbucket.org/mpyne/game-music-emu/downloads/game-music-emu-0.6.3.tar.xz
-	change_dir "$src_dir/game-music-emu-0.6.3"
+	download_and_unpack_file "https://bitbucket.org/mpyne/game-music-emu/downloads/game-music-emu-0.6.3.tar.xz" "libgme"
+	change_dir "$src_dir/libgme"
 	do_cmake_and_install "-DENABLE_UBSAN=0"
 	change_dir "$src_dir"
 	fi
