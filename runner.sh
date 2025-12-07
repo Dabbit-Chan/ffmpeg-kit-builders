@@ -243,6 +243,11 @@ while [ $# -gt 0 ]; do
     export enable_lto="1"
     shift
 		;;
+  --lts)
+    export FFMPEG_KIT_LTS_BUILD="1"
+    export LTS_BUILD_FLAG="-DFFMPEG_KIT_LTS"
+    shift
+		;;
   --host-platform=*|--host=*)
     pick_host_platform "${1#*=}"
     shift
@@ -326,17 +331,14 @@ while [ $# -gt 0 ]; do
 	--clean-builds)
 		export clean_builds=y
     shift
-		break
 		;;
   --list-libraries)
     list_libraries
     shift
-    break
     ;;
   --run-only=*)
     export run_only="${1#*=}"
     shift
-    break
     ;;
 	--enable-*)
 		LIBRARY_NAME="${1#--enable-}"
