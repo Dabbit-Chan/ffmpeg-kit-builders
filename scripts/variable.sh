@@ -33,6 +33,7 @@ export build_amd_amf=y
 export ffmpeg_git_checkout_version="release/8.0"
 export build_ismindex=n
 export enable_gpl=y
+export original_cflags="$CFLAGS"
 export build_x264_with_libav=n # To build x264 with Libavformat.
 export ffmpeg_git_checkout="https://github.com/FFmpeg/FFmpeg.git"
 export cpu_count=$(nproc)
