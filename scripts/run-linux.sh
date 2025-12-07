@@ -771,22 +771,55 @@ build_libbluray() {
 # build_libbs2b           # config_options+= --enable-libbs2b             # enable bs2b DSP library [no]
 build_libbs2b() {
   if [[ $disable_libbs2b != 1 && $enable_libbs2b == 1 ]]; then
+  build_libsndfile
   local lib="libbs2b"
-  download_and_unpack_file https://downloads.sourceforge.net/project/bs2b/libbs2b/3.1.0/libbs2b-3.1.0.tar.gz
+  local repo="https://downloads.sourceforge.net/project/bs2b/libbs2b/3.1.0/libbs2b-3.1.0.tar.gz"
+  local repo_ver="3.1.0"
+  change_dir "$src_dir"
+  download_and_unpack_file "$repo" "$lib"
+  change_dir "$src_dir/$lib"
+  sed -i.bak "s/AC_FUNC_MALLOC//" configure.ac # #270
+	export LIBS=-lm                              # avoid pow failure linux native
+  export CFLAGS="$CFLAGS -I${dependency_install_prefix}/include"
+  export CXXFLAGS=" $CXXFLAGS -I${dependency_install_prefix}/include"
+  export LDFLAGS="$LDFLAGS -L${dependency_install_prefix}/lib"
+	generic_configure_make_install
+	unset LIBS CFLAGS CXXFLAGS LDFLAGS
+	change_dir "$src_dir"
   fi
 }
 # build_libcaca           # config_options+= --enable-libcaca             # enable textual display using libcaca [no]
 build_libcaca() {
   if [[ $disable_libcaca != 1 && $enable_libcaca == 1 ]]; then
   local lib="libcaca"
-  do_git_checkout https://github.com/cacalabs/libcaca  libcaca 813baea7a7bc28986e474541dd1080898fac14d7
+  local repo_ver="v0.99.beta20"
+  local repo="https://github.com/cacalabs/libcaca"
+  change_dir "$src_dir"
+  do_git_checkout "$repo" "$lib" "$repo_ver"
+  change_dir "$src_dir/$lib"
+  generic_configure "--libdir=$dependency_install_prefix/lib --disable-csharp --disable-java --disable-cxx --disable-python --disable-ruby --disable-doc --disable-cocoa --disable-ncurses"
+	do_make_and_make_install
+	change_dir "$src_dir"
   fi
 }
 # build_libcdio           # config_options+= --enable-libcdio             # enable audio CD grabbing with libcdio [no]
 build_libcdio() {
   if [[ $disable_libcdio != 1 && $enable_libcdio == 1 ]]; then
   local lib="libcdio"
-  # https://github.com/libcdio/libcdio
+  local repo_ver="2.2.0"
+  local repo="https://github.com/libcdio/libcdio"
+  change_dir "$src_dir"
+  do_git_checkout "$repo" "$lib" "$repo_ver"
+  change_dir "$src_dir/$lib"
+  if [[ ! -f "configure" ]]; then
+    autoreconf -fiv || exit_message 1
+  fi
+  generic_configure "--disable-vcd-info --disable-cddb --disable-example-progs MAKEINFO=true"
+  for prog in cd-drive cd-info cd-read iso-info iso-read mmc-tool; do
+    touch src/"$prog".1
+  done
+  do_make_and_make_install
+  change_dir "$src_dir"
   fi
 }
 # build_libcelt           # config_options+= --enable-libcelt             # enable CELT decoding via libcelt [no]
@@ -915,11 +948,32 @@ build_libgme() {
   download_and_unpack_file https://bitbucket.org/mpyne/game-music-emu/downloads/game-music-emu-0.6.3.tar.xz
   fi
 }
+build_libsndfile() {
+  local lib="libsndfile"
+  local repo="https://github.com/libsndfile/libsndfile"
+  local repo_ver="1.2.2"
+	change_dir "$src_dir"
+	do_git_checkout "$repo" "$lib" "$repo_ver"
+	change_dir "$src_dir/$lib"
+	generic_configure "--disable-sqlite --disable-external-libs --disable-full-suite"
+	do_make_and_make_install
+	change_dir "$src_dir"
+}
 # build_libgsm            # config_options+= --enable-libgsm              # enable GSM de/encoding via libgsm [no]
 build_libgsm() {
   if [[ $disable_libgsm != 1 && $enable_libgsm == 1 ]]; then
-  local lib="libgsm"
-  do_git_checkout https://github.com/libsndfile/libsndfile
+  build_libsndfile
+  local lib="libsndfile"
+  local repo="https://github.com/libsndfile/libsndfile"
+  local repo_ver="1.2.2"
+  change_dir "$src_dir/$lib"
+  if [[ ! -f $dependency_install_prefix/lib/libgsm.a ]]; then
+		install -m644 src/GSM610/gsm.h "$dependency_install_prefix/include/gsm.h" || exit_message 1 "could not install src/GSM610/gsm.h"
+		install -m644 src/GSM610/.libs/libgsm.a "$dependency_install_prefix/lib/libgsm.a" || exit_message 1 "could not install src/GSM610/.libs/libgsm.a"
+	else
+		echo -e "already installed GSM 6.10 ..."
+	fi
+  change_dir "$src_dir"
   fi
 }
 # build_libharfbuzz       # config_options+= --enable-libharfbuzz         # enable libharfbuzz, needed for drawtext filter [no]
