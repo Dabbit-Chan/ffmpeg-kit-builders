@@ -928,8 +928,14 @@ build_libdvdread() {
 # build_libflite          # config_options+= --enable-libflite            # enable flite (voice synthesis) support via libflite [no]
 build_libflite() {
   if [[ $disable_libflite != 1 && $enable_libflite == 1 ]]; then
-  local lib="libflite"
-  do_git_checkout https://github.com/festvox/flite  flite
+  local lib="flite"
+  local repo="https://github.com/festvox/flite"
+  local repo_ver="v2.2"
+  change_dir "$src_dir"
+  do_git_checkout "$repo" "$lib" "$repo_ver"
+  change_dir "$src_dir/$lib"
+  generic_configure_make_install
+	change_dir "$src_dir"
   fi
 }
 # build_libfontconfig     # config_options+= --enable-libfontconfig       # enable libfontconfig, useful for drawtext filter [no]
@@ -985,10 +991,67 @@ build_libfribidi() {
 # build_libglslang        # config_options+= --enable-libglslang          # enable GLSL->SPIRV compilation via libglslang [no]
 build_libglslang() {
   if [[ $disable_libglslang != 1 && $enable_libglslang == 1 ]]; then
-  local lib="libglslang"
-  do_git_checkout https://github.com/KhronosGroup/SPIRV-Headers "$lib" "vulkan-sdk-1.4.328.1"
-  do_git_checkout https://github.com/KhronosGroup/SPIRV-Tools "$lib" "v2025.4"
-  do_git_checkout https://github.com/KhronosGroup/glslang "$lib" "Release 16.1.0"
+  local parent_lib="libglslang"
+  change_dir "$src_dir"
+  local lib="SPIRV-Headers"
+  local repo="https://github.com/KhronosGroup/SPIRV-Headers"
+  local repo_ver="vulkan-sdk-1.4.328.1"
+  change_dir "$src_dir/$parent_lib" 1
+  do_git_checkout "$repo" "$lib" "$repo_ver"
+  change_dir "$src_dir/$parent_lib/$lib"
+  local cmake_params="-DCMAKE_INSTALL_PREFIX=${dependency_install_prefix} \
+-DCMAKE_BUILD_TYPE=Release \
+-DBUILD_SHARED_LIBS=OFF \
+-DSPIRV_HEADERS_SKIP_EXAMPLES=ON"
+  do_cmake_from_build_dir "$src_dir/$parent_lib/$lib" "$cmake_params"
+  do_make_and_make_install
+  local lib="SPIRV-Tools"
+  local repo="https://github.com/KhronosGroup/SPIRV-Tools"
+  local repo_ver="v2025.4"
+  change_dir "$src_dir/$parent_lib"
+  do_git_checkout "$repo" "$lib" "$repo_ver"
+  change_dir "$src_dir/$parent_lib/$lib"
+  local cmake_params="-DCMAKE_INSTALL_PREFIX=${dependency_install_prefix} \
+-DCMAKE_BUILD_TYPE=Release \
+-DBUILD_SHARED_LIBS=OFF \
+-DSPIRV_SKIP_TESTS=ON \
+-DSPIRV_WERROR=OFF \
+-DSPIRV_SKIP_EXECUTABLES=ON \
+-DSPIRV-Headers_SOURCE_DIR=${dependency_install_prefix}"
+  do_cmake_from_build_dir "$src_dir/$parent_lib/$lib" "$cmake_params"
+  do_make_and_make_install
+  local lib="glslang"
+  local repo="https://github.com/KhronosGroup/glslang"
+  local repo_ver="Release 16.1.0"
+  change_dir "$src_dir/$parent_lib"
+  do_git_checkout "$repo" "$lib" "$repo_ver"
+  change_dir "$src_dir/$parent_lib/$lib"
+  local cmake_params="-DCMAKE_INSTALL_PREFIX=${dependency_install_prefix} \
+-DCMAKE_BUILD_TYPE=Release \
+-DBUILD_SHARED_LIBS=OFF \
+-DENABLE_OPT=ON \
+-DENABLE_HLSL=ON \
+-DBUILD_TESTING=OFF \
+-DENABLE_GLSLANG_BINARIES=OFF \
+-DGLSLANG_TESTS=OFF \
+-DALLOW_EXTERNAL_SPIRV_TOOLS=ON \
+-DCMAKE_PREFIX_PATH=${dependency_install_prefix}"
+  do_cmake_from_build_dir "$src_dir/$parent_lib/$lib" "$cmake_params"
+  do_make_and_make_install
+  cat > "${dependency_install_prefix}/lib/pkgconfig/glslang.pc" <<EOF
+prefix=${dependency_install_prefix}
+exec_prefix=\${prefix}
+libdir=\${prefix}/lib
+includedir=\${prefix}/include
+
+Name: glslang
+Description: Khronos glslang validator and generator
+Version: 16.1.0
+Requires:
+Libs: -L\${libdir} -lglslang -lMachineIndependent -lGenericCodeGen -lOSDependent -lSPIRV -lSPVRemapper -lSPIRV-Tools-opt -lSPIRV-Tools -lstdc++
+Cflags: -I\${includedir}
+EOF
+  change_dir "$src_dir"
   fi
 }
 # build_libgme            # config_options+= --enable-libgme              # enable Game Music Emu via libgme [no]

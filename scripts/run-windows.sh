@@ -2210,7 +2210,7 @@ includedir=\${prefix}/include
 
 Name: glslang
 Description: Khronos glslang validator and generator
-Version: 11.0.0
+Version: 16.1.0
 Requires:
 Libs: -L\${libdir} -lglslang -lMachineIndependent -lGenericCodeGen -lOSDependent -lSPIRV -lSPVRemapper -lSPIRV-Tools-opt -lSPIRV-Tools -lstdc++
 Cflags: -I\${includedir}
