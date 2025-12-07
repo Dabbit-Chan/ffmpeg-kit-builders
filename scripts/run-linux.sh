@@ -744,6 +744,8 @@ build_libaribcaption() {
 # build_libass            # config_options+= --enable-libass              # enable libass subtitles rendering, needed for subtitles and ass filter [no]
 build_libass() {
   if [[ $disable_libass != 1 && $enable_libass == 1 ]]; then
+  build_libfribidi
+  build_libharfbuzz
   local lib="libass"
   do_git_checkout_and_make_install https://github.com/libass/libass
   fi
@@ -873,7 +875,17 @@ build_libfreetype() {
 # build_libfribidi        # config_options+= --enable-libfribidi          # enable libfribidi, improves drawtext filter [no]
 build_libfribidi() {
   if [[ $disable_libfribidi != 1 && $enable_libfribidi == 1 ]]; then
-  local lib="libfribidi"
+  local lib="fribidi"
+  local repo="https://github.com/fribidi/fribidi"
+  local repo_ver="v1.0.16"
+  activate_meson
+  change_dir "$src_dir"
+  do_git_checkout "$repo" "$lib" "$repo_ver"
+  change_dir "$src_dir/$lib"
+  local meson_options="--prefix=$dependency_install_prefix -Ddefault_library=static -Ddeprecated=false -Ddocs=false -Dtests=false"
+  do_meson "$meson_options" "setup build"
+  do_ninja_and_ninja_install
+	change_dir "$src_dir"
   fi
 }
 # build_libglslang        # config_options+= --enable-libglslang          # enable GLSL->SPIRV compilation via libglslang [no]
@@ -902,8 +914,17 @@ build_libgsm() {
 # build_libharfbuzz       # config_options+= --enable-libharfbuzz         # enable libharfbuzz, needed for drawtext filter [no]
 build_libharfbuzz() {
   if [[ $disable_libharfbuzz != 1 && $enable_libharfbuzz == 1 ]]; then
-  local lib="libharfbuzz"
-  do_git_checkout https://github.com/harfbuzz/harfbuzz harfbuzz "10.4.0" # 11.0.0 no longer found by ffmpeg via this method, multiple issues, breaks harfbuzz freetype circular depends hack
+  local lib="harfbuzz"
+  local repo_ver="10.4.0"
+  local repo="https://github.com/harfbuzz/harfbuzz"
+  activate_meson
+  change_dir "$src_dir"
+  do_git_checkout "$repo" "$lib" "$repo_ver" # 11.0.0 no longer found by ffmpeg via this method, multiple issues, breaks harfbuzz freetype circular depends hack
+  change_dir "$src_dir/$lib"
+  local meson_options="--prefix=$dependency_install_prefix -Dglib=disabled -Dgobject=disabled -Dcairo=disabled -Dicu=disabled -Dtests=disabled -Dintrospection=disabled -Ddocs=disabled"
+  do_meson "$meson_options" "setup build"
+  do_ninja_and_ninja_install
+	change_dir "$src_dir"
   fi
 }
 # build_libilbc           # config_options+= --enable-libilbc             # enable iLBC de/encoding via libilbc [no]
@@ -1474,6 +1495,7 @@ build_libxeve() {
 # build_libxml2           # config_options+= --enable-libxml2             # enable XML parsing using the C library libxml2, needed for dash and imf demuxing support [no]
 build_libxml2() {
   if [[ $disable_libxml2 != 1 && $enable_libxml2 == 1 ]]; then
+  build_iconv
   local lib="libxml2"
   local repo="https://gitlab.gnome.org/GNOME/libxml2"
   local repo_ver="v2.15.1"
