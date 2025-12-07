@@ -862,28 +862,67 @@ build_libcodec2() {
 build_libdav1d() {
   if [[ $disable_libdav1d != 1 && $enable_libdav1d == 1 ]]; then
   local lib="libdav1d"
-  do_git_checkout https://code.videolan.org/videolan/dav1d  libdav1d
+  local repo_ver="1.5.2"
+  local repo="https://code.videolan.org/videolan/dav1d"
+  activate_meson
+  change_dir "$src_dir"
+  do_git_checkout "$repo" "$lib" "$repo_ver"
+  change_dir "$src_dir/$lib"
+  local meson_options="--prefix=$dependency_install_prefix -Ddefault_library=static -Denable_tools=false -Denable_examples=false -Denable_tests=false"
+  do_meson "$meson_options" "setup build"
+  do_ninja_and_ninja_install
+  change_dir "$src_dir"
   fi
 }
 # build_libdavs2          # config_options+= --enable-libdavs2            # enable AVS2 decoding via libdavs2 [no]
 build_libdavs2() {
   if [[ $disable_libdavs2 != 1 && $enable_libdavs2 == 1 ]]; then
-  local lib="libdavs2"
-  do_git_checkout https://github.com/pkuvcl/davs2
+  local lib="davs2"
+  local repo_ver="1.7"
+  local repo="https://github.com/pkuvcl/davs2"
+  change_dir "$src_dir"
+  do_git_checkout "$repo" "$lib" "$repo_ver"
+  change_dir "$src_dir/$lib/build/linux"
+  do_configure "--prefix=$dependency_install_prefix --enable-pic"
+	do_make_and_make_install
+	change_dir "$src_dir"
   fi
 }
 # build_libdvdnav         # config_options+= --enable-libdvdnav           # enable libdvdnav, needed for DVD demuxing [no]
 build_libdvdnav() {
   if [[ $disable_libdvdnav != 1 && $enable_libdvdnav == 1 ]]; then
+  build_libdvdread
   local lib="libdvdnav"
-  download_and_unpack_file http://dvdnav.mplayerhq.hu/releases/libdvdnav-4.2.1.tar.xz # 4.2.1. latest revision before 5.x series [?]
+  local repo="http://dvdnav.mplayerhq.hu/releases/libdvdnav-4.2.1.tar.xz"
+  change_dir "$src_dir"
+  download_and_unpack_file "$repo" "$lib"  # 4.2.1. latest revision before 5.x series [?]
+  change_dir "$src_dir/$lib"
+  generic_configure_make_install
+	sed -i.bak 's/-ldvdnav.*/-ldvdnav -ldvdread -ldvdcss -lpsapi/' "$dependency_install_prefix/lib/pkgconfig/dvdnav.pc" # psapi for dlfcn ... [hrm?]
+	change_dir "$src_dir"
   fi
+}
+build_libdvdcss() {
+	change_dir "$src_dir"
+	generic_download_and_make_and_install https://download.videolan.org/pub/videolan/libdvdcss/1.2.13/libdvdcss-1.2.13.tar.bz2
+  change_dir "$src_dir"
 }
 # build_libdvdread        # config_options+= --enable-libdvdread          # enable libdvdread, needed for DVD demuxing [no]
 build_libdvdread() {
   if [[ $disable_libdvdread != 1 && $enable_libdvdread == 1 ]]; then
+  build_libdvdcss
   local lib="libdvdread"
-  download_and_unpack_file http://dvdnav.mplayerhq.hu/releases/libdvdread-4.9.9.tar.xz # last revision before 5.X series so still works with MPlayer
+  local repo="http://dvdnav.mplayerhq.hu/releases/libdvdread-4.9.9.tar.xz" # last revision before 5.X series so still works with MPlayer
+  change_dir "$src_dir"
+  download_and_unpack_file "$repo" "$lib"  # 4.2.1. latest revision before 5.x series [?]
+  change_dir "$src_dir/$lib"
+  export CFLAGS="$CFLAGS -I${dependency_install_prefix}/include"
+  export CXXFLAGS=" $CXXFLAGS -I${dependency_install_prefix}/include"
+  export LDFLAGS="$LDFLAGS -L${dependency_install_prefix}/lib"
+  generic_configure
+	do_make_and_make_install
+	sed -i.bak 's/-ldvdread.*/-ldvdread -ldvdcss/' "$dependency_install_prefix/lib/pkgconfig/dvdread.pc"
+  change_dir "$src_dir"
   fi
 }
 # build_libflite          # config_options+= --enable-libflite            # enable flite (voice synthesis) support via libflite [no]
