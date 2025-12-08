@@ -1546,7 +1546,7 @@ build_libdovi() {
 	change_dir "$src_dir"
 	do_git_checkout "$repo" "$lib" "$repo_ver"
 	change_dir "$src_dir/$lib/dolby_vision"
-	cargo_build_and_install "--release" "--package dolby_vision --release --libdir=\"$dependency_install_prefix/lib\" --library-type=staticlib"
+	cargo_build_and_install "--release" "--package dolby_vision --release --library-type=staticlib"
 	change_dir "$src_dir"
 }
 build_vulkan_loader() {
@@ -1636,14 +1636,41 @@ build_libpulse() {
 # build_libqrencode       # config_options+= --enable-libqrencode         # enable QR encode generation via libqrencode [no]
 build_libqrencode() {
   if [[ $disable_libqrencode != 1 && $enable_libqrencode == 1 ]]; then
-  # https://github.com/fukuchi/libqrencode
   local lib="libqrencode"
+  local repo="https://github.com/fukuchi/libqrencode"
+  local repo_ver="v4.1.1"
+  change_dir "$src_dir"
+	do_git_checkout "$repo" "$lib" "$repo_ver"
+	change_dir "$src_dir/$lib/build" 1
+	local cmake_params="-DCMAKE_BUILD_TYPE=Release \
+-DWITH_TOOLS=NO \
+-DWITH_TESTS=NO \
+-DWITHOUT_PNG=YES \
+-DBUILD_SHARED_LIBS=NO"
+	do_cmake_from_build_dir "$src_dir/$lib" "$cmake_params"
+	do_make_and_make_install
+	change_dir "$src_dir"
   fi
 }
 # build_libquirc          # config_options+= --enable-libquirc            # enable QR decoding via libquirc [no]
 build_libquirc() {
   if [[ $disable_libquirc != 1 && $enable_libquirc == 1 ]]; then
   local lib="libquirc"
+  local repo="https://github.com/dlbeer/quirc"
+  local repo_ver="master"
+	change_dir "$src_dir"
+	do_git_checkout "$repo" "$lib" "$repo_ver"
+	create_dir "$src_dir/$lib/build"
+  # path to remove demo app build because it requires some unnecessary dependencies
+	if git apply --reverse --check --ignore-space-change --ignore-whitespace --verbose "$PATCHDIR/libquirc_Makefile.patch" >/dev/null 2>&1; then
+    echo "INFO: Patch already applied. Skipping."
+	else
+		echo "INFO: Applying patch to remove demo app..."
+		copy_path "Makefile" "Makefile.bak"
+		git apply --ignore-space-change --ignore-whitespace --verbose "$PATCHDIR/libquirc_Makefile.patch" > >(redirect_output) 2>&1 || exit_message 1 "unable to patch makefile"
+	fi
+	do_make_and_make_install "libquirc.a LDFLAGS=\"-static\" PREFIX=${dependency_install_prefix}" "PREFIX=${dependency_install_prefix}"
+	change_dir "$src_dir"
   fi
 }
 # build_librabbitmq       # config_options+= --enable-librabbitmq         # enable RabbitMQ library [no]

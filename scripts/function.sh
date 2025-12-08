@@ -376,6 +376,7 @@ calculate_bits_target() {
 }
 
 setup_windows_environment() {
+    export PATCHDIR="$SCRIPTDIR/windows/patches"
     export host_target="$host_arch-w64-mingw32"
     export rust_target="$host_arch-pc-windows-gnu"
     export toolchain_root="mingw-w64-$host_arch"
@@ -411,6 +412,7 @@ CXX=${cross_prefix}g++"
 }
 
 setup_linux_environment() {
+    export PATCHDIR="$SCRIPTDIR/linux/patches"
     export host_target="$host_arch-$host_platform-gnu"
     export rust_target="$host_arch-unknown-linux-gnu"
     export dependency_install_prefix="$work_dir/libraries"
@@ -1041,9 +1043,9 @@ determine_distro() {
 # made into a method so I don't/don't have to download this script every time if only doing just 32 or just6 64 bit builds...
 download_gcc_build_script() {
 	local zeranoe_script_name=$1
-	cp "$WINPATCHDIR"/"$zeranoe_script_name" "$WINPATCHDIR"/"$zeranoe_script_name".bak
-	cp "$WINPATCHDIR"/"$zeranoe_script_name" "$zeranoe_script_name"
-	#rm -f $WINPATCHDIR/$zeranoe_script_name || exit_message 1
+	cp "$PATCHDIR"/"$zeranoe_script_name" "$PATCHDIR"/"$zeranoe_script_name".bak
+	cp "$PATCHDIR"/"$zeranoe_script_name" "$zeranoe_script_name"
+	#rm -f $PATCHDIR/$zeranoe_script_name || exit_message 1
 	#curl -4 https://raw.githubusercontent.com/Zeranoe/mingw-w64-build/refs/heads/master/mingw-w64-build -O --fail || exit_message 1
 	chmod -R a+rwx "$zeranoe_script_name"
 }
@@ -2431,7 +2433,7 @@ configure_ffmpeg() {
 	fi
 
 	change_dir "$ffmpeg_source_dir" || exit
-	[[ $host_platform == "windows" ]] && apply_patch file://"$WINPATCHDIR"/frei0r_load-shared-libraries-dynamically.diff
+	[[ $host_platform == "windows" ]] && apply_patch file://"$PATCHDIR"/frei0r_load-shared-libraries-dynamically.diff
 	if [ "$bits_target" = "32" ]; then
 		local arch=x86
 	else

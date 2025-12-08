@@ -103,7 +103,7 @@ build_libcaca() {
 	change_dir "$src_dir"
 	do_git_checkout https://github.com/cacalabs/libcaca libcaca 813baea7a7bc28986e474541dd1080898fac14d7
 	change_dir "$src_dir/libcaca"
-	apply_patch "file://$WINPATCHDIR/libcaca_git_stdio-cruft.diff" -p1 # Fix WinXP incompatibility.
+	apply_patch "file://$PATCHDIR/libcaca_git_stdio-cruft.diff" -p1 # Fix WinXP incompatibility.
 	change_dir "$src_dir/libcaca/caca"
 	sed -i.bak "s/__declspec(dllexport)//g" *.h # get rid of the declspec lines otherwise the build will fail for undefined symbols
 	sed -i.bak "s/__declspec(dllimport)//g" *.h
@@ -118,7 +118,7 @@ build_bzlib() {
 	change_dir "$src_dir"
 	download_and_unpack_file https://sourceware.org/pub/bzip2/bzip2-1.0.8.tar.gz
 	change_dir "$src_dir/bzip2"
-	apply_patch "file://$WINPATCHDIR/bzip2-1.0.8_brokenstuff.diff"
+	apply_patch "file://$PATCHDIR/bzip2-1.0.8_brokenstuff.diff"
 	if [[ ! -f ./libbz2.a ]] || [[ -f $dependency_install_prefix/lib/libbz2.a && ! $(/usr/bin/env md5sum ./libbz2.a) = $(/usr/bin/env md5sum "$dependency_install_prefix"/lib/libbz2.a) ]]; then # Not built or different build installed
 		do_make "libbz2.a $compiler_flags"
 		install -m644 bzlib.h "$dependency_install_prefix"/include/bzlib.h
@@ -168,7 +168,7 @@ build_sdl2() {
 	change_dir "$src_dir"
 	download_and_unpack_file https://www.libsdl.org/release/SDL2-2.32.10.tar.gz
 	change_dir "$src_dir/SDL2-2.32.10"
-	apply_patch "file://$WINPATCHDIR/SDL2-2.32.10_lib-only.diff"
+	apply_patch "file://$PATCHDIR/SDL2-2.32.10_lib-only.diff"
 	if [[ ! -f configure.bak ]]; then
 		sed -i.bak "s/ -mwindows//" configure # Allow ffmpeg to output anything to console.
 	fi
@@ -706,7 +706,7 @@ build_libbs2b() {
 	change_dir "$src_dir"
 	download_and_unpack_file https://downloads.sourceforge.net/project/bs2b/libbs2b/3.1.0/libbs2b-3.1.0.tar.gz
 	change_dir "$src_dir/libbs2b-3.1.0"
-	apply_patch "file://$WINPATCHDIR/libbs2b.patch"
+	apply_patch "file://$PATCHDIR/libbs2b.patch"
 	sed -i.bak "s/AC_FUNC_MALLOC//" configure.ac # #270
 	export LIBS=-lm                              # avoid pow failure linux native
 	generic_configure_make_install
@@ -731,7 +731,7 @@ build_libflite() {
 	change_dir "$src_dir"
 	do_git_checkout https://github.com/festvox/flite flite
 	change_dir "$src_dir/flite"
-	apply_patch "file://$WINPATCHDIR/flite-2.1.0_mingw-w64-fixes.patch"
+	apply_patch "file://$PATCHDIR/flite-2.1.0_mingw-w64-fixes.patch"
 	if [[ ! -f main/Makefile.bak ]]; then
 		sed -i.bak "s/cp -pd/cp -p/" main/Makefile # friendlier cp for OS X
 	fi
@@ -763,7 +763,7 @@ build_vamp_plugin() {
 	download_and_unpack_file https://github.com/vamp-plugins/vamp-plugin-sdk/archive/refs/tags/vamp-plugin-sdk-v2.10.zip vamp-plugin-sdk-vamp-plugin-sdk-v2.10
 	#cd vamp-plugin-sdk-2.10.0
 	change_dir "$src_dir/vamp-plugin-sdk-vamp-plugin-sdk-v2.10"
-	apply_patch "file://$WINPATCHDIR/vamp-plugin-sdk-2.10_static-lib.diff"
+	apply_patch "file://$PATCHDIR/vamp-plugin-sdk-2.10_static-lib.diff"
 	if [[ ! -f src/vamp-sdk/PluginAdapter.cpp.bak ]]; then
 		sed -i.bak "s/#include <mutex>/#include <mingw.mutex.h>/" src/vamp-sdk/PluginAdapter.cpp
 	fi
@@ -813,7 +813,7 @@ build_librubberband() {
 	change_dir "$src_dir"
 	do_git_checkout https://github.com/breakfastquay/rubberband rubberband 18c06ab8c431854056407c467f4755f761e36a8e
 	change_dir "$src_dir/rubberband"
-	apply_patch "file://$WINPATCHDIR/rubberband_git_static-lib.diff" # create install-static target
+	apply_patch "file://$PATCHDIR/rubberband_git_static-lib.diff" # create install-static target
 	do_configure "--host=$host_target --prefix=$dependency_install_prefix --disable-ladspa"
 	# TODO: Allow shared library build
 	do_make "install-static AR=${cross_prefix}ar" # No need for 'do_make_install', because 'install-static' already has install-instructions.
@@ -936,7 +936,7 @@ build_libxvid() {
 	change_dir "$src_dir"
 	download_and_unpack_file https://downloads.xvid.com/downloads/xvidcore-1.3.7.tar.gz xvidcore
 	change_dir "$src_dir/xvidcore/build/generic"
-	apply_patch "file://$WINPATCHDIR/xvidcore-1.3.7_static-lib.patch"
+	apply_patch "file://$PATCHDIR/xvidcore-1.3.7_static-lib.patch"
 	do_configure "--host=$host_target --prefix=$dependency_install_prefix" # no static option...
 	do_make_and_make_install
 	change_dir "$src_dir"
@@ -949,7 +949,7 @@ build_libsrt() {
 	change_dir "$src_dir"
 	download_and_unpack_file https://github.com/Haivision/srt/archive/v1.5.4.tar.gz srt-1.5.4
 	change_dir "$src_dir/srt-1.5.4"
-	apply_patch "file://$WINPATCHDIR/srt.app.patch" -p1
+	apply_patch "file://$PATCHDIR/srt.app.patch" -p1
 	# CMake Warning at CMakeLists.txt:893 (message):
 	#   On MinGW, some C++11 apps are blocked due to lacking proper C++11 headers
 	#   for <thread>.  FIX IF POSSIBLE.
@@ -1043,7 +1043,7 @@ build_libvpx() {
 	change_dir "$src_dir"
 	do_git_checkout https://chromium.googlesource.com/webm/libvpx libvpx "origin/main"
 	change_dir "$src_dir/libvpx"
-	# apply_patch file://$WINPATCHDIR/vpx_160_semaphore.patch -p1 # perhaps someday can remove this after 1.6.0 or mingw fixes it LOL
+	# apply_patch file://$PATCHDIR/vpx_160_semaphore.patch -p1 # perhaps someday can remove this after 1.6.0 or mingw fixes it LOL
 	if [[ "$bits_target" = "32" ]]; then
 		local config_options="--target=x86-win32-gcc"
 	else
@@ -1082,7 +1082,7 @@ build_libx265() {
 
 	# Apply x86 noasm detection fix on newer versions
 	if [[ $x265_git_checkout_version != *"3.5"* ]] && [[ $x265_git_checkout_version != *"3.4"* ]] && [[ $x265_git_checkout_version != *"3.3"* ]] && [[ $x265_git_checkout_version != *"3.2"* ]] && [[ $x265_git_checkout_version != *"3.1"* ]]; then
-		git apply "$WINPATCHDIR/x265_x86_noasm_fix.patch"
+		git apply "$PATCHDIR/x265_x86_noasm_fix.patch"
 	fi
 
 	if [ "$bits_target" = "32" ]; then
@@ -1171,7 +1171,7 @@ build_libdav1d() {
 	activate_meson
 	change_dir "$src_dir/libdav1d"
 	if [[ $bits_target == 32 || $bits_target == 64 ]]; then   # XXX why 64???
-		apply_patch "file://$WINPATCHDIR/david_no_asm.patch" -p1 # XXX report
+		apply_patch "file://$PATCHDIR/david_no_asm.patch" -p1 # XXX report
 	fi
 	cpu_count=1 # XXX report :|
 	local meson_options="-Denable_tests=false -Denable_examples=false"
@@ -1215,7 +1215,7 @@ build_libplacebo() {
 	do_git_checkout https://code.videolan.org/videolan/libplacebo libplacebo #515da9548ad734d923c7d0988398053f87b454d5
 	activate_meson
 	change_dir "$src_dir/libplacebo"
-	apply_patch "file://$WINPATCHDIR/fix_libplacebo_absolute_path.patch" -p1 # latest meson version wont work without patch
+	apply_patch "file://$PATCHDIR/fix_libplacebo_absolute_path.patch" -p1 # latest meson version wont work without patch
 	git submodule update --init --recursive --depth=1 --filter=blob:none
 	local config_options=""
 	local config_options+=" -Dvulkan-registry=$dependency_install_prefix/share/vulkan/registry/vk.xml"
@@ -1334,7 +1334,7 @@ build_libcodec2() {
 	if [ "$bits_target" = "32" ]; then
 		target_proc=X86
 	fi
-	copy_path "$WINPATCHDIR/codec2_GetDependencies.cmake.in" "$src_dir/$lib/cmake/GetDependencies.cmake.in" "-f"
+	copy_path "$PATCHDIR/codec2_GetDependencies.cmake.in" "$src_dir/$lib/cmake/GetDependencies.cmake.in" "-f"
 	do_cmake_from_build_dir "$src_dir/$lib" "$cmake_params"
 	do_make_and_make_install
 	change_dir "$src_dir"
@@ -1582,12 +1582,12 @@ build_tre() {
     change_dir "$src_dir"
     do_git_checkout https://github.com/laurikari/tre "$lib" "TRE 0.9.0" # meson build for fontconfig no good
     change_dir "$src_dir/$lib"
-    if git apply --reverse --check --ignore-space-change --ignore-whitespace --verbose "$WINPATCHDIR/tre_tre-internal.diff" >/dev/null 2>&1; then
+    if git apply --reverse --check --ignore-space-change --ignore-whitespace --verbose "$PATCHDIR/tre_tre-internal.diff" >/dev/null 2>&1; then
       echo "INFO: Patch already applied. Skipping." >>"$LOG_FILE"
     else
       echo "INFO: Applying patch tre_tre-internal.diff..." >>"$LOG_FILE"
       copy_path "lib/tre-internal.h" "lib/tre-internal.h.bak"
-      git apply --ignore-space-change --ignore-whitespace --verbose "$WINPATCHDIR/tre_tre-internal.diff" > >(redirect_output) 2>&1 || exit_message 1 "unable to patch makefile"
+      git apply --ignore-space-change --ignore-whitespace --verbose "$PATCHDIR/tre_tre-internal.diff" > >(redirect_output) 2>&1 || exit_message 1 "unable to patch makefile"
     fi
     generic_configure_make_install "--disable-nls"
     change_dir "$src_dir"
@@ -1672,13 +1672,13 @@ build_libpulse() {
     export CFLAGS="-static -O3 -I$dependency_install_prefix/include -L$dependency_install_prefix/lib"
     export CXXFLAGS="-static -O3 -I$dependency_install_prefix/include -L$dependency_install_prefix/lib"
     do_meson "$meson_options" "setup build"
-    if git apply --reverse --check --ignore-space-change --ignore-whitespace --verbose "$WINPATCHDIR/pulseaudio.diff" >/dev/null 2>&1; then
+    if git apply --reverse --check --ignore-space-change --ignore-whitespace --verbose "$PATCHDIR/pulseaudio.diff" >/dev/null 2>&1; then
       echo "INFO: Patch already applied. Skipping." >>"$LOG_FILE"
     else
       echo "INFO: Applying patch to remove demo app..." >>"$LOG_FILE"
       copy_path "src/pulse/fork-detect.c" "src/pulse/fork-detect.c.bak"
       copy_path "src/pulsecore/arpa-inet.c" "src/pulsecore/arpa-inet.c.bak"
-      git apply --ignore-space-change --ignore-whitespace --verbose "$WINPATCHDIR/pulseaudio.diff" > >(redirect_output) 2>&1 || exit_message 1 "unable to patch makefile"
+      git apply --ignore-space-change --ignore-whitespace --verbose "$PATCHDIR/pulseaudio.diff" > >(redirect_output) 2>&1 || exit_message 1 "unable to patch makefile"
     fi
     do_ninja_and_ninja_install
     change_dir "$src_dir"
@@ -1798,12 +1798,12 @@ build_librist() {
   change_dir "$src_dir"
   do_git_checkout https://code.videolan.org/rist/librist "$lib"
   change_dir "$src_dir/$lib"
-  if git apply --reverse --check --ignore-space-change --ignore-whitespace --verbose "$WINPATCHDIR/librist_time-shim.diff" >/dev/null 2>&1; then
+  if git apply --reverse --check --ignore-space-change --ignore-whitespace --verbose "$PATCHDIR/librist_time-shim.diff" >/dev/null 2>&1; then
     echo "INFO: Patch already applied. Skipping." >>"$LOG_FILE"
 	else
 		echo "INFO: Applying patch to remove demo app..." >>"$LOG_FILE"
 		copy_path "contrib/time-shim.c" "contrib/time-shim.c.bak"
-		git apply --ignore-space-change --ignore-whitespace --verbose "$WINPATCHDIR/librist_time-shim.diff" > >(redirect_output) 2>&1 || exit_message 1 "unable to patch makefile"
+		git apply --ignore-space-change --ignore-whitespace --verbose "$PATCHDIR/librist_time-shim.diff" > >(redirect_output) 2>&1 || exit_message 1 "unable to patch makefile"
 	fi
   local cross_file=$(get_meson_cross_file)
   local meson_options="-Ddefault_library=static -Duse_mbedtls=true -Dbuilt_tools=false -Dtest=false"
@@ -1847,12 +1847,12 @@ build_librabbitmq() {
   change_dir "$src_dir"
   do_git_checkout https://github.com/alanxz/rabbitmq-c "$lib"
   change_dir "$src_dir/$lib"
-  if git apply --reverse --check --ignore-space-change --ignore-whitespace --verbose "$WINPATCHDIR/librabbitmq_amqp_socket.diff" >/dev/null 2>&1; then
+  if git apply --reverse --check --ignore-space-change --ignore-whitespace --verbose "$PATCHDIR/librabbitmq_amqp_socket.diff" >/dev/null 2>&1; then
     echo "INFO: Patch already applied. Skipping." >>"$LOG_FILE"
 	else
 		echo "INFO: Applying patch to remove demo app..." >>"$LOG_FILE"
 		copy_path "librabbitmq/amqp_socket.c" "librabbitmq/amqp_socket.c.bak"
-		git apply --ignore-space-change --ignore-whitespace --verbose "$WINPATCHDIR/librabbitmq_amqp_socket.diff" > >(redirect_output) 2>&1 || exit_message 1 "unable to patch makefile"
+		git apply --ignore-space-change --ignore-whitespace --verbose "$PATCHDIR/librabbitmq_amqp_socket.diff" > >(redirect_output) 2>&1 || exit_message 1 "unable to patch makefile"
 	fi
   local cmake_params="-DCMAKE_TOOLCHAIN_FILE=$(get_generic_cmake_toolchain) \
 -DCMAKE_BUILD_TYPE=Release \
@@ -2355,12 +2355,12 @@ build_libquirc() {
 	export RANLIB="${cross_prefix}ranlib"
 	export TOOLCHAIN_PATH=$toolchain_bin_path
   # path to remove demo app build because it requires some unnecessary dependencies
-	if git apply --reverse --check --ignore-space-change --ignore-whitespace --verbose "$WINPATCHDIR/libquirc_Makefile.patch" >/dev/null 2>&1; then
+	if git apply --reverse --check --ignore-space-change --ignore-whitespace --verbose "$PATCHDIR/libquirc_Makefile.patch" >/dev/null 2>&1; then
     echo "INFO: Patch already applied. Skipping."
 	else
 		echo "INFO: Applying patch to remove demo app..."
 		copy_path "Makefile" "Makefile.bak"
-		git apply --ignore-space-change --ignore-whitespace --verbose "$WINPATCHDIR/libquirc_Makefile.patch" > >(redirect_output) 2>&1 || exit_message 1 "unable to patch makefile"
+		git apply --ignore-space-change --ignore-whitespace --verbose "$PATCHDIR/libquirc_Makefile.patch" > >(redirect_output) 2>&1 || exit_message 1 "unable to patch makefile"
 	fi
 	do_make_and_make_install "CC=${CC} AR=${AR} AS=${AS} CXX=${CXX} STRIP=${STRIP} RANLIB=${RANLIB}"' libquirc.a LDFLAGS="-static"'" PREFIX=${dependency_install_prefix}" "PREFIX=${dependency_install_prefix}"
 	change_dir "$src_dir"
@@ -2433,12 +2433,12 @@ build_vapoursynth() {
 	copy_path "src/vsscript/vsscript.cpp" "src/vsscript/vsscript.cpp.bak"
 	sed -i 's/#include <Windows.h>/#include <windows.h>/' src/vsscript/vsscript.cpp
   # patch to load windows python dependencies
-	if git apply --reverse --check --ignore-space-change --ignore-whitespace --verbose "$WINPATCHDIR/vapoursynth_meson_build.patch" >/dev/null 2>&1; then
+	if git apply --reverse --check --ignore-space-change --ignore-whitespace --verbose "$PATCHDIR/vapoursynth_meson_build.patch" >/dev/null 2>&1; then
     echo "INFO: Patch already applied. Skipping."
 	else
 		echo "INFO: Applying patch..."
 		copy_path "meson.build" "meson.build.bak"
-		git apply --ignore-space-change --ignore-whitespace --verbose "$WINPATCHDIR/vapoursynth_meson_build.patch" > >(redirect_output) 2>&1 || exit_message 1 "unable to patch python"
+		git apply --ignore-space-change --ignore-whitespace --verbose "$PATCHDIR/vapoursynth_meson_build.patch" > >(redirect_output) 2>&1 || exit_message 1 "unable to patch python"
 	fi
 	apt install cython3 # needed for enable_python_module 
 	change_dir "$src_dir/$lib/python_dep" 1
@@ -2674,7 +2674,7 @@ build_libopencv() {
     download_and_unpack_file https://github.com/opencv/opencv/archive/3.4.5.zip opencv-3.4.5
     create_dir "$src_dir/opencv-3.4.5/build"
     #change_dir "$src_dir/opencv-3.4.5"
-    apply_patch "file://$WINPATCHDIR/opencv.detection_based.patch"
+    apply_patch "file://$PATCHDIR/opencv.detection_based.patch"
     change_dir "$src_dir"
     change_dir "$src_dir/opencv-3.4.5/build"
     # could do more here, it seems to think it needs its own internal libwebp etc...
@@ -2927,7 +2927,7 @@ build_libffi() {
 	change_dir "$src_dir"
 	download_and_unpack_file "https://github.com/libffi/libffi/releases/download/v3.5.2/libffi-3.5.2.tar.gz" # also dep
 	change_dir "$src_dir/libffi-3.5.2"
-	apply_patch "file://$WINPATCHDIR/libffi.patch" -p1
+	apply_patch "file://$PATCHDIR/libffi.patch" -p1
 	generic_configure_make_install
 	change_dir "$src_dir"
 }
@@ -3379,7 +3379,7 @@ EOF
 # 	change_dir "$src_dir"
 # 	do_git_checkout https://github.com/facebook/transform360
 # 	change_dir "$src_dir/transform360"
-# 	apply_patch "file://$WINPATCHDIR/transform360.pi.diff" -p1
+# 	apply_patch "file://$PATCHDIR/transform360.pi.diff" -p1
 # 	#change_dir "$src_dir"
 # 	change_dir "$src_dir/transform360/Transform360"
 # 	do_cmake ""
@@ -3458,8 +3458,8 @@ EOF
 # 	change_dir "$src_dir"
 # 	download_and_unpack_file http://pkgs.fedoraproject.org/repo/pkgs/qt/qt-everywhere-opensource-src-4.8.5.tar.gz/1864987bdbb2f58f8ae8b350dfdbe133/qt-everywhere-opensource-src-4.8.5.tar.gz
 # 	change_dir qt-everywhere-opensource-src-4.8.5
-# 	apply_patch "file://$WINPATCHDIR/imageformats.patch"
-# 	apply_patch "file://$WINPATCHDIR/qt-win64.patch"
+# 	apply_patch "file://$PATCHDIR/imageformats.patch"
+# 	apply_patch "file://$PATCHDIR/qt-win64.patch"
 # 	# vlc's configure options...mostly
 # 	# TODO: Allow shared library build
 # 	do_configure "-static -release -fast -no-exceptions -no-stl -no-sql-sqlite -no-qt3support -no-gif -no-libmng -qt-libjpeg -no-libtiff -no-qdbus -no-openssl -no-webkit -sse -no-script -no-multimedia -no-phonon -opensource -no-scripttools -no-opengl -no-script -no-scripttools -no-declarative -no-declarative-debug -opensource -no-s60 -host-little-endian -confirm-license -xplatform win32-g++ -device-option CROSS_COMPILE=$cross_prefix -prefix $dependency_install_prefix -prefix-install -nomake examples"
@@ -3495,7 +3495,7 @@ EOF
 # 	# currently vlc itself currently broken :|
 # 	do_git_checkout https://github.com/videolan/vlc
 # 	change_dir vlc
-# 	#apply_patch file://$WINPATCHDIR/vlc_localtime_s.patch # git revision needs it...
+# 	#apply_patch file://$PATCHDIR/vlc_localtime_s.patch # git revision needs it...
 # 	# outdated and patch doesn't apply cleanly anymore apparently...
 # 	#if [[ "$non_free" = "y" ]]; then
 # 	#  apply_patch https://raw.githubusercontent.com/gcsx/ffmpeg-windows-build-helpers/patch-5/patches/priorize_avcodec.patch
@@ -3583,7 +3583,7 @@ EOF
 # build_libMXF() {
 # 	download_and_unpack_file https://sourceforge.net/projects/ingex/files/1.0.0/libMXF/libMXF-src-1.0.0.tgz "libMXF-src-1.0.0"
 # 	change_dir libMXF-src-1.0.0
-# 	apply_patch "file://$WINPATCHDIR/libMXF.diff"
+# 	apply_patch "file://$PATCHDIR/libMXF.diff"
 # 	do_make "MINGW_CC_PREFIX=$cross_prefix"
 # 	#
 # 	# Manual equivalent of make install. Enable it if desired. We shouldn't need it in theory since we never use libMXF.a file and can just hand pluck out the *.exe files already...
@@ -3625,9 +3625,9 @@ EOF
 # 	do_git_checkout https://github.com/meganz/mingw-std-threads mingw-std-threads # our g++ apparently doesn't have std::mutex baked in...weird...this replaces it...
 # 	change_dir "$src_dir"
 # 	change_dir "$src_dir/librtmfp"
-# 	apply_patch "file://$WINPATCHDIR/rtmfp.static.cross.patch" -p1  # works e48efb4f
-# 	apply_patch "file://$WINPATCHDIR/rtmfp_capitalization.diff" -p1 # cross for windows needs it if on linux...
-# 	apply_patch "file://$WINPATCHDIR/librtmfp_xp.diff.diff" -p1     # cross for windows needs it if on linux...
+# 	apply_patch "file://$PATCHDIR/rtmfp.static.cross.patch" -p1  # works e48efb4f
+# 	apply_patch "file://$PATCHDIR/rtmfp_capitalization.diff" -p1 # cross for windows needs it if on linux...
+# 	apply_patch "file://$PATCHDIR/librtmfp_xp.diff.diff" -p1     # cross for windows needs it if on linux...
 # 	do_make "$compiler_flags GPP=${cross_prefix}g++"
 # 	do_make_install "prefix=$dependency_install_prefix PKGCONFIGPATH=$PKG_CONFIG_PATH"
 # 	sed -i.bak 's/-lrtmfp.*/-lrtmfp -lstdc++ -lws2_32 -liphlpapi/' "$PKG_CONFIG_PATH/librtmfp.pc"
@@ -3638,7 +3638,7 @@ EOF
 # 	change_dir "$src_dir"
 # 	download_and_unpack_file https://www.openssl.org/source/openssl-1.0.2p.tar.gz
 # 	change_dir "$src_dir/openssl-1.0.2p"
-# 	apply_patch "file://$WINPATCHDIR/openssl-1.0.2l_lib-only.diff"
+# 	apply_patch "file://$PATCHDIR/openssl-1.0.2l_lib-only.diff"
 # 	export CC="${cross_prefix}gcc"
 # 	export AR="${cross_prefix}ar"
 # 	export RANLIB="${cross_prefix}ranlib"

@@ -13,7 +13,6 @@ export LOG_FILE="${BASEDIR}"/build.log
 export sandbox="prebuilt"
 export WORKDIR="$BASEDIR/$sandbox"
 export SCRIPTDIR="$BASEDIR/scripts"
-export WINPATCHDIR="$SCRIPTDIR/windows/patches"
 
 # variables with their defaults
 export build_force="0"
