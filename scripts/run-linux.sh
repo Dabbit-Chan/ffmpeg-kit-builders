@@ -1439,8 +1439,6 @@ build_libopenmpt() {
   build_sdl2
   build_sdl12_compat
   build_libsndfile
-  build_portaudio
-  build_libpulse
   local lib="libopenmpt"
   #local repo="https://github.com/OpenMPT/openmpt" # doesnt work from git for some reason
   local repo="https://lib.openmpt.org/files/libopenmpt/src/libopenmpt-0.8.3+release.autotools.tar.gz"
