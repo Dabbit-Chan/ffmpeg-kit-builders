@@ -87,7 +87,7 @@ get_arch_specific_ldflags() {
 get_common_linked_libraries() {
   case $1 in
   ffmpeg-kit)
-    echo "-stdlib=libstdc++ -lstdc++ -lc -lm"
+    echo "-lc -lm"
     ;;
   *)
     echo "-lc -lm -ldl"
@@ -164,7 +164,7 @@ get_ldflags() {
   fi
   local COMMON_LINKED_LIBS=$(get_common_linked_libraries "$1")
 
-  echo "${ARCH_FLAGS} ${OPTIMIZATION_FLAGS} ${COMMON_LINKED_LIBS} ${LLVM_CONFIG_LDFLAGS} -Wl,--hash-style=both -fuse-ld=lld"
+  echo "${ARCH_FLAGS} ${OPTIMIZATION_FLAGS} ${COMMON_LINKED_LIBS} ${LLVM_CONFIG_LDFLAGS} -Wl,--hash-style=both"
 }
 
 

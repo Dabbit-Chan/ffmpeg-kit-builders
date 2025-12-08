@@ -417,7 +417,7 @@ setup_linux_environment() {
     export linux_cflags='-fstrict-aliasing -fPIC -DLINUX'
     export CFLAGS="$linux_cflags"
     export linux_cppflags=''
-    export linux_cxxflags='-stdlib=libstdc++ -std=c++11'
+    export linux_cxxflags=''
     export CXXFLAGS="$linux_cxxflags"
     export linux_ldflags=''
 }

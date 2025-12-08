@@ -849,10 +849,6 @@ build_libcodec2() {
   change_dir "$src_dir"
   do_git_checkout "$repo" "$lib" "$repo_ver"
   change_dir "$src_dir/$lib/build" 1
-  local target_proc=AMD64
-	if [ "$bits_target" = "32" ]; then
-		target_proc=X86
-	fi
   do_cmake_from_build_dir "$src_dir/$lib" "-DUNITTEST=FALSE"
 	do_make_and_make_install
 	change_dir "$src_dir"
@@ -1176,28 +1172,74 @@ build_libjack() {
 build_libjxl() {
   if [[ $disable_libjxl != 1 && $enable_libjxl == 1 ]]; then
   local lib="libjxl"
-  do_git_checkout https://github.com/libjxl/libjxl
+  local repo="https://github.com/libjxl/libjxl"
+  local repo_ver="v0.7.2"
+  change_dir "$src_dir"
+  do_git_checkout "$repo" "$lib" "$repo_ver"
+  change_dir "$src_dir/$lib/build" 1
+  local cmake_params="-DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=OFF"
+	do_cmake_from_build_dir "$src_dir/$lib" "$cmake_params"
+	do_make_and_make_install
+	change_dir "$src_dir"
   fi
 }
 # build_libklvanc         # config_options+= --enable-libklvanc           # enable Kernel Labs VANC processing [no]
 build_libklvanc() {
   if [[ $disable_libklvanc != 1 && $enable_libklvanc == 1 ]]; then
   local lib="libklvanc"
-  # https://github.com/stoth68000/libklvanc
+  local repo="https://github.com/stoth68000/libklvanc"
+  local repo_ver="vid.obe.1.6.0"
+  change_dir "$src_dir"
+  do_git_checkout "$repo" "$lib" "$repo_ver"
+  change_dir "$src_dir/$lib"
+  generic_configure_make_install "--enable-static \
+--disable-shared \
+--disable-examples"
+cat > "${dependency_install_prefix}/lib/pkgconfig/libklvanc.pc" <<EOF
+prefix=${dependency_install_prefix}
+exec_prefix=\${prefix}
+libdir=\${exec_prefix}/lib
+includedir=\${prefix}/include
+
+Name: libklvanc
+Description: VANC processing library
+Version: 1.6.0
+Libs: -L\${libdir} -lklvanc
+Libs.private: -lz
+Cflags: -I\${includedir}
+EOF
+  change_dir "$src_dir"
   fi
 }
 # build_libkvazaar        # config_options+= --enable-libkvazaar          # enable HEVC encoding via libkvazaar [no]
 build_libkvazaar() {
   if [[ $disable_libkvazaar != 1 && $enable_libkvazaar == 1 ]]; then
   local lib="libkvazaar"
-  do_git_checkout https://github.com/ultravideo/kvazaar
+  local repo="https://github.com/ultravideo/kvazaar"
+  local repo_ver="v2.3.2"
+  change_dir "$src_dir"
+  do_git_checkout "$repo" "$lib" "$repo_ver"
+  change_dir "$src_dir/$lib/build" 1
+	local cmake_params="-DCMAKE_BUILD_TESTS=OFF"
+	do_cmake_from_build_dir "$src_dir/$lib" "$cmake_params"
+	do_make_and_make_install
+	change_dir "$src_dir"
   fi
 }
 # build_liblc3            # config_options+= --enable-liblc3              # enable LC3 de/encoding via liblc3 [no]
 build_liblc3() {
   if [[ $disable_liblc3 != 1 && $enable_liblc3 == 1 ]]; then
   local lib="liblc3"
-  # https://github.com/google/liblc3
+  local repo="https://github.com/google/liblc3"
+  local repo_ver="v1.1.3"
+  activate_meson
+  change_dir "$src_dir"
+  do_git_checkout "$repo" "$lib" "$repo_ver"
+  change_dir "$src_dir/$lib"
+	generic_meson "-Dtools=false -Dpython=false"
+	change_dir "$src_dir/$lib/build"
+	do_meson "" "install"
+	change_dir "$src_dir"
   fi
 }
 # build_liblensfun        # config_options+= --enable-liblensfun          # enable lensfun lens correction [no]
@@ -1562,10 +1604,6 @@ build_libjpeg_turbo() {
 	change_dir "$src_dir/libjpeg-turbo"
 	local cmake_params="-DENABLE_SHARED=0 -DCMAKE_ASM_NASM_COMPILER=yasm"
 		cmake_params+=" -DCMAKE_TOOLCHAIN_FILE=$(get_generic_cmake_toolchain)"
-		local target_proc=AMD64
-		if [ "$bits_target" = "32" ]; then
-			target_proc=X86
-		fi
 	do_cmake_and_install "$cmake_params"
 	change_dir "$src_dir"
 }
