@@ -1461,15 +1461,49 @@ build_libopenmpt() {
 build_libopenvino() {
   if [[ $disable_libopenvino != 1 && $enable_libopenvino == 1 ]]; then
   local lib="libopenvino"
-  # https://github.com/openvinotoolkit/openvino # compiling from source fails and is complicated. using pre-built binaries
-  download_and_unpack_file "https://storage.openvinotoolkit.org/repositories/openvino/packages/2025.4/windows/openvino_toolkit_windows_2025.4.0.20398.8fdad55727d_x86_64.zip" "$lib"
+  local repo="https://github.com/openvinotoolkit/openvino"
+  local repo_ver="2025.4.0"
+  change_dir "$src_dir"
+	do_git_checkout "$repo" "$lib" "$repo_ver"
+	change_dir "$src_dir/$lib/build" 1
+  do_cmake_from_build_dir "$src_dir/$lib" "-DCMAKE_INSTALL_PREFIX=$dependency_install_prefix \
+-DCMAKE_BUILD_TYPE=Release \
+-DBUILD_SHARED_LIBS=OFF \
+-DENABLE_LTO=OFF \
+-DENABLE_INTEL_CPU=ON \
+-DENABLE_INTEL_GPU=OFF \
+-DENABLE_INTEL_GNA=OFF \
+-DENABLE_CLDNN=OFF \
+-DENABLE_PLANARTRACE=OFF \
+-DENABLE_INTEL_NPU=OFF \
+-DENABLE_INTEL_VPU=OFF \
+-DENABLE_OV_FRONTEND=OFF \
+-DENABLE_PYTHON=OFF \
+-DENABLE_SAMPLES=OFF \
+-DENABLE_TESTS=OFF \
+-DENABLE_CPPLINT=OFF \
+-DENABLE_NCC_STYLE=OFF \
+-DTHREADING=SEQ \
+-DENABLE_SYSTEM_PUGIXML=OFF \
+-DENABLE_SYSTEM_TBB=OFF \
+-DENABLE_SYSTEM_OPENCL=OFF \
+-DENABLE_OPENCV=OFF \
+-DCMAKE_DISABLE_FIND_PACKAGE_OpenCV=ON"
+  do_make_and_make_install
+  change_dir "$src_dir"
   fi
 }
 # build_libopus           # config_options+= --enable-libopus             # enable Opus de/encoding via libopus [no]
 build_libopus() {
   if [[ $disable_libopus != 1 && $enable_libopus == 1 ]]; then
   local lib="libopus"
-  do_git_checkout https://github.com/xiph/opus opus origin/main
+  local repo="https://github.com/xiph/opus"
+  local repo_ver="v1.5.2"
+  change_dir "$src_dir"
+  do_git_checkout "$repo" "$lib"
+  change_dir "$src_dir/$lib"
+	generic_configure_make_install "--enable-static --disable-shared"
+  change_dir "$src_dir"
   fi
 }
 build_libunwind() {
@@ -1538,8 +1572,10 @@ build_libplacebo() {
 # build_libpulse          # config_options+= --enable-libpulse            # enable Pulseaudio input via libpulse [no]
 build_libpulse() {
   if [[ $disable_libpulse != 1 && $enable_libpulse == 1 ]]; then
-  # https://github.com/pulseaudio/pulseaudio
   local lib="libpulse"
+  local repo="https://github.com/pulseaudio/pulseaudio"
+  local repo_ver="v16.2"
+
   fi
 }
 # build_libqrencode       # config_options+= --enable-libqrencode         # enable QR encode generation via libqrencode [no]
@@ -1745,18 +1781,25 @@ build_libtensorflow() {
   fi
 }
 build_libtiff() {
-	build_libjpeg_turbo # auto uses it?
+  local lib="libtiff"
+  local repo="https://download.osgeo.org/libtiff/tiff-4.7.1rc1.tar.gz" # "https://gitlab.com/libtiff/libtiff"
+  local repo_ver="v4.7.1"
+	#build_libjpeg_turbo # auto uses it?
 	change_dir "$src_dir"
-	generic_download_and_make_and_install http://download.osgeo.org/libtiff/tiff-4.7.1.tar.gz
-	sed -i.bak "s/-ltiff.*$/-ltiff -llzma -ljpeg -lz/" "$PKG_CONFIG_PATH/libtiff-4.pc" # static deps
+  download_and_unpack_file "$repo" "$lib"
+  change_dir "$src_dir/$lib"
+  generic_configure_make_install "--enable-static --disable-shared"
+	sed -i.bak "s/-ltiff.*$/-ltiff -llzma -ljpeg -lz/" "$dependency_install_prefix/lib/pkgconfig/libtiff-4.pc" # static deps
 	change_dir "$src_dir"
 }
 build_libjpeg_turbo() {
+  local lib="libjpeg-turbo"
+  local repo="https://github.com/libjpeg-turbo/libjpeg-turbo"
+  local repo_ver="3.1.2"
 	change_dir "$src_dir"
-	do_git_checkout https://github.com/libjpeg-turbo/libjpeg-turbo libjpeg-turbo "origin/main"
-	change_dir "$src_dir/libjpeg-turbo"
-	local cmake_params="-DENABLE_SHARED=0 -DCMAKE_ASM_NASM_COMPILER=yasm"
-		cmake_params+=" -DCMAKE_TOOLCHAIN_FILE=$(get_generic_cmake_toolchain)"
+	do_git_checkout "$repo" "$lib" "$repo_ver"
+	change_dir "$src_dir/$lib"
+	local cmake_params="-DCMAKE_INSTALL_PREFIX=$dependency_install_prefix -DENABLE_SHARED=0 -DCMAKE_ASM_NASM_COMPILER=yasm"
 	do_cmake_and_install "$cmake_params"
 	change_dir "$src_dir"
 }
@@ -1877,8 +1920,16 @@ build_libvvenc() {
 # build_libwebp           # config_options+= --enable-libwebp             # enable WebP encoding via libwebp [no]
 build_libwebp() {
   if [[ $disable_libwebp != 1 && $enable_libwebp == 1 ]]; then
+  build_libpng
   local lib="libwebp"
-  do_git_checkout https://chromium.googlesource.com/webm/libwebp libwebp
+  local repo="https://chromium.googlesource.com/webm/libwebp"
+  local repo_ver="v1.6.0"
+  change_dir "$src_dir"
+	do_git_checkout "$repo" "$lib" "$repo_ver"
+	change_dir "$src_dir/$lib"
+	generic_configure "--disable-wic"
+	do_make_and_make_install
+	change_dir "$src_dir"
   fi
 }
 # build_libx264           # config_options+= --enable-libx264             # enable H.264 encoding via x264 [no]

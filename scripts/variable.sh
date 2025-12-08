@@ -188,4 +188,5 @@ export BUILD_STEPS=(
 "build_omx" \
 "build_sndio" \
 "build_libdvdnav" \
-"build_libdvdread")
+"build_libdvdread" \
+"build_libopenvino")

@@ -511,6 +511,11 @@ get_cpu_count() {
 	echo -e "$cpu_count"
 }
 
+get_concurrent_proc() {
+  # shellcheck disable=2046
+  echo -e $(( $(get_cpu_count) / 3 ))
+}
+
 display_version() {
 	COMMAND=$(echo -e "$0" | sed -e 's/\.\///g')
 
@@ -1495,8 +1500,8 @@ do_configure() {
 		} # less nicey than make (since single thread, and what if you're running another ffmpeg nice build elsewhere?)
 		create_touch_file 0 "$touch_name"
 		echo -e "INFO: doing preventative make clean" >>"$LOG_FILE"
-		echo -e "INFO: do_configure() nice running: \"make clean -j $(get_cpu_count)\"" >>"$LOG_FILE"
-		nice make clean -j "$(get_cpu_count)" > >(redirect_output) 2>&1 # sometimes useful when files change, etc.
+		echo -e "INFO: do_configure() nice running: \"make clean -j $(get_concurrent_proc)\"" >>"$LOG_FILE"
+		nice make clean -j "$(get_concurrent_proc)" > >(redirect_output) 2>&1 # sometimes useful when files change, etc.
 	else
 	 echo -e "DEBUG: already configured $(basename "$cur_dir2")" >>"$LOG_FILE"
 	fi
@@ -1531,23 +1536,23 @@ do_make() {
 	local extra_make_options="$1"
 	local touch_postfix=""
 	[[ -n $2 ]] && touch_postfix="_${2}_" || touch_postfix="_"
-	extra_make_options="-j$(get_cpu_count) $extra_make_options"
+	extra_make_options="-j$(get_concurrent_proc) $extra_make_options"
 	local cur_dir2=$(pwd)
   local touch_prefix="${host_name}${touch_postfix}already"
 	local touch_name=$(get_small_touchfile_name "${touch_prefix}_make" "make $extra_make_options")
 	if truthy "$build_force"; then
 		remove_path -f "$cur_dir2/${touch_prefix}_"*
-    nice make clean -j"$(get_cpu_count)" > >(redirect_output) 2>&1
+    nice make clean -j"$(get_concurrent_proc)" > >(redirect_output) 2>&1
 	fi
 	if [ ! -f "$touch_name" ]; then
     remove_path -f "${touch_prefix}_make"* # reset
 		echo -e "INFO: Making $cur_dir2 as $ PATH=$PATH make $extra_make_options" >>"$LOG_FILE"
 		if [ ! -f configure ]; then
-			echo -e "INFO: do_make() PATH=$PATH\n nice running: \"make clean -j$(get_cpu_count)\"" >>"$LOG_FILE"
-			nice make clean -j"$(get_cpu_count)" > >(redirect_output) 2>&1 # just in case helpful if old junk left around and this is a 're make' and wasn't cleaned at reconfigure time
+			echo -e "INFO: do_make() PATH=$PATH\n nice running: \"make clean -j$(get_concurrent_proc)\"" >>"$LOG_FILE"
+			nice make clean -j"$(get_concurrent_proc)" > >(redirect_output) 2>&1 # just in case helpful if old junk left around and this is a 're make' and wasn't cleaned at reconfigure time
 		fi
 		echo -e "INFO: do_make() PATH=$PATH\n nice running: \"make $extra_make_options\"" >>"$LOG_FILE"
-		eval "nice make -j$(get_cpu_count) $extra_make_options" > >(redirect_output) 2>&1 || exit_message 1 "could not make with $extra_make_options"
+		eval "nice make -j$(get_concurrent_proc) $extra_make_options" > >(redirect_output) 2>&1 || exit_message 1 "could not make with $extra_make_options"
 		create_touch_file 1 "$touch_name" # only touch if the build was OK
 	else
 		echo -e "INFO: Already made $(dirname "$cur_dir2") $(basename "$cur_dir2") ..." >>"$LOG_FILE"
@@ -1584,7 +1589,7 @@ do_make_install() {
 	if [ ! -f "$touch_name" ]; then
     remove_path -f "${touch_prefix}_make_install"* # reset
 		echo -e "INFO: do_make_install() PATH=$PATH\n nice running: \"make $make_install_options\"" >>"$LOG_FILE"
-		eval "nice make -j$(get_cpu_count) $make_install_options" > >(redirect_output) 2>&1 || exit_message 1 "could not make with $make_install_options"
+		eval "nice make -j$(get_concurrent_proc) $make_install_options" > >(redirect_output) 2>&1 || exit_message 1 "could not make with $make_install_options"
 		create_touch_file 1 "$touch_name"
 	fi
 }
@@ -1827,7 +1832,7 @@ do_ninja_and_ninja_install() {
 do_ninja() {
 	local touch_postfix=""
 	[[ -n $1 ]] && touch_postfix="_${1}_" || touch_postfix="_"
-	local extra_make_options=" -j $(get_cpu_count)"
+	local extra_make_options=" -j $(get_concurrent_proc)"
 	local cur_dir2=$(pwd)
   local touch_prefix="${host_name}${touch_postfix}already"
 	local touch_name=$(get_small_touchfile_name "${touch_prefix}_ninja_build" "ninja build $extra_make_options")
