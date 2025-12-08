@@ -382,7 +382,6 @@ build_libharfbuzz() {
 	fi
 	change_dir "$src_dir"
 	build_freetype # with harfbuzz now
-	deactivate
 	sed -i.bak 's/-lfreetype.*/-lfreetype -lharfbuzz -lpng -lbz2/' "$PKG_CONFIG_PATH/freetype2.pc"
 	sed -i.bak 's/-lharfbuzz.*/-lfreetype -lharfbuzz -lpng -lbz2/' "$PKG_CONFIG_PATH/harfbuzz.pc"
 	fi
@@ -400,7 +399,6 @@ build_libvmaf() {
 	do_meson "$meson_options" "setup build"
 	do_ninja_and_ninja_install
 	sed -i.bak "s/Libs: .*/& -lstdc++/" "$PKG_CONFIG_PATH/libvmaf.pc"
-	deactivate
 	change_dir "$src_dir"
 	fi
 }
@@ -699,7 +697,6 @@ build_libbluray() {
 	do_meson "$meson_options" "setup build"
 	do_ninja_and_ninja_install # "CPPFLAGS=\"-Ddec_init=libbr_dec_init\""
 	sed -i.bak 's/-lbluray.*/-lbluray -lstdc++ -lssp -lgdi32/' "$PKG_CONFIG_PATH/libbluray.pc"
-	deactivate
 	change_dir "$src_dir"
 	fi
 }
@@ -1184,7 +1181,6 @@ build_libdav1d() {
 	do_ninja_and_ninja_install
 	copy_path "$src_dir/build/src/libdav1d.a" "$dependency_install_prefix/lib" || exit_message 1 "could not copy $src_dir/build/src/libdav1d.a" # avoid 'run ranlib' weird failure, possibly older meson's https://github.com/mesonbuild/meson/issues/4138 :|
 	cpu_count=$original_cpu_count
-	deactivate
 	change_dir "$src_dir"
 	fi
 }
@@ -1235,7 +1231,6 @@ build_libplacebo() {
 	do_meson "$meson_options" "setup build"
 	do_ninja_and_ninja_install
 	sed -i.bak 's/-lplacebo.*$/-lplacebo -lm -lshlwapi -lunwind -lxxhash -lversion -lstdc++/' "$PKG_CONFIG_PATH/libplacebo.pc"
-	deactivate
 	change_dir "$src_dir"
 	fi
 }
@@ -2951,7 +2946,6 @@ build_glib() {
 	do_meson "$meson_options" "setup build"
 	do_ninja_and_ninja_install
 	sed -i.bak 's/-lglib-2.0.*$/-lglib-2.0 -lintl -lws2_32 -lwinmm -lm -liconv -lole32/' "$PKG_CONFIG_PATH/glib-2.0.pc"
-	deactivate
 	change_dir "$src_dir"
 }
 

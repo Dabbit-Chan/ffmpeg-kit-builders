@@ -1507,52 +1507,60 @@ build_libopus() {
   fi
 }
 build_libunwind() {
+  local lib="libunwind"
+  local repo="https://github.com/libunwind/libunwind"
+  local repo_ver="v1.8.3"
 	change_dir "$src_dir"
-	do_git_checkout https://github.com/libunwind/libunwind libunwind
-	change_dir "$src_dir/libunwind"
-	autoreconf -i
-	# TODO: Allow shared library build
-	do_configure "--host=x86_64-linux-gnu --prefix=$dependency_install_prefix --disable-shared --enable-static"
-	do_make_and_make_install
+	do_git_checkout "$repo" "$lib" "$repo_ver"
+	change_dir "$src_dir/$lib"
+	generic_configure_make_install "--disable-shared --enable-static"
 	change_dir "$src_dir"
 }
 build_libxxhash() {
+  local lib="libxxhash"
+  local repo="https://github.com/Cyan4973/xxHash"
+  local repo_ver="v0.8.3"
 	change_dir "$src_dir"
-	do_git_checkout https://github.com/Cyan4973/xxHash xxHash dev
-	change_dir "$src_dir/xxHash"
-	do_cmake "-S build/cmake -B build -DCMAKE_BUILD_TYPE=release -GNinja"
-	do_ninja_and_ninja_install
+	do_git_checkout "$repo" "$lib" "$repo_ver"
+	change_dir "$src_dir/$lib"
+	do_make_and_make_install "PREFIX=$dependency_install_prefix"
 	change_dir "$src_dir"
 }
 build_spirv_cross() {
+  local lib="SPIRV-Cross"
+  local repo="https://github.com/KhronosGroup/SPIRV-Cross"
+  local repo_ver="vulkan-sdk-1.4.328.1"
 	change_dir "$src_dir"
-	do_git_checkout https://github.com/KhronosGroup/SPIRV-Cross SPIRV-Cross b26ac3fa8bcfe76c361b56e3284b5276b23453ce
-	change_dir "$src_dir/SPIRV-Cross"
+	do_git_checkout "$repo" "$lib" "$repo_ver"
+	change_dir "$src_dir/$lib"
 	# TODO: Allow shared library build
 	do_cmake "-B build -GNinja -DSPIRV_CROSS_STATIC=ON -DSPIRV_CROSS_SHARED=OFF -DCMAKE_BUILD_TYPE=Release -DSPIRV_CROSS_CLI=OFF -DSPIRV_CROSS_ENABLE_TESTS=OFF -DSPIRV_CROSS_FORCE_PIC=ON -DSPIRV_CROSS_ENABLE_CPP=OFF"
 	do_ninja_and_ninja_install
-	mv "$PKG_CONFIG_PATH/spirv-cross-c.pc" "$PKG_CONFIG_PATH/spirv-cross-c-shared.pc"
+	mv "$dependency_install_prefix/lib/pkgconfig/spirv-cross-c.pc" "$dependency_install_prefix/lib/pkgconfig/spirv-cross-c-shared.pc"
 	change_dir "$src_dir"
 }
 build_libdovi() {
+  local lib="libdovi"
+  local repo="https://github.com/quietvoid/dovi_tool"
+  local repo_ver="2.3.1"
 	change_dir "$src_dir"
-	do_git_checkout https://github.com/quietvoid/dovi_tool dovi_tool
-	change_dir "$src_dir/dovi_tool"
-	if [[ ! -e $dependency_install_prefix/lib/libdovi.a ]]; then
-		curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y && . "$HOME/.cargo/env" && rustup update && rustup target add x86_64-pc-windows-gnu # rustup self uninstall
-		wget https://github.com/quietvoid/dovi_tool/releases/download/2.3.1/dovi_tool-2.3.1-x86_64-pc-windows-msvc.zip
-		unzip -o dovi_tool-2.3.1-x86_64-pc-windows-msvc.zip -d "$dependency_install_prefix/bin"
-		remove_path -f dovi_tool-2.3.1-x86_64-pc-windows-msvc.zip
-		unset PKG_CONFIG_PATH
-		change_dir "$src_dir/dovi_tool/dolby_vision"
-		cargo install cargo-c --features=vendored-openssl
-		export PKG_CONFIG_PATH="$dependency_install_prefix/lib/pkgconfig"
-		# TODO: Allow shared library build
-		cargo cinstall --release --prefix="$dependency_install_prefix" --libdir="$dependency_install_prefix/lib" --library-type=staticlib --target x86_64-pc-windows-gnu
-		change_dir "$src_dir"
-	else
-		echo -e "libdovi already installed"
-	fi
+	do_git_checkout "$repo" "$lib" "$repo_ver"
+	change_dir "$src_dir/$lib/dolby_vision"
+	cargo_build_and_install "--release" "--package dolby_vision --release --libdir=\"$dependency_install_prefix/lib\" --library-type=staticlib"
+	change_dir "$src_dir"
+}
+build_vulkan_loader() {
+  local parentlib="vulkan-loader"
+  local lib="Vulkan-Shim-Loader"
+  local repo="https://github.com/BtbN/Vulkan-Shim-Loader"
+	change_dir "$src_dir/$parentlib" 1
+	do_git_checkout "$repo" "$lib"
+	change_dir "$src_dir/$parentlib/$lib"
+  local lib="Vulkan-Headers"
+  local repo="https://github.com/KhronosGroup/Vulkan-Headers"
+  local repo_ver="v1.4.326"
+	do_git_checkout "$repo" "$lib" "$repo_ver"
+	do_cmake_and_install "-DCMAKE_BUILD_TYPE=Release -DVULKAN_SHIM_IMPERSONATE=ON"
 	change_dir "$src_dir"
 }
 # build_libplacebo        # config_options+= --enable-libplacebo          # enable libplacebo library [no]
@@ -1565,8 +1573,23 @@ build_libplacebo() {
 	build_spirv_cross
 	build_libdovi
 	build_libshaderc
+  activate_meson
   local lib="libplacebo"
-  do_git_checkout https://code.videolan.org/videolan/libplacebo libplacebo #515da9548ad734d923c7d0988398053f87b454d5
+  local repo="https://code.videolan.org/videolan/libplacebo"
+  local repo_ver="v7.351.0"
+  change_dir "$src_dir"
+  do_git_checkout "$repo" "$lib" "$repo_ver"
+  change_dir "$src_dir/$lib"
+  local config_options+=" -Dvulkan-registry=$dependency_install_prefix/share/vulkan/registry/vk.xml"
+  local meson_options="-Ddefault_library=static -Ddemos=false -Dbench=false -Dfuzz=false -Dvulkan=enabled -Dvk-proc-addr=disabled -Dglslang=disabled -Dc_link_args=-static -Dcpp_link_args=-static $config_options" # https://mesonbuild.com/Dependencies.html#shaderc trigger use of shaderc_combined
+	if [[ $disable_libshaderc != 1 && $enable_libshaderc == 1 ]]; then
+    meson_options+=" -Dshaderc=enabled"
+  else
+    meson_options+=" -Dshaderc=disabled"
+  fi
+  do_meson "$meson_options" "setup build"
+	do_ninja_and_ninja_install
+	sed -i.bak 's/-lplacebo.*$/-lplacebo -lm -lunwind -lxxhash -lstdc++/' "$dependency_install_prefix/lib/pkgconfig/libplacebo.pc"
   fi
 }
 # build_libpulse          # config_options+= --enable-libpulse            # enable Pulseaudio input via libpulse [no]
@@ -1707,7 +1730,19 @@ build_librubberband() {
 build_libshaderc() {
   if [[ $disable_libshaderc != 1 && $enable_libshaderc == 1 ]]; then
   local lib="libshaderc"
-  do_git_checkout https://github.com/google/shaderc shaderc 3a44d5d7850da3601aa43d523a3d228f045fb43d
+  local repo="https://github.com/google/shaderc"
+  local repo_ver="v2025.5"
+  change_dir "$src_dir"
+  do_git_checkout "$repo" "$lib" "$repo_ver"
+  change_dir "$src_dir/$lib"
+  ./utils/git-sync-deps > >(redirect_output) 2>&1
+	# TODO: Allow shared library build
+	do_cmake "-B build -DCMAKE_BUILD_TYPE=release -GNinja -DSHADERC_SKIP_EXAMPLES=ON -DSHADERC_SKIP_TESTS=ON -DSPIRV_SKIP_TESTS=ON -DSHADERC_SKIP_COPYRIGHT_CHECK=ON -DENABLE_EXCEPTIONS=ON -DENABLE_GLSLANG_BINARIES=OFF -DSPIRV_SKIP_EXECUTABLES=ON -DSPIRV_TOOLS_BUILD_STATIC=ON -DBUILD_SHARED_LIBS=OFF"
+	do_ninja_and_ninja_install
+	cp -fv build/libshaderc_util/libshaderc_util.a "$dependency_install_prefix/lib" > >(redirect_output) 2>&1
+	sed -i.bak "s/Libs: .*/& -lstdc++/" "$dependency_install_prefix/lib/pkgconfig/shaderc_combined.pc"
+	sed -i.bak "s/Libs: .*/& -lstdc++/" "$dependency_install_prefix/lib/pkgconfig/shaderc_static.pc"
+	change_dir "$src_dir"
   fi
 }
 # build_libshine          # config_options+= --enable-libshine            # enable fixed-point MP3 encoding via libshine [no]

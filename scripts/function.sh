@@ -377,6 +377,7 @@ calculate_bits_target() {
 
 setup_windows_environment() {
     export host_target="$host_arch-w64-mingw32"
+    export rust_target="$host_arch-pc-windows-gnu"
     export toolchain_root="mingw-w64-$host_arch"
     export dependency_install_prefix="$(realpath "$work_dir/cross_compilers/$toolchain_root/$host_target")"
     export toolchain_root_dir="$(realpath "$work_dir/cross_compilers/$toolchain_root")"
@@ -411,6 +412,7 @@ CXX=${cross_prefix}g++"
 
 setup_linux_environment() {
     export host_target="$host_arch-$host_platform-gnu"
+    export rust_target="$host_arch-unknown-linux-gnu"
     export dependency_install_prefix="$work_dir/libraries"
     export PKG_CONFIG_PATH="$PKG_CONFIG_PATH:$dependency_install_prefix/share/pkgconfig:$dependency_install_prefix/lib/pkgconfig:$dependency_install_prefix/lib/$host_target/pkgconfig:$work_dir/pkgconfig"
     export PATH="$ffmpeg_install_prefix:$dependency_install_prefix:$original_path"
@@ -1409,9 +1411,9 @@ do_cargo_build() {
 	fi
 	if [ ! -f "$touch_name" ]; then
     remove_path -f "${touch_prefix}_cargo_build"* # reset
-		echo -e "INFO: Running cargo build with:\n  RUSTFLAGS=$RUSTFLAGS\n  \"cargo build --target $host_arch-pc-windows-gnu $extra_build_args\"" >>"$LOG_FILE"
-    rustup target add $host_arch-pc-windows-gnu
-		cargo build --target "$host_arch-pc-windows-gnu" $extra_build_args > >(redirect_output) 2>&1 || {
+		echo -e "INFO: Running cargo build with:\n  RUSTFLAGS=$RUSTFLAGS\n  \"cargo build --target $rust_target $extra_build_args\"" >>"$LOG_FILE"
+    rustup target add $rust_target > >(redirect_output) 2>&1
+		cargo build --target "$rust_target" $extra_build_args > >(redirect_output) 2>&1 || {
 			exit_message 1 "failed cargo build with $extra_build_args\n see $LOG_FILE for more details"
 		}
 		create_touch_file 0 "$touch_name"
@@ -1436,8 +1438,8 @@ do_cargo_install() {
 	if [ ! -f "$touch_name" ]; then
     remove_path -f "${touch_prefix}_cargo_install"* # reset
 		echo -e "INFO: Running cargo install cargo-c" >>"$LOG_FILE"
-    echo -e "INFO: Running cargo cinstall with:\n  RUSTFLAGS=$RUSTFLAGS\n  \"cargo cinstall --prefix=$dependency_install_prefix --target $host_arch-pc-windows-gnu $extra_install_args\"" >>"$LOG_FILE"
-		cargo cinstall --prefix="$dependency_install_prefix" --target "$host_arch-pc-windows-gnu" $extra_install_args > >(redirect_output) 2>&1 || {
+    echo -e "INFO: Running cargo cinstall with:\n  RUSTFLAGS=$RUSTFLAGS\n  \"cargo cinstall --prefix=$dependency_install_prefix --target $rust_target $extra_install_args\"" >>"$LOG_FILE"
+		cargo cinstall --prefix="$dependency_install_prefix" --target "$rust_target" $extra_install_args > >(redirect_output) 2>&1 || {
 			exit_message 1 "failed cargo cinstall with $extra_install_args\n see $LOG_FILE for more details"
 		}
 		create_touch_file 0 "$touch_name"
