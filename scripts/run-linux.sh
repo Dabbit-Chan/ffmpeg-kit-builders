@@ -1676,8 +1676,24 @@ build_libquirc() {
 # build_librabbitmq       # config_options+= --enable-librabbitmq         # enable RabbitMQ library [no]
 build_librabbitmq() {
   if [[ $disable_librabbitmq != 1 && $enable_librabbitmq == 1 ]]; then
-  # https://github.com/dlbeer/quirc
   local lib="librabbitmq"
+  local repo="https://github.com/alanxz/rabbitmq-c"
+  local repo_ver="v0.15.0"
+  change_dir "$src_dir"
+  do_git_checkout "$repo" "$lib" "$repo_ver" 
+  change_dir "$src_dir/$lib"
+  local cmake_params="-DCMAKE_BUILD_TYPE=Release \
+-DBUILD_SHARED_LIBS=OFF \
+-DBUILD_STATIC_LIBS=ON \
+-DBUILD_EXAMPLES=OFF \
+-DBUILD_TESTING=OFF \
+-DBUILD_TOOLS=OFF \
+-DBUILD_API_DOCS=OFF \
+-DENABLE_SSL_SUPPORT=OFF \
+-DCMAKE_INSTALL_PREFIX=${dependency_install_prefix}"
+  do_cmake_from_build_dir "$src_dir/$lib" "$cmake_params"
+  do_make_and_make_install
+  change_dir "$src_dir"
   fi
 }
 # build_librav1e          # config_options+= --enable-librav1e            # enable AV1 encoding via rav1e [no]
