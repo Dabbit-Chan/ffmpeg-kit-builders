@@ -414,12 +414,11 @@ setup_linux_environment() {
     export dependency_install_prefix="$work_dir/libraries"
     export PKG_CONFIG_PATH="$PKG_CONFIG_PATH:$dependency_install_prefix/share/pkgconfig:$dependency_install_prefix/lib/pkgconfig:$dependency_install_prefix/lib/$host_target/pkgconfig:$work_dir/pkgconfig"
     export PATH="$ffmpeg_install_prefix:$dependency_install_prefix:$original_path"
-    export linux_cflags='-fstrict-aliasing -fPIC -DLINUX'
+    export linux_cflags='-fstrict-aliasing -fPIC -DLINUX -I${dependency_install_prefix}/include'
     export CFLAGS="$linux_cflags"
     export linux_cppflags=''
-    export linux_cxxflags=''
-    export CXXFLAGS="$linux_cxxflags"
-    export linux_ldflags=''
+    export linux_cxxflags='-I${dependency_install_prefix}/include'
+    export linux_ldflags='-L${dependency_install_prefix}/lib -L${dependency_install_prefix}/lib/${host_target}'
 }
 
 reset_cflags() {
@@ -860,9 +859,9 @@ check_missing_packages() {
 		# In RHEL this should always be set anyway. But not so sure about CentOS
 		VENDOR="redhat"
 	fi
-  # apt install autoconf-archive autoconf autogen automake autopoint bc bison bzip2 cargo clang cmake coreutils curl cvs ed ed flex g++ gcc gettext git gperf help2man libtool libtool-bin make meson nasm p7zip-full patch pax pkg-config python3 python3-setuptools python3-venv ragel subversion unzip wget xz-utils yasm zlib1g-dev libglib2.0-dev libglib2.0-dev-bin sudo apt install binutils llvm lld xutils-dev
+  # apt install autoconf-archive autoconf autogen automake autopoint bc bison bzip2 cargo clang cmake coreutils curl cvs ed ed flex g++ gcc gettext git gperf help2man libtool libtool-bin make meson nasm p7zip-full patch pax pkg-config python3 python3-setuptools python3-venv ragel subversion unzip wget xz-utils yasm zlib1g-dev libglib2.0-dev libglib2.0-dev-bin sudo apt install binutils llvm lld xutils-dev python3-numpy
 	# zeranoe's build scripts use wget, though we don't here...
-	local check_packages=('ragel' 'curl' 'pkg-config' 'make' 'git' 'svn' 'gcc' 'autoconf' 'automake' 'yasm' 'cvs' 'flex' 'bison' 'makeinfo' 'g++' 'ed' 'pax' 'unzip' 'patch' 'wget' 'xz' 'nasm' 'gperf' 'autogen' 'bzip2' 'realpath' 'clang' 'python3' 'python3-venv' 'bc' 'autopoint' 'zstd' 'glib-mkenums' 'ld' 'ld.lld' 'xutils-dev')
+	local check_packages=('ragel' 'curl' 'pkg-config' 'make' 'git' 'svn' 'gcc' 'autoconf' 'automake' 'yasm' 'cvs' 'flex' 'bison' 'makeinfo' 'g++' 'ed' 'pax' 'unzip' 'patch' 'wget' 'xz' 'nasm' 'gperf' 'autogen' 'bzip2' 'realpath' 'clang' 'python3' 'python3-venv' 'bc' 'autopoint' 'zstd' 'glib-mkenums' 'ld' 'ld.lld' 'xutils-dev' 'python3-numpy')
 	# autoconf-archive is just for leptonica FWIW
 	# I'm not actually sure if VENDOR being set to centos is a thing or not. On all the centos boxes I can test on it's not been set at all.
 	# that being said, if it where set I would imagine it would be set to centos... And this contition will satisfy the "Is not initially set"
@@ -1053,8 +1052,8 @@ do_svn_checkout() {
 		else
 			svn checkout -r "$desired_revision" "$repo_url" "$to_dir".tmp > >(redirect_output) 2>&1 || exit_message 1 "could not checkout $desired_revision $repo_url"
 		fi
-		mv "$to_dir".tmp "$to_dir" 2>"$LOG_FILE"
-    chmod -R a+rwx "$to_dir" 2>"$LOG_FILE"
+		mv "$to_dir".tmp "$to_dir" 2>>"$LOG_FILE"
+    chmod -R a+rwx "$to_dir" 2>>"$LOG_FILE"
 	else
     if truthy "$build_force"; then
       echo -e "INFO: Force requested, resetting repository" >>"$LOG_FILE"
@@ -1063,7 +1062,7 @@ do_svn_checkout() {
       echo -e "INFO: Fetching git instead" >>"$LOG_FILE"
 			svn update > >(redirect_output) 2>&1 # want this for later...
 		else
-      chmod -R a+rwx "$to_dir" 2>"$LOG_FILE"
+      chmod -R a+rwx "$to_dir" 2>>"$LOG_FILE"
       change_dir "$to_dir"
       change_dir ..
     fi
@@ -1245,8 +1244,8 @@ do_git_checkout() {
     fi
 		echo -e "INFO: Downloading $repo_url $desired_branch into $to_dir" >>"$LOG_FILE"
 		retry_git_or_die "$repo_url" "$to_dir" "$desired_branch"
-    mv "$to_dir.tmp" "$to_dir" 2>"$LOG_FILE"
-		chmod -R a+rwx "$to_dir" 2>"$LOG_FILE"
+    mv "$to_dir.tmp" "$to_dir" 2>>"$LOG_FILE"
+		chmod -R a+rwx "$to_dir" 2>>"$LOG_FILE"
     change_dir "$to_dir"
 	fi
 }
@@ -1301,7 +1300,7 @@ create_touch_file() {
 get_small_touchfile_name() { # have to call with assignment like a=$(get_small...)
 	local beginning="$1"
 	local extra_stuff="$2"
-	local touch_name="${beginning}_$(echo -e -- "$extra_stuff" "$host_name" "$CFLAGS" "$LDFLAGS" | /usr/bin/env md5sum)" # md5sum to make it smaller, cflags to force rebuild if changes
+	local touch_name="${beginning}_$(echo -e -- "$extra_stuff" "$(get_build_type)" "$LDFLAGS" "$CFLAGS" "$CXXFLAGS" | /usr/bin/env md5sum)" # md5sum to make it smaller, cflags to force rebuild if changes
 	touch_name=$(echo -e "$touch_name" | sed "s/ //g")                                                      # md5sum introduces spaces, remove them
 	echo -e "$touch_name"                                                                                   # bash cruddy return system LOL
 }
@@ -1350,7 +1349,7 @@ do_python() {
 	local configure_name=$2
 	local configure_env="$3"
 	local touch_postfix=""
-	[[ -n $4 ]] && touch_postfix="_$4"
+	[[ -n $4 ]] && touch_postfix="_${4}_" || touch_postfix="_"
 	if [[ -z "${configure_name[*]}" ]]; then
 		configure_name=("./waf" "configure -v")
 	fi
@@ -1366,13 +1365,13 @@ do_python() {
   configure_command=(python ${configure_name[*]})
 	local cur_dir2=$(pwd)
 	local english_name=$(basename "$cur_dir2")
-  local touch_prefix="${host_name}_${touch_postfix}_already_"
-	local touch_name=$(get_small_touchfile_name "${touch_prefix}_python_" "$configure_options ${configure_command[*]} $LDFLAGS $CFLAGS $CXXFLAGS")
+  local touch_prefix="${host_name}${touch_postfix}already"
+	local touch_name=$(get_small_touchfile_name "${touch_prefix}_python" "$configure_options ${configure_command[*]}")
 	if truthy "$build_force"; then
-		remove_path -f "$cur_dir2/${touch_prefix}"*
+		remove_path -f "$cur_dir2/${touch_prefix}_"*
 	fi
 	if [ ! -f "$touch_name" ]; then
-    remove_path -f "${touch_prefix}"* # reset
+    remove_path -f "${touch_prefix}_python"* # reset
 		echo -e "INFO: Using python: $english_name ($PWD) as PATH=$PATH ${configure_env}\n ${configure_command[*]} $configure_options" >>"$LOG_FILE"
 		# shellcheck disable=SC1078,SC2086
 		eval "${configure_command[*]} $configure_options" > >(redirect_output) 2>&1 || exit_message 1 "could not run configure ${configure_command[*]}"
@@ -1396,15 +1395,15 @@ cargo_build_and_install() {
 do_cargo_build() {
 	local extra_build_args="$1"
   local touch_postfix=""
-  [[ -n $2 ]] && touch_postfix="_$2"
+  [[ -n $2 ]] && touch_postfix="_${2}_" || touch_postfix="_"
 	local cur_dir2=$(pwd)
-  local touch_prefix="${host_name}_${touch_postfix}_already_"
-	local touch_name=$(get_small_touchfile_name "${touch_prefix}_cargo_build_" "cargo build $extra_build_args $LDFLAGS $CFLAGS $CXXFLAGS")
+  local touch_prefix="${host_name}${touch_postfix}already"
+	local touch_name=$(get_small_touchfile_name "${touch_prefix}_cargo_build" "cargo build $extra_build_args")
 	if truthy "$build_force"; then
-		remove_path -f "$cur_dir2/${touch_prefix}"*
+		remove_path -f "$cur_dir2/${touch_prefix}_"*
 	fi
 	if [ ! -f "$touch_name" ]; then
-    remove_path -f "${touch_prefix}"* # reset
+    remove_path -f "${touch_prefix}_cargo_build"* # reset
 		echo -e "INFO: Running cargo build with:\n  RUSTFLAGS=$RUSTFLAGS\n  \"cargo build --target $host_arch-pc-windows-gnu $extra_build_args\"" >>"$LOG_FILE"
     rustup target add $host_arch-pc-windows-gnu
 		cargo build --target "$host_arch-pc-windows-gnu" $extra_build_args > >(redirect_output) 2>&1 || {
@@ -1422,15 +1421,15 @@ do_cargo_build() {
 do_cargo_install() {
 	local extra_install_args="$1"
   local touch_postfix=""
-  [[ -n $2 ]] && touch_postfix="_$2"
+  [[ -n $2 ]] && touch_postfix="_${2}_" || touch_postfix="_"
 	local cur_dir2=$(pwd)
-  local touch_prefix="${host_name}_${touch_postfix}_already_"
-	local touch_name=$(get_small_touchfile_name "${touch_prefix}_cargo_install_" "cargo install $extra_install_args $LDFLAGS $CFLAGS $CXXFLAGS")
+  local touch_prefix="${host_name}${touch_postfix}already"
+	local touch_name=$(get_small_touchfile_name "${touch_prefix}_cargo_install" "cargo install $extra_install_args")
 	if truthy "$build_force"; then
-		remove_path -f "$cur_dir2/${touch_prefix}"*
+		remove_path -f "$cur_dir2/${touch_prefix}_"*
 	fi
 	if [ ! -f "$touch_name" ]; then
-    remove_path -f "${touch_prefix}"* # reset
+    remove_path -f "${touch_prefix}_cargo_install"* # reset
 		echo -e "INFO: Running cargo install cargo-c" >>"$LOG_FILE"
     echo -e "INFO: Running cargo cinstall with:\n  RUSTFLAGS=$RUSTFLAGS\n  \"cargo cinstall --prefix=$dependency_install_prefix --target $host_arch-pc-windows-gnu $extra_install_args\"" >>"$LOG_FILE"
 		cargo cinstall --prefix="$dependency_install_prefix" --target "$host_arch-pc-windows-gnu" $extra_install_args > >(redirect_output) 2>&1 || {
@@ -1451,19 +1450,19 @@ do_configure() {
 	local configure_options="$1"
 	local configure_name="$2"
 	local touch_postfix=""
-	[[ -n $3 ]] && touch_postfix="_$3"
+	[[ -n $3 ]] && touch_postfix="_${3}_" || touch_postfix="_"
 	if [[ "$configure_name" = "" ]]; then
 		configure_name="./configure"
 	fi
 	local cur_dir2=$(pwd)
 	local english_name=$(basename "$cur_dir2")
-  local touch_prefix="${host_name}_${touch_postfix}_already_"
-	local touch_name=$(get_small_touchfile_name "${touch_prefix}_configure_" "$configure_options $configure_name $LDFLAGS $CFLAGS $CXXFLAGS")
+  local touch_prefix="${host_name}${touch_postfix}already"
+	local touch_name=$(get_small_touchfile_name "${touch_prefix}_configure" "$configure_options $configure_name")
 	if truthy "$build_force"; then
-		remove_path -f "$cur_dir2/${touch_prefix}"*
+		remove_path -f "$cur_dir2/${touch_prefix}_"*
 	fi
 	if [ ! -f "$touch_name" ]; then
-    remove_path -f "${touch_prefix}"* # reset
+    remove_path -f "${touch_prefix}_configure"* # reset
 		# make uninstall # does weird things when run under ffmpeg src so disabled for now...
 		echo -e "INFO: configuring $english_name ($PWD) as $ PKG_CONFIG_PATH=$PKG_CONFIG_PATH PATH=$PATH $configure_name $configure_options" >>"$LOG_FILE" # say it now in case bootstrap fails etc.
 		echo -e "INFO: all touch files" "already_configured$touch_postfix*" touchname= "$touch_name" >>"$LOG_FILE"
@@ -1508,13 +1507,14 @@ do_configure() {
 do_autogen() {
   local extra_build_args="$1"
 	local cur_dir2=$(pwd)
-  local touch_prefix="${host_name}_${touch_postfix}_already_"
-	local touch_name=$(get_small_touchfile_name "${touch_prefix}_autogen_" "autogen $extra_build_args $LDFLAGS $CFLAGS $CXXFLAGS")
+  [[ -n $2 ]] && touch_postfix="_${2}_" || touch_postfix="_"
+  local touch_prefix="${host_name}${touch_postfix}already"
+	local touch_name=$(get_small_touchfile_name "${touch_prefix}_autogen" "autogen $extra_build_args")
 	if truthy "$build_force"; then
-		remove_path -f "$cur_dir2/${touch_prefix}"*
+		remove_path -f "$cur_dir2/${touch_prefix}_"*
 	fi
 	if [ ! -f "$touch_name" ]; then
-    remove_path -f "${touch_prefix}"* # reset
+    remove_path -f "${touch_prefix}_autogen"* # reset
 		echo -e "INFO: Running ./autogen.sh with:\n  \"./autogen.sh --build-"w$bits_target" $extra_build_args\"" >>"$LOG_FILE"
 		./autogen.sh --build-"w$bits_target" $extra_build_args > >(redirect_output) 2>&1 || {
 			exit_message 1 "failed ./autogen.sh with $extra_build_args\n see $LOG_FILE for more details"
@@ -1530,17 +1530,17 @@ do_autogen() {
 do_make() {
 	local extra_make_options="$1"
 	local touch_postfix=""
-	[[ -n $2 ]] && touch_postfix="_$2"
+	[[ -n $2 ]] && touch_postfix="_${2}_" || touch_postfix="_"
 	extra_make_options="-j$(get_cpu_count) $extra_make_options"
 	local cur_dir2=$(pwd)
-  local touch_prefix="${host_name}_${touch_postfix}_already_"
-	local touch_name=$(get_small_touchfile_name "${touch_prefix}_make_" "make $extra_make_options $LDFLAGS $CFLAGS $CXXFLAGS")
+  local touch_prefix="${host_name}${touch_postfix}already"
+	local touch_name=$(get_small_touchfile_name "${touch_prefix}_make" "make $extra_make_options")
 	if truthy "$build_force"; then
-		remove_path -f "$cur_dir2/${touch_prefix}"*
+		remove_path -f "$cur_dir2/${touch_prefix}_"*
     nice make clean -j"$(get_cpu_count)" > >(redirect_output) 2>&1
 	fi
 	if [ ! -f "$touch_name" ]; then
-    remove_path -f "${touch_prefix}"* # reset
+    remove_path -f "${touch_prefix}_make"* # reset
 		echo -e "INFO: Making $cur_dir2 as $ PATH=$PATH make $extra_make_options" >>"$LOG_FILE"
 		if [ ! -f configure ]; then
 			echo -e "INFO: do_make() PATH=$PATH\n nice running: \"make clean -j$(get_cpu_count)\"" >>"$LOG_FILE"
@@ -1570,19 +1570,19 @@ do_make_install() {
 	local extra_make_install_options="$1"
 	local override_make_install_options="$2" # startingly, some need/use something different than just 'make install'
 	local touch_postfix=""
-	[[ -n $3 ]] && touch_postfix="_$3"
+	[[ -n $3 ]] && touch_postfix="_${3}_" || touch_postfix="_"
 	if [[ -z $override_make_install_options ]]; then
 		local make_install_options="install $extra_make_install_options"
 	else
 		local make_install_options="$override_make_install_options $extra_make_install_options"
 	fi
-  local touch_prefix="${host_name}_${touch_postfix}_already_"
-	local touch_name=$(get_small_touchfile_name "${touch_prefix}_make_install_" "make install $make_install_options $LDFLAGS $CFLAGS $CXXFLAGS")
+  local touch_prefix="${host_name}${touch_postfix}already"
+	local touch_name=$(get_small_touchfile_name "${touch_prefix}_make_install" "make install $make_install_options")
 	if truthy "$build_force"; then
-		remove_path -f "$cur_dir2/${touch_prefix}"*
+		remove_path -f "$cur_dir2/${touch_prefix}_"*
 	fi
 	if [ ! -f "$touch_name" ]; then
-    remove_path -f "${touch_prefix}"* # reset
+    remove_path -f "${touch_prefix}_make_install"* # reset
 		echo -e "INFO: do_make_install() PATH=$PATH\n nice running: \"make $make_install_options\"" >>"$LOG_FILE"
 		eval "nice make -j$(get_cpu_count) $make_install_options" > >(redirect_output) 2>&1 || exit_message 1 "could not make with $make_install_options"
 		create_touch_file 1 "$touch_name"
@@ -1651,18 +1651,18 @@ do_cmake() {
 	extra_args="$1"
 	local build_from_dir="$2"
 	local touch_postfix=""
-	[[ -n $3 ]] && touch_postfix="_$3"
+	[[ -n $3 ]] && touch_postfix="_${3}_" || touch_postfix="_"
 	if [[ -z $build_from_dir ]]; then
 		build_from_dir="."
 	fi
-  local touch_prefix="${host_name}_${touch_postfix}_already_"
-	local touch_name=$(get_small_touchfile_name "${touch_prefix}_cmake_" "cmake $extra_args $LDFLAGS $CFLAGS $CXXFLAGS")
+  local touch_prefix="${host_name}${touch_postfix}already"
+	local touch_name=$(get_small_touchfile_name "${touch_prefix}_cmake" "cmake $extra_args")
 	if truthy "$build_force"; then
-		remove_path -f "$cur_dir2/${touch_prefix}"*
+		remove_path -f "$cur_dir2/${touch_prefix}_"*
     clean_cmake_cache "$(pwd)/build" "$(pwd)"
 	fi
 	if [ ! -f "$touch_name" ]; then
-    remove_path -f "${touch_prefix}"* # reset
+    remove_path -f "${touch_prefix}_cmake"* # reset
 		local cur_dir2=$(pwd)
 		local config_options=""
 		if [ "$bits_target" = 32 ]; then
@@ -1746,7 +1746,7 @@ do_meson() {
 	local configure_name="$2"
 	local configure_env="$3"
 	local touch_postfix=""
-	[[ -n $4 ]] && touch_postfix="_$4"
+	[[ -n $4 ]] && touch_postfix="_${4}_" || touch_postfix="_"
 	local configure_noclean=""
 	if [[ -z "${configure_command[*]}" || "${configure_command[*]}" == "setup build" ]]; then
 		configure_name=("setup" "build")
@@ -1760,14 +1760,14 @@ do_meson() {
 	fi
 	local cur_dir2=$(pwd)
 	local english_name=$(basename "$cur_dir2")
-  local touch_prefix="${host_name}_${touch_postfix}_already_"
-	local touch_name=$(get_small_touchfile_name "${touch_prefix}_meson_" "meson $configure_options ${configure_command[*]} $LDFLAGS $CFLAGS $CXXFLAGS")
+  local touch_prefix="${host_name}${touch_postfix}already"
+	local touch_name=$(get_small_touchfile_name "${touch_prefix}_meson" "meson $configure_options ${configure_command[*]}")
 	if truthy "$build_force"; then
-		remove_path -f "$cur_dir2/${touch_prefix}"*
+		remove_path -f "$cur_dir2/${touch_prefix}_"*
     remove_path -rf "$(pwd)/build"
 	fi
 	if [ ! -f "$touch_name" ]; then
-    remove_path -f "${touch_prefix}"* # reset
+    remove_path -f "${touch_prefix}_meson"* # reset
 		if [ "$configure_noclean" != "noclean" ]; then
 			make clean > >(redirect_output) 2>&1 # just in case
 		fi
@@ -1808,15 +1808,15 @@ generic_meson_ninja_install() {
 do_ninja_and_ninja_install() {
 	local extra_ninja_options="$1"
 	local touch_postfix=""
-	[[ -n $2 ]] && touch_postfix="_$2"
+	[[ -n $2 ]] && touch_postfix="_${2}_" || touch_postfix="_"
 	do_ninja "$extra_ninja_options" "$touch_postfix"
-  local touch_prefix="${host_name}_${touch_postfix}_already_"
-	local touch_name=$(get_small_touchfile_name "${touch_prefix}_ninja_build_install_" "ninja build install $extra_ninja_options $LDFLAGS $CFLAGS $CXXFLAGS")
+  local touch_prefix="${host_name}${touch_postfix}already"
+	local touch_name=$(get_small_touchfile_name "${touch_prefix}_ninja_build_install" "ninja build install $extra_ninja_options")
 	if truthy "$build_force"; then
-		remove_path -f "$cur_dir2/${touch_prefix}"*
+		remove_path -f "$cur_dir2/${touch_prefix}_"*
 	fi
 	if [ ! -f "$touch_name" ]; then
-    remove_path -f "${touch_prefix}"* # reset
+    remove_path -f "${touch_prefix}_ninja_build_install"* # reset
 		echo -e "INFO: PATH=$PATH\n do_ninja() in $(pwd) ninja running: \"build $extra_make_options\"" >>"$LOG_FILE"
 		ninja -C build install > >(redirect_output) 2>&1 || exit_message 1 "could not do_ninja() in $(pwd) ninja running: \"build $extra_make_options\""
 		create_touch_file 1 "$touch_name"
@@ -1826,16 +1826,16 @@ do_ninja_and_ninja_install() {
 # 1. touch_postfix
 do_ninja() {
 	local touch_postfix=""
-	[[ -n $1 ]] && touch_postfix="_$1"
+	[[ -n $1 ]] && touch_postfix="_${1}_" || touch_postfix="_"
 	local extra_make_options=" -j $(get_cpu_count)"
 	local cur_dir2=$(pwd)
-  local touch_prefix="${host_name}_${touch_postfix}_already_"
-	local touch_name=$(get_small_touchfile_name "${touch_prefix}_ninja_build_" "ninja build $extra_make_options $LDFLAGS $CFLAGS $CXXFLAGS")
+  local touch_prefix="${host_name}${touch_postfix}already"
+	local touch_name=$(get_small_touchfile_name "${touch_prefix}_ninja_build" "ninja build $extra_make_options")
 	if truthy "$build_force"; then
-		remove_path -f "$cur_dir2/${touch_prefix}"*
+		remove_path -f "$cur_dir2/${touch_prefix}_"*
 	fi
 	if [ ! -f "$touch_name" ]; then
-    remove_path -f "${touch_prefix}"* # reset
+    remove_path -f "${touch_prefix}_ninja_build"* # reset
 		echo -e "INFO: ninja-ing $cur_dir2 as PATH=$PATH ninja -C build $extra_make_options" >>"$LOG_FILE"
 		echo -e "INFO: do_ninja() ninja running: \"build $extra_make_options\"" >>"$LOG_FILE"
 		# shellcheck disable=SC2086
@@ -2891,19 +2891,19 @@ get_ffmpeg_kit_version() {
 
 create_ffmpeg_kit_bundle() {
 	echo -e "INFO: Creating bundle" | tee -a "$LOG_FILE"
-	local TYPE_POSTFIX="$(get_build_type)"
+	local touch_postfix="_$(get_build_type)_"
 	local FFMPEG_KIT_VERSION=$(get_ffmpeg_kit_version)
 
 	if [[ $build_force == "1" ]]; then
-		remove_path -rf "${ffmpeg_kit_src_dir}/already_bundled_${TYPE_POSTFIX}"*
+		remove_path -rf "${ffmpeg_kit_src_dir}/already_bundled_${touch_postfix}"*
 	fi
-  local touch_prefix="${host_name}_${touch_postfix}_already_"
-	local touch_name=$(get_small_touchfile_name "${touch_prefix}_ninja_build_" "ninja build $extra_make_options $LDFLAGS $CFLAGS $CXXFLAGS")
+  local touch_prefix="${host_name}${touch_postfix}already"
+	local touch_name=$(get_small_touchfile_name "${touch_prefix}_ninja_build" "ninja build $extra_make_options")
 	if truthy "$build_force"; then
-		remove_path -f "$cur_dir2/${touch_prefix}"*
+		remove_path -f "$cur_dir2/${touch_prefix}_"*
 	fi
 	if [ ! -f "$touch_name" ]; then
-    remove_path -f "${touch_prefix}"* # reset
+    remove_path -f "${touch_prefix}_ninja_build"* # reset
 		export FFMPEG_KIT_BUNDLE_INCLUDE_DIRECTORY="${ffmpeg_kit_bundle}/include"
 		export FFMPEG_KIT_BUNDLE_LIB_DIRECTORY="${ffmpeg_kit_bundle}/lib"
 		export FFMPEG_KIT_BUNDLE_BIN_DIRECTORY="${ffmpeg_kit_bundle}/bin"

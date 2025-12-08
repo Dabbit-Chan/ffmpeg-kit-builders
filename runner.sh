@@ -232,8 +232,9 @@ while [ $# -gt 0 ]; do
 		shift
 		;;
 	-l | --lts)
-		export FFMPEG_KIT_LTS_BUILD=1
-		shift
+		export FFMPEG_KIT_LTS_BUILD="1"
+    export LTS_BUILD_FLAG="-DFFMPEG_KIT_LTS"
+    shift
 		;;
 	-f | --force)
 		export build_force="1"
@@ -241,11 +242,6 @@ while [ $# -gt 0 ]; do
 		;;
   --lto)
     export enable_lto="1"
-    shift
-		;;
-  --lts)
-    export FFMPEG_KIT_LTS_BUILD="1"
-    export LTS_BUILD_FLAG="-DFFMPEG_KIT_LTS"
     shift
 		;;
   --host-platform=*|--host=*)

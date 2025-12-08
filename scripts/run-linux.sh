@@ -249,7 +249,7 @@ build_vaapi() {
   change_dir "$src_dir"
 	do_git_checkout "$repo" "$lib" "$repo_ver"
   change_dir "$src_dir/$lib"
-  local meson_options="--prefix=$dependency_install_prefix"
+  local meson_options="--prefix=$dependency_install_prefix -Ddefault_library=static"
 	do_meson "$meson_options" "setup build"
 	do_ninja_and_ninja_install
   fi
@@ -481,6 +481,7 @@ build_zlib() {
   change_dir "$src_dir"
 	do_git_checkout "$repo" "$lib" "$repo_ver"
   change_dir "$src_dir/$lib"
+  export CFLAGS="$CFLAGS -fPIC"
   do_configure "--prefix=$dependency_install_prefix --static"
   do_make_and_make_install
   change_dir "$src_dir"
@@ -1328,41 +1329,134 @@ build_libmp3lame() {
 build_libmysofa() {
   if [[ $disable_libmysofa != 1 && $enable_libmysofa == 1 ]]; then
   local lib="libmysofa"
-  do_git_checkout https://github.com/hoene/libmysofa libmysofa "origin/main"
+  local repo="https://github.com/hoene/libmysofa"
+  local repo_ver="latest"
+  change_dir "$src_dir"
+  do_git_checkout "$repo" "$lib" "$repo_ver"
+  change_dir "$src_dir/$lib"
+	local cmake_params="-DBUILD_TESTS=0 -DMATH=m"
+	do_cmake "$cmake_params"
+	do_make_and_make_install
+	change_dir "$src_dir"
   fi
 }
 # build_liboapv           # config_options+= --enable-liboapv             # enable APV encoding via liboapv [no]
 build_liboapv() {
   if [[ $disable_liboapv != 1 && $enable_liboapv == 1 ]]; then
   local lib="liboapv"
-  # https://github.com/AcademySoftwareFoundation/openapv
+  local repo="https://github.com/AcademySoftwareFoundation/openapv"
+  local repo_ver="v0.2.0.4"
+  change_dir "$src_dir"
+  do_git_checkout "$repo" "$lib" "$repo_ver"
+  change_dir "$src_dir/$lib/build" 1
+	local cmake_params="-DCMAKE_BUILD_TYPE=Release \
+-DOAPV_BUILD_APPS=ON \
+-DOAPV_BUILD_STATIC_LIB=ON \
+-DOAPV_BUILD_SHARED_LIB=ON \
+-DOAPV_APP_STATIC_BUILD=ON"
+	do_cmake_from_build_dir "$src_dir/$lib" "$cmake_params"
+	do_make_and_make_install
+	change_dir "$src_dir"
   fi
 }
 # build_libopencv         # config_options+= --enable-libopencv           # enable video filtering via libopencv [no]
 build_libopencv() {
   if [[ $disable_libopencv != 1 && $enable_libopencv == 1 ]]; then
+  build_vaapi
   local lib="libopencv"
+  local repo="https://github.com/opencv/opencv/"
+  local repo_ver="4.12.0"
+  change_dir "$src_dir"
+  do_git_checkout "$repo" "$lib" "$repo_ver"
+  change_dir "$src_dir/$lib/build" 1
+  export LDFLAGS="$LDFLAGS -L${ffmpeg_install_prefix}/lib -L${dependency_install_prefix}/lib -L${dependency_install_prefix}/lib/$host_target"
+  do_cmake_from_build_dir "$src_dir/$lib" "-DWITH_FFMPEG=0 -DOPENCV_GENERATE_PKGCONFIG=1 -DHAVE_DSHOW=0"
+  do_make_and_make_install
+  reset_ldflags
+  change_dir "$src_dir"
   fi
 }
 # build_libopenh264       # config_options+= --enable-libopenh264         # enable H.264 encoding via OpenH264 [no]
 build_libopenh264() {
   if [[ $disable_libopenh264 != 1 && $enable_libopenh264 == 1 ]]; then
   local lib="libopenh264"
-  do_git_checkout "https://github.com/cisco/openh264.git" openh264 v2.6.0 #75b9fcd2669c75a99791 # wels/codec_api.h weirdness
+  local repo="https://github.com/cisco/openh264.git"
+  local repo_ver="openh264 v2.6.0" #75b9fcd2669c75a99791 # wels/codec_api.h weirdness
+  change_dir "$src_dir"
+  do_git_checkout "$repo" "$lib" "$repo_ver"
+  change_dir "$src_dir/$lib"
+  if [[ $bits_target == 32 ]]; then
+		local arch=i686 # or x86?
+	else
+		local arch=x86_64
+	fi
+  do_make "PREFIX=$dependency_install_prefix OS=linux ARCH=$arch ASM=yasm install-static"
+  change_dir "$src_dir"
   fi
 }
 # build_libopenjpeg       # config_options+= --enable-libopenjpeg         # enable JPEG 2000 encoding via OpenJPEG [no]
 build_libopenjpeg() {
   if [[ $disable_libopenjpeg != 1 && $enable_libopenjpeg == 1 ]]; then
   local lib="libopenjpeg"
-  do_git_checkout https://github.com/uclouvain/openjpeg openjpeg
+  local repo="https://github.com/uclouvain/openjpeg"
+  local repo_ver="v2.5.4"
+  change_dir "$src_dir"
+  do_git_checkout "$repo" "$lib" "$repo_ver"
+  change_dir "$src_dir/$lib"
+  do_cmake_and_install "-DOPJ_BIG_ENDIAN=0 -DBUILD_CODEC=0"
+  change_dir "$src_dir"
   fi
+}
+build_libogg() {
+  local lib="libogg"
+  local repo="https://github.com/xiph/ogg"
+  local repo_ver="v1.3.6"
+	change_dir "$src_dir"
+	do_git_checkout "$repo" "$lib" "$repo_ver"
+  change_dir "$src_dir/$lib/build" 1
+  do_cmake_from_build_dir "$src_dir/$lib" 
+  do_make_and_make_install
+	change_dir "$src_dir"
+}
+build_flac() {
+  local lib="flac"
+  local repo="https://github.com/xiph/flac"
+  local repo_ver="1.5.0"
+	change_dir "$src_dir"
+	do_git_checkout "$repo" "$lib" "$repo_ver"
+	change_dir "$src_dir/$lib"
+	do_cmake "-B build -DBUILD_DOCS=OFF -DBUILD_TESTING=OFF -DBUILD_EXAMPLES=OFF -DBUILD_PROGRAMS=OFF -DBUILD_STATIC_LIBS=ON -DBUILD_SHARED_LIBS=OFF -DCMAKE_BUILD_TYPE=Release -DINSTALL_MANPAGES=OFF -GNinja"
+	do_ninja_and_ninja_install
+	change_dir "$src_dir"
 }
 # build_libopenmpt        # config_options+= --enable-libopenmpt          # enable decoding tracked files via libopenmpt [no]
 build_libopenmpt() {
   if [[ $disable_libopenmpt != 1 && $enable_libopenmpt == 1 ]]; then
+  build_zlib
+  build_mpg123
+  build_libogg
+  build_libvorbis
+  build_sdl2
+  build_sdl12_compat
+  build_libsndfile
+  build_portaudio
+  build_libpulse
   local lib="libopenmpt"
-  do_git_checkout https://github.com/OpenMPT/openmpt openmpt # OpenMPT-1.30
+  #local repo="https://github.com/OpenMPT/openmpt" # doesnt work from git for some reason
+  local repo="https://lib.openmpt.org/files/libopenmpt/src/libopenmpt-0.8.3+release.autotools.tar.gz"
+  local repo_ver="libopenmpt-0.8.3"
+  change_dir "$src_dir"
+  download_and_unpack_file "$repo" "$lib"
+  #do_git_checkout "$repo" "$lib" "$repo_ver"
+  change_dir "$src_dir/$lib"
+  export CFLAGS="$CFLAGS -I${dependency_install_prefix}/include"
+  export CXXFLAGS="$CXXFLAGS -I${dependency_install_prefix}/include"
+  export LDFLAGS="$LDFLAGS -L${dependency_install_prefix}/lib -L${dependency_install_prefix}/lib/${host_target}"
+  generic_configure_make_install "--enable-shared=no --enable-static=yes --with-pic --without-pulseaudio --without-portaudiocpp --with-sdl2 --disable-openmpt123 --disable-examples --disable-tests --disable-doxygen-doc"
+  reset_cflags
+  reset_cxxflags
+  reset_ldflags
+  change_dir "$src_dir"
   fi
 }
 # build_libopenvino       # config_options+= --enable-libopenvino         # enable OpenVINO as a DNN module backend for DNN based filters like dnn_processing [no]
@@ -1755,8 +1849,17 @@ build_libvmaf() {
 # build_libvorbis         # config_options+= --enable-libvorbis           # enable Vorbis en/decoding via libvorbis, native implementation exists [no]
 build_libvorbis() {
   if [[ $disable_libvorbis != 1 && $enable_libvorbis == 1 ]]; then
+  build_libogg
   local lib="libvorbis"
-  do_git_checkout https://github.com/xiph/vorbis
+  local repo="https://github.com/xiph/vorbis"
+  local repo_ver="v1.3.7"
+  change_dir "$src_dir"
+	do_git_checkout "$repo" "$lib" "$repo_ver"
+	change_dir "$src_dir/$lib/build" 1
+  #generic_configure "--disable-docs --disable-examples --disable-oggtest --static"
+  do_cmake_from_build_dir "$src_dir/$lib"
+	do_make_and_make_install
+  change_dir "$src_dir"
   fi
 }
 # build_libvpx            # config_options+= --enable-libvpx              # enable VP8 and VP9 de/encoding via libvpx [no]

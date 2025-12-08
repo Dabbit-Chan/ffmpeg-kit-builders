@@ -262,5 +262,5 @@ set_toolchain_paths() {
   export NM=$(command -v "llvm-nm$CLANG_POSTFIX")
   export CFLAGS="$CFLAGS $(get_cflags "ffmpeg-kit") -I${ffmpeg_install_prefix}/include -I${dependency_install_prefix}/include -I${ffmpeg_source_dir} -I${ffmpeg_source_dir}/compat"
   export CXXFLAGS=" $CXXFLAGS $(get_cxxflags "ffmpeg-kit") -I${ffmpeg_install_prefix}/include -I${dependency_install_prefix}/include -I${ffmpeg_source_dir} -I${ffmpeg_source_dir}/compat"
-  export LDFLAGS="$LDFLAGS $(get_ldflags "ffmpeg-kit") -L${ffmpeg_install_prefix}/lib -L${dependency_install_prefix}/lib"
+  export LDFLAGS="$LDFLAGS $(get_ldflags "ffmpeg-kit") -L${ffmpeg_install_prefix}/lib -L${dependency_install_prefix}/lib -L${dependency_install_prefix}/lib/$host_target"
 }
