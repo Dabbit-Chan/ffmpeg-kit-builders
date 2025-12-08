@@ -1288,7 +1288,7 @@ build_liblensfun() {
 	do_make_and_make_install
 	sed -i.bak 's/-llensfun/-llensfun -lstdc++/' "$PKG_CONFIG_PATH/lensfun.pc"
 	reset_cppflags
-	unset CXXFLAGS
+	reset_cxxflags
 	change_dir "$src_dir"
   fi
 }
@@ -1296,14 +1296,32 @@ build_liblensfun() {
 build_libmodplug() {
   if [[ $disable_libmodplug != 1 && $enable_libmodplug == 1 ]]; then
   local lib="libmodplug"
-  do_git_checkout https://github.com/Konstanty/libmodplug
+  local repo="https://github.com/Konstanty/libmodplug"
+  change_dir "$src_dir"
+  do_git_checkout "$repo" "$lib"
+  change_dir "$src_dir/$lib"
+	generic_configure_make_install # or could use cmake I guess
+  change_dir "$src_dir"
   fi
+}
+build_mpg123() {
+  local lib="mpg123"
+  local repo="https://sourceforge.net/projects/mpg123/files/mpg123/1.33.3/mpg123-1.33.3.tar.bz2/download"
+  local repo_ver="r5008"
+	change_dir "$src_dir"
+	generic_download_and_make_and_install "$repo" "$lib"
+	change_dir "$src_dir"
 }
 # build_libmp3lame        # config_options+= --enable-libmp3lame          # enable MP3 encoding via libmp3lame [no]
 build_libmp3lame() {
   if [[ $disable_libmp3lame != 1 && $enable_libmp3lame == 1 ]]; then
+  build_mpg123
   local lib="libmp3lame"
-  do_svn_checkout https://svn.code.sf.net/p/lame/svn/trunk/lame lame_svn r6525 # anything other than r6525 fails
+  local repo="https://sourceforge.net/projects/lame/files/lame/3.100/lame-3.100.tar.gz/download"
+  local repo_ver="r6525"
+  change_dir "$src_dir"
+  generic_download_and_make_and_install "$repo" "$lib"
+  change_dir "$src_dir"
   fi
 }
 # build_libmysofa         # config_options+= --enable-libmysofa           # enable libmysofa, needed for sofalizer filter [no]

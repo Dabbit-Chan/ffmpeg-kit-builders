@@ -599,8 +599,8 @@ build_mpg123() {
 build_libmp3lame() {
   if [[ $disable_libmp3lame != 1 && $enable_libmp3lame == 1 ]]; then
 	change_dir "$src_dir"
-	do_svn_checkout https://svn.code.sf.net/p/lame/svn/trunk/lame lame_svn r6525 # anything other than r6525 fails
-	change_dir "$src_dir/lame_svn"
+	do_svn_checkout https://svn.code.sf.net/p/lame/svn/trunk/lame libmp3lame r6525 # anything other than r6525 fails
+	change_dir "$src_dir/libmp3lame"
 	# sed -i.bak '1s/^\xEF\xBB\xBF//' libmp3lame/i386/nasm.h # Remove a UTF-8 BOM that breaks nasm if it's still there; should be fixed in trunk eventually https://sourceforge.net/p/lame/patches/81/
 	generic_configure "--enable-nasm --enable-libmpg123"
 	do_make_and_make_install
@@ -670,10 +670,6 @@ build_libmodplug() {
 	change_dir "libmodplug"
 	sed -i.bak 's/__declspec(dllexport)//' "$dependency_install_prefix/include/libmodplug/modplug.h" #strip DLL import/export directives
 	sed -i.bak 's/__declspec(dllimport)//' "$dependency_install_prefix/include/libmodplug/modplug.h"
-	if [[ ! -f "configure" ]]; then
-		autoreconf -fiv || exit_message 1 "could not autoreconf libmodplug"
-		automake --add-missing || exit_message 1 "could not automake libmodplug"
-	fi
 	generic_configure_make_install # or could use cmake I guess
 	change_dir "$src_dir"
 	fi
