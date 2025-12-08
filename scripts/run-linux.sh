@@ -423,7 +423,7 @@ build_iconv() {
   change_dir "$src_dir"
 	download_and_unpack_file "$repo" "$lib"
   change_dir "$src_dir/$lib"
-  generic_configure_make_install
+  generic_configure_make_install "--enable-static --disable-shared --enable-pic --disable-rpath"
   change_dir "$src_dir"
   fi
 }
@@ -1595,10 +1595,42 @@ build_libplacebo() {
 # build_libpulse          # config_options+= --enable-libpulse            # enable Pulseaudio input via libpulse [no]
 build_libpulse() {
   if [[ $disable_libpulse != 1 && $enable_libpulse == 1 ]]; then
+  build_iconv
   local lib="libpulse"
   local repo="https://github.com/pulseaudio/pulseaudio"
-  local repo_ver="v16.2"
-
+  local repo_ver="v17.0"
+  activate_meson
+  change_dir "$src_dir"
+  do_git_checkout "$repo" "$lib" "$repo_ver"
+  change_dir "$src_dir/$lib"
+  remove_path -rf "$src_dir/$lib/build"
+  if [[ ! -f "$src_dir/$lib/.tarball-version" ]]; then
+    echo "17.0" > "$src_dir/$lib/.tarball-version"
+  fi
+  export CFLAGS="$CFLAGS -I${dependency_install_prefix}/include"
+  export LDFLAGS="$LDFLAGS -L${dependency_install_prefix}/lib -L${dependency_install_prefix}/lib/${host_target}"
+  export LIBS="-liconv"
+  local meson_options="-Dprefix=$dependency_install_prefix \
+-Dlibdir=$dependency_install_prefix/lib \
+-Dtests=false \
+-Ddoxygen=false \
+-Dman=false \
+-Ddatabase=simple \
+-Dglib=disabled \
+-Dgtk=disabled \
+-Dx11=disabled \
+-Dopenssl=disabled \
+-Dbluez5=disabled \
+-Dudev=disabled \
+-Dsystemd=disabled \
+-Ddaemon=false \
+-Ddefault_library=static \
+--unity=off \
+--warnlevel=0 \
+-Dc_link_args=\"-liconv -L${dependency_install_prefix}/lib\" "
+  do_meson "$meson_options" "setup build"
+  do_ninja_and_ninja_install
+  change_dir "$src_dir"
   fi
 }
 # build_libqrencode       # config_options+= --enable-libqrencode         # enable QR encode generation via libqrencode [no]

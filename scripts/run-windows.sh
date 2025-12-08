@@ -1647,7 +1647,7 @@ build_libpulse() {
     local lib="libpulse"
     activate_meson
     change_dir "$src_dir"
-    do_git_checkout https://github.com/pulseaudio/pulseaudio "$lib" "v17.0" # meson build for fontconfig no good
+    do_git_checkout https://github.com/pulseaudio/pulseaudio "$lib" "v17.0"
     change_dir "$src_dir/$lib"
     remove_path -rf "$src_dir/$lib/build"
     echo "17.0" > "$src_dir/$lib/.tarball-version"
