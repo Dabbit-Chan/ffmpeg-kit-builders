@@ -1242,11 +1242,54 @@ build_liblc3() {
 	change_dir "$src_dir"
   fi
 }
+build_gettext() {
+  local lib="liblc3"
+  local repo="https://ftp.gnu.org/pub/gnu/gettext/gettext-0.26.tar.gz"
+	change_dir "$src_dir"
+	generic_download_and_make_and_install "$repo" "$lib"
+	change_dir "$src_dir"
+}
+build_libffi() {
+  local lib="libffi"
+  local repo="https://github.com/libffi/libffi/releases/download/v3.5.2/libffi-3.5.2.tar.gz"
+	change_dir "$src_dir"
+	generic_download_and_make_and_install "$repo" "$lib"
+	change_dir "$src_dir"
+}
+build_glib() {
+	build_gettext
+	build_libffi
+  local lib="glib"
+  local repo="https://github.com/GNOME/glib"
+	change_dir "$src_dir"
+	do_git_checkout "$repo" "$lib"
+	activate_meson
+	change_dir "$src_dir/$lib"
+	local meson_options="--prefix=$dependency_install_prefix -Ddefault_library=static --force-fallback-for=libpcre -Dforce_posix_threads=true -Dman-pages=disabled -Dsysprof=disabled -Dglib_debug=disabled -Dtests=false --wrap-mode=default"
+	do_meson "$meson_options" "setup build"
+	do_ninja_and_ninja_install
+	sed -i.bak 's/-lglib-2.0.*$/-lglib-2.0 -lintl -lm -liconv/' "${dependency_install_prefix}/lib/pkgconfig/glib-2.0.pc"
+	deactivate
+	change_dir "$src_dir"
+}
 # build_liblensfun        # config_options+= --enable-liblensfun          # enable lensfun lens correction [no]
 build_liblensfun() {
   if [[ $disable_liblensfun != 1 && $enable_liblensfun == 1 ]]; then
+  build_glib
   local lib="liblensfun"
-  do_git_checkout "https://github.com/lensfun/lensfun.git" "lensfun"
+  local repo="https://github.com/lensfun/lensfun"
+  local repo_ver="v0.3.4"
+  change_dir "$src_dir"
+  do_git_checkout "$repo" "$lib" "$repo_ver"
+  change_dir "$src_dir/$lib"
+  export CPPFLAGS="$CPPFLAGS -DGLIB_STATIC_COMPILATION"
+	export CXXFLAGS="$CFLAGS -DGLIB_STATIC_COMPILATION"
+  do_cmake "-DBUILD_STATIC=on -DCMAKE_INSTALL_DATAROOTDIR=$dependency_install_prefix -DBUILD_TESTS=off -DBUILD_DOC=off -DINSTALL_HELPER_SCRIPTS=off -DINSTALL_PYTHON_MODULE=OFF"
+	do_make_and_make_install
+	sed -i.bak 's/-llensfun/-llensfun -lstdc++/' "$PKG_CONFIG_PATH/lensfun.pc"
+	reset_cppflags
+	unset CXXFLAGS
+	change_dir "$src_dir"
   fi
 }
 # build_libmodplug        # config_options+= --enable-libmodplug          # enable ModPlug via libmodplug [no]

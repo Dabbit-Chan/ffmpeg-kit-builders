@@ -1016,7 +1016,7 @@ build_liblensfun() {
 	change_dir "$src_dir"
 	do_git_checkout "https://github.com/lensfun/lensfun.git" "lensfun"
 	change_dir "$src_dir/lensfun"
-	export CPPFLAGS="$CPPFLAGS-DGLIB_STATIC_COMPILATION"
+	export CPPFLAGS="$CPPFLAGS -DGLIB_STATIC_COMPILATION"
 	export CXXFLAGS="$CFLAGS -DGLIB_STATIC_COMPILATION"
 	# TODO: Allow shared library build
 	do_cmake "-DBUILD_STATIC=on -DCMAKE_INSTALL_DATAROOTDIR=$dependency_install_prefix -DBUILD_TESTS=off -DBUILD_DOC=off -DINSTALL_HELPER_SCRIPTS=off -DINSTALL_PYTHON_MODULE=OFF"
