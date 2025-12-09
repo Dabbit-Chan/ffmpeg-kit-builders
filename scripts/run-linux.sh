@@ -1944,6 +1944,25 @@ build_libssh() {
   if [[ $disable_libssh != 1 && $enable_libssh == 1 ]]; then
   local lib="libssh"
   # https://github.com/canonical/libssh
+  local repo="https://github.com/canonical/libssh"
+  local repo_ver="libssh-0.11.1" 
+  change_dir "$src_dir"
+  do_git_checkout "$repo" "$lib" "$repo_ver"
+	change_dir "$src_dir/$lib/build" 1
+  local cmake_params="-DBUILD_SHARED_LIBS=OFF \
+-DWITH_STATIC_LIB=ON \
+-DWITH_EXAMPLES=OFF \
+-DWITH_TESTING=OFF \
+-DWITH_SERVER=OFF \
+-DWITH_ZLIB=ON \
+-DWITH_SFTP=ON \
+-DWITH_GSSAPI=OFF \
+-DWITH_NACL=OFF \
+-DWITH_PCAP=OFF \
+-DCMAKE_INSTALL_PREFIX=${dependency_install_prefix}"
+  do_cmake_from_build_dir "$src_dir/$lib" "$cmake_params"
+  do_make_and_make_install
+	change_dir "$src_dir"
   fi
 }
 build_cpuinfo() {
