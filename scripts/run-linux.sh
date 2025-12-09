@@ -1821,6 +1821,15 @@ build_librtmp() {
   if [[ $disable_librtmp != 1 && $enable_librtmp == 1 ]]; then
   local lib="librtmp"
   # https://github.com/mirror/rtmpdump
+  local repo="git://git.ffmpeg.org/rtmpdump"
+  local repo_ver="2.6"
+  activate_meson
+	change_dir "$src_dir"
+	do_git_checkout "$repo" "$lib" "$repo_ver"
+	change_dir "$src_dir/$lib"
+  do_make "SHARED= INC=\"-I$dependency_install_prefix/include\" LDFLAGS=\"-L$dependency_install_prefix/lib -L${dependency_install_prefix}/lib/${host_target} --static\" prefix=${dependency_install_prefix}"
+  do_make_install "SHARED= prefix=${dependency_install_prefix}"
+  change_dir "$src_dir"
   fi
 }
 # build_librubberband     # config_options+= --enable-librubberband       # enable rubberband needed for rubberband filter [no]

@@ -423,7 +423,7 @@ setup_linux_environment() {
     export linux_cppflags=''
     export linux_cxxflags="-I${dependency_install_prefix}/include"
     export CXXFLAGS=$linux_cxxflags
-    export linux_ldflags="-L${dependency_install_prefix}/lib -L${dependency_install_prefix}/lib/${host_target}"
+    export linux_ldflags="-L${dependency_install_prefix}/lib -L${dependency_install_prefix}/lib/${host_target} --static"
     export LDFLAGS=$linux_ldflags
 }
 
