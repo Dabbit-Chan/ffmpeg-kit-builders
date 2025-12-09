@@ -1928,8 +1928,15 @@ build_libspeex() {
 # build_libsrt            # config_options+= --enable-libsrt              # enable Haivision SRT protocol via libsrt [no]
 build_libsrt() {
   if [[ $disable_libsrt != 1 && $enable_libsrt == 1 ]]; then
+  build_openssl
   local lib="libsrt"
   # do_git_checkout https://github.com/Haivision/srt # might be able to use these days...?
+  local repo="https://github.com/Haivision/srt"
+  local repo_ver="v1.5.4" 
+  do_git_checkout "$repo" "$lib" "$repo_ver"
+	change_dir "$src_dir/$lib"
+	do_cmake_and_install "-DCMAKE_BUILD_TYPE=Release -DENABLE_STATIC=ON -DENABLE_SHARED=OFF -DENABLE_APPS=OFF -DUSE_STATIC_LIBSTDCXX=ON"
+	change_dir "$src_dir"
   fi
 }
 # build_libssh            # config_options+= --enable-libssh              # enable SFTP protocol via libssh [no]
@@ -2260,6 +2267,13 @@ build_openssl() {
   if [[ $disable_openssl != 1 && $enable_openssl == 1 ]]; then
   local lib="openssl"
   # https://github.com/openssl/openssl 
+  local repo="https://github.com/openssl/openssl"
+  local repo_ver="openssl-3.6.0"
+  do_git_checkout "$repo" "$lib" "$repo_ver"
+	change_dir "$src_dir/$lib"
+	do_configure "--release --prefix=$dependency_install_prefix --openssldir=$dependency_install_prefix/ssl --libdir=lib no-shared no-tests no-docs no-demos no-legacy" "./Configure"
+	do_make_and_make_install
+	change_dir "$src_dir"
   fi
 }
 # build_pocketsphinx      # config_options+= --enable-pocketsphinx        # enable PocketSphinx, needed for asr filter [no]
