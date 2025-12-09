@@ -1701,6 +1701,13 @@ build_librav1e() {
   if [[ $disable_librav1e != 1 && $enable_librav1e == 1 ]]; then
   # https://github.com/xiph/rav1e
   local lib="librav1e"
+  local repo="https://github.com/xiph/rav1e"
+  local repo_ver="v0.8.1"
+  change_dir "$src_dir"
+  do_git_checkout "$repo" "$lib" "$repo_ver" 
+  change_dir "$src_dir/$lib"
+  cargo_build_and_install "--no-default-features --features=asm,binaries --profile release-no-lto" "--no-default-features --library-type=staticlib --features=asm,binaries"
+  change_dir "$src_dir"
   fi
 }
 # build_librist           # config_options+= --enable-librist             # enable RIST via librist [no]
