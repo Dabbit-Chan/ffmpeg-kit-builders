@@ -1715,54 +1715,60 @@ build_librist() {
   if [[ $disable_librist != 1 && $enable_librist == 1 ]]; then
   # https://code.videolan.org/rist/librist
   local lib="librist"
+  local repo="https://code.videolan.org/rist/librist"
+  local repo_ver="v0.2.11"
+  activate_meson
+  change_dir "$src_dir"
+  do_git_checkout "$repo" "$lib" "$repo_ver" 
+  change_dir "$src_dir/$lib"
+  local meson_options="-Duse_mbedtls=true -Dbuilt_tools=false -Dtest=false"
+  generic_meson "$meson_options"
+	do_ninja_and_ninja_install
+  change_dir "$src_dir"
   fi
 }
 build_pixman() {
-  if [[ $disable_librsvg != 1 && $enable_librsvg == 1 ]]; then
  	# https://gitlab.freedesktop.org/pixman/pixman
 	local lib="pixman"
+  local repo="https://gitlab.freedesktop.org/pixman/pixman"
+  local repo_ver="pixman-0.46.4"
   activate_meson
 	change_dir "$src_dir"
-	do_git_checkout https://gitlab.freedesktop.org/pixman/pixman "$lib"
+	do_git_checkout "$repo" "$lib" "$repo_ver"
 	change_dir "$src_dir/$lib"
-  local cross_file=$(get_meson_cross_file)
 	local meson_options="-Dtests=disabled -Ddemos=disabled"
-	meson_options+=" --cross-file=$cross_file"
 	generic_meson "$meson_options"
 	change_dir "$src_dir/$lib/build" 1
 	do_meson "" "install"
 	change_dir "$src_dir"
-	fi
 }
 build_cairo() {
-  if [[ $disable_librsvg != 1 && $enable_librsvg == 1 ]]; then
  	# https://gitlab.freedesktop.org/cairo/cairo
 	local lib="cairo"
+  local repo="https://gitlab.freedesktop.org/cairo/cairo"
+  local repo_ver="1.18.4"
   activate_meson
 	change_dir "$src_dir"
-	do_git_checkout https://gitlab.freedesktop.org/cairo/cairo "$lib"
+	do_git_checkout "$repo" "$lib" "$repo_ver"
 	change_dir "$src_dir/$lib"
-  local cross_file=$(get_meson_cross_file)
 	local meson_options="-Dtests=disabled -Dgtk_doc=false"
-	meson_options+=" --cross-file=$cross_file"
 	generic_meson "$meson_options"
 	change_dir "$src_dir/$lib/build" 1
 	do_meson "" "install"
 	change_dir "$src_dir"
-	fi
 }
 build_pango() {
-  if [[ $disable_librsvg != 1 && $enable_librsvg == 1 ]]; then
   #build_harfbuzz
   #build_freetype
   #build_libfontconfig
  	# https://gitlab.gnome.org/GNOME/pango
 	local lib="pango"
+  local repo="https://gitlab.gnome.org/GNOME/pango"
+  local repo_ver="1.57.0"
   activate_meson
 	change_dir "$src_dir"
-	do_git_checkout https://gitlab.gnome.org/GNOME/pango "$lib"
+	do_git_checkout "$repo" "$lib" "$repo_ver"
 	change_dir "$src_dir/$lib"
-  export PKG_CONFIG_PATH="$dependency_install_prefix/lib/pkgconfig"
 	local meson_options="-Ddocumentation=false \
 -Dgtk_doc=false \
 -Dman-pages=false \
@@ -1770,19 +1776,15 @@ build_pango() {
 -Dbuild-examples=false \
 -Dintrospection=disabled \
 -Dxft=disabled \
--Dc_args=\"-DCAIRO_WIN32_STATIC_BUILD -DGLIB_STATIC_COMPILATION\" \
--Dcpp_args=\"-DCAIRO_WIN32_STATIC_BUILD -DGLIB_STATIC_COMPILATION\" \
--Dc_link_args=\"-lssp -lmsvcrt\" \
--Dcpp_link_args=\"-lssp -lmsvcrt\""
+-Dc_args=\"-DGLIB_STATIC_COMPILATION\" \
+-Dcpp_args=\"-DGLIB_STATIC_COMPILATION\""
   # disable tools - not needed for ffmpeg
   sed -i "s/subdir('utils')/# subdir('utils')/g" meson.build
-  local cross_file=$(get_meson_cross_file)
-	meson_options+=" --cross-file=$cross_file --libdir=$dependency_install_prefix/lib"
+	meson_options+=" --libdir=$dependency_install_prefix/lib"
 	generic_meson "$meson_options"
 	change_dir "$src_dir/$lib/build" 1
 	do_meson "" "install"
 	change_dir "$src_dir"
-	fi
 }
 # build_librsvg           # config_options+= --enable-librsvg             # enable SVG rasterization via librsvg [no]
 build_librsvg() {
