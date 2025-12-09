@@ -1873,6 +1873,7 @@ build_libshine() {
   local lib="libshine"
   local repo="https://github.com/toots/shine"
   local repo_ver="3.1.1" 
+  change_dir "$src_dir"
   do_git_checkout "$repo" "$lib" "$repo_ver"
 	change_dir "$src_dir/$lib"
 	generic_configure_make_install
@@ -1894,6 +1895,7 @@ build_libsnappy() {
   local lib="libsnappy"
   local repo="https://github.com/google/snappy"
   local repo_ver="1.2.2" 
+  change_dir "$src_dir"
   do_git_checkout "$repo" "$lib" "$repo_ver"
 	change_dir "$src_dir/$lib"
 	do_cmake_and_install "-DBUILD_BINARY=OFF -DCMAKE_BUILD_TYPE=Release -DSNAPPY_BUILD_TESTS=OFF -DSNAPPY_BUILD_BENCHMARKS=OFF" # extra params from deadsix27 and from new cMakeLists.txt content
@@ -1906,6 +1908,7 @@ build_libsoxr() {
   local lib="libsoxr"
   local repo="https://github.com/chirlu/soxr"
   local repo_ver="0.1.3" 
+  change_dir "$src_dir"
   do_git_checkout "$repo" "$lib" "$repo_ver"
 	change_dir "$src_dir/$lib"
 	do_cmake_and_install "-DWITH_OPENMP=0 -DBUILD_TESTS=0 -DBUILD_EXAMPLES=0"
@@ -1918,6 +1921,7 @@ build_libspeex() {
   local lib="libspeex"
   local repo="https://github.com/xiph/speexdsp"
   local repo_ver="SpeexDSP-1.2.1" 
+  change_dir "$src_dir"
   do_git_checkout "$repo" "$lib" "$repo_ver"
 	change_dir "$src_dir/$lib"
 	generic_configure "--disable-examples"
@@ -1933,6 +1937,7 @@ build_libsrt() {
   # do_git_checkout https://github.com/Haivision/srt # might be able to use these days...?
   local repo="https://github.com/Haivision/srt"
   local repo_ver="v1.5.4" 
+  change_dir "$src_dir"
   do_git_checkout "$repo" "$lib" "$repo_ver"
 	change_dir "$src_dir/$lib"
 	do_cmake_and_install "-DCMAKE_BUILD_TYPE=Release -DENABLE_STATIC=ON -DENABLE_SHARED=OFF -DENABLE_APPS=OFF -DUSE_STATIC_LIBSTDCXX=ON"
@@ -1966,24 +1971,139 @@ build_libssh() {
   fi
 }
 build_cpuinfo() {
+  local lib="cpuinfo"
+  local repo="https://github.com/pytorch/cpuinfo"
 	change_dir "$src_dir"
-	do_git_checkout https://github.com/pytorch/cpuinfo
-	change_dir "$src_dir/cpuinfo"
+	do_git_checkout "$repo" "$lib"
+	change_dir "$src_dir/$lib"
 	do_cmake_and_install # builds included cpuinfo bugged
 	change_dir "$src_dir"
 }
 # build_libsvtav1         # config_options+= --enable-libsvtav1           # enable AV1 encoding via SVT [no]
 build_libsvtav1() {
   if [[ $disable_libsvtav1 != 1 && $enable_libsvtav1 == 1 ]]; then
-  local lib="libsvtav1"
-  do_git_checkout https://gitlab.com/AOMediaCodec/SVT-AV1 SVT-AV1
+    if [[ "$bits_target" != "32" ]]; then
+      build_cpuinfo
+      local lib="libsvtav1"
+      local repo="https://gitlab.com/AOMediaCodec/SVT-AV1"
+      local repo_ver="v3.1.2"
+      change_dir "$src_dir"
+      do_git_checkout "$repo" "$lib" "$repo_ver"
+      change_dir "$src_dir/$lib"
+      do_cmake "-B build -GNinja -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=OFF -DUSE_CPUINFO=SYSTEM" # -DSVT_AV1_LTO=OFF if fails try adding this
+      do_ninja_and_ninja_install
+      change_dir "$src_dir"
+    else
+      echo -e "WARNING: 32bit not supported" | tee -a "$LOG_FILE"
+    fi
+  fi
+}
+pick_gpu_support() {
+    if [[ -n $1 ]]; then
+        export gpu_support=$1
+    fi
+    while [[ ! "${gpu_support,,}" =~ ^([1-2]|yes|y|no|n)$ ]]; do
+        # shellcheck disable=SC2199
+        if [[ -n "${unknown_opts[@]}" ]]; then
+            echo -e -n 'Unknown option(s)'
+            for unknown_opt in "${unknown_opts[@]}"; do
+                echo -e -n " '$unknown_opt'"
+            done
+            echo -e ', ignored.'
+            echo
+        fi
+        cat <<'EOF'
+Do you want to enable GPU support for TensorFlow?
+  1. yes
+  2. no [default]
+EOF
+        local timeout=10
+        local gpu_support=""
+        echo -ne 'Input your choice [1-2] (defaulting to "no" in 10 seconds): '
+        for ((i=timeout; i>0; i--)); do
+            if read -r -t 1 gpu_support; then
+                break
+            fi
+            if (( i > 1 )); then
+                echo -ne "\rInput your choice [1-2] (defaulting to \"no\" in $((i-1)) seconds): "
+            else
+                echo -ne "\rInput your choice [1-2] (defaulting to \"no\" in 0 seconds): "
+            fi
+        done
+        
+        # Check if timeout occurred
+        if [[ -z "$gpu_support" ]] && (( i == 0 )); then
+            echo "No input received within 10 seconds. Defaulting to 'no'."
+            gpu_support="2"
+        fi
+    done
+    case "${gpu_support,,}" in
+        1|yes|y) 
+            export gpu_support="yes"
+            return 0
+            ;;
+        2|no|n|"") 
+            export gpu_support="no"
+            return 1
+            ;;
+        *)
+            echo -e 'Your choice was not valid, please try again.'
+            echo
+            ;;
+    esac
+}
+uninstall_manifest() {
+  local manifest="$1"
+  if [[ -f "$manifest" ]]; then
+    echo "WARNING: found $manifest. Uninstalling files from $manifest if installed" >> "$LOG_FILE"
+    while IFS= read -r line || [[ -n "$line" ]]; do
+        [[ -z "$line" ]] && continue
+        [[ -f "$line" ]] && remove_path -f "$line" || echo "WARNING: could not uninstall file: $line" >> "$LOG_FILE"
+    done < "$manifest"
+    remove_path -f "$manifest"
+  else
+    echo "WARNING: $manifest not found." >> "$LOG_FILE"
   fi
 }
 # build_libtensorflow     # config_options+= --enable-libtensorflow       # enable TensorFlow as a DNN module backend for DNN based filters like sr [no]
 build_libtensorflow() {
   if [[ $disable_libtensorflow != 1 && $enable_libtensorflow == 1 ]]; then
   local lib="libtensorflow"
-  wget "https://storage.googleapis.com/tensorflow/versions/2.18.1/libtensorflow-cpu-windows-x86_64.zip" # tensorflow.dll required by ffmpeg to run
+  if pick_gpu_support; then
+      echo "GPU support enabled (user chose 'yes')" >> "$LOG_FILE"
+      local repo="https://storage.googleapis.com/tensorflow/versions/2.18.0/libtensorflow-gpu-linux-x86_64.tar.gz"
+      local subdir="gpu"
+      echo "WARNING: uninstalling cpu libtensorflow if installed." >> "$LOG_FILE"
+      uninstall_manifest "$src_dir/$lib/cpu/install_manifest"
+  else
+      echo "GPU support disabled (user chose 'no' or timed out)" >> "$LOG_FILE"
+      local repo="https://storage.googleapis.com/tensorflow/versions/2.18.0/libtensorflow-cpu-linux-x86_64.tar.gz"
+      local subdir="cpu"
+      echo "WARNING: uninstalling gpu libtensorflow if installed." >> "$LOG_FILE"
+      uninstall_manifest "$src_dir/$lib/gpu/install_manifest"
+  fi
+  # "https://github.com/tensorflow/tensorflow"
+  change_dir "$src_dir"
+  change_dir "$src_dir/$lib"
+	download_and_unpack_file "$repo" "$src_dir/$lib/$subdir"
+	change_dir "$src_dir/$lib/$subdir"
+  echo > "$src_dir/$lib/$subdir/install_manifest" && chmod -R u+rwx "$src_dir/$lib/$subdir/install_manifest"
+  cp -rfv "$src_dir/$lib/$subdir/lib"* "$dependency_install_prefix/lib" 2>&1 | sed -n "s/.*' -> '\(.*\)'/\1/p" >> "$src_dir/$lib/$subdir/install_manifest"
+  cp -rfv "$src_dir/$lib/$subdir/include"* "$dependency_install_prefix/include" 2>&1 | sed -n "s/.*' -> '\(.*\)'/\1/p" >> "$src_dir/$lib/$subdir/install_manifest"
+  cat >> "$dependency_install_prefix/lib/pkgconfig/tensorflow.pc" << EOF
+prefix=${dependency_install_prefix}
+exec_prefix=\${prefix}
+libdir=\${exec_prefix}/lib
+includedir=\${prefix}/include
+
+Name: tensorflow
+Description: TensorFlow C Library (${subdir})
+Version: 2.18.0
+Libs: -L\${libdir} -ltensorflow -ltensorflow_framework
+Cflags: -I\${includedir}
+EOF
+  echo "$dependency_install_prefix/lib/pkgconfig/tensorflow.pc" >> "$src_dir/$lib/$subdir/install_manifest"
+	change_dir "$src_dir"
   fi
 }
 build_libtiff() {
