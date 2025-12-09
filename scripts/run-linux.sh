@@ -1884,7 +1884,7 @@ build_libsmbclient() {
   if [[ $disable_libsmbclient != 1 && $enable_libsmbclient == 1 ]]; then
   local lib="libsmbclient"
   # https://git.samba.org/samba https://gitlab.com/samba-team/samba https://github.com/samba-team/samba https://www.samba.org/
-  # best to just install locally as its a large library with a lot of dependencies
+  # best to just install locally as its a large library with a lot of dependencies https://wiki.samba.org/index.php/Distribution-specific_Package_Installation
   apt-get install acl attr samba winbind libpam-winbind libnss-winbind krb5-config krb5-user dnsutils python3-setproctitle ntp -y
   fi
 }
@@ -1892,21 +1892,37 @@ build_libsmbclient() {
 build_libsnappy() {
   if [[ $disable_libsnappy != 1 && $enable_libsnappy == 1 ]]; then
   local lib="libsnappy"
-  do_git_checkout https://github.com/google/snappy snappy # got weird failure once 1.1.8
+  local repo="https://github.com/google/snappy"
+  local repo_ver="1.2.2" 
+  do_git_checkout "$repo" "$lib" "$repo_ver"
+	change_dir "$src_dir/$lib"
+	do_cmake_and_install "-DBUILD_BINARY=OFF -DCMAKE_BUILD_TYPE=Release -DSNAPPY_BUILD_TESTS=OFF -DSNAPPY_BUILD_BENCHMARKS=OFF" # extra params from deadsix27 and from new cMakeLists.txt content
+	change_dir "$src_dir"
   fi
 }
 # build_libsoxr           # config_options+= --enable-libsoxr             # enable Include libsoxr resampling [no]
 build_libsoxr() {
   if [[ $disable_libsoxr != 1 && $enable_libsoxr == 1 ]]; then
   local lib="libsoxr"
-  do_git_checkout https://github.com/chirlu/soxr soxr
+  local repo="https://github.com/chirlu/soxr"
+  local repo_ver="0.1.3" 
+  do_git_checkout "$repo" "$lib" "$repo_ver"
+	change_dir "$src_dir/$lib"
+	do_cmake_and_install "-DWITH_OPENMP=0 -DBUILD_TESTS=0 -DBUILD_EXAMPLES=0"
+	change_dir "$src_dir"
   fi
 }
 # build_libspeex          # config_options+= --enable-libspeex            # enable Speex de/encoding via libspeex [no]
 build_libspeex() {
   if [[ $disable_libspeex != 1 && $enable_libspeex == 1 ]]; then
   local lib="libspeex"
-  do_git_checkout https://github.com/xiph/speexdsp
+  local repo="https://github.com/xiph/speexdsp"
+  local repo_ver="SpeexDSP-1.2.1" 
+  do_git_checkout "$repo" "$lib" "$repo_ver"
+	change_dir "$src_dir/$lib"
+	generic_configure "--disable-examples"
+	do_make_and_make_install
+	change_dir "$src_dir"
   fi
 }
 # build_libsrt            # config_options+= --enable-libsrt              # enable Haivision SRT protocol via libsrt [no]
