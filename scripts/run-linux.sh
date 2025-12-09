@@ -2107,10 +2107,10 @@ EOF
   fi
 }
 build_libtiff() {
+  build_libjpeg_turbo # auto uses it?
   local lib="libtiff"
   local repo="https://download.osgeo.org/libtiff/tiff-4.7.1rc1.tar.gz" # "https://gitlab.com/libtiff/libtiff"
   local repo_ver="v4.7.1"
-	#build_libjpeg_turbo # auto uses it?
 	change_dir "$src_dir"
   download_and_unpack_file "$repo" "$lib"
   change_dir "$src_dir/$lib"
@@ -2130,38 +2130,154 @@ build_libjpeg_turbo() {
 	change_dir "$src_dir"
 }
 build_giflib() {
+  local lib="giflib"
+  local repo="https://sourceforge.net/projects/giflib/files/giflib-5.1.4.tar.gz"
+  local repo_ver="5.1.4"
 	change_dir "$src_dir"
-	generic_download_and_make_and_install https://sourceforge.net/projects/giflib/files/giflib-5.1.4.tar.gz
+	generic_download_and_make_and_install "$repo" "$lib"
 	change_dir "$src_dir"
 }
 build_libleptonica() {
-	build_libjpeg_turbo
+  build_zlib
+  build_libpng
+  build_libwebp
+  build_libjpeg_turbo
+  build_libtiff
 	build_giflib
+  local lib="libleptonica"
+  local repo="https://github.com/DanBloomberg/leptonica"
+  local repo_ver="1.86.0"
 	change_dir "$src_dir"
-	do_git_checkout "https://github.com/DanBloomberg/leptonica.git" "leptonica"
-	change_dir "$src_dir/leptonica"
-	export CPPFLAGS="-DOPJ_STATIC"
+	do_git_checkout "$repo" "$lib" "$repo_ver"
+	change_dir "$src_dir/$lib"
+	export CPPFLAGS="$CPPFLAGS -DOPJ_STATIC"
 	generic_configure_make_install
 	reset_cppflags
 	change_dir "$src_dir"
 }
+build_lz4() {
+  local lib="lz4"
+  local repo="https://github.com/lz4/lz4/releases/download/v1.10.0/lz4-1.10.0.tar.gz"
+  local repo_ver="v1.10.0"
+	change_dir "$src_dir"
+	download_and_unpack_file "$repo" "$lib"
+	change_dir "$src_dir/$lib"
+	do_cmake "-S build/cmake -B build -GNinja -DCMAKE_BUILD_TYPE=Release -DBUILD_STATIC_LIBS=ON -DBUILD_SHARED_LIBS=OFF"
+	do_ninja_and_ninja_install
+	change_dir "$src_dir"
+}
 build_libarchive() {
 	build_lz4
+  local lib="libarchive"
+  local repo="https://github.com/libarchive/libarchive"
+  local repo_ver="v3.8.4"
 	change_dir "$src_dir"
-	download_and_unpack_file https://github.com/libarchive/libarchive/releases/download/v3.8.1/libarchive-3.8.1.tar.gz
-	change_dir "$src_dir/libarchive-3.8.1"
-	generic_configure "--with-nettle --bindir=$dependency_install_prefix/bin --without-openssl --without-iconv --disable-posix-regex-lib"
+	do_git_checkout "$repo" "$lib" "$repo_ver"
+	change_dir "$src_dir/$lib"
+  export CFLAGS="$CFLAGS -I${dependency_install_prefix}/include"
+  export LDFLAGS="$LDFLAGS -L${dependency_install_prefix}/lib -L${dependency_install_prefix}/lib/${host_target}"
+	generic_configure "--with-nettle --bindir=$dependency_install_prefix/bin --without-openssl --without-iconv --enable-static --disable-shared"
 	do_make_install
+  reset_cflags
+  reset_ldflags
+	change_dir "$src_dir"
+}
+build_libssh2() {
+  local lib="libssh2"
+  local repo="https://github.com/libssh2/libssh2"
+  local repo_ver="1.11.1"
+	change_dir "$src_dir"
+	do_git_checkout "$repo" "$lib" "$repo_ver"
+	change_dir "$src_dir/$lib"
+	generic_configure_make_install "--enable-static --disable-shared"
+	change_dir "$src_dir"
+}
+build_zstd() {
+  local lib="zstd"
+  local repo="https://github.com/facebook/zstd"
+  local repo_ver="v1.5.7"
+	change_dir "$src_dir"
+	do_git_checkout "$repo" "$lib" "$repo_ver"
+	change_dir "$src_dir/$lib"
+	do_cmake "-S build/cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DZSTD_BUILD_SHARED=OFF -DZSTD_USE_STATIC_RUNTIME=ON -DCMAKE_BUILD_WITH_INSTALL_RPATH=OFF"
+	do_ninja_and_ninja_install
+	change_dir "$src_dir"
+}
+build_libpsl() {
+  local lib="libpsl"
+  local repo="https://github.com/rockdaboot/libpsl"
+  local repo_ver="0.21.5"
+	change_dir "$src_dir"
+	do_git_checkout "$repo" "$lib" "$repo_ver"
+	change_dir "$src_dir/$lib"
+	export CFLAGS="$CFLAGS -DPSL_STATIC"
+  generic_configure "--disable-nls --disable-rpath --disable-gtk-doc-html --disable-man --disable-runtime --enable-static --disable-shared"
+	do_make_and_make_install
+	sed -i.bak "s/Libs: .*/& -lidn2 -lunistring -liconv/" "$PKG_CONFIG_PATH/libpsl.pc"
+	reset_cflags
+	change_dir "$src_dir"
+}
+build_nghttp2() {
+  local lib="nghttp2"
+  local repo="https://github.com/nghttp2/nghttp2"
+  local repo_ver="v1.68.0"
+  change_dir "$src_dir"
+	do_git_checkout "$repo" "$lib" "$repo_ver"
+	change_dir "$src_dir/$lib"
+  export CFLAGS="$CFLAGS -DNGHTTP2_STATICLIB"
+	generic_configure "--enable-static --disable-shared"
+  do_make_and_make_install
+	reset_cflags
+	change_dir "$src_dir"
+}
+build_curl() {
+  build_libssh2
+	build_zstd
+	build_brotli
+	build_libpsl
+	build_nghttp2
+  build_openssl
+  local lib="curl"
+  local repo="https://github.com/curl/curl"
+  local repo_ver="8.17.0"
+	change_dir "$src_dir"
+	do_git_checkout "$repo" "$lib" "$repo_ver"
+	change_dir "$src_dir/$lib"
+  export CPPFLAGS+="$CPPFLAGS -DNGHTTP2_STATICLIB -DPSL_STATIC $config_options"
+  generic_configure "--enable-static --disable-shared --with-openssl --with-libssh2 --with-libpsl --with-libidn2 --disable-debug --enable-hsts --with-brotli --enable-versioned-symbols"
+	do_make_and_make_install
+	reset_cppflags
 	change_dir "$src_dir"
 }
 # build_libtesseract      # config_options+= --enable-libtesseract        # enable Tesseract, needed for ocr filter [no]
 build_libtesseract() {
   if [[ $disable_libtesseract != 1 && $enable_libtesseract == 1 ]]; then
-  build_libtiff
 	build_libleptonica
 	build_libarchive
+  build_curl
   local lib="libtesseract"
-  do_git_checkout https://github.com/tesseract-ocr/tesseract tesseract
+  local repo="https://github.com/tesseract-ocr/tesseract"
+  local repo_ver="5.5.1"
+  change_dir "$src_dir"
+	do_git_checkout "$repo" "$lib" "$repo_ver"
+	change_dir "$src_dir/$lib"
+  export CPPFLAGS="$CPPFLAGS -DCURL_STATICLIB"
+  generic_configure "--disable-openmp \
+--with-archive \
+--disable-graphics \
+--disable-tessdata-prefix \
+--with-curl \
+LIBLEPT_HEADERSDIR=$dependency_install_prefix/include \
+--datadir=$dependency_install_prefix/bin"
+  do_make_and_make_install
+	sed -i.bak 's/Requires.private.*/& lept libarchive liblzma libtiff-4 libcurl/' "$dependency_install_prefix/lib/pkgconfig/tesseract.pc"
+	sed -i 's/-ltesseract.*$/-ltesseract -lstdc++ -lbz2 -lz -liconv -lpthread/' "$dependency_install_prefix/lib/pkgconfig/tesseract.pc"
+	if [[ ! -f $dependency_install_prefix/bin/tessdata/tessdata/eng.traineddata ]]; then
+		create_dir "$dependency_install_prefix/bin/tessdata"
+		cp -f /usr/share/tesseract-ocr/**/tessdata/eng.traineddata "$dependency_install_prefix/bin/tessdata/"
+	fi
+  change_dir "$src_dir"
+  reset_cppflags
   fi
 }
 # build_libtheora         # config_options+= --enable-libtheora           # enable Theora encoding via libtheora [no]
