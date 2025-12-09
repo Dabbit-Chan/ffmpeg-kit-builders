@@ -1819,8 +1819,8 @@ build_librsvg() {
 # build_librtmp           # config_options+= --enable-librtmp             # enable RTMP[E] support via librtmp [no]
 build_librtmp() {
   if [[ $disable_librtmp != 1 && $enable_librtmp == 1 ]]; then
-  local lib="librtmp"
   # https://github.com/mirror/rtmpdump
+  local lib="librtmp"
   local repo="git://git.ffmpeg.org/rtmpdump"
   local repo_ver="2.6"
   activate_meson
@@ -1836,7 +1836,16 @@ build_librtmp() {
 build_librubberband() {
   if [[ $disable_librubberband != 1 && $enable_librubberband == 1 ]]; then
   local lib="librubberband"
-  do_git_checkout https://github.com/breakfastquay/rubberband rubberband 18c06ab8c431854056407c467f4755f761e36a8e
+  local repo="https://github.com/breakfastquay/rubberband"
+  local repo_ver="v4.0.0"
+  activate_meson
+  change_dir "$src_dir"
+	do_git_checkout "$repo" "$lib" "$repo_ver"
+	change_dir "$src_dir/$lib"
+  local meson_options="-Dtests=disabled"
+	generic_meson "$meson_options"
+	do_ninja_and_ninja_install
+	change_dir "$src_dir"
   fi
 }
 # build_libshaderc        # config_options+= --enable-libshaderc          # enable GLSL->SPIRV compilation via libshaderc [no]
