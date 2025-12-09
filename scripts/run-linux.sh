@@ -1758,9 +1758,9 @@ build_cairo() {
 	change_dir "$src_dir"
 }
 build_pango() {
-  #build_harfbuzz
-  #build_freetype
-  #build_libfontconfig
+  build_harfbuzz
+  build_freetype
+  build_libfontconfig
  	# https://gitlab.gnome.org/GNOME/pango
 	local lib="pango"
   local repo="https://gitlab.gnome.org/GNOME/pango"
@@ -1794,6 +1794,26 @@ build_librsvg() {
   build_pango
   # 	# https://github.com/GNOME/librsvg
   local lib="librsvg"
+  local repo="https://gitlab.gnome.org/GNOME/librsvg"
+  local repo_ver="2.61.3"
+  activate_meson
+	change_dir "$src_dir"
+	do_git_checkout "$repo" "$lib" "$repo_ver"
+	change_dir "$src_dir/$lib"
+	local meson_options="-Ddocs=disabled \
+-Dintrospection=disabled \
+-Dvala=disabled \
+-Davif=disabled \
+-Dpixbuf-loader=disabled \
+-Dtests=false \
+-Drsvg-convert=disabled \
+-Dtriplet=$rust_target \
+-Dc_args=\"-DGLIB_STATIC_COMPILATION\" \
+-Dcpp_args=\"-DGLIB_STATIC_COMPILATION\""
+	generic_meson "$meson_options"
+	change_dir "$src_dir/$lib/build" 1
+	do_meson "" "install"
+	change_dir "$src_dir"
   fi
 }
 # build_librtmp           # config_options+= --enable-librtmp             # enable RTMP[E] support via librtmp [no]
