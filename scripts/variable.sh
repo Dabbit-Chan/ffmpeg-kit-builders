@@ -188,4 +188,5 @@ export BUILD_STEPS=(
 "build_sndio" \
 "build_libdvdnav" \
 "build_libdvdread" \
-"build_libopenvino")
+"build_libopenvino" \
+"build_libsmbclient")

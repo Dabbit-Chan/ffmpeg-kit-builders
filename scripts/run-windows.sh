@@ -1875,8 +1875,6 @@ build_libsmbclient() {
     if [[ $host_platform == "windows" ]]; then
       echo "INFO: SMB support already built into $host_platform. Seperate library not needed." && return 0
     fi
-		# TODO NON-WINDOWS --enable-libsmbclient - Not needed for windows"
-	echo "TODO --enable-libsmbclient"
   echo "Not needed for Windows. Windows has SMB built into the Operating System."
 	# https://git.samba.org/samba
 	local lib="libsmbclient"

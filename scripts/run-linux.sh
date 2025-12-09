@@ -1871,14 +1871,21 @@ build_libshaderc() {
 build_libshine() {
   if [[ $disable_libshine != 1 && $enable_libshine == 1 ]]; then
   local lib="libshine"
-  # https://github.com/toots/shine 
+  local repo="https://github.com/toots/shine"
+  local repo_ver="3.1.1" 
+  do_git_checkout "$repo" "$lib" "$repo_ver"
+	change_dir "$src_dir/$lib"
+	generic_configure_make_install
+	change_dir "$src_dir"
   fi
 }
 # build_libsmbclient      # config_options+= --enable-libsmbclient        # enable Samba protocol via libsmbclient [no]
 build_libsmbclient() {
   if [[ $disable_libsmbclient != 1 && $enable_libsmbclient == 1 ]]; then
   local lib="libsmbclient"
-  # https://git.samba.org/samba
+  # https://git.samba.org/samba https://gitlab.com/samba-team/samba https://github.com/samba-team/samba https://www.samba.org/
+  # best to just install locally as its a large library with a lot of dependencies
+  apt-get install acl attr samba winbind libpam-winbind libnss-winbind krb5-config krb5-user dnsutils python3-setproctitle ntp -y
   fi
 }
 # build_libsnappy         # config_options+= --enable-libsnappy           # enable Snappy compression, needed for hap encoding [no]
