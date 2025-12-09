@@ -62,7 +62,7 @@ create_dir() {
 		echo -e "DEBUG: directory already exists, skipping creation." >>"$LOG_FILE"
 	fi
   execute "INFO: updating path permissions: '$path'" "ERROR: unable to update permissions on '$path'" "true" \
-    chmod -R a+rwx "$path"
+    chmod -R u+rwx "$path"
 }
 # 1. options
 # @. paths
@@ -121,7 +121,7 @@ remove_path() {
                 rm_options+=(-r)
             fi
             execute "INFO: updating path permissions: '$path'" "ERROR: unable to update permissions on '$path'" "true" \
-              chmod -R a+rwx "$path"
+              chmod -R u+rwx "$path"
             execute "INFO: removing path: '$path'" "ERROR: unable to remove path '$path'" "true" \
                 rm "${rm_options[@]}" "$path"
         else
@@ -147,7 +147,7 @@ change_dir() {
 			cd "$path"
 		if [[ ! -r "$path" ]] || [[ ! -w "$path" ]] || [[ ! -x "$path" ]]; then
       execute "INFO: updating path permissions: '$path'" "ERROR: unable to update permissions on '$path'" "true" \
-        chmod -R a+rwx "$(pwd)"
+        chmod -R u+rwx "$(pwd)"
 		fi
 	else
 		echo -e "INFO: path '$path' does not exist" >>"$LOG_FILE"
@@ -205,7 +205,7 @@ copy_path() {
 
 	# Update permissions on the copied path
   execute "INFO: updating path permissions: '$path'" "ERROR: unable to update permissions on '$path'" "true" \
-    chmod -R a+rwx "$path"
+    chmod -R u+rwx "$path"
 }
 
 # 1. skip_if_missing
@@ -1047,7 +1047,7 @@ download_gcc_build_script() {
 	cp "$PATCHDIR"/"$zeranoe_script_name" "$zeranoe_script_name"
 	#rm -f $PATCHDIR/$zeranoe_script_name || exit_message 1
 	#curl -4 https://raw.githubusercontent.com/Zeranoe/mingw-w64-build/refs/heads/master/mingw-w64-build -O --fail || exit_message 1
-	chmod -R a+rwx "$zeranoe_script_name"
+	chmod -R u+rwx "$zeranoe_script_name"
 }
 
 # helper methods for downloading and building projects that can take generic input
@@ -1064,7 +1064,7 @@ do_svn_checkout() {
 			svn checkout -r "$desired_revision" "$repo_url" "$to_dir".tmp > >(redirect_output) 2>&1 || exit_message 1 "could not checkout $desired_revision $repo_url"
 		fi
 		mv "$to_dir".tmp "$to_dir" 2>>"$LOG_FILE"
-    chmod -R a+rwx "$to_dir" 2>>"$LOG_FILE"
+    chmod -R u+rwx "$to_dir" 2>>"$LOG_FILE"
 	else
     if truthy "$build_force"; then
       echo -e "INFO: Force requested, resetting repository" >>"$LOG_FILE"
@@ -1073,7 +1073,7 @@ do_svn_checkout() {
       echo -e "INFO: Fetching git instead" >>"$LOG_FILE"
 			svn update > >(redirect_output) 2>&1 # want this for later...
 		else
-      chmod -R a+rwx "$to_dir" 2>>"$LOG_FILE"
+      chmod -R u+rwx "$to_dir" 2>>"$LOG_FILE"
       change_dir "$to_dir"
       change_dir ..
     fi
@@ -1190,7 +1190,7 @@ retry_git_or_die() { # originally from https://stackoverflow.com/a/76012343/3245
 			create_dir "$to_dir.tmp"
 			echo -e "DEBUG: Evaluating \"$git_command\"\n" >>"$LOG_FILE"
       # shellcheck disable=SC2086
-			eval "$git_command" > >(redirect_output) 2>&1 && chmod -R a+rwx "$to_dir.tmp" && break
+			eval "$git_command" > >(redirect_output) 2>&1 && chmod -R u+rwx "$to_dir.tmp" && break
 		fi
 		#git clone --depth 1 -b "$desired_branch" "$repo_url" "$to_dir.tmp" --recurse-submodules --single-branch && break
 		# get here -> failure
@@ -1256,7 +1256,7 @@ do_git_checkout() {
 		echo -e "INFO: Downloading $repo_url $desired_branch into $to_dir" >>"$LOG_FILE"
 		retry_git_or_die "$repo_url" "$to_dir" "$desired_branch"
     mv "$to_dir.tmp" "$to_dir" 2>>"$LOG_FILE"
-		chmod -R a+rwx "$to_dir" 2>>"$LOG_FILE"
+		chmod -R u+rwx "$to_dir" 2>>"$LOG_FILE"
     change_dir "$to_dir"
 	fi
 }
@@ -1498,7 +1498,7 @@ do_configure() {
       automake --force-missing --add-missing > >(redirect_output) 2>&1
 			autoreconf_library # a handful of them require this to create ./configure :|
 		fi
-		chmod -R a+rwx "$configure_name" # In non-windows environments, with devcontainers, the configuration file doesn't have execution permissions
+		chmod -R u+rwx "$configure_name" # In non-windows environments, with devcontainers, the configuration file doesn't have execution permissions
 		echo -e "INFO: do_configure() PATH=$PATH\n PKG_CONFIG_PATH=$PKG_CONFIG_PATH nice running: \"$configure_name $configure_options\"" >>"$LOG_FILE"
 		# shellcheck disable=SC2086
 		eval "nice -n 5 $configure_name $configure_options" > >(redirect_output) 2>&1 || {
@@ -1895,7 +1895,7 @@ download_and_unpack_file() {
     if [[ -n "$dest_folder" ]]; then
         if [ ! -d "$dest_folder" ]; then
             create_dir "$dest_folder" || exit_message 1 "could not create dir $dest_folder"
-            chmod -R a+rwx "$dest_folder"
+            chmod -R u+rwx "$dest_folder"
         fi
     fi
     local marker_file="$dest_folder/unpacked.successfully"
@@ -1919,11 +1919,11 @@ download_and_unpack_file() {
             #tar -xf "$filename" > >(redirect_output) 2>&1 || exit_message 1 "tar failed"
         fi
         remove_path -f "$filename"
-        chmod -R a+rwx "$dest_folder"
+        chmod -R u+rwx "$dest_folder"
         create_touch_file 0 "$marker_file"
     else
       echo "DEBUG: Archive already downloaded and extracted at $dest_folder" >>"$LOG_FILE"
-      chmod -R a+rwx "$dest_folder"
+      chmod -R u+rwx "$dest_folder"
       create_touch_file 0 "$marker_file"
     fi
 }
