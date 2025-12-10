@@ -2631,6 +2631,7 @@ EOF
 	do_make "xevd"
   # manually install static library only
   cp -fv "$src_dir/$lib/build/src_main/libxevd.a" "$dependency_install_prefix/lib/" > >(redirect_output) 2>&1
+  cp -fv "$src_dir/$lib/inc/xevd.h" "$dependency_install_prefix/include/" > >(redirect_output) 2>&1
   cp -fv "$src_dir/$lib/build/xevd.pc" "$dependency_install_prefix/lib/pkgconfig/" > >(redirect_output) 2>&1
   change_dir "$src_dir"
   fi
@@ -2662,6 +2663,7 @@ EOF
 	do_make "xeve"
   # manually install static library only
   cp -fv "$src_dir/$lib/build/src_main/libxeve.a" "$dependency_install_prefix/lib/" > >(redirect_output) 2>&1
+  cp -fv "$src_dir/$lib/inc/xeve.h" "$dependency_install_prefix/include/" > >(redirect_output) 2>&1
   cp -fv "$src_dir/$lib/build/xeve.pc" "$dependency_install_prefix/lib/pkgconfig/" > >(redirect_output) 2>&1
   change_dir "$src_dir"
   fi
@@ -2685,21 +2687,63 @@ build_libxml2() {
 build_libxvid() {
   if [[ $disable_libxvid != 1 && $enable_libxvid == 1 ]]; then
   local lib="libxvid"
-  download_and_unpack_file https://downloads.xvid.com/downloads/xvidcore-1.3.7.tar.gz xvidcore
+  # local repo="https://downloads.xvid.com/downloads/xvidcore-1.3.7.tar.gz"
+  local repo="https://github.com/openkylin/xvidcore"
+  local repo_ver="upstream/1.3.7"
+  change_dir "$src_dir"
+  do_git_checkout "$repo" "$lib" "$repo_ver"
+  change_dir "$src_dir/$lib/build/generic"
+  generic_configure
+	do_make "libxvidcore.a"
+  # manually install static library only
+  cp -fv "$src_dir/$lib/build/generic/=build/libxvidcore.a" "$dependency_install_prefix/lib/" > >(redirect_output) 2>&1
+  cp -fv "$src_dir/$lib/src/xvid.h" "$dependency_install_prefix/include/" > >(redirect_output) 2>&1
+  cat > "${dependency_install_prefix}/lib/pkgconfig/xvidcore.pc" <<EOF
+prefix=${dependency_install_prefix}
+exec_prefix=\${prefix}
+libdir=\${exec_prefix}/lib
+includedir=\${prefix}/include
+
+Name: xvidcore
+Description: MPEG-4 video codec
+Version: 1.3.7
+Libs: -L\${libdir} -lxvidcore
+Libs.private: -lm -lpthread
+Cflags: -I\${includedir}
+EOF
+  change_dir "$src_dir"
   fi
 }
 # build_libzimg           # config_options+= --enable-libzimg             # enable z.lib, needed for zscale filter [no]
 build_libzimg() {
   if [[ $disable_libzimg != 1 && $enable_libzimg == 1 ]]; then
   local lib="libzimg"
-  do_git_checkout_and_make_install https://github.com/sekrit-twc/zimg zimg
+  local repo="https://github.com/sekrit-twc/zimg"
+  local repo_ver="v3.0.6"
+  change_dir "$src_dir"
+  do_git_checkout_and_make_install "$repo" "$lib" "$repo_ver"
+  change_dir "$src_dir"
   fi
 }
 # build_libzmq            # config_options+= --enable-libzmq              # enable message passing via libzmq [no]
 build_libzmq() {
   if [[ $disable_libzmq != 1 && $enable_libzmq == 1 ]]; then
   local lib="libzmq"
-  # https://github.com/zeromq/libzmq libzmq 4.3.5
+  local repo="https://github.com/zeromq/libzmq"
+  local repo_ver="v4.3.5"
+  change_dir "$src_dir"
+  do_git_checkout "$repo" "$lib" "$repo_ver"
+  change_dir "$src_dir/$lib"
+  generic_configure_make_install "--enable-static \
+--disable-shared \
+--without-docs \
+--without-libsodium \
+--disable-libunwind \
+--disable-perf \
+--disable-werror \
+--disable-curve-keygen \
+--disable-curve"
+  change_dir "$src_dir"
   fi
 }
 # build_libzvbi           # config_options+= --enable-libzvbi             # enable teletext support via libzvbi [no]
