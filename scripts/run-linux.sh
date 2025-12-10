@@ -2522,14 +2522,28 @@ build_libvorbis() {
 build_libvpx() {
   if [[ $disable_libvpx != 1 && $enable_libvpx == 1 ]]; then
   local lib="libvpx"
-  do_git_checkout https://chromium.googlesource.com/webm/libvpx libvpx "origin/main"
+  local repo="https://chromium.googlesource.com/webm/libvpx"
+  local repo_ver="v1.15.2"
+  change_dir "$src_dir"
+	do_git_checkout "$repo" "$lib" "$repo_ver"
+  change_dir "$src_dir/$lib"
+  do_configure "--prefix=$dependency_install_prefix --enable-ssse3 --enable-static --disable-shared --disable-examples --disable-tools --disable-docs --disable-unit-tests --enable-vp9-highbitdepth --extra-cflags=-fno-asynchronous-unwind-tables --extra-cflags=-mstackrealign" # fno for Error: invalid register for .seh_savexmm
+	do_make_and_make_install
+  change_dir "$src_dir"
   fi
 }
 # build_libvvenc          # config_options+= --enable-libvvenc            # enable H.266/VVC encoding via vvenc [no]
 build_libvvenc() {
   if [[ $disable_libvvenc != 1 && $enable_libvvenc == 1 ]]; then
   local lib="libvvenc"
-  do_git_checkout https://github.com/fraunhoferhhi/vvenc libvvenc
+  local repo="https://github.com/fraunhoferhhi/vvenc"
+  local repo_ver="v1.13.1"
+  change_dir "$src_dir"
+	do_git_checkout "$repo" "$lib" "$repo_ver"
+  change_dir "$src_dir/$lib"
+  do_cmake "-B build -DCMAKE_BUILD_TYPE=Release -DVVENC_ENABLE_LINK_TIME_OPT=OFF -DBUILD_SHARED_LIBS=0 -DVVENC_INSTALL_FULLFEATURE_APP=ON -GNinja"
+	do_ninja_and_ninja_install
+  change_dir "$src_dir"
   fi
 }
 # build_libwebp           # config_options+= --enable-libwebp             # enable WebP encoding via libwebp [no]
