@@ -2440,7 +2440,17 @@ EOF
 build_libtwolame() {
   if [[ $disable_libtwolame != 1 && $enable_libtwolame == 1 ]]; then
   local lib="libtwolame"
-  do_git_checkout https://github.com/njh/twolame twolame "origin/main"
+  local repo="https://github.com/njh/twolame"
+  local repo_ver="0.4.0"
+  change_dir "$src_dir"
+	do_git_checkout "$repo" "$lib" "$repo_ver"
+	change_dir "$src_dir/$lib"
+  if [[ ! -f Makefile.am.bak ]]; then # Library only, front end refuses to build for some reason with git master
+		sed -i.bak "/^SUBDIRS/s/ frontend.*//" Makefile.am || exit_message 1 "could not update makefile for twolame"
+	fi
+	generic_configure "--enable-static --disable-shared"
+	do_make_and_make_install
+	change_dir "$src_dir"
   fi
 }
 # build_libuavs3d         # config_options+= --enable-libuavs3d           # enable AVS3 decoding via libuavs3d [no]
@@ -2448,6 +2458,18 @@ build_libuavs3d() {
   if [[ $disable_libuavs3d != 1 && $enable_libuavs3d == 1 ]]; then
   local lib="libuavs3d"
   # https://github.com/uavs3/uavs3d
+  local repo="https://github.com/uavs3/uavs3d"
+  local repo_ver="1.0"
+  change_dir "$src_dir"
+	do_git_checkout "$repo" "$lib" "$repo_ver"
+  chmod -R u+rwx "$src_dir/$lib/version.sh"
+  eval "$src_dir/$lib/version.sh" > >(redirect_output) 2>&1
+	change_dir "$src_dir/$lib/build" 1
+	local cmake_params="-DCOMPILE_10BIT=0 \
+-DBUILD_SHARED_LIBS=0 \
+-DCMAKE_BUILD_TYPE=Release"
+	do_cmake_from_build_dir "$src_dir/$lib" "$cmake_params"
+	do_make_and_make_install
   fi
 }
 # build_libvidstab        # config_options+= --enable-libvidstab          # enable video stabilization using vid.stab [no]

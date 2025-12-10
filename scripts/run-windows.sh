@@ -2406,6 +2406,8 @@ build_libuavs3d() {
 	local lib="libuavs3d"
 	change_dir "$src_dir"
 	do_git_checkout https://github.com/uavs3/uavs3d "$lib"
+  chmod -R u+rwx "$src_dir/$lib/version.sh"
+  eval "$src_dir/$lib/version.sh" > >(redirect_output) 2>&1
 	change_dir "$src_dir/$lib/build" 1
 	local cmake_params=" -DCMAKE_TOOLCHAIN_FILE=$(get_generic_cmake_toolchain) \
 -DCOMPILE_10BIT=0 \
