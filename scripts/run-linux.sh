@@ -1533,7 +1533,6 @@ build_spirv_cross() {
 	change_dir "$src_dir"
 	do_git_checkout "$repo" "$lib" "$repo_ver"
 	change_dir "$src_dir/$lib"
-	# TODO: Allow shared library build
 	do_cmake "-B build -GNinja -DSPIRV_CROSS_STATIC=ON -DSPIRV_CROSS_SHARED=OFF -DCMAKE_BUILD_TYPE=Release -DSPIRV_CROSS_CLI=OFF -DSPIRV_CROSS_ENABLE_TESTS=OFF -DSPIRV_CROSS_FORCE_PIC=ON -DSPIRV_CROSS_ENABLE_CPP=OFF"
 	do_ninja_and_ninja_install
 	mv "$dependency_install_prefix/lib/pkgconfig/spirv-cross-c.pc" "$dependency_install_prefix/lib/pkgconfig/spirv-cross-c-shared.pc"
@@ -1858,7 +1857,6 @@ build_libshaderc() {
   do_git_checkout "$repo" "$lib" "$repo_ver"
   change_dir "$src_dir/$lib"
   ./utils/git-sync-deps > >(redirect_output) 2>&1
-	# TODO: Allow shared library build
 	do_cmake "-B build -DCMAKE_BUILD_TYPE=release -GNinja -DSHADERC_SKIP_EXAMPLES=ON -DSHADERC_SKIP_TESTS=ON -DSPIRV_SKIP_TESTS=ON -DSHADERC_SKIP_COPYRIGHT_CHECK=ON -DENABLE_EXCEPTIONS=ON -DENABLE_GLSLANG_BINARIES=OFF -DSPIRV_SKIP_EXECUTABLES=ON -DSPIRV_TOOLS_BUILD_STATIC=ON -DBUILD_SHARED_LIBS=OFF"
 	do_ninja_and_ninja_install
 	cp -fv build/libshaderc_util/libshaderc_util.a "$dependency_install_prefix/lib" > >(redirect_output) 2>&1
@@ -2565,21 +2563,47 @@ build_libwebp() {
 build_libx264() {
   if [[ $disable_libx264 != 1 && $enable_libx264 == 1 ]]; then
   local lib="libx264"
-  do_git_checkout "https://code.videolan.org/videolan/x264.git" "$checkout_dir" "origin/master"
+  local repo="https://code.videolan.org/videolan/x264.git"
+  local repo_ver="stable"
+  change_dir "$src_dir"
+	do_git_checkout "$repo" "$lib" "$repo_ver"
+	change_dir "$src_dir/$lib"
+  generic_configure "--enable-static --disable-shared --enable-pic --disable-cli"
+	do_make_and_make_install
+  change_dir "$src_dir"
   fi
 }
 # build_libx265           # config_options+= --enable-libx265             # enable HEVC encoding via x265 [no]
 build_libx265() {
   if [[ $disable_libx265 != 1 && $enable_libx265 == 1 ]]; then
   local lib="libx265"
-  local remote="https://bitbucket.org/multicoreware/x265"
+  local repo="https://bitbucket.org/multicoreware/x265_git"
+  local repo_ver="stable"
+  change_dir "$src_dir"
+	do_git_checkout "$repo" "$lib" "$repo_ver"
+  change_dir "$src_dir/$lib/12bit" 1
+  do_cmake "-DHIGH_BIT_DEPTH=TRUE -DMAIN12=TRUE -DEXPORT_C_API=FALSE -DENABLE_CLI=FALSE -DENABLE_SHARED=FALSE" "$src_dir/$lib/source"
+  do_make
+  change_dir "$src_dir/$lib/10bit" 1
+  do_cmake "-DHIGH_BIT_DEPTH=TRUE -DEXPORT_C_API=FALSE -DENABLE_CLI=FALSE -DENABLE_SHARED=FALSE" "$src_dir/$lib/source"
+  do_make
+  change_dir "$src_dir/$lib/8bit" 1
+  do_cmake "-DEXTRA_LIB=\"$src_dir/$lib/12bit/libx265.a;$src_dir/$lib/10bit/libx265.a\" -DENABLE_SHARED=FALSE -DLINKED_10BIT=TRUE -DLINKED_12BIT=TRUE" "$src_dir/$lib/source"
+  do_make_and_make_install
+  change_dir "$src_dir"
   fi
 }
 # build_libxavs           # config_options+= --enable-libxavs             # enable AVS encoding via xavs [no]
 build_libxavs() {
   if [[ $disable_libxavs != 1 && $enable_libxavs == 1 ]]; then
   local lib="libxavs"
-  do_git_checkout https://github.com/Distrotech/xavs xavs
+  local repo="https://github.com/Distrotech/xavs"
+  local repo_ver="stable"
+  change_dir "$src_dir"
+	do_git_checkout "$repo" "$lib" "$repo_ver"
+	change_dir "$src_dir/$lib"
+  generic_configure_make_install "--enable-static --disable-shared --enable-pic"
+  change_dir "$src_dir"
   fi
 }
 # build_libxavs2          # config_options+= --enable-libxavs2            # enable AVS2 encoding via xavs2 [no]

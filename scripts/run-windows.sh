@@ -1063,7 +1063,7 @@ build_libx265() {
   if [[ $disable_libx265 != 1 && $enable_libx265 == 1 ]]; then
 	change_dir "$src_dir"
 	local checkout_dir=x265
-	local remote="https://bitbucket.org/multicoreware/x265"
+	local remote="https://bitbucket.org/multicoreware/x265_git"
 	if [[ -n $x265_git_checkout_version ]]; then
 		checkout_dir+="_$x265_git_checkout_version"
 		do_git_checkout "$remote" "$checkout_dir" "$x265_git_checkout_version"
