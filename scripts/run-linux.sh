@@ -2721,7 +2721,11 @@ build_libzimg() {
   local repo="https://github.com/sekrit-twc/zimg"
   local repo_ver="v3.0.6"
   change_dir "$src_dir"
-  do_git_checkout_and_make_install "$repo" "$lib" "$repo_ver"
+  do_git_checkout "$repo" "$lib" "$repo_ver"
+  change_dir "$src_dir/$lib"
+  generic_configure_make_install "--enable-static \
+--disable-shared \
+--with-pic"
   change_dir "$src_dir"
   fi
 }
@@ -2925,21 +2929,53 @@ build_openssl() {
 build_pocketsphinx() {
   if [[ $disable_pocketsphinx != 1 && $enable_pocketsphinx == 1 ]]; then
   local lib="pocketsphinx"
-  # https://github.com/cmusphinx/pocketsphinx
+  local repo="https://github.com/cmusphinx/pocketsphinx"
+  local repo_ver="v5.0.4"
+	change_dir "$src_dir"
+  do_git_checkout "$repo" "$lib" "$repo_ver"
+	change_dir "$src_dir/$lib"
+  local cmake_params="-DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=OFF"
+	do_cmake_from_build_dir "$src_dir/$lib" "$cmake_params"
+	do_make_and_make_install
+  change_dir "$src_dir"
   fi
 }
 # build_vapoursynth       # config_options+= --enable-vapoursynth         # enable VapourSynth demuxer [no]
 build_vapoursynth() {
   if [[ $disable_vapoursynth != 1 && $enable_vapoursynth == 1 ]]; then
+  build_libzimg
+  activate_meson
   local lib="vapoursynth"
-  # https://github.com/vapoursynth/vapoursynth
+  local repo="https://github.com/vapoursynth/vapoursynth"
+  local repo_ver="R73"
+	change_dir "$src_dir"
+  do_git_checkout "$repo" "$lib" "$repo_ver"
+  change_dir "$src_dir/$lib"
+  generic_meson
+  do_ninja_and_ninja_install
+	change_dir "$src_dir"
   fi
 }
 # build_whisper           # config_options+= --enable-whisper             # enable whisper filter [no]
 build_whisper() {
   if [[ $disable_whisper != 1 && $enable_whisper == 1 ]]; then
   local lib="whisper"
-  # https://github.com/ggerganov/whisper.cpp
+  local repo="https://github.com/ggerganov/whisper.cpp"
+  local repo_ver="v1.8.2"
+	change_dir "$src_dir"
+  do_git_checkout "$repo" "$lib" "$repo_ver"
+  change_dir "$src_dir/$lib/build" 1
+	local cmake_params="-DCMAKE_BUILD_TYPE=Release \
+-DWHISPER_BUILD_EXAMPLES=OFF \
+-DWHISPER_BUILD_TESTS=OFF \
+-DBUILD_SHARED_LIBS=OFF \
+-DGGML_STATIC=ON \
+-DGGML_AVX2=ON \
+-DGGML_FMA=ON \
+-DGGML_F16C=ON"
+	do_cmake_from_build_dir "$src_dir/$lib" "$cmake_params"
+	do_make_and_make_install
+  change_dir "$src_dir"
   fi
 }
 #endregion---------------------------------------------------------------------
