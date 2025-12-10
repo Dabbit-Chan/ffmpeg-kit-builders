@@ -1284,6 +1284,52 @@ do_git_checkout() {
 	fi
 }
 
+do_git_sparse_checkout() {
+  local repo_url="$1"
+	local to_dir="$2"
+  local path="$3"
+	echo -e "INFO: Starting git checkout $repo_url" >>"$LOG_FILE"
+	if [[ -z $to_dir ]]; then
+		to_dir=$(basename "$repo_url" | sed 's/\.git$//; s/[?#].*$//') # http://y/abc.git -> abc
+	fi
+	if [ -d "$to_dir" ] && is_valid_git_dir "$to_dir"; then
+    echo -e "INFO: Directory already exists $to_dir." >>"$LOG_FILE"
+		change_dir "$to_dir"
+    if truthy "$build_force"; then
+      echo -e "INFO: Force requested, resetting repository" >>"$LOG_FILE"
+      git_hard_reset "$(pwd)"
+      git sparse-checkout init --cone > >(redirect_output) 2>&1 || exit_message 1 "could not re-init sparse-checkout"
+      git sparse-checkout set "$path" > >(redirect_output) 2>&1 || exit_message 1 "could not set sparse-checkout path"
+      git checkout > >(redirect_output) 2>&1 || exit_message 1 "could not checkout"
+		elif truthy "$git_get_latest"; then
+      echo -e "INFO: Fetching git instead" >>"$LOG_FILE"
+			git fetch --quiet >>"$LOG_FILE" # want this for later...
+      git sparse-checkout set "$path" > >(redirect_output) 2>&1
+      git checkout > >(redirect_output) 2>&1 || exit_message 1 "could not checkout after fetch"
+		else
+			echo -e "INFO: not doing git get latest pull for latest code $to_dir" >>"$LOG_FILE" # too slow'ish...
+      git sparse-checkout set "$path" > >(redirect_output) 2>&1
+		fi
+	else
+    [[ -d "$to_dir.tmp" ]] && (remove_path -rf "$to_dir.tmp"; true) # just in case it failed previously
+    if [[ -d "$to_dir" ]] && is_empty_dir "$to_dir"; then
+      echo -e "INFO: Empty directory already exists at $to_dir. Deleting before downloading." >>"$LOG_FILE"
+      remove_path -rf "$to_dir"
+    fi
+		echo -e "INFO: Downloading $repo_url into $to_dir" >>"$LOG_FILE"
+		git clone --no-checkout "$repo_url" "$to_dir.tmp" > >(redirect_output) 2>&1 || exit_message 1 "could not \"git clone --no-checkout\" $repo_url"
+    change_dir "$to_dir.tmp"
+    git sparse-checkout init --cone > >(redirect_output) 2>&1 || exit_message 1 "could not \"git sparse-checkout init --cone\" $repo_url"
+    git sparse-checkout set "$path" > >(redirect_output) 2>&1 || exit_message 1 "could not \"git sparse-checkout set $path\" $repo_url"
+    git checkout > >(redirect_output) 2>&1 || exit_message 1 "could not \"git checkout\" $repo_url"
+    change_dir ..
+    mv "$to_dir.tmp" "$to_dir" 2>>"$LOG_FILE"
+		chmod -R u+rwx "$to_dir" 2>>"$LOG_FILE"
+    change_dir "$to_dir"
+	fi
+  echo -e "INFO: Successfully checked out $path from $repo_url into $(pwd)" >>"$LOG_FILE"
+}
+
 git_hard_reset() {
     # Get the absolute path of the target
     local target_path

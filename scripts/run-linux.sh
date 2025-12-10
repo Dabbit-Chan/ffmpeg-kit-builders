@@ -2872,7 +2872,7 @@ build_glew() {
 -DGLEW_USE_STATIC_LIBS=ON"
   mapfile -t missing_packages < <(get_missing_packages libxmu-dev libxi-dev libgl-dev)
   if [[ "${#missing_packages[*]}" -gt 0 ]]; then
-    apt-get install "${missing_packages[*]}" -y > >(redirect_output) 2>&1
+    eval "apt-get install ${missing_packages[*]} -y" > >(redirect_output) 2>&1
   fi
 	do_cmake_from_build_dir "$src_dir/$lib/build/cmake" "$cmake_params"
 	do_make_and_make_install
@@ -2889,7 +2889,7 @@ build_glfw() {
 	change_dir "$src_dir/$lib"
   mapfile -t missing_packages < <(get_missing_packages libwayland-dev libxkbcommon-dev xorg-dev)
   if [[ "${#missing_packages[*]}" -gt 0 ]]; then
-    apt-get install "${missing_packages[*]}" -y > >(redirect_output) 2>&1
+    eval "apt-get install ${missing_packages[*]} -y" > >(redirect_output) 2>&1
   fi
 	do_cmake_and_install "-DBUILD_SHARED_LIBS=OFF \
 -DGLFW_LIBRARY_TYPE=STATIC \
@@ -3136,22 +3136,54 @@ build_libnpp() {
   fi
 }
 #endregion
-#region------------------ non-gpl linux/unix features -------------------------    
+#region---------- non-gpl linux/unix (Raspberry Pi) features ------------------    
 # build_mmal              # config_options+= --disable-mmal               # enable Broadcom Multi-Media Abstraction Layer (Raspberry Pi) via MMAL [no]
 build_mmal() {
   if [[ $disable_mmal != 1 && $enable_mmal == 1 ]]; then
   echo "WARNING: This is a non-gpl library. Binaries including this library are non-redistributable!"
+  local old_force=$build_force
+  export build_force=1
   local lib="mmal"
-    # https://github.com/raspberrypi/userland/tree/master/interface/mmal maybe?
-
+  local repo="https://github.com/raspberrypi/userland"
+  change_dir "$src_dir"
+  do_git_checkout "$repo" "$lib"
+  change_dir "$src_dir/$lib"
+  local toolchain_file="$src_dir/$lib/makefiles/cmake/toolchains/aarch64-linux-gnu.cmake"
+  mapfile -t missing_packages < <(get_missing_packages "gcc-aarch64-linux-gnu" "g++-aarch64-linux-gnu")
+  if [[ "${#missing_packages[*]}" -gt 0 ]]; then
+    eval "apt-get install ${missing_packages[*]} -y" > >(redirect_output) 2>&1
+  fi
+  do_cmake_and_install "-DCMAKE_TOOLCHAIN_FILE=$toolchain_file \
+-DARM64=ON \
+-DWITH_VCOS_PTHREADS=TRUE \
+-DBUILD_SHARED_LIBS=OFF \
+-DBUILD_MMAL=TRUE \
+-DBUILD_MMAL_APPS=FALSE"
+  change_dir "$src_dir"
+  export build_force=$old_force
   fi
 }
 # build_omx_rpi           # config_options+= --disable-omx-rpi            # enable OpenMAX IL code for Raspberry Pi [no]
 build_omx_rpi() {
   if [[ $disable_omx_rpi != 1 && $enable_omx_rpi == 1 ]]; then
   echo "WARNING: This is a non-gpl library. Binaries including this library are non-redistributable!"
-  local lib="omx_rpi"
-    # https://github.com/tizonia/tizonia-openmax-il maybe?
+  local old_force=$build_force
+  export build_force=1
+  local lib="mmal"
+  local repo="https://github.com/raspberrypi/userland"
+  change_dir "$src_dir"
+  do_git_checkout "$repo" "$lib"
+  change_dir "$src_dir/$lib"
+  local toolchain_file="$src_dir/$lib/makefiles/cmake/toolchains/aarch64-linux-gnu.cmake"
+  mapfile -t missing_packages < <(get_missing_packages "gcc-aarch64-linux-gnu" "g++-aarch64-linux-gnu")
+  if [[ "${#missing_packages[*]}" -gt 0 ]]; then
+    eval "apt-get install ${missing_packages[*]} -y" > >(redirect_output) 2>&1
+  fi
+  do_cmake_and_install "-DCMAKE_TOOLCHAIN_FILE=$toolchain_file \
+-DCMAKE_BUILD_TYPE=Release \
+-DARM64=ON"
+  change_dir "$src_dir"
+export build_force=$old_force
   fi
 }
 #endregion
