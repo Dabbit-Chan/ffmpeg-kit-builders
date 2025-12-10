@@ -2050,24 +2050,6 @@ EOF
             ;;
     esac
 }
-uninstall_manifest() {
-  local manifest="$1"
-  if [[ -f "$manifest" ]]; then
-    echo "WARNING: found $manifest. Uninstalling files from $manifest if installed"
-    while IFS= read -r line || [[ -n "$line" ]]; do
-        [[ -z "$line" ]] && continue
-        if [[ -f "$line" ]]; then
-          echo "WARNING: uninstalling file: $line"
-          remove_path -f "$line"
-        else
-          echo "WARNING: could not uninstall file: $line"
-        fi
-    done < "$manifest"
-    remove_path -f "$manifest"
-  else
-    echo "WARNING: $manifest not found."
-  fi
-}
 # build_libtensorflow     # config_options+= --enable-libtensorflow       # enable TensorFlow as a DNN module backend for DNN based filters like sr [no]
 build_libtensorflow() {
   if [[ $disable_libtensorflow != 1 && $enable_libtensorflow == 1 ]]; then
@@ -2598,7 +2580,7 @@ build_libxavs() {
   if [[ $disable_libxavs != 1 && $enable_libxavs == 1 ]]; then
   local lib="libxavs"
   local repo="https://github.com/Distrotech/xavs"
-  local repo_ver="stable"
+  local repo_ver="distrotech-xavs-git"
   change_dir "$src_dir"
 	do_git_checkout "$repo" "$lib" "$repo_ver"
 	change_dir "$src_dir/$lib"
@@ -2610,14 +2592,47 @@ build_libxavs() {
 build_libxavs2() {
   if [[ $disable_libxavs2 != 1 && $enable_libxavs2 == 1 ]]; then
   local lib="libxavs2"
-  do_git_checkout https://github.com/pkuvcl/xavs2 xavs2
+  local repo="https://github.com/pkuvcl/xavs2"
+  local repo_ver="1.4"
+  change_dir "$src_dir"
+	do_git_checkout "$repo" "$lib" "$repo_ver"
+	change_dir "$src_dir/$lib/build/linux"
+  generic_configure_make_install "--enable-pic \
+--disable-cli \
+--enable-static \
+--disable-shared \
+--extra-cflags=\"-Wno-error=incompatible-pointer-types\""
+  change_dir "$src_dir"
   fi
 }
 # build_libxevd           # config_options+= --enable-libxevd             # enable EVC decoding via libxevd [no]
 build_libxevd() {
   if [[ $disable_libxevd != 1 && $enable_libxevd == 1 ]]; then
   local lib="libxevd"
-  # https://github.com/mpeg5/xevd
+  local repo="https://github.com/mpeg5/xevd"
+  local repo_ver="v0.5.0"
+  change_dir "$src_dir"
+	do_git_checkout "$repo" "$lib" "$repo_ver"
+	change_dir "$src_dir/$lib/build" 1
+  # needs a version.txt file but git repo doesnt have one for some reason
+	if [[ -d .git && ! -f "$src_dir/$lib/version.txt" ]]; then
+			# Get version from git tags
+			VERSION=$(git describe --tags --abbrev=0 2>/dev/null || echo "v0.5.0")
+	else
+			# Use default version
+			VERSION="v0.5.0"
+	fi
+cat >"$src_dir/$lib/version.txt" <<EOF
+$VERSION
+EOF
+	do_cmake_from_build_dir "$src_dir/$lib" "-DBUILD_SHARED_LIBS=OFF \
+-DCMAKE_POSITION_INDEPENDENT_CODE=ON \
+-DCMAKE_BUILD_TYPE=Release"
+	do_make "xevd"
+  # manually install static library only
+  cp -fv "$src_dir/$lib/build/src_main/libxevd.a" "$dependency_install_prefix/lib/" > >(redirect_output) 2>&1
+  cp -fv "$src_dir/$lib/build/xevd.pc" "$dependency_install_prefix/lib/pkgconfig/" > >(redirect_output) 2>&1
+  change_dir "$src_dir"
   fi
 }
 # build_libxeve           # config_options+= --enable-libxeve             # enable EVC encoding via libxeve [no]
@@ -2625,6 +2640,30 @@ build_libxeve() {
   if [[ $disable_libxeve != 1 && $enable_libxeve == 1 ]]; then
   local lib="libxeve"
   # https://github.com/mpeg5/xeve
+  local repo="https://github.com/mpeg5/xeve"
+  local repo_ver="v0.5.0"
+  change_dir "$src_dir"
+	do_git_checkout "$repo" "$lib" "$repo_ver"
+	change_dir "$src_dir/$lib/build" 1
+  # needs a version.txt file but git repo doesnt have one for some reason
+	if [[ -d .git && ! -f "$src_dir/$lib/version.txt" ]]; then
+			# Get version from git tags
+			VERSION=$(git describe --tags --abbrev=0 2>/dev/null || echo "v0.5.0")
+	else
+			# Use default version
+			VERSION="v0.5.0"
+	fi
+cat >"$src_dir/$lib/version.txt" <<EOF
+$VERSION
+EOF
+	do_cmake_from_build_dir "$src_dir/$lib" "-DBUILD_SHARED_LIBS=OFF \
+-DCMAKE_POSITION_INDEPENDENT_CODE=ON \
+-DCMAKE_BUILD_TYPE=Release"
+	do_make "xeve"
+  # manually install static library only
+  cp -fv "$src_dir/$lib/build/src_main/libxeve.a" "$dependency_install_prefix/lib/" > >(redirect_output) 2>&1
+  cp -fv "$src_dir/$lib/build/xeve.pc" "$dependency_install_prefix/lib/pkgconfig/" > >(redirect_output) 2>&1
+  change_dir "$src_dir"
   fi
 }
 # build_libxml2           # config_options+= --enable-libxml2             # enable XML parsing using the C library libxml2, needed for dash and imf demuxing support [no]

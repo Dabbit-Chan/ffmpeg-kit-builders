@@ -2962,3 +2962,21 @@ create_ffmpeg_kit_bundle() {
 	fi
 	echo -e "INFO: Done creating bundle" | tee -a "$LOG_FILE"
 }
+uninstall_manifest() {
+  local manifest="$1"
+  if [[ -f "$manifest" ]]; then
+    echo "WARNING: found $manifest. Uninstalling files from $manifest if installed"
+    while IFS= read -r line || [[ -n "$line" ]]; do
+        [[ -z "$line" ]] && continue
+        if [[ -f "$line" ]]; then
+          echo "WARNING: uninstalling file: $line"
+          remove_path -f "$line"
+        else
+          echo "WARNING: could not uninstall file: $line"
+        fi
+    done < "$manifest"
+    remove_path -f "$manifest"
+  else
+    echo "WARNING: $manifest not found."
+  fi
+}
