@@ -14,5 +14,6 @@
 /libtool
 /ltmain.sh
 /m4/l*
-/Makefile.in
+Makefile.in
+aclocal.m4
 already_*

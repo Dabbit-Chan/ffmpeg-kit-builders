@@ -1,5 +1,7 @@
 #!/bin/bash
 
+# shellcheck disable=SC2317,SC1091,SC1090,SC2120,SC2129
+
 HOST_PKG_CONFIG_PATH=$(command -v pkg-config)
 if [ -z "${HOST_PKG_CONFIG_PATH}" ]; then
   echo -e "\n(*) pkg-config command not found\n"
@@ -30,7 +32,7 @@ export PKG_CONFIG_PATH="${INSTALL_PKG_CONFIG_DIR}:$(pkg-config --variable pc_pat
 
 echo -e "\nINFO: Using PKG_CONFIG_PATH: ${PKG_CONFIG_PATH}\n" 1>>"${BASEDIR}"/build.log 2>&1
 
-cd "${BASEDIR}"/prebuilt/src/"${LIB_NAME}" 1>>"${BASEDIR}"/build.log 2>&1 || return 1
+cd "${BASEDIR}/prebuilt/src/${LIB_NAME}" 1>>"${BASEDIR}"/build.log 2>&1 || return 1
 
 # SET BUILD OPTIONS
 TARGET_CPU=""
@@ -50,7 +52,7 @@ HIGH_PRIORITY_INCLUDES=""
 # SET CONFIGURE OPTIONS
 for library in {0..91}; do
   if [[ ${ENABLED_LIBRARIES[$library]} -eq 1 ]]; then
-    ENABLED_LIBRARY=$(get_library_name ${library})
+    ENABLED_LIBRARY=$(get_library_name "${library}")
 
     echo -e "INFO: Enabling library ${ENABLED_LIBRARY}\n" 1>>"${BASEDIR}"/build.log 2>&1
 
@@ -296,8 +298,8 @@ for custom_library_index in "${CUSTOM_LIBRARIES[@]}"; do
 
   echo -e "INFO: Enabling custom library ${!library_name}\n" 1>>"${BASEDIR}"/build.log 2>&1
 
-  CFLAGS+=" $(pkg-config --cflags ${!pc_file_name} 2>>"${BASEDIR}"/build.log)"
-  LDFLAGS+=" $(pkg-config --libs --static ${!pc_file_name} 2>>"${BASEDIR}"/build.log)"
+CFLAGS+=" $(pkg-config --cflags "${!pc_file_name}" 2>>"${BASEDIR}"/build.log)"
+LDFLAGS+=" $(pkg-config --libs --static "${!pc_file_name}" 2>>"${BASEDIR}"/build.log)"
   CONFIGURE_POSTFIX+=" --enable-${!ffmpeg_flag_name}"
 done
 
@@ -336,8 +338,8 @@ if [[ -z ${NO_WORKSPACE_CLEANUP_ffmpeg} ]]; then
   make distclean 2>/dev/null 1>/dev/null
 
   # WORKAROUND TO MANUALLY DELETE UNCLEANED FILES
-  rm -f "${BASEDIR}"/prebuilt/src/"${LIB_NAME}"/libavfilter/opencl/*.o 1>>"${BASEDIR}"/build.log 2>&1
-  rm -f "${BASEDIR}"/prebuilt/src/"${LIB_NAME}"/libavcodec/neon/*.o 1>>"${BASEDIR}"/build.log 2>&1
+  rm -f "${BASEDIR}/prebuilt/src/${LIB_NAME}/libavfilter/opencl/"*.o 1>>"${BASEDIR}"/build.log 2>&1
+  rm -f "${BASEDIR}/prebuilt/src/${LIB_NAME}/libavcodec/neon/"*.o 1>>"${BASEDIR}"/build.log 2>&1
 
   # DELETE SHARED FRAMEWORK WORKAROUNDS
   git checkout "${BASEDIR}/prebuilt/src/ffmpeg/ffbuild" 1>>"${BASEDIR}"/build.log 2>&1
@@ -347,13 +349,13 @@ fi
 ulimit -n 2048 1>>"${BASEDIR}"/build.log 2>&1
 
 ########################### CUSTOMIZATIONS #######################
-cd "${BASEDIR}"/prebuilt/src/"${LIB_NAME}" 1>>"${BASEDIR}"/build.log 2>&1 || return 1
+cd "${BASEDIR}/prebuilt/src/${LIB_NAME}" 1>>"${BASEDIR}"/build.log 2>&1 || return 1
 git checkout libavformat/file.c 1>>"${BASEDIR}"/build.log 2>&1
 git checkout libavformat/protocols.c 1>>"${BASEDIR}"/build.log 2>&1
 git checkout libavutil 1>>"${BASEDIR}"/build.log 2>&1
 
 # 1. Use thread local log levels
-${SED_INLINE} 's/static int av_log_level/__thread int av_log_level/g' "${BASEDIR}"/prebuilt/src/"${LIB_NAME}"/libavutil/log.c 1>>"${BASEDIR}"/build.log 2>&1 || return 1
+${SED_INLINE} 's/static int av_log_level/__thread int av_log_level/g' "${BASEDIR}/prebuilt/src/${LIB_NAME}/libavutil/log.c" 1>>"${BASEDIR}"/build.log 2>&1 || return 1
 
 ###################################################################
 
@@ -366,7 +368,7 @@ ${SED_INLINE} 's/static int av_log_level/__thread int av_log_level/g' "${BASEDIR
   --arch="x86-64" \
   --cpu="x86-64" \
   --target-os=linux \
-  ${ASM_OPTIONS} \
+  "$ASM_OPTIONS" \
   --ar="${AR}" \
   --cc="${CC}" \
   --cxx="${CXX}" \
@@ -378,14 +380,14 @@ ${SED_INLINE} 's/static int av_log_level/__thread int av_log_level/g' "${BASEDIR
   --enable-pic \
   --enable-optimizations \
   --enable-swscale \
-  ${BUILD_LIBRARY_OPTIONS} \
+  "$BUILD_LIBRARY_OPTIONS" \
   --enable-pthreads \
   --enable-v4l2-m2m \
   --disable-outdev=fbdev \
   --disable-indev=fbdev \
-  ${SIZE_OPTIONS} \
+  "$SIZE_OPTIONS" \
   --disable-xmm-clobber-test \
-  ${DEBUG_OPTIONS} \
+  "$DEBUG_OPTIONS" \
   --disable-openssl \
   --disable-neon-clobber-test \
   --disable-programs \
@@ -411,7 +413,7 @@ ${SED_INLINE} 's/static int av_log_level/__thread int av_log_level/g' "${BASEDIR
   --disable-nvenc \
   --disable-vaapi \
   --disable-vdpau \
-  ${CONFIGURE_POSTFIX} 1>>"${BASEDIR}"/build.log 2>&1
+  "$CONFIGURE_POSTFIX" 1>>"${BASEDIR}"/build.log 2>&1
 
 if [[ $? -ne 0 ]]; then
   echo -e "failed\n\nSee build.log for details\n"
@@ -419,7 +421,7 @@ if [[ $? -ne 0 ]]; then
 fi
 
 if [[ -z ${NO_OUTPUT_REDIRECTION} ]]; then
-  make -j$(get_cpu_count) 1>>"${BASEDIR}"/build.log 2>&1
+  make -j"$(get_cpu_count)" 1>>"${BASEDIR}"/build.log 2>&1
 
   if [[ $? -ne 0 ]]; then
     echo -e "failed\n\nSee build.log for details\n"
@@ -427,7 +429,7 @@ if [[ -z ${NO_OUTPUT_REDIRECTION} ]]; then
   fi
 else
   echo -e "started\n"
-  make -j$(get_cpu_count)
+  make -j"$(get_cpu_count)"
 
   if [[ $? -ne 0 ]]; then
     echo -n -e "\n${LIB_NAME}: failed\n\nSee build.log for details\n"
@@ -458,30 +460,30 @@ overwrite_file "${FFMPEG_LIBRARY_PATH}"/lib/pkgconfig/libavcodec.pc "${INSTALL_P
 overwrite_file "${FFMPEG_LIBRARY_PATH}"/lib/pkgconfig/libavutil.pc "${INSTALL_PKG_CONFIG_DIR}/libavutil.pc" || return 1
 
 # MANUALLY ADD REQUIRED HEADERS
-mkdir -p "${FFMPEG_LIBRARY_PATH}"/include/libavutil/x86 1>>"${BASEDIR}"/build.log 2>&1
-mkdir -p "${FFMPEG_LIBRARY_PATH}"/include/libavutil/arm 1>>"${BASEDIR}"/build.log 2>&1
-mkdir -p "${FFMPEG_LIBRARY_PATH}"/include/libavutil/aarch64 1>>"${BASEDIR}"/build.log 2>&1
-mkdir -p "${FFMPEG_LIBRARY_PATH}"/include/libavcodec/x86 1>>"${BASEDIR}"/build.log 2>&1
-mkdir -p "${FFMPEG_LIBRARY_PATH}"/include/libavcodec/arm 1>>"${BASEDIR}"/build.log 2>&1
-overwrite_file "${BASEDIR}"/prebuilt/src/ffmpeg/config.h "${FFMPEG_LIBRARY_PATH}"/include/config.h 1>>"${BASEDIR}"/build.log 2>&1
-overwrite_file "${BASEDIR}"/prebuilt/src/ffmpeg/libavcodec/mathops.h "${FFMPEG_LIBRARY_PATH}"/include/libavcodec/mathops.h 1>>"${BASEDIR}"/build.log 2>&1
-overwrite_file "${BASEDIR}"/prebuilt/src/ffmpeg/libavcodec/x86/mathops.h "${FFMPEG_LIBRARY_PATH}"/include/libavcodec/x86/mathops.h 1>>"${BASEDIR}"/build.log 2>&1
-overwrite_file "${BASEDIR}"/prebuilt/src/ffmpeg/libavcodec/arm/mathops.h "${FFMPEG_LIBRARY_PATH}"/include/libavcodec/arm/mathops.h 1>>"${BASEDIR}"/build.log 2>&1
-overwrite_file "${BASEDIR}"/prebuilt/src/ffmpeg/libavformat/network.h "${FFMPEG_LIBRARY_PATH}"/include/libavformat/network.h 1>>"${BASEDIR}"/build.log 2>&1
-overwrite_file "${BASEDIR}"/prebuilt/src/ffmpeg/libavformat/os_support.h "${FFMPEG_LIBRARY_PATH}"/include/libavformat/os_support.h 1>>"${BASEDIR}"/build.log 2>&1
-overwrite_file "${BASEDIR}"/prebuilt/src/ffmpeg/libavformat/url.h "${FFMPEG_LIBRARY_PATH}"/include/libavformat/url.h 1>>"${BASEDIR}"/build.log 2>&1
-overwrite_file "${BASEDIR}"/prebuilt/src/ffmpeg/libavutil/attributes_internal.h "${FFMPEG_LIBRARY_PATH}"/include/libavutil/attributes_internal.h 1>>"${BASEDIR}"/build.log 2>&1
-overwrite_file "${BASEDIR}"/prebuilt/src/ffmpeg/libavutil/bprint.h "${FFMPEG_LIBRARY_PATH}"/include/libavutil/bprint.h 1>>"${BASEDIR}"/build.log 2>&1
-overwrite_file "${BASEDIR}"/prebuilt/src/ffmpeg/libavutil/getenv_utf8.h "${FFMPEG_LIBRARY_PATH}"/include/libavutil/getenv_utf8.h 1>>"${BASEDIR}"/build.log 2>&1
-overwrite_file "${BASEDIR}"/prebuilt/src/ffmpeg/libavutil/internal.h "${FFMPEG_LIBRARY_PATH}"/include/libavutil/internal.h 1>>"${BASEDIR}"/build.log 2>&1
-overwrite_file "${BASEDIR}"/prebuilt/src/ffmpeg/libavutil/libm.h "${FFMPEG_LIBRARY_PATH}"/include/libavutil/libm.h 1>>"${BASEDIR}"/build.log 2>&1
-overwrite_file "${BASEDIR}"/prebuilt/src/ffmpeg/libavutil/reverse.h "${FFMPEG_LIBRARY_PATH}"/include/libavutil/reverse.h 1>>"${BASEDIR}"/build.log 2>&1
-overwrite_file "${BASEDIR}"/prebuilt/src/ffmpeg/libavutil/thread.h "${FFMPEG_LIBRARY_PATH}"/include/libavutil/thread.h 1>>"${BASEDIR}"/build.log 2>&1
-overwrite_file "${BASEDIR}"/prebuilt/src/ffmpeg/libavutil/timer.h "${FFMPEG_LIBRARY_PATH}"/include/libavutil/timer.h 1>>"${BASEDIR}"/build.log 2>&1
-overwrite_file "${BASEDIR}"/prebuilt/src/ffmpeg/libavutil/x86/asm.h "${FFMPEG_LIBRARY_PATH}"/include/libavutil/x86/asm.h 1>>"${BASEDIR}"/build.log 2>&1
-overwrite_file "${BASEDIR}"/prebuilt/src/ffmpeg/libavutil/x86/timer.h "${FFMPEG_LIBRARY_PATH}"/include/libavutil/x86/timer.h 1>>"${BASEDIR}"/build.log 2>&1
-overwrite_file "${BASEDIR}"/prebuilt/src/ffmpeg/libavutil/arm/timer.h "${FFMPEG_LIBRARY_PATH}"/include/libavutil/arm/timer.h 1>>"${BASEDIR}"/build.log 2>&1
-overwrite_file "${BASEDIR}"/prebuilt/src/ffmpeg/libavutil/aarch64/timer.h "${FFMPEG_LIBRARY_PATH}"/include/libavutil/aarch64/timer.h 1>>"${BASEDIR}"/build.log 2>&1
+mkdir -p "${FFMPEG_LIBRARY_PATH}/include/libavutil/x86" 1>>"${BASEDIR}"/build.log 2>&1
+mkdir -p "${FFMPEG_LIBRARY_PATH}/include/libavutil/arm" 1>>"${BASEDIR}"/build.log 2>&1
+mkdir -p "${FFMPEG_LIBRARY_PATH}/include/libavutil/aarch64" 1>>"${BASEDIR}"/build.log 2>&1
+mkdir -p "${FFMPEG_LIBRARY_PATH}/include/libavcodec/x86" 1>>"${BASEDIR}"/build.log 2>&1
+mkdir -p "${FFMPEG_LIBRARY_PATH}/include/libavcodec/arm" 1>>"${BASEDIR}"/build.log 2>&1
+overwrite_file "${BASEDIR}/prebuilt/src/ffmpeg/config.h" "${FFMPEG_LIBRARY_PATH}"/include/config.h 1>>"${BASEDIR}"/build.log 2>&1
+overwrite_file "${BASEDIR}/prebuilt/src/ffmpeg/libavcodec/mathops.h" "${FFMPEG_LIBRARY_PATH}"/include/libavcodec/mathops.h 1>>"${BASEDIR}"/build.log 2>&1
+overwrite_file "${BASEDIR}/prebuilt/src/ffmpeg/libavcodec/x86/mathops.h" "${FFMPEG_LIBRARY_PATH}"/include/libavcodec/x86/mathops.h 1>>"${BASEDIR}"/build.log 2>&1
+overwrite_file "${BASEDIR}/prebuilt/src/ffmpeg/libavcodec/arm/mathops.h" "${FFMPEG_LIBRARY_PATH}"/include/libavcodec/arm/mathops.h 1>>"${BASEDIR}"/build.log 2>&1
+overwrite_file "${BASEDIR}/prebuilt/src/ffmpeg/libavformat/network.h" "${FFMPEG_LIBRARY_PATH}"/include/libavformat/network.h 1>>"${BASEDIR}"/build.log 2>&1
+overwrite_file "${BASEDIR}/prebuilt/src/ffmpeg/libavformat/os_support.h" "${FFMPEG_LIBRARY_PATH}"/include/libavformat/os_support.h 1>>"${BASEDIR}"/build.log 2>&1
+overwrite_file "${BASEDIR}/prebuilt/src/ffmpeg/libavformat/url.h" "${FFMPEG_LIBRARY_PATH}"/include/libavformat/url.h 1>>"${BASEDIR}"/build.log 2>&1
+overwrite_file "${BASEDIR}/prebuilt/src/ffmpeg/libavutil/attributes_internal.h" "${FFMPEG_LIBRARY_PATH}"/include/libavutil/attributes_internal.h 1>>"${BASEDIR}"/build.log 2>&1
+overwrite_file "${BASEDIR}/prebuilt/src/ffmpeg/libavutil/bprint.h" "${FFMPEG_LIBRARY_PATH}"/include/libavutil/bprint.h 1>>"${BASEDIR}"/build.log 2>&1
+overwrite_file "${BASEDIR}/prebuilt/src/ffmpeg/libavutil/getenv_utf8.h" "${FFMPEG_LIBRARY_PATH}"/include/libavutil/getenv_utf8.h 1>>"${BASEDIR}"/build.log 2>&1
+overwrite_file "${BASEDIR}/prebuilt/src/ffmpeg/libavutil/internal.h" "${FFMPEG_LIBRARY_PATH}"/include/libavutil/internal.h 1>>"${BASEDIR}"/build.log 2>&1
+overwrite_file "${BASEDIR}/prebuilt/src/ffmpeg/libavutil/libm.h" "${FFMPEG_LIBRARY_PATH}"/include/libavutil/libm.h 1>>"${BASEDIR}"/build.log 2>&1
+overwrite_file "${BASEDIR}/prebuilt/src/ffmpeg/libavutil/reverse.h" "${FFMPEG_LIBRARY_PATH}"/include/libavutil/reverse.h 1>>"${BASEDIR}"/build.log 2>&1
+overwrite_file "${BASEDIR}/prebuilt/src/ffmpeg/libavutil/thread.h" "${FFMPEG_LIBRARY_PATH}"/include/libavutil/thread.h 1>>"${BASEDIR}"/build.log 2>&1
+overwrite_file "${BASEDIR}/prebuilt/src/ffmpeg/libavutil/timer.h" "${FFMPEG_LIBRARY_PATH}"/include/libavutil/timer.h 1>>"${BASEDIR}"/build.log 2>&1
+overwrite_file "${BASEDIR}/prebuilt/src/ffmpeg/libavutil/x86/asm.h" "${FFMPEG_LIBRARY_PATH}"/include/libavutil/x86/asm.h 1>>"${BASEDIR}"/build.log 2>&1
+overwrite_file "${BASEDIR}/prebuilt/src/ffmpeg/libavutil/x86/timer.h" "${FFMPEG_LIBRARY_PATH}"/include/libavutil/x86/timer.h 1>>"${BASEDIR}"/build.log 2>&1
+overwrite_file "${BASEDIR}/prebuilt/src/ffmpeg/libavutil/arm/timer.h" "${FFMPEG_LIBRARY_PATH}"/include/libavutil/arm/timer.h 1>>"${BASEDIR}"/build.log 2>&1
+overwrite_file "${BASEDIR}/prebuilt/src/ffmpeg/libavutil/aarch64/timer.h" "${FFMPEG_LIBRARY_PATH}"/include/libavutil/aarch64/timer.h 1>>"${BASEDIR}"/build.log 2>&1
 #overwrite_file "${BASEDIR}"/prebuilt/src/ffmpeg/libavutil/x86/emms.h "${FFMPEG_LIBRARY_PATH}"/include/libavutil/x86/emms.h 1>>"${BASEDIR}"/build.log 2>&1
 
 if [ $? -eq 0 ]; then

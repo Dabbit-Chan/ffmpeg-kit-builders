@@ -1,5 +1,7 @@
 #!/bin/bash
 
+# shellcheck disable=SC2317,SC1091,SC1090,SC2120
+
 # ALWAYS CLEAN THE PREVIOUS BUILD
 make distclean 2>/dev/null 1>/dev/null
 

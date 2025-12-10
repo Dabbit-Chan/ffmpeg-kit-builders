@@ -1,7 +1,9 @@
 #!/bin/bash
 
+# shellcheck disable=SC2317,SC1091,SC1090,SC2120
+
 # ENABLE COMMON FUNCTIONS
-source ${SCRIPTDIR}/function-"${FFMPEG_KIT_BUILD_TYPE}".sh 1>>"${BASEDIR}"/build.log 2>&1 || return 1
+source "$SCRIPTDIR/function-$target_platform.sh" 1>>"$BASEDIR"/build.log 2>&1 || return 1
 
 LIB_NAME="ffmpeg-kit"
 
@@ -42,7 +44,7 @@ autoreconf_library "${LIB_NAME}" 1>>"${BASEDIR}"/build.log 2>&1 || return 1
 ./configure \
   --prefix="${FFMPEG_KIT_LIBRARY_PATH}" \
   --with-pic \
-  ${BUILD_LIBRARY_OPTIONS} \
+  "$BUILD_LIBRARY_OPTIONS" \
   --disable-fast-install \
   --disable-maintainer-mode \
   --host="${HOST}" 1>>"${BASEDIR}"/build.log 2>&1
@@ -57,7 +59,7 @@ if [ -d "${FFMPEG_KIT_LIBRARY_PATH}" ]; then
   rm -rf "${FFMPEG_KIT_LIBRARY_PATH}" 1>>"${BASEDIR}"/build.log 2>&1 || return 1
 fi
 
-make -j$(get_cpu_count) install 1>>"${BASEDIR}"/build.log 2>&1
+make -j"$(get_cpu_count)" install 1>>"${BASEDIR}"/build.log 2>&1
 
 if [ $? -eq 0 ]; then
   echo "ok"
