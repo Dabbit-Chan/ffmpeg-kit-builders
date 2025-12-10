@@ -2107,7 +2107,8 @@ build_libtorch() {
   if [[ $disable_libtorch != 1 && $enable_libtorch == 1 ]]; then
     # TODO ABI Mismatch --enable-libtorch"
 	  echo "TODO --enable-libtorch"
-    # https://github.com/pytorch/pytorch # compiling from source fails and is complicated. using pre-built binaries  
+    # https://github.com/pytorch/pytorch # compiling from source fails and is complicated. 
+    # https://download.pytorch.org/libtorch/cpu/libtorch-win-shared-with-deps-2.9.1%2Bcpu.zip
     local lib="libtorch"
     echo -e "WARNING: [disabled] Using $lib may cause segmentation faults due to ABI mismatch (mingw vs mscv)" >>"$LOG_FILE"
     # change_dir "$src_dir/$lib" 1

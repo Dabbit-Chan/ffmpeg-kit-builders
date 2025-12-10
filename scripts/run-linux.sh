@@ -2018,7 +2018,7 @@ Do you want to enable GPU support for TensorFlow?
   2. no [default]
 EOF
         local timeout=10
-        local gpu_support=""
+        export gpu_support=""
         echo -ne 'Input your choice [1-2] (defaulting to "no" in 10 seconds): '
         for ((i=timeout; i>0; i--)); do
             if read -r -t 1 gpu_support; then
@@ -2034,7 +2034,7 @@ EOF
         # Check if timeout occurred
         if [[ -z "$gpu_support" ]] && (( i == 0 )); then
             echo "No input received within 10 seconds. Defaulting to 'no'."
-            gpu_support="2"
+            export gpu_support="no"
         fi
     done
     case "${gpu_support,,}" in
@@ -2055,41 +2055,47 @@ EOF
 uninstall_manifest() {
   local manifest="$1"
   if [[ -f "$manifest" ]]; then
-    echo "WARNING: found $manifest. Uninstalling files from $manifest if installed" >> "$LOG_FILE"
+    echo "WARNING: found $manifest. Uninstalling files from $manifest if installed"
     while IFS= read -r line || [[ -n "$line" ]]; do
         [[ -z "$line" ]] && continue
-        [[ -f "$line" ]] && remove_path -f "$line" || echo "WARNING: could not uninstall file: $line" >> "$LOG_FILE"
+        if [[ -f "$line" ]]; then
+          echo "WARNING: uninstalling file: $line"
+          remove_path -f "$line"
+        else
+          echo "WARNING: could not uninstall file: $line"
+        fi
     done < "$manifest"
     remove_path -f "$manifest"
   else
-    echo "WARNING: $manifest not found." >> "$LOG_FILE"
+    echo "WARNING: $manifest not found."
   fi
 }
 # build_libtensorflow     # config_options+= --enable-libtensorflow       # enable TensorFlow as a DNN module backend for DNN based filters like sr [no]
 build_libtensorflow() {
   if [[ $disable_libtensorflow != 1 && $enable_libtensorflow == 1 ]]; then
   local lib="libtensorflow"
-  if pick_gpu_support; then
-      echo "GPU support enabled (user chose 'yes')" >> "$LOG_FILE"
+  pick_gpu_support
+  if truthy "$gpu_support"; then
       local repo="https://storage.googleapis.com/tensorflow/versions/2.18.0/libtensorflow-gpu-linux-x86_64.tar.gz"
       local subdir="gpu"
       echo "WARNING: uninstalling cpu libtensorflow if installed." >> "$LOG_FILE"
-      uninstall_manifest "$src_dir/$lib/cpu/install_manifest"
+      uninstall_manifest "$install_pkgconfig_dir/${lib}_cpu_manifest" > >(redirect_output) 2>&1
   else
-      echo "GPU support disabled (user chose 'no' or timed out)" >> "$LOG_FILE"
       local repo="https://storage.googleapis.com/tensorflow/versions/2.18.0/libtensorflow-cpu-linux-x86_64.tar.gz"
       local subdir="cpu"
       echo "WARNING: uninstalling gpu libtensorflow if installed." >> "$LOG_FILE"
-      uninstall_manifest "$src_dir/$lib/gpu/install_manifest"
+      uninstall_manifest "$install_pkgconfig_dir/${lib}_gpu_manifest" > >(redirect_output) 2>&1
   fi
+  echo "WARNING: sit tight, this may take a while due to the size of this library" | tee -a "$LOG_FILE"
   # "https://github.com/tensorflow/tensorflow"
-  change_dir "$src_dir"
-  change_dir "$src_dir/$lib"
+  local manifest="$install_pkgconfig_dir/${lib}_${subdir}_manifest"
+  uninstall_manifest "$manifest" > >(redirect_output) 2>&1
+  change_dir "$src_dir/$lib" 1
 	download_and_unpack_file "$repo" "$src_dir/$lib/$subdir"
 	change_dir "$src_dir/$lib/$subdir"
-  echo > "$src_dir/$lib/$subdir/install_manifest" && chmod -R u+rwx "$src_dir/$lib/$subdir/install_manifest"
-  cp -rfv "$src_dir/$lib/$subdir/lib"* "$dependency_install_prefix/lib" 2>&1 | sed -n "s/.*' -> '\(.*\)'/\1/p" >> "$src_dir/$lib/$subdir/install_manifest"
-  cp -rfv "$src_dir/$lib/$subdir/include"* "$dependency_install_prefix/include" 2>&1 | sed -n "s/.*' -> '\(.*\)'/\1/p" >> "$src_dir/$lib/$subdir/install_manifest"
+  echo > "$manifest" && chmod -R u+rwx "$manifest"
+  cp -rfv "$src_dir/$lib/$subdir/lib"* "$dependency_install_prefix" 2>&1 | sed -n "s/.*' -> '\(.*\)'/\1/p" >> "$manifest"
+  cp -rfv "$src_dir/$lib/$subdir/include"* "$dependency_install_prefix" 2>&1 | sed -n "s/.*' -> '\(.*\)'/\1/p" >> "$manifest"
   cat >> "$dependency_install_prefix/lib/pkgconfig/tensorflow.pc" << EOF
 prefix=${dependency_install_prefix}
 exec_prefix=\${prefix}
@@ -2102,7 +2108,7 @@ Version: 2.18.0
 Libs: -L\${libdir} -ltensorflow -ltensorflow_framework
 Cflags: -I\${includedir}
 EOF
-  echo "$dependency_install_prefix/lib/pkgconfig/tensorflow.pc" >> "$src_dir/$lib/$subdir/install_manifest"
+  echo "$dependency_install_prefix/lib/pkgconfig/tensorflow.pc" >> "$manifest"
 	change_dir "$src_dir"
   fi
 }
@@ -2284,7 +2290,14 @@ LIBLEPT_HEADERSDIR=$dependency_install_prefix/include \
 build_libtheora() {
   if [[ $disable_libtheora != 1 && $enable_libtheora == 1 ]]; then
   local lib="libtheora"
-  do_git_checkout https://github.com/xiph/theora
+  local repo="https://github.com/xiph/theora"
+  local repo_ver="v1.2.0"
+  change_dir "$src_dir"
+	do_git_checkout "$repo" "$lib" "$repo_ver"
+	change_dir "$src_dir/$lib"
+	generic_configure "--enable-static --disable-shared --disable-doc --disable-spec --disable-oggtest --disable-vorbistest --disable-examples --disable-asm" # disable asm: avoid [theora @ 0x1043144a0]error in unpack_block_qpis in 64 bit... [OK OS X 64 bit tho...]
+	do_make_and_make_install
+	change_dir "$src_dir"
   fi
 }
 # build_libtls            # config_options+= --enable-libtls              # enable LibreSSL (via libtls), needed for https support if openssl, gnutls or mbedtls is not used [no]
@@ -2292,13 +2305,135 @@ build_libtls() {
   if [[ $disable_libtls != 1 && $enable_libtls == 1 ]]; then
   local lib="libtls"
   # https://github.com/PowerShell/LibreSSL
+  local repo="https://github.com/PowerShell/LibreSSL"
+  local repo_ver="V4.0.0.0"
+  change_dir "$src_dir"
+	do_git_checkout "$repo" "$lib" "$repo_ver"
+  change_dir "$src_dir/$lib/build" 1
+  local cmake_params="-DCMAKE_INSTALL_PREFIX=${dependency_install_prefix} \
+-DBUILD_SHARED_LIBS=OFF \
+-DLIBRESSL_APPS=OFF \
+-DLIBRESSL_TESTS=OFF \
+-DCMAKE_BUILD_TYPE=Release"
+  do_cmake_from_build_dir "$src_dir/$lib" "$cmake_params"
+  do_make_and_make_install
   fi
+}
+pick_gpu_type() {
+    if [[ -n $1 ]]; then
+        export gpu_type=$1
+    fi
+    while [[ ! "${gpu_type,,}" =~ ^([1-2]|cuda|nvdia|rocm|amd)$ ]]; do
+        # shellcheck disable=SC2199
+        if [[ -n "${unknown_opts[@]}" ]]; then
+            echo -e -n 'Unknown option(s)'
+            for unknown_opt in "${unknown_opts[@]}"; do
+                echo -e -n " '$unknown_opt'"
+            done
+            echo -e ', ignored.'
+            echo
+        fi
+        cat <<'EOF'
+Which GPU compute platform?
+  1. CUDA (Nvidia) [default]
+  2. ROCm (AMD)
+EOF
+        local timeout=10
+        export gpu_type=""
+        echo -ne 'Input your choice [1-2] (defaulting to "CUDA (Nvidia)" in 10 seconds): '
+        for ((i=timeout; i>0; i--)); do
+            if read -r -t 1 gpu_type; then
+                break
+            fi
+            if (( i > 1 )); then
+                echo -ne "\rInput your choice [1-2] (defaulting to \"CUDA (Nvidia)\" in $((i-1)) seconds): "
+            else
+                echo -ne "\rInput your choice [1-2] (defaulting to \"CUDA (Nvidia)\" in 0 seconds): "
+            fi
+        done
+        
+        # Check if timeout occurred
+        if [[ -z "$gpu_type" ]] && (( i == 0 )); then
+            echo "No input received within 10 seconds. Defaulting to 'CUDA (Nvidia)'."
+            export gpu_type="cuda"
+        fi
+    done
+    case "${gpu_type,,}" in
+        1|cuda|nvidia|"") 
+            export gpu_type="cuda"
+            return 0
+            ;;
+        2|rocm|amd) 
+            export gpu_type="rocm"
+            return 1
+            ;;
+        *)
+            echo -e 'Your choice was not valid, please try again.'
+            echo
+            ;;
+    esac
 }
 # build_libtorch          # config_options+= --enable-libtorch            # enable Torch as one DNN backend [no]
 build_libtorch() {
   if [[ $disable_libtorch != 1 && $enable_libtorch == 1 ]]; then
   local lib="libtorch"
+  local subdir=""
+  pick_gpu_support
+  if truthy "$gpu_support"; then
+      pick_gpu_type
+      subdir=$gpu_type
+      if [[ $subdir == "rocm" ]]; then
+        local repo="https://download.pytorch.org/libtorch/rocm6.4/libtorch-shared-with-deps-2.9.1%2Brocm6.4.zip"
+        echo "WARNING: uninstalling cpu and cuda libtorch if installed." >> "$LOG_FILE"
+        uninstall_manifest "$install_pkgconfig_dir/${lib}_cpu_manifest" > >(redirect_output) 2>&1
+        uninstall_manifest "$install_pkgconfig_dir/${lib}_cuda_manifest" > >(redirect_output) 2>&1
+      else
+        local repo="https://download.pytorch.org/libtorch/cu130/libtorch-shared-with-deps-2.9.1%2Bcu130.zip"
+        echo "WARNING: uninstalling cpu and rocm libtorch if installed." >> "$LOG_FILE"
+        uninstall_manifest "$install_pkgconfig_dir/${lib}_cpu_manifest" > >(redirect_output) 2>&1
+        uninstall_manifest "$install_pkgconfig_dir/${lib}_rocm_manifest" > >(redirect_output) 2>&1
+      fi
+  else
+      local repo="https://download.pytorch.org/libtorch/cpu/libtorch-cxx11-abi-shared-with-deps-2.7.1%2Bcpu.zip"
+      local subdir="cpu"
+      echo "WARNING: uninstalling cuda and rocm libtorch if installed." >> "$LOG_FILE"
+      uninstall_manifest "$install_pkgconfig_dir/${lib}_cuda_manifest" > >(redirect_output) 2>&1
+      uninstall_manifest "$install_pkgconfig_dir/${lib}_rocm_manifest" > >(redirect_output) 2>&1
+  fi
+  echo "WARNING: sit tight, this may take a while due to the size of this library" | tee -a "$LOG_FILE"
   # https://github.com/pytorch/pytorch
+  local manifest="$install_pkgconfig_dir/${lib}_${subdir}_manifest"
+  uninstall_manifest "$manifest" > >(redirect_output) 2>&1
+  change_dir "$src_dir/$lib" 1
+	download_and_unpack_file "$repo" "$src_dir/$lib/$subdir"
+	change_dir "$src_dir/$lib/$subdir"
+  echo > "$manifest" && chmod -R u+rwx "$manifest"
+  cp -rfv "$src_dir/$lib/$subdir/bin"* "$dependency_install_prefix" 2>&1 | sed -n "s/.*' -> '\(.*\)'/\1/p" >> "$manifest"
+  cp -rfv "$src_dir/$lib/$subdir/lib"* "$dependency_install_prefix" 2>&1 | sed -n "s/.*' -> '\(.*\)'/\1/p" >> "$manifest"
+  cp -rfv "$src_dir/$lib/$subdir/include"* "$dependency_install_prefix" 2>&1 | sed -n "s/.*' -> '\(.*\)'/\1/p" >> "$manifest"
+  cp -rfv "$src_dir/$lib/$subdir/share"* "$dependency_install_prefix" 2>&1 | sed -n "s/.*' -> '\(.*\)'/\1/p" >> "$manifest"
+  local VERSION="unknown"
+  if [ -f "$src_dir/$lib/$subdir/build-version" ]; then
+      VERSION=$(cat "$src_dir/$lib/$subdir/build-version")
+  elif [ -f "$src_dir/$lib/$subdir/version.txt" ]; then
+      VERSION=$(cat "$src_dir/$lib/$subdir/version.txt")
+  else
+      VERSION="2.0.0" 
+  fi
+  cat >> "$dependency_install_prefix/lib/pkgconfig/libtorch.pc" << EOF
+prefix=${dependency_install_prefix}
+exec_prefix=\${prefix}
+libdir=\${exec_prefix}/lib
+includedir=\${prefix}/include
+
+Name: libtorch
+Description: The PyTorch C++ library
+Version: $VERSION
+Libs: -L\${libdir} -ltorch -lc10 -ltorch_cpu -Wl,-rpath,\${libdir}
+Cflags: -I\${includedir} -I\${includedir}/torch/csrc/api/include -D_GLIBCXX_USE_CXX11_ABI=1
+EOF
+  echo "$dependency_install_prefix/lib/pkgconfig/libtorch.pc" >> "$manifest"
+  change_dir "$src_dir"
   fi
 }
 # build_libtwolame        # config_options+= --enable-libtwolame          # enable MP2 encoding via libtwolame [no]
