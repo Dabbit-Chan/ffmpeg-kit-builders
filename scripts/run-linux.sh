@@ -2799,35 +2799,103 @@ build_mbedtls() {
 build_openal() {
   if [[ $disable_openal != 1 && $enable_openal == 1 ]]; then
   local lib="openal"
-  # https://github.com/kcat/openal-soft
+  local repo="https://github.com/kcat/openal-soft"
+  local repo_ver="1.24.3"
+  change_dir "$src_dir"
+  do_git_checkout "$repo" "$lib" "$repo_ver"
+  change_dir "$src_dir/$lib/build" 1
+  local cmake_params="-DCMAKE_BUILD_TYPE=Release \
+-DLIBTYPE=STATIC \
+-DALSOFT_UTILS=OFF \
+-DALSOFT_EXAMPLES=OFF \
+-DALSOFT_TESTS=OFF \
+-DALSOFT_REQUIRE_DSOUND=OFF \
+-DALSOFT_REQUIRE_WASAPI=OFF \
+-DALSOFT_BACKEND_DSOUND=OFF \
+-DALSOFT_BACKEND_WASAPI=OFF \
+-DALSOFT_BACKEND_ALSA=ON \
+-DALSOFT_BACKEND_PULSEAUDIO=ON \
+-DALSOFT_BACKEND_PIPEWIRE=ON"
+	do_cmake_from_build_dir "$src_dir/$lib" "$cmake_params"
+	do_make_and_make_install
+  change_dir "$src_dir"
   fi
 }
 # build_opencl            # config_options+= --enable-opencl              # enable OpenCL processing [no]
 build_opencl() {
   if [[ $disable_opencl != 1 && $enable_opencl == 1 ]]; then
-  local lib="opencl"
-  # https://github.com/KhronosGroup/OpenCL-Headers
-  # https://github.com/KhronosGroup/OpenCL-ICD-Loader
+  local parentlib="opencl"
+  local lib="OpenCL-Headers"
+  local repo="https://github.com/KhronosGroup/OpenCL-Headers"
+  local repo_ver="v2025.07.22"
+  change_dir "$src_dir"
+  change_dir "$src_dir/$parentlib" 1
+  do_git_checkout "$repo" "$lib" "$repo_ver"
+  change_dir "$src_dir/$parentlib/$lib/build" 1
+  local cmake_params="-DCMAKE_INSTALL_PREFIX=${dependency_install_prefix} \
+-DCMAKE_BUILD_TYPE=Release \
+-DBUILD_SHARED_LIBS=OFF \
+-DBUILD_TESTING=OFF \
+-DOPENCL_HEADERS_BUILD_TESTING=OFF"
+  do_cmake_from_build_dir "$src_dir/$parentlib/$lib" "$cmake_params"
+  do_make_and_make_install
+  local lib="OpenCL-ICD-Loader"
+  local repo="https://github.com/KhronosGroup/OpenCL-ICD-Loader"
+  local repo_ver="v2025.07.22"
+  change_dir "$src_dir/$parentlib"
+  do_git_checkout "$repo" "$lib" "$repo_ver"
+  change_dir "$src_dir/$parentlib/$lib/build" 1
+  local cmake_params="-DCMAKE_INSTALL_PREFIX=${dependency_install_prefix} \
+-DCMAKE_BUILD_TYPE=Release \
+-DBUILD_SHARED_LIBS=OFF \
+-DBUILD_TESTING=OFF \
+-DOPENCL_ICD_LOADER_BUILD_TESTING=OFF"
+  do_cmake_from_build_dir "$src_dir/$parentlib/$lib" "$cmake_params"
+  do_make_and_make_install
+  change_dir "$src_dir"
   fi
 }
 build_glew() {
   if [[ $disable_opengl != 1 && $enable_opengl == 1 ]]; then
-	change_dir "$src_dir"
-	download_and_unpack_file https://sourceforge.net/projects/glew/files/glew/2.2.0/glew-2.2.0.tgz glew-2.2.0
-	change_dir "$src_dir/glew-2.2.0/build"
-	local cmake_params=""
-	cmake_params+=" -DWIN32=1"
-	do_cmake_from_build_dir ./cmake "$cmake_params" # "-DWITH_FFMPEG=0 -DOPENCV_GENERATE_PKGCONFIG=1 -DHAVE_DSHOW=0"
+  local lib="glew"
+  local repo="https://sourceforge.net/projects/glew/files/glew/2.1.0/glew-2.1.0.tgz/download"
+  local repo_ver="glew-2.2.0"
+  change_dir "$src_dir"
+  download_and_unpack_file "$repo" "$lib"
+  change_dir "$src_dir/$lib/build" 1
+	local cmake_params="-DCMAKE_BUILD_TYPE=Release \
+-DBUILD_UTILS=OFF \
+-DGLEW_USE_STATIC_LIBS=ON"
+  mapfile -t missing_packages < <(get_missing_packages libxmu-dev libxi-dev libgl-dev)
+  if [[ "${#missing_packages[*]}" -gt 0 ]]; then
+    apt-get install "${missing_packages[*]}" -y > >(redirect_output) 2>&1
+  fi
+	do_cmake_from_build_dir "$src_dir/$lib/build/cmake" "$cmake_params"
 	do_make_and_make_install
 	change_dir "$src_dir"
 	fi
 }
 build_glfw() {
   if [[ $disable_opengl != 1 && $enable_opengl == 1 ]]; then
+  local lib="glfw"
+  local repo="https://github.com/glfw/glfw"
+  local repo_ver="3.4"
 	change_dir "$src_dir"
-	download_and_unpack_file https://github.com/glfw/glfw/releases/download/3.4/glfw-3.4.zip glfw-3.4
-	change_dir "$src_dir/glfw-3.4"
-	do_cmake_and_install "-DGLFW_BUILD_WAYLAND=OFF -DGLFW_BUILD_X11=OFF -DGLFW_BUILD_WIN32=ON"
+  do_git_checkout "$repo" "$lib" "$repo_ver"
+	change_dir "$src_dir/$lib"
+  mapfile -t missing_packages < <(get_missing_packages libwayland-dev libxkbcommon-dev xorg-dev)
+  if [[ "${#missing_packages[*]}" -gt 0 ]]; then
+    apt-get install "${missing_packages[*]}" -y > >(redirect_output) 2>&1
+  fi
+	do_cmake_and_install "-DBUILD_SHARED_LIBS=OFF \
+-DGLFW_LIBRARY_TYPE=STATIC \
+-DGLFW_BUILD_EXAMPLES=OFF \
+-DGLFW_BUILD_TESTS=OFF \
+-DGLFW_BUILD_DOCS=OFF \
+-DGLFW_BUILD_X11=ON \
+-DGLFW_BUILD_WIN32=OFF \
+-DGLFW_BUILD_COCOA=OFF \
+-DGLFW_BUILD_WAYLAND=ON"
 	change_dir "$src_dir"
 	fi
 }
