@@ -416,14 +416,14 @@ setup_linux_environment() {
     export host_target="$host_arch-$host_platform-gnu"
     export rust_target="$host_arch-unknown-linux-gnu"
     export dependency_install_prefix="$work_dir/libraries"
-    export PKG_CONFIG_PATH="$PKG_CONFIG_PATH:$dependency_install_prefix/share/pkgconfig:$dependency_install_prefix/lib/pkgconfig:$dependency_install_prefix/lib/$host_target/pkgconfig:$work_dir/pkgconfig"
+    export PKG_CONFIG_PATH="$PKG_CONFIG_PATH:/usr/lib/$host_target/pkgconfig:/usr/lib/pkgconfig:$dependency_install_prefix/share/pkgconfig:$dependency_install_prefix/lib/pkgconfig:$dependency_install_prefix/lib/$host_target/pkgconfig:$work_dir/pkgconfig"
     export PATH="$ffmpeg_install_prefix:$dependency_install_prefix:$original_path"
-    export linux_cflags='-fstrict-aliasing -fPIC -DLINUX -I${dependency_install_prefix}/include'
+    export linux_cflags="-fstrict-aliasing -fPIC -DLINUX -I${dependency_install_prefix}/include"
     export CFLAGS="$linux_cflags"
     export linux_cppflags=''
     export linux_cxxflags="-I${dependency_install_prefix}/include"
     export CXXFLAGS=$linux_cxxflags
-    export linux_ldflags="-L${dependency_install_prefix}/lib -L${dependency_install_prefix}/lib/${host_target} --static"
+    export linux_ldflags="-L${dependency_install_prefix}/lib -L${dependency_install_prefix}/lib/${host_target}"
     export LDFLAGS=$linux_ldflags
 }
 
@@ -864,6 +864,28 @@ apt_not_installed() {
 	echo -e "$need_install"
 }
 
+check_package() {
+  local pkg_name="$1"
+  if hash "$package" &>/dev/null || dpkg -s "$package" &>/dev/null; then
+    return 0
+  else
+    return 1
+  fi
+}
+
+get_missing_packages() {
+  local check_packages=("$@")
+  local missing_packages=()
+  for package in "${check_packages[@]}"; do
+		  if [[ -n $package ]] && ! check_package "$package"; then
+        missing_packages+=("$package")
+      fi
+	done
+  for pkg in "${missing_packages[@]}"; do
+      echo "$pkg"
+  done
+}
+
 check_missing_packages() {
 	# We will need this later if we don't want to just constantly be grepping the /etc/os-release file
 	if [ -z "${VENDOR}" ] && grep -E '(centos|rhel)' /etc/os-release &>/dev/null; then
@@ -883,9 +905,10 @@ check_missing_packages() {
 	# libtool check is wonky...
 	check_packages+=('libtoolize') # the rest of the world
 	# Use hash to check if the packages exist or not. Type is a bash builtin which I'm told behaves differently between different versions of bash.
-	for package in "${check_packages[@]}"; do
-		  hash "$package" &>/dev/null || dpkg -s "$package" &>/dev/null || missing_packages=("$package" "${missing_packages[@]}")
-	done
+	mapfile -t missing_packages < <(get_missing_packages "${check_packages[@]}")
+  # for package in "${check_packages[@]}"; do
+	# 	  check_package "$package" || missing_packages=("$package" "${missing_packages[@]}")
+	# done
 	if [ "${VENDOR}" = "redhat" ] || [ "${VENDOR}" = "centos" ]; then
 		if [ -n "$(hash cmake 2>&1)" ] && [ -n "$(hash cmake3 2>&1)" ]; then missing_packages=('cmake' "${missing_packages[@]}"); fi
 	fi
@@ -1383,7 +1406,7 @@ do_python() {
 	fi
 	if [ ! -f "$touch_name" ]; then
     remove_path -f "${touch_prefix}_python"* # reset
-		echo -e "INFO: Using python: $english_name ($PWD) as PATH=$PATH ${configure_env}\n ${configure_command[*]} $configure_options" >>"$LOG_FILE"
+		echo -e "INFO: Using python:\n  PATH=$PATH\n  PKG_CONFIG_PATH=$PKG_CONFIG_PATH\n  CFLAGS:$CFLAGS\n  CXXFLAGS:$CXXFLAGS\n  CPPFLAGS:$CPPFLAGS\n  LDFLAGS:$LDFLAGS\n  $english_name ($PWD) as PATH=$PATH ${configure_env}\n ${configure_command[*]} $configure_options" >>"$LOG_FILE"
 		# shellcheck disable=SC1078,SC2086
 		eval "${configure_command[*]} $configure_options" > >(redirect_output) 2>&1 || exit_message 1 "could not run configure ${configure_command[*]}"
 		create_touch_file 0 "$touch_name"
@@ -1415,7 +1438,7 @@ do_cargo_build() {
 	fi
 	if [ ! -f "$touch_name" ]; then
     remove_path -f "${touch_prefix}_cargo_build"* # reset
-		echo -e "INFO: Running cargo build with:\n  RUSTFLAGS=$RUSTFLAGS\n  \"cargo build --target $rust_target $extra_build_args\"" >>"$LOG_FILE"
+		echo -e "INFO: Running cargo build with:\n  RUSTFLAGS=$RUSTFLAGS\n  PATH=$PATH\n  PKG_CONFIG_PATH=$PKG_CONFIG_PATH\n  CFLAGS:$CFLAGS\n  CXXFLAGS:$CXXFLAGS\n  CPPFLAGS:$CPPFLAGS\n  LDFLAGS:$LDFLAGS\n  \"cargo build --target $rust_target $extra_build_args\"" >>"$LOG_FILE"
     rustup target add $rust_target > >(redirect_output) 2>&1
 		cargo build --target "$rust_target" $extra_build_args > >(redirect_output) 2>&1 || {
 			exit_message 1 "failed cargo build with $extra_build_args\n see $LOG_FILE for more details"
@@ -1442,7 +1465,7 @@ do_cargo_install() {
 	if [ ! -f "$touch_name" ]; then
     remove_path -f "${touch_prefix}_cargo_install"* # reset
 		echo -e "INFO: Running cargo install cargo-c" >>"$LOG_FILE"
-    echo -e "INFO: Running cargo cinstall with:\n  RUSTFLAGS=$RUSTFLAGS\n  \"cargo cinstall --prefix=$dependency_install_prefix --target $rust_target $extra_install_args\"" >>"$LOG_FILE"
+    echo -e "INFO: Running cargo cinstall with:\n  RUSTFLAGS=$RUSTFLAGS\n  PATH=$PATH\n  PKG_CONFIG_PATH=$PKG_CONFIG_PATH\n  CFLAGS:$CFLAGS\n  CXXFLAGS:$CXXFLAGS\n  CPPFLAGS:$CPPFLAGS\n  LDFLAGS:$LDFLAGS\n  \"cargo cinstall --prefix=$dependency_install_prefix --target $rust_target $extra_install_args\"" >>"$LOG_FILE"
 		cargo cinstall --prefix="$dependency_install_prefix" --target "$rust_target" $extra_install_args > >(redirect_output) 2>&1 || {
 			exit_message 1 "failed cargo cinstall with $extra_install_args\n see $LOG_FILE for more details"
 		}
@@ -1475,7 +1498,7 @@ do_configure() {
 	if [ ! -f "$touch_name" ]; then
     remove_path -f "${touch_prefix}_configure"* # reset
 		# make uninstall # does weird things when run under ffmpeg src so disabled for now...
-		echo -e "INFO: configuring $english_name ($PWD) as $ PKG_CONFIG_PATH=$PKG_CONFIG_PATH PATH=$PATH $configure_name $configure_options" >>"$LOG_FILE" # say it now in case bootstrap fails etc.
+		echo -e "INFO: configuring $english_name ($PWD) $configure_name $configure_options" >>"$LOG_FILE" # say it now in case bootstrap fails etc.
 		echo -e "INFO: all touch files" "already_configured$touch_postfix*" touchname= "$touch_name" >>"$LOG_FILE"
 		echo -e "INFO: config options $configure_name $configure_options" >>"$LOG_FILE"
     if [ -f bootstrap ]; then
@@ -1499,7 +1522,7 @@ do_configure() {
 			autoreconf_library # a handful of them require this to create ./configure :|
 		fi
 		chmod -R u+rwx "$configure_name" # In non-windows environments, with devcontainers, the configuration file doesn't have execution permissions
-		echo -e "INFO: do_configure() PATH=$PATH\n PKG_CONFIG_PATH=$PKG_CONFIG_PATH nice running: \"$configure_name $configure_options\"" >>"$LOG_FILE"
+		echo -e "INFO: do_configure() PATH=$PATH\n PKG_CONFIG_PATH=$PKG_CONFIG_PATH\n  CFLAGS:$CFLAGS\n  CXXFLAGS:$CXXFLAGS\n  CPPFLAGS:$CPPFLAGS\n  LDFLAGS:$LDFLAGS\n nice running: \"$configure_name $configure_options\"" >>"$LOG_FILE"
 		# shellcheck disable=SC2086
 		eval "nice -n 5 $configure_name $configure_options" > >(redirect_output) 2>&1 || {
 			exit_message 1 "failed configure $english_name \n see $(find "$(pwd)" -name "config.log" -print)"
@@ -1554,10 +1577,10 @@ do_make() {
     remove_path -f "${touch_prefix}_make"* # reset
 		echo -e "INFO: Making $cur_dir2 as $ PATH=$PATH make $extra_make_options" >>"$LOG_FILE"
 		if [ ! -f configure ]; then
-			echo -e "INFO: do_make() PATH=$PATH\n nice running: \"make clean -j$(get_concurrent_proc)\"" >>"$LOG_FILE"
+			echo -e "INFO: do_make() nice running: \"make clean -j$(get_concurrent_proc)\"" >>"$LOG_FILE"
 			nice make clean -j"$(get_concurrent_proc)" > >(redirect_output) 2>&1 # just in case helpful if old junk left around and this is a 're make' and wasn't cleaned at reconfigure time
 		fi
-		echo -e "INFO: do_make() PATH=$PATH\n nice running: \"make $extra_make_options\"" >>"$LOG_FILE"
+		echo -e "INFO: do_make()with:\n  PATH=$PATH\n  PKG_CONFIG_PATH=$PKG_CONFIG_PATH\n  CFLAGS:$CFLAGS\n  CXXFLAGS:$CXXFLAGS\n  CPPFLAGS:$CPPFLAGS\n  LDFLAGS:$LDFLAGS\n  nice running: \"make $extra_make_options\"" >>"$LOG_FILE"
 		eval "nice make -j$(get_concurrent_proc) $extra_make_options" > >(redirect_output) 2>&1 || exit_message 1 "could not make with $extra_make_options"
 		create_touch_file 1 "$touch_name" # only touch if the build was OK
 	else
@@ -1594,7 +1617,7 @@ do_make_install() {
 	fi
 	if [ ! -f "$touch_name" ]; then
     remove_path -f "${touch_prefix}_make_install"* # reset
-		echo -e "INFO: do_make_install() PATH=$PATH\n nice running: \"make $make_install_options\"" >>"$LOG_FILE"
+		echo -e "INFO: do_make_install() with:\n  PATH=$PATH\n  PKG_CONFIG_PATH=$PKG_CONFIG_PATH\n  CFLAGS:$CFLAGS\n  CXXFLAGS:$CXXFLAGS\n  CPPFLAGS:$CPPFLAGS\n  LDFLAGS:$LDFLAGS\n  nice running: \"make $make_install_options\"" >>"$LOG_FILE"
 		eval "nice make -j$(get_concurrent_proc) $make_install_options" > >(redirect_output) 2>&1 || exit_message 1 "could not make with $make_install_options"
 		create_touch_file 1 "$touch_name"
 	fi
@@ -1693,14 +1716,14 @@ do_cmake() {
 		local command="${build_from_dir} -DCMAKE_MESSAGE_LOG_LEVEL=ERROR \
 -DCMAKE_FIND_ROOT_PATH=$dependency_install_prefix \
 -DCMAKE_FIND_ROOT_PATH_MODE_PROGRAM=NEVER \
--DCMAKE_FIND_ROOT_PATH_MODE_LIBRARY=ONLY \
--DCMAKE_FIND_ROOT_PATH_MODE_INCLUDE=ONLY \
+-DCMAKE_FIND_ROOT_PATH_MODE_LIBRARY=BOTH \
+-DCMAKE_FIND_ROOT_PATH_MODE_INCLUDE=BOTH \
 -DCMAKE_INSTALL_PREFIX=$dependency_install_prefix $config_options"
 		if [[ $extra_args != *"-DBUILD_STATIC_LIBS="* && $extra_args != *"-DBUILD_SHARED_LIBS="* && $extra_args != *"-DENABLE_SHARED="* && $extra_args != *"-DENABLE_STATIC="* ]]; then
 			command+=" -DBUILD_SHARED_LIBS=0"
 		fi
 		command+=" $extra_args"
-		echo -e "INFO: do_cmake() nice running: \"${cmake_command} -G\"Unix Makefiles\" $command\"" >>"$LOG_FILE"
+		echo -e "INFO: do_cmake() nice running:\n  PATH=$PATH\n  PKG_CONFIG_PATH=$PKG_CONFIG_PATH\n  CFLAGS:$CFLAGS\n  CXXFLAGS:$CXXFLAGS\n  CPPFLAGS:$CPPFLAGS\n  LDFLAGS:$LDFLAGS\n  \"${cmake_command} -G\"Unix Makefiles\" $command\"" >>"$LOG_FILE"
 		# shellcheck disable=SC2086
 		eval "nice -n 5  ${cmake_command} -G\"Unix Makefiles\" $command" > >(redirect_output) 2>&1 || exit_message 1 "could not run nice: \"${cmake_command} -G\"Unix Makefiles\" $command\""
 		create_touch_file 1 "$touch_name"
@@ -1786,7 +1809,7 @@ do_meson() {
 			echo -e "INFO: Adding --reconfigure to meson config because there is an existing previous build" >>"$LOG_FILE"
 			configure_options+=" --reconfigure"
 		fi
-		echo -e "INFO: Using meson: $english_name ($PWD) as PATH=$PATH ${configure_env}\n ${configure_command[*]} $configure_options" >>"$LOG_FILE"
+		echo -e "INFO: Using meson:\n  PATH=$PATH\n  PKG_CONFIG_PATH=$PKG_CONFIG_PATH\n  CFLAGS:$CFLAGS\n  CXXFLAGS:$CXXFLAGS\n  CPPFLAGS:$CPPFLAGS\n  LDFLAGS:$LDFLAGS\n  ${configure_command[*]} $configure_options" >>"$LOG_FILE"
 		#env
 		export MESON_BUILD_ROOT="$(pwd)/build"
 		export MESON_SOURCE_ROOT="$(pwd)"
@@ -1828,7 +1851,7 @@ do_ninja_and_ninja_install() {
 	fi
 	if [ ! -f "$touch_name" ]; then
     remove_path -f "${touch_prefix}_ninja_build_install"* # reset
-		echo -e "INFO: PATH=$PATH\n do_ninja() in $(pwd) ninja running: \"build $extra_make_options\"" >>"$LOG_FILE"
+		echo -e "INFO: do_ninja() with:\n  PATH=$PATH\n  PKG_CONFIG_PATH=$PKG_CONFIG_PATH\n  CFLAGS:$CFLAGS\n  CXXFLAGS:$CXXFLAGS\n  CPPFLAGS:$CPPFLAGS\n  LDFLAGS:$LDFLAGS\n  in $(pwd) ninja running: \"build $extra_make_options\"" >>"$LOG_FILE"
 		ninja -C build install > >(redirect_output) 2>&1 || exit_message 1 "could not do_ninja() in $(pwd) ninja running: \"build $extra_make_options\""
 		create_touch_file 1 "$touch_name"
 	fi
@@ -1848,7 +1871,7 @@ do_ninja() {
 	if [ ! -f "$touch_name" ]; then
     remove_path -f "${touch_prefix}_ninja_build"* # reset
 		echo -e "INFO: ninja-ing $cur_dir2 as PATH=$PATH ninja -C build $extra_make_options" >>"$LOG_FILE"
-		echo -e "INFO: do_ninja() ninja running: \"build $extra_make_options\"" >>"$LOG_FILE"
+		echo -e "INFO: do_ninja() ninja running:\n  PATH=$PATH\n  PKG_CONFIG_PATH=$PKG_CONFIG_PATH\n  CFLAGS:$CFLAGS\n  CXXFLAGS:$CXXFLAGS\n  CPPFLAGS:$CPPFLAGS\n  LDFLAGS:$LDFLAGS\n  \"build $extra_make_options\"" >>"$LOG_FILE"
 		# shellcheck disable=SC2086
 		ninja -C build ${extra_make_options} > >(redirect_output) 2>&1 || exit_message 1 "could not do_ninja() ninja running: \"build $extra_make_options\""
 		create_touch_file 1 "$touch_name" # only touch if the build was OK
