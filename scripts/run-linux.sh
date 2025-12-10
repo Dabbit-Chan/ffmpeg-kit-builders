@@ -2750,21 +2750,49 @@ build_libzmq() {
 build_libzvbi() {
   if [[ $disable_libzvbi != 1 && $enable_libzvbi == 1 ]]; then
   local lib="libzvbi"
-  do_git_checkout https://github.com/zapping-vbi/zvbi zvbi
+  local repo="https://github.com/zapping-vbi/zvbi"
+  local repo_ver="v0.2.44"
+  change_dir "$src_dir"
+  do_git_checkout "$repo" "$lib" "$repo_ver"
+  change_dir "$src_dir/$lib"
+  generic_configure_make_install "--enable-static --disable-shared --disable-dvb --disable-bktr --disable-proxy --disable-nls --without-doxygen --disable-examples --disable-tests --without-libiconv-prefix"
+  change_dir "$src_dir"
   fi
 }
 # build_lv2               # config_options+= --enable-lv2                 # enable LV2 audio filtering [no]
 build_lv2() {
   if [[ $disable_lv2 != 1 && $enable_lv2 == 1 ]]; then
+  activate_meson
   local lib="lv2"
-  # https://github.com/lv2/lv2
+  local repo="https://github.com/lv2/lv2"
+  local repo_ver="v1.18.10"
+  change_dir "$src_dir"
+  do_git_checkout "$repo" "$lib" "$repo_ver"
+  change_dir "$src_dir/$lib"
+  local meson_options="-Dtests=disabled -Ddocs=disabled -Donline_docs=false -Dplugins=disabled"
+  generic_meson "$meson_options"
+  do_ninja_and_ninja_install
+  change_dir "$src_dir"
   fi
 }
 # build_mbedtls           # config_options+= --enable-mbedtls             # enable mbedTLS, needed for https support if openssl, gnutls or libtls is not used [no]
 build_mbedtls() {
   if [[ $disable_mbedtls != 1 && $enable_mbedtls == 1 ]]; then
   local lib="mbedtls"
-  # https://github.com/Mbed-TLS/mbedtls "v3.6.5"
+  local repo="https://github.com/Mbed-TLS/mbedtls"
+  local repo_ver="v3.6.5"
+  change_dir "$src_dir"
+  do_git_checkout "$repo" "$lib" "$repo_ver"
+  change_dir "$src_dir/$lib"
+  local cmake_params="-DCMAKE_INSTALL_PREFIX=${dependency_install_prefix} \
+-DCMAKE_BUILD_TYPE=Release \
+-DENABLE_TESTING=OFF \
+-DENABLE_PROGRAMS=OFF \
+-DUSE_STATIC_MBEDTLS_LIBRARY=ON \
+-DUSE_SHARED_MBEDTLS_LIBRARY=OFF \
+-DMBEDTLS_FATAL_WARNINGS=OFF"
+  do_cmake_and_install "$cmake_params" "$src_dir/$lib"
+  change_dir "$src_dir"
   fi
 }
 # build_openal            # config_options+= --enable-openal              # enable OpenAL 1.1 capture support [no]
