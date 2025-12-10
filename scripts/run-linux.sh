@@ -2984,69 +2984,130 @@ build_whisper() {
 # build_decklink          # config_options+= --enable-decklink            # enable Blackmagic DeckLink I/O support [no]
 build_decklink() {
   if [[ $disable_decklink != 1 && $enable_decklink == 1 ]]; then
+  echo "WARNING: This is a non-gpl library. Binaries including this library are non-redistributable!"
   local lib="decklink"
-  do_git_checkout https://gitlab.com/m-ab-s/decklink-headers decklink-headers 47d84f8d272ca6872b5440eae57609e36014f3b6
+  local repo="https://gitlab.com/m-ab-s/decklink-headers"
+  local repo_ver="40eb094072004d8a8416e3c57721967df8b1d10c"
+	change_dir "$src_dir"
+  do_git_checkout "$repo" "$lib" "$repo_ver"
+  do_make_install "PREFIX=$dependency_install_prefix"
+  change_dir "$src_dir/$lib"
   fi
 }
 # build_libfdk_aac        # config_options+= --enable-libfdk-aac          # enable AAC de/encoding via libfdk-aac [no]
 build_libfdk_aac() {
   if [[ $disable_libfdk_aac != 1 && $enable_libfdk_aac == 1 ]]; then
+  echo "WARNING: This is a non-gpl library. Binaries including this library are non-redistributable!"
   local lib="libfdk_aac"
-  do_git_checkout "https://github.com/mstorsjo/fdk-aac.git" "$checkout_dir"
+  local repo="https://github.com/mstorsjo/fdk-aac"
+  local repo_ver="v2.0.3"
+	change_dir "$src_dir"
+  do_git_checkout "$repo" "$lib" "$repo_ver"
+  change_dir "$src_dir/$lib"
+  generic_configure_make_install
+  change_dir "$src_dir"
   fi
 }
 #region-------------------- non-gpl hardware features ------------------------- 
 # build_cuda_llvm         # config_options+= --disable-cuda-llvm          # disable CUDA compilation using clang [autodetect]
 build_cuda_llvm() {
   if [[ $disable_cuda_llvm != 1 && $enable_cuda_llvm == 1 ]]; then
+  echo "WARNING: This is a non-gpl library. Binaries including this library are non-redistributable!"
   local lib="cuda_llvm"
   fi
 }
 # build_cuvid             # config_options+= --disable-cuvid              # disable Nvidia CUVID support [autodetect]
 build_cuvid() {
-  if [[ $disable_cuvid != 1 && $enable_cuvid == 1 ]]; then
-  do_git_checkout https://github.com/FFmpeg/nv-codec-headers
-  local lib="cuvid"
+  if [[ $disable_cuvid != 1 && $enable_cuvid == 1 ]] || [[ -n "$1" ]]; then
+  echo "WARNING: This is a non-gpl library. Binaries including this library are non-redistributable!"
+  build_nvenc 1
   fi
 }
 # build_ffnvcodec         # config_options+= --disable-ffnvcodec          # disable dynamically linked Nvidia code [autodetect]
 build_ffnvcodec() {
-  if [[ $disable_ffnvcodec != 1 && $enable_ffnvcodec == 1 ]]; then
-  do_git_checkout https://github.com/FFmpeg/nv-codec-headers
-  local lib="ffnvcodec"
+  if [[ $disable_ffnvcodec != 1 && $enable_ffnvcodec == 1 ]] || [[ -n "$1" ]]; then
+  echo "WARNING: This is a non-gpl library. Binaries including this library are non-redistributable!"
+  build_nvenc 1
   fi
 }
 # build_nvdec             # config_options+= --disable-nvdec              # disable Nvidia video decoding acceleration (via hwaccel) [autodetect]
 build_nvdec() {
-  if [[ $disable_nvdec != 1 && $enable_nvdec == 1 ]]; then
-  do_git_checkout https://github.com/FFmpeg/nv-codec-headers
-  local lib="nvdec"
+  if [[ $disable_nvdec != 1 && $enable_nvdec == 1 ]] || [[ -n "$1" ]]; then
+  echo "WARNING: This is a non-gpl library. Binaries including this library are non-redistributable!"
+  build_nvenc 1
   fi
 }
 # build_nvenc             # config_options+= --disable-nvenc              # disable Nvidia video encoding code [autodetect]
 build_nvenc() {
-  if [[ $disable_nvenc != 1 && $enable_nvenc == 1 ]]; then
-  do_git_checkout https://github.com/FFmpeg/nv-codec-headers
+  if [[ $disable_nvenc != 1 && $enable_nvenc == 1 ]] || [[ -n "$1" ]]; then
+  echo "WARNING: This is a non-gpl library. Binaries including this library are non-redistributable!"
   local lib="nvenc"
+  local repo="https://github.com/FFmpeg/nv-codec-headers"
+  local repo_ver="n13.0.19.0"
+	change_dir "$src_dir"
+  do_git_checkout "$repo" "$lib" "$repo_ver"
+  change_dir "$src_dir/$lib"
+  do_make_install "PREFIX=$dependency_install_prefix" # just copies in headers
+  change_dir "$src_dir"
   fi
 }
 # build_vdpau             # config_options+= --disable-vdpau              # disable Nvidia Video Decode and Presentation API for Unix code [autodetect]
 build_vdpau() {
   if [[ $disable_vdpau != 1 && $enable_vdpau == 1 ]]; then
+  echo "WARNING: This is a non-gpl library. Binaries including this library are non-redistributable!"
+  activate_meson
   local lib="vdpau"
-  # https://gitlab.freedesktop.org/vdpau/libvdpau
+  local repo="https://gitlab.freedesktop.org/vdpau/libvdpau"
+  local repo_ver="1.5"
+	change_dir "$src_dir"
+  do_git_checkout "$repo" "$lib" "$repo_ver"
+  change_dir "$src_dir/$lib"
+  local meson_options="-Ddocumentation=false"
+  generic_meson "$meson_options"
+  do_ninja_and_ninja_install
+  change_dir "$src_dir"
   fi
 }
 # build_cuda_nvcc         # config_options+= --enable-cuda-nvcc           # enable Nvidia CUDA compiler [no]
 build_cuda_nvcc() {
   if [[ $disable_cuda_nvcc != 1 && $enable_cuda_nvcc == 1 ]]; then
-  local lib="cuda_nvcc"
-  # https://developer.download.nvidia.com/compute/cuda/redist/
+  echo "WARNING: This is a non-gpl library. Binaries including this library are non-redistributable!"
+    if [[ "$bits_target" != "32" ]]; then
+      local lib="cuda-nvcc"
+      # https://developer.download.nvidia.com/compute/cuda/redist/
+      local repo_ver="13.1.80"
+      local repo="https://developer.download.nvidia.com/compute/cuda/redist/cuda_nvcc/linux-x86_64/cuda_nvcc-linux-x86_64-13.1.80-archive.tar.xz"
+      change_dir "$src_dir"
+      local manifest="$install_pkgconfig_dir/${lib}_manifest"
+      uninstall_manifest "$manifest" > >(redirect_output) 2>&1
+      download_and_unpack_file "$repo" "$lib"
+      change_dir "$src_dir/$lib"
+      echo > "$manifest" && chmod -R u+rwx "$manifest"
+      [[ -d "$src_dir/$lib/bin" ]] && (cp -rfv "$src_dir/$lib/bin"* "$dependency_install_prefix/" 2>/dev/null | sed -n "s/.*' -> '\(.*\)'/\1/p" >> "$manifest"; true)
+      [[ -d "$src_dir/$lib/lib" ]] && (cp -rfv "$src_dir/$lib/lib"* "$dependency_install_prefix/" 2>/dev/null | sed -n "s/.*' -> '\(.*\)'/\1/p" >> "$manifest"; true)
+      [[ -d "$src_dir/$lib/include" ]] && (cp -rfv "$src_dir/$lib/include"* "$dependency_install_prefix/" 2>/dev/null | sed -n "s/.*' -> '\(.*\)'/\1/p" >> "$manifest"; true)
+      [[ -d "$src_dir/$lib/share" ]] && (cp -rfv "$src_dir/$lib/share"* "$dependency_install_prefix/" 2>/dev/null | sed -n "s/.*' -> '\(.*\)'/\1/p" >> "$manifest"; true)
+      cat >> "$dependency_install_prefix/lib/pkgconfig/$lib.pc" << EOF
+prefix=${dependency_install_prefix}
+exec_prefix=\${prefix}
+includedir=\${prefix}/include
+bindir=\${prefix}/bin
+
+Name: Nvidia CUDA compiler
+Description: The NVIDIA CUDA Compiler Driver is a toolchain for compiling CUDA C/C++ programs
+Version: $repo_ver
+Cflags: -I\${includedir}
+EOF
+    echo "$dependency_install_prefix/lib/pkgconfig/$lib.pc" >> "$manifest"
+    else
+      echo -e "WARNING: 32bit not supported" | tee -a "$LOG_FILE"
+    fi
   fi
 }
 # build_libnpp            # config_options+= --enable-libnpp              # enable Nvidia Performance Primitives-based code [no]
 build_libnpp() {
   if [[ $disable_libnpp != 1 && $enable_libnpp == 1 ]]; then
+  echo "WARNING: This is a non-gpl library. Binaries including this library are non-redistributable!"
   local lib="libnpp"
   # https://developer.download.nvidia.com/compute/cuda/redist/
   fi
@@ -3056,6 +3117,7 @@ build_libnpp() {
 # build_mmal              # config_options+= --disable-mmal               # enable Broadcom Multi-Media Abstraction Layer (Raspberry Pi) via MMAL [no]
 build_mmal() {
   if [[ $disable_mmal != 1 && $enable_mmal == 1 ]]; then
+  echo "WARNING: This is a non-gpl library. Binaries including this library are non-redistributable!"
   local lib="mmal"
     # https://github.com/raspberrypi/userland/tree/master/interface/mmal maybe?
 
@@ -3064,6 +3126,7 @@ build_mmal() {
 # build_omx_rpi           # config_options+= --disable-omx-rpi            # enable OpenMAX IL code for Raspberry Pi [no]
 build_omx_rpi() {
   if [[ $disable_omx_rpi != 1 && $enable_omx_rpi == 1 ]]; then
+  echo "WARNING: This is a non-gpl library. Binaries including this library are non-redistributable!"
   local lib="omx_rpi"
     # https://github.com/tizonia/tizonia-openmax-il maybe?
   fi
