@@ -3108,8 +3108,31 @@ EOF
 build_libnpp() {
   if [[ $disable_libnpp != 1 && $enable_libnpp == 1 ]]; then
   echo "WARNING: This is a non-gpl library. Binaries including this library are non-redistributable!"
-  local lib="libnpp"
   # https://developer.download.nvidia.com/compute/cuda/redist/
+    if [[ "$bits_target" != "32" ]]; then
+      local lib="libnpp"
+      local repo_ver="13.0.2.21"
+      local repo="https://developer.download.nvidia.com/compute/cuda/redist/libnpp/linux-x86_64/libnpp-linux-x86_64-13.0.2.21-archive.tar.xz"
+      change_dir "$src_dir"
+      local manifest="$install_pkgconfig_dir/${lib}_manifest"
+      uninstall_manifest "$manifest" > >(redirect_output) 2>&1
+      download_and_unpack_file "$repo" "$lib"
+      change_dir "$src_dir/$lib"
+      for file in "${src_dir}/${lib}/pkg-config/"*.pc; do
+        [[ -e "$file" ]] || continue
+        sed -i "s|cudaroot=.*|cudaroot=${dependency_install_prefix}|g" "$file"
+        sed -i "s|libdir=.*|libdir=\${cudaroot}/lib|g" "$file"
+        sed -i "s|includedir=.*|includedir=\${cudaroot}/include|g" "$file"
+      done
+      echo > "$manifest" && chmod -R u+rwx "$manifest"
+      [[ -d "$src_dir/$lib/bin" ]] && (cp -rfv "$src_dir/$lib/bin"* "$dependency_install_prefix/" 2>/dev/null | sed -n "s/.*' -> '\(.*\)'/\1/p" >> "$manifest"; true)
+      [[ -d "$src_dir/$lib/lib" ]] && (cp -rfv "$src_dir/$lib/lib"* "$dependency_install_prefix/" 2>/dev/null | sed -n "s/.*' -> '\(.*\)'/\1/p" >> "$manifest"; true)
+      [[ -d "$src_dir/$lib/include" ]] && (cp -rfv "$src_dir/$lib/include"* "$dependency_install_prefix/" 2>/dev/null | sed -n "s/.*' -> '\(.*\)'/\1/p" >> "$manifest"; true)
+      [[ -d "$src_dir/$lib/share" ]] && (cp -rfv "$src_dir/$lib/share"* "$dependency_install_prefix/" 2>/dev/null | sed -n "s/.*' -> '\(.*\)'/\1/p" >> "$manifest"; true)
+      [[ -d "$src_dir/$lib/pkg-config" ]] && (cp -rfv "$src_dir/$lib/pkg-config/"* "$dependency_install_prefix/lib/pkgconfig/" 2>/dev/null | sed -n "s/.*' -> '\(.*\)'/\1/p" >> "$manifest"; true)
+    else
+      echo -e "WARNING: 32bit not supported" | tee -a "$LOG_FILE"
+    fi
   fi
 }
 #endregion
