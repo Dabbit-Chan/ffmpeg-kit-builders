@@ -2476,14 +2476,30 @@ build_libuavs3d() {
 build_libvidstab() {
   if [[ $disable_libvidstab != 1 && $enable_libvidstab == 1 ]]; then
   local lib="libvidstab"
-  do_git_checkout https://github.com/georgmartius/vid.stab vid.stab
+  local repo="https://github.com/georgmartius/vid.stab"
+  local repo_ver="v1.1.1"
+  change_dir "$src_dir"
+	do_git_checkout "$repo" "$lib" "$repo_ver"
+  change_dir "$src_dir/$lib"
+  do_cmake_and_install "-DUSE_OMP=0 -DBUILD_SHARED_LIBS=0" # '-DUSE_OMP' is on by default, but somehow libgomp ('cygwin_local_install/lib/gcc/i686-pc-cygwin/5.4.0/include/omp.h') can't be found, so '-DUSE_OMP=0' to prevent a compilation error.
+	change_dir "$src_dir"
   fi
 }
 # build_libvmaf           # config_options+= --enable-libvmaf             # enable vmaf filter via libvmaf [no]
 build_libvmaf() {
   if [[ $disable_libvmaf != 1 && $enable_libvmaf == 1 ]]; then
+  activate_meson
   local lib="libvmaf"
-  do_git_checkout https://github.com/Netflix/vmaf vmaf
+  local repo="https://github.com/Netflix/vmaf"
+  local repo_ver="v3.0.0"
+  change_dir "$src_dir"
+	do_git_checkout "$repo" "$lib" "$repo_ver"
+  change_dir "$src_dir/$lib/libvmaf"
+  local meson_options="-Denable_float=true -Dbuilt_in_models=true -Denable_tests=false -Denable_docs=false"
+	generic_meson "$meson_options"
+	do_ninja_and_ninja_install
+  sed -i.bak "s/Libs: .*/& -lstdc++/" "$PKG_CONFIG_PATH/libvmaf.pc"
+  change_dir "$src_dir"
   fi
 }
 # build_libvorbis         # config_options+= --enable-libvorbis           # enable Vorbis en/decoding via libvorbis, native implementation exists [no]
