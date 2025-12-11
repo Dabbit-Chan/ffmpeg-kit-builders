@@ -351,7 +351,7 @@ setup_build_environment() {
     # Common setup for all platforms
     export src_dir="${WORKDIR}/src"
     export install_pkgconfig_dir="${work_dir}/pkgconfig"
-    export ffmpeg_source_dir="${src_dir}/ffmpeg"
+    export ffmpeg_source_dir=${ffmpeg_source_dir:-"${src_dir}/ffmpeg"}
     export ffmpeg_install_prefix="${work_dir}/$(get_ffmpeg_directory)"
     export ffmpeg_kit_install="${work_dir}/$(get_ffmpeg_kit_directory)"
     export ffmpeg_kit_bundle="${work_dir}/$(get_bundle_directory)"
@@ -2400,15 +2400,16 @@ check_pkg_config_batch() {
 }
 
 download_ffmpeg() {
-	local output_dir="$src_dir/ffmpeg"
+	local output_dir="$ffmpeg_source_dir"
 	local desired_version="$ffmpeg_git_checkout_version"
 
 	if [[ -z $desired_version ]]; then
 		desired_version="master"
 	fi
-
-	do_git_checkout "$ffmpeg_git_checkout" "$output_dir" "$desired_version" || exit_message 1 "could not git $ffmpeg_git_checkout $output_dir $desired_version"
-	ffmpeg_source_dir=$output_dir
+  if ! is_valid_git_dir "$ffmpeg_source_dir"; then
+	  do_git_checkout "$ffmpeg_git_checkout" "$output_dir" "$desired_version" || exit_message 1 "could not git $ffmpeg_git_checkout $output_dir $desired_version"
+    ffmpeg_source_dir=$output_dir
+	fi
 }
 
 
