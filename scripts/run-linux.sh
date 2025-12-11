@@ -78,7 +78,7 @@ build_libusb() {
   change_dir "$src_dir"
 }
 build_sdl12_compat() {
-  build_sdl2
+  build_sdl2 1
   local repo="https://github.com/libsdl-org/sdl12-compat"
   local lib="sdl12-compat"
   local repo_ver="release-1.2.72"
@@ -159,21 +159,21 @@ build_libv4l2() {
 # build_libxcb_shape      # config_options+= --enable-libxcb-shape        # enable X11 grabbing shape rendering [autodetect]
 build_libxcb_shape() {
   if [[ $disable_libxcb_shape != 1 && $enable_libxcb_shape == 1 ]]; then
-    build_libxcb
+    build_libxcb 1
     echo "INFO: libxcb-shape is part of libxcb."
   fi
 }
 # build_libxcb_shm        # config_options+= --enable-libxcb-shm          # enable X11 grabbing shm communication [autodetect]
 build_libxcb_shm() {
   if [[ $disable_libxcb_shm != 1 && $enable_libxcb_shm == 1 ]]; then
-    build_libxcb
+    build_libxcb 1
     echo "INFO: libxcb-shm is part of libxcb."
   fi
 }
 # build_libxcb_xfixes     # config_options+= --enable-libxcb-xfixes       # enable X11 grabbing mouse rendering [autodetect]
 build_libxcb_xfixes() {
   if [[ $disable_libxcb_xfixes != 1 && $enable_libxcb_xfixes == 1 ]]; then
-    build_libxcb
+    build_libxcb 1
     echo "INFO: libxcb-xfixes is part of libxcb."
   fi
 }
@@ -202,7 +202,7 @@ build_libxau() {
 }
 # build_libxcb            # config_options+= --enable-libxcb              # enable X11 grabbing using XCB [autodetect]
 build_libxcb() {
-  if [[ $disable_libxcb != 1 && $enable_libxcb == 1 ]]; then
+  if [[ $disable_libxcb != 1 && $enable_libxcb == 1 ]] || [[ -n "$1" ]]; then
   build_xcbproto
   build_libxau
   # https://gitlab.freedesktop.org/xorg/lib/libxcb
@@ -240,7 +240,7 @@ build_v4l2_m2m() {
 }
 # build_vaapi             # config_options+= --disable-vaapi              # disable Video Acceleration API (mainly Unix/Intel) code [autodetect]
 build_vaapi() {
-  if [[ $disable_vaapi != 1 && $enable_vaapi == 1 ]]; then
+  if [[ $disable_vaapi != 1 && $enable_vaapi == 1 ]] || [[ -n "$1" ]]; then
   activate_meson
   # https://github.com/intel/libva
   local lib="vaapi"
@@ -285,7 +285,7 @@ build_xlib() {
   if [[ $disable_xlib != 1 && $enable_xlib == 1 ]]; then
   build_xorgproto
   build_xtrans
-  build_libxcb
+  build_libxcb 1
   # https://github.com/mirror/libX11
   local lib="xlib"
   local repo="https://github.com/mirror/libX11"
@@ -445,7 +445,7 @@ build_lzma() {
 }
 # build_sdl2              # config_options+= --disable-sdl2               # disable sdl2 [autodetect]
 build_sdl2() {
-  if [[ $disable_sdl2 != 1 ]]; then
+  if [[ $disable_sdl2 != 1 ]] || [[ -n "$1" ]]; then
   local lib="sdl2"
   local repo="https://github.com/libsdl-org/SDL"
   local repo_ver="release-2.32.8"
@@ -939,7 +939,7 @@ build_libflite() {
 build_libfontconfig() {
   if [[ $disable_libfontconfig != 1 && $enable_libfontconfig == 1 ]]; then
   build_libfreetype
-  build_libxml2
+  build_libxml2 1
   local lib="fontconfig"
   local repo="https://gitlab.freedesktop.org/fontconfig/fontconfig"
   local repo_ver="2.17.1"
@@ -1362,7 +1362,7 @@ build_liboapv() {
 # build_libopencv         # config_options+= --enable-libopencv           # enable video filtering via libopencv [no]
 build_libopencv() {
   if [[ $disable_libopencv != 1 && $enable_libopencv == 1 ]]; then
-  build_vaapi
+  build_vaapi 1
   local lib="libopencv"
   local repo="https://github.com/opencv/opencv/"
   local repo_ver="4.12.0"
@@ -1435,8 +1435,8 @@ build_libopenmpt() {
   build_zlib
   build_mpg123
   build_libogg
-  build_libvorbis
-  build_sdl2
+  build_libvorbis 1
+  build_sdl2 1
   build_sdl12_compat
   build_libsndfile
   local lib="libopenmpt"
@@ -1571,7 +1571,7 @@ build_libplacebo() {
 	build_libxxhash
 	build_spirv_cross
 	build_libdovi
-	build_libshaderc
+	build_libshaderc 1
   activate_meson
   local lib="libplacebo"
   local repo="https://code.videolan.org/videolan/libplacebo"
@@ -1849,7 +1849,7 @@ build_librubberband() {
 }
 # build_libshaderc        # config_options+= --enable-libshaderc          # enable GLSL->SPIRV compilation via libshaderc [no]
 build_libshaderc() {
-  if [[ $disable_libshaderc != 1 && $enable_libshaderc == 1 ]]; then
+  if [[ $disable_libshaderc != 1 && $enable_libshaderc == 1 ]] || [[ -n "$1" ]]; then
   local lib="libshaderc"
   local repo="https://github.com/google/shaderc"
   local repo_ver="v2025.5"
@@ -1930,7 +1930,7 @@ build_libspeex() {
 # build_libsrt            # config_options+= --enable-libsrt              # enable Haivision SRT protocol via libsrt [no]
 build_libsrt() {
   if [[ $disable_libsrt != 1 && $enable_libsrt == 1 ]]; then
-  build_openssl
+  build_openssl 1
   local lib="libsrt"
   # do_git_checkout https://github.com/Haivision/srt # might be able to use these days...?
   local repo="https://github.com/Haivision/srt"
@@ -2126,7 +2126,7 @@ build_giflib() {
 build_libleptonica() {
   build_zlib
   build_libpng
-  build_libwebp
+  build_libwebp 1
   build_libjpeg_turbo
   build_libtiff
 	build_giflib
@@ -2222,7 +2222,7 @@ build_curl() {
 	build_brotli
 	build_libpsl
 	build_nghttp2
-  build_openssl
+  build_openssl 1
   local lib="curl"
   local repo="https://github.com/curl/curl"
   local repo_ver="8.17.0"
@@ -2484,7 +2484,7 @@ build_libvmaf() {
 }
 # build_libvorbis         # config_options+= --enable-libvorbis           # enable Vorbis en/decoding via libvorbis, native implementation exists [no]
 build_libvorbis() {
-  if [[ $disable_libvorbis != 1 && $enable_libvorbis == 1 ]]; then
+  if [[ $disable_libvorbis != 1 && $enable_libvorbis == 1 ]] || [[ -n "$1" ]]; then
   build_libogg
   local lib="libvorbis"
   local repo="https://github.com/xiph/vorbis"
@@ -2528,7 +2528,7 @@ build_libvvenc() {
 }
 # build_libwebp           # config_options+= --enable-libwebp             # enable WebP encoding via libwebp [no]
 build_libwebp() {
-  if [[ $disable_libwebp != 1 && $enable_libwebp == 1 ]]; then
+  if [[ $disable_libwebp != 1 && $enable_libwebp == 1 ]] || [[ -n "$1" ]]; then
   build_libpng
   local lib="libwebp"
   local repo="https://chromium.googlesource.com/webm/libwebp"
@@ -2670,7 +2670,7 @@ EOF
 }
 # build_libxml2           # config_options+= --enable-libxml2             # enable XML parsing using the C library libxml2, needed for dash and imf demuxing support [no]
 build_libxml2() {
-  if [[ $disable_libxml2 != 1 && $enable_libxml2 == 1 ]]; then
+  if [[ $disable_libxml2 != 1 && $enable_libxml2 == 1 ]] || [[ -n "$1" ]]; then
   build_iconv
   local lib="libxml2"
   local repo="https://gitlab.gnome.org/GNOME/libxml2"
@@ -2716,7 +2716,7 @@ EOF
 }
 # build_libzimg           # config_options+= --enable-libzimg             # enable z.lib, needed for zscale filter [no]
 build_libzimg() {
-  if [[ $disable_libzimg != 1 && $enable_libzimg == 1 ]]; then
+  if [[ $disable_libzimg != 1 && $enable_libzimg == 1 ]] || [[ -n "$1" ]]; then
   local lib="libzimg"
   local repo="https://github.com/sekrit-twc/zimg"
   local repo_ver="v3.0.6"
@@ -2913,7 +2913,7 @@ build_opengl() {
 }
 # build_openssl           # config_options+= --enable-openssl             # enable openssl, needed for https support if gnutls, libtls or mbedtls is not used [no]
 build_openssl() {
-  if [[ $disable_openssl != 1 && $enable_openssl == 1 ]]; then
+  if [[ $disable_openssl != 1 && $enable_openssl == 1 ]] || [[ -n "$1" ]]; then
   local lib="openssl"
   # https://github.com/openssl/openssl 
   local repo="https://github.com/openssl/openssl"
@@ -2943,7 +2943,7 @@ build_pocketsphinx() {
 # build_vapoursynth       # config_options+= --enable-vapoursynth         # enable VapourSynth demuxer [no]
 build_vapoursynth() {
   if [[ $disable_vapoursynth != 1 && $enable_vapoursynth == 1 ]]; then
-  build_libzimg
+  build_libzimg 1
   activate_meson
   local lib="vapoursynth"
   local repo="https://github.com/vapoursynth/vapoursynth"
@@ -3018,21 +3018,21 @@ build_cuda_llvm() {
 }
 # build_cuvid             # config_options+= --disable-cuvid              # disable Nvidia CUVID support [autodetect]
 build_cuvid() {
-  if [[ $disable_cuvid != 1 && $enable_cuvid == 1 ]] || [[ -n "$1" ]]; then
+  if [[ $disable_cuvid != 1 && $enable_cuvid == 1 ]]; then
   echo "WARNING: This is a non-gpl library. Binaries including this library are non-redistributable!"
   build_nvenc 1
   fi
 }
 # build_ffnvcodec         # config_options+= --disable-ffnvcodec          # disable dynamically linked Nvidia code [autodetect]
 build_ffnvcodec() {
-  if [[ $disable_ffnvcodec != 1 && $enable_ffnvcodec == 1 ]] || [[ -n "$1" ]]; then
+  if [[ $disable_ffnvcodec != 1 && $enable_ffnvcodec == 1 ]]; then
   echo "WARNING: This is a non-gpl library. Binaries including this library are non-redistributable!"
   build_nvenc 1
   fi
 }
 # build_nvdec             # config_options+= --disable-nvdec              # disable Nvidia video decoding acceleration (via hwaccel) [autodetect]
 build_nvdec() {
-  if [[ $disable_nvdec != 1 && $enable_nvdec == 1 ]] || [[ -n "$1" ]]; then
+  if [[ $disable_nvdec != 1 && $enable_nvdec == 1 ]]; then
   echo "WARNING: This is a non-gpl library. Binaries including this library are non-redistributable!"
   build_nvenc 1
   fi
