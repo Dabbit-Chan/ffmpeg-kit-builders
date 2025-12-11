@@ -1,53 +1,105 @@
-# Windows Build Process Documentation
+# FFmpeg-Kit Builders
+
+Cross-platform build system for FFmpeg and FFmpegKit supporting Linux and Windows platforms.
 
 ## Overview
 
-This document describes the Windows cross-compilation build system for FFmpeg and FFmpegKit. The system builds Windows binaries (DLLs and executables) on a Linux host using MinGW-w64 cross-compilers, handling the complete build pipeline from toolchain installation through dependency compilation to final bundle creation.
+This repository provides a comprehensive build system for FFmpeg and FFmpegKit that supports multiple platforms and architectures. The system handles the complete build pipeline from toolchain installation through dependency compilation to final bundle creation, with support for both native Linux builds and cross-compilation to Windows from Linux hosts.
+
+## Platform Support
+
+- **Linux**: Native builds for x86_64 and i686 architecture with shared libraries (.so) and static libraries (.a)
+- **Windows**: Cross-compilation from Linux hosts using MinGW-w64 toolchain with shared libraries (.dll) and static mingw libraries (.a). Note that MSVC ABI is not supported.
 
 ## Quick Start
 
 ### Prerequisites
 
-- Linux host (Ubuntu/Debian recommended)
+- Linux host or WSL (Ubuntu/Debian recommended)
 - Minimum 600MB RAM, 2GB+ recommended for parallel builds
 - 285GB available disk space for full build with all dependencies 
 - Basic build tools: git, make, cmake, ninja, meson, pkg-config
 
-### Basic Usage
+### Using the Unified Entry Point
+
+The `runner.sh` script is the unified entry point for all builds. It can be used interactively or with explicit command-line options.
 
 ```bash
-# Build for Windows 64-bit with shared libraries and force rebuild of dependencies
-./windows.sh --compiler-flavors=win64 --enable-shared -f
+# Interactive mode - prompts for platform and architecture
+./runner.sh
 
-# Build only 64-bit static libraries
-./windows.sh --compiler-flavors=win64 --enable-static
+# Non-interactive mode with explicit options
+./runner.sh --host-platform=linux --host-arch=x86_64 --enable-gpl=y
 
-# Build only 64-bit static libraries with chromaprint support
-./windows.sh --compiler-flavors=win64 --enable-static --enable-chromaprint
+# Build for Windows 64-bit with shared libraries
+./runner.sh --host-platform=windows --host-arch=x86_64 --enable-shared
 
-# Build with GPL libraries
-./windows.sh --enable-gpl=y --compiler-flavors=win64
+# Build static libraries for Linux
+./runner.sh --host-platform=linux --host-arch=x86_64 --enable-static
 ```
 
-## Build Architecture
+### Common Build Scenarios
 
-The Windows build system consists of four primary script files implementing a six-phase build pipeline:
+#### Linux Native Builds
+```bash
+# Build for Linux with additional libraries
+./runner.sh --host-platform=linux --host-arch=x86_64 --enable-fontconfig --enable-gpl
 
-1. **windows.sh** - Entry point and argument parsing
-2. **scripts/main-windows.sh** - Build orchestrator and phase coordination  
-3. **scripts/function-windows.sh** - Windows-specific build functions
-4. **scripts/run-windows.sh** - Individual library builders
+# Build static libraries only
+./runner.sh --host-platform=linux --host-arch=x86_64 --enable-static
 
-### Build Phases
+# Build with debug information
+./runner.sh --host-platform=linux --host-arch=x86_64 --debug
+```
+
+#### Windows Cross-Compilation Builds
+```bash
+# Build for Windows 64-bit with shared libraries and force rebuild of dependencies
+./runner.sh --host-platform=windows --host-arch=x86_64 --enable-shared -f
+
+# Build only 64-bit static libraries
+./runner.sh --host-platform=windows --host-arch=x86_64 --enable-static
+
+# Build only 64-bit static libraries with chromaprint support
+./runner.sh --host-platform=windows --host-arch=x86_64 --enable-static --enable-chromaprint
+
+# Build with GPL libraries
+./runner.sh --host-platform=windows --host-arch=x86_64 --enable-gpl=y
+```
+
+## Architecture
+
+This repository implements a three-tier build architecture with platform abstraction.
+
+The architecture consists of:
+1. **Unified Entry Point** - `runner.sh` script that handles platform selection and argument parsing 
+2. **Build Orchestration** - `scripts/main-linux.sh`, `scripts/main-windows.sh` that coordinate build phases
+3. **Execution Primitives** - `scripts/function.sh` and platform-specific extensions that implement common build functions
+4. **Build Execution** - `scripts/run-linux.sh`, `scripts/run-windows.sh` that executes individual library builders
+
+## Repository Structure
+
+- `README.md` - This overview document
+- `runner.sh` - Unified build entry point for all platforms
+- `scripts/` - Shared build orchestration and functions
+  - `main-linux.sh`, `main-windows.sh` - Platform orchestrators
+  - `function.sh` - Cross-platform build primitives
+  - `function-linux.sh`, `function-windows.sh` - Platform-specific extensions
+  - `variable.sh` - Build configuration and targets
+  - `run-linux.sh`, `run-windows.sh` - Individual library builders
+
+## Build Phases
+
+The build system implements a six-phase build pipeline:
 
 | Phase | Function | Purpose |
 |-------|----------|---------|
 | 1 | `setup_build_environment` | Initialize paths, environment variables, architecture settings |
-| 2 | `install_cross_compiler` | Build or verify MinGW-w64 GCC 14 toolchain |
+| 2 | `install_cross_compiler` | Build or verify MinGW-w64 GCC 14 toolchain (Windows only) |
 | 3 | `build_all_ffmpeg_dependencies` | Compile 100+ external libraries sequentially |
 | 4 | `configure_ffmpeg`, `install_ffmpeg` | Configure and build FFmpeg with detected libraries |
 | 5 | `configure_ffmpeg_kit`, `install_ffmpeg_kit` | Build FFmpegKit wrapper library |
-| 6 | `create_windows_bundle` | Aggregate artifacts into relocatable bundle |
+| 6 | `create_*_bundle` | Aggregate artifacts into relocatable bundle |
 
 ## Command-Line Options
 
@@ -59,13 +111,21 @@ The Windows build system consists of four primary script files implementing a si
 | `-v, --version` | - | Display version and exit |
 | `-d, --debug` | - | Build with debug information |
 | `-s, --speed` | - | Optimize for speed instead of size |
-| `-f, --force` | - | Ignore warnings |
+| `-f, --force` | - | Force rebuild of all dependencies |
+
+### Platform Selection Options
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `--host-platform=*|--host=*` | - | Target platform [linux|windows] |
+| `--host-arch=*|--arch=*` | - | Host CPU architecture [i686|x86_64] (32-bit or 64-bit) |
 
 ### Licensing Options
 
 | Option | Default | Description |
 |--------|---------|-------------|
 | `--enable-gpl=` | `n` | Allow building GPL libraries, created libs will be licensed under the GPLv3.0 |
+| `--enable-nonfree\|--nonfree` | - | Build binaries will be non-redistributable |
 
 ### Build Options
 
@@ -74,50 +134,24 @@ The Windows build system consists of four primary script files implementing a si
 | `--ffmpeg-git-checkout-version=` | `release/8.0` | Build a particular version of FFmpeg (e.g., n3.1.1 or a specific git hash) |
 | `--ffmpeg-git-checkout=` | `https://github.com/FFmpeg/FFmpeg.git` | Clone FFmpeg from other repositories |
 | `--ffmpeg-source-dir=` | `[empty]` | Specify the directory of ffmpeg source code. When specified, git will not be used |
-| `--compiler-flavors=\|--flavor=` | - | Target architecture (win32 or win64) |
-| `--cflags=` | `-mtune=generic -O3 -pipe` | Compiler flags (default works on any CPU, see README for options) |
-| `--git-get-latest=` | `y` | Do a git pull for latest code from repositories like FFmpeg (can force a rebuild if changes are detected) |
+| `--cflags=` | `-mtune=generic -O3 -pipe` | Compiler flags (default works on any CPU) |
+| `--git-get-latest=` | `y` | Do a git pull for latest code from repositories like FFmpeg |
 | `--prefer-stable=` | `y` | Build a few libraries from releases instead of git master |
-| `--debug` | - | Make this script print out each line as it executes |
-| `--enable-gpl=` | `y` | Set to n to do an LGPL build |
-| `--get-total-steps\|--get-step-name=` | - | Get dependency steps and step name by index |
 | `--build-only=` | - | Build only specific dependency (0.. or step/library name from get-all-steps) |
 | `--build-from=` | - | Start building dependencies from given step (0.. or step/library name) |
-| `--build-dependencies=` | `y` | Build the ffmpeg dependencies. Disable when dependencies were built once to reduce build time |
 | `--build-dependencies-only=` | `n` | Only build dependency binaries. Will not build app binaries |
 | `--build-ffmpeg-only=` | `n` | Build ffmpeg binaries only |
 | `--build-ffmpeg-kit-only=` | `n` | Build ffmpeg-kit binaries and bundle only |
 | `--enable-static\|--static` | - | Build static ffmpeg and ffmpeg-kit binaries |
 | `--enable-shared\|--shared` | `default` | Build shared ffmpeg and ffmpeg-kit binaries |
-| `--enable-nonfree\|--nonfree` | - | Build binaries will be non-redistributable |
 | `--clean-builds` | - | Clean ffmpeg and ffmpeg-kit builds based on --enable-static/--enable-shared(default) and exit |
 | `--list-libraries` | - | Lists ffmpeg configuration including extra libraries and exit |
 | `--enable-[library name]` | - | Enable extra ffmpeg libraries. Run --list-libraries and see under "External library support" |
 | `--ff-*` | - | Pass additional ffmpeg parameters prefixed by ff-* to ffmpeg configure. No additional checks done |
 
-## Environment Setup
-
-The build system configures architecture-specific paths and toolchain variables:
-
-### Win32 (32-bit)
-```bash
-ARCH=x86
-FULL_ARCH=i686
-host_target=i686-w64-mingw32
-bits_target=32
-```
-
-### Win64 (64-bit)
-```bash
-ARCH=x86-64
-FULL_ARCH=x86_64
-host_target=x86_64-w64-mingw32
-bits_target=64
-```
-
 ## Cross-Compiler Toolchain
 
-The system uses MinGW-w64 GCC 14 toolchain with the following configuration:
+For Windows builds, the system uses MinGW-w64 GCC 14 toolchain with the following configuration:
 
 - GCC version: 14.x (releases/gcc-14)
 - MinGW-w64 headers: master branch
@@ -131,16 +165,18 @@ The toolchain installation typically takes 30+ minutes and produces:
 
 ## Output Bundle Structure
 
-The final Windows bundle contains a complete, relocatable distribution:
+The final bundle contains a complete, relocatable distribution:
 
 ```
-prebuilt/bundle-windows-{arch}/
-├── ffmpeg-kit/
-│   ├── include/          # FFmpeg and FFmpegKit headers
-│   ├── lib/              # DLLs and import libraries
-│   ├── bin/              # Executables (ffmpeg.exe, ffprobe.exe)
-│   ├── pkgconfig/        # Pkg-config files with bundle-relative paths
-│   └── LICENSE/          # All dependency licenses
+prebuilt/
+├── {platform}-{arch}
+│     └──bundle-{platform}-{arch}-{build-type}/
+│         └──ffmpeg-kit/
+│            ├── include/                           # FFmpeg and FFmpegKit headers
+│            ├── lib/                               # Shared libraries (.so) or (.a) and import libraries
+│            ├── bin/                               # Executables (ffmpeg, ffprobe) or (ffmpeg.exe, ffprobe.exe)
+│            ├── pkgconfig/                         # Pkg-config files with bundle-relative paths
+│            └── LICENSE/                           # All dependency licenses
 ```
 
 ## Supported Libraries
@@ -161,28 +197,16 @@ The build system supports 100+ external libraries including:
 - librubberband - Audio time-stretching
 - And more...
 
+For a full list of supported libraries run `--list-libraries`
+
 ## Troubleshooting
 
 ### Common Issues
 
 1. **Insufficient Memory**: Build requires minimum 600MB RAM
-2. **Toolchain Build Fails**: Ensure 30+ minutes available for GCC compilation
+2. **Toolchain Build Fails**: Ensure 30+ minutes available for GCC compilation (Windows builds)
 3. **Missing Dependencies**: Install required build tools on host system
 
 ### Build Logs
 
 All build operations are logged to `build.log` in the repository root.
-
-## Notes
-
-- The build system only supports cross-compilation from Linux to Windows
-- Static and shared builds cannot be mixed in a single build
-- GPL-enabled builds produce GPLv3-licensed binaries
-- Bundle is fully relocatable with no hardcoded absolute paths
-
-## Notes
-
-- Default values are shown in the tables where applicable
-- Options marked with `-` have no default value (they are flags)
-- The `--ff-*` options allow direct passthrough to FFmpeg's configure script but may conflict with other explicit flags
-- Use `--list-libraries` to see all available external libraries that can be enabled with `--enable-[library name]`
