@@ -16,8 +16,6 @@
   "customizations": {
     "vscode": {
       "extensions": [
-        "ms-vscode.vscode-typescript-next",
-        "ms-python.python",
         "shakram02.bash-beautify",
         "rogalmic.bash-debug",
         "mads-hartmann.bash-ide-vscode",
