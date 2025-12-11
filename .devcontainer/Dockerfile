@@ -58,9 +58,6 @@ RUN apt-get update && \
     meson \
     p7zip-full \
     python3-venv \
-    sudo \
-    apt \
-    install \
     binutils \
     llvm \
     lld \
@@ -69,6 +66,7 @@ RUN apt-get update && \
     cython3 \
     zlib1g-dev \
     libglib2.0-dev \
-    libglib2.0-dev-bin
+    libglib2.0-dev-bin && \
     # Cleanup to keep image small
-    && apt-get clean -y && rm -rf /var/lib/apt/lists/*
+    apt-get clean -y && \
+    rm -rf /var/lib/apt/lists/*
