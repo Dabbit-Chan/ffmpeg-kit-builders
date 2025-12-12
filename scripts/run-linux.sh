@@ -2,6 +2,10 @@
 
 # shellcheck disable=SC2317,SC1091,SC1090,SC2120
 
+platform_deps() {
+  echo "INFO: installing platform specific dependencies"
+}
+
 # required for ffmpeg-kit
 build_libjsoncpp() {
   activate_meson

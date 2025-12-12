@@ -9,7 +9,11 @@
 #                        WINDOWS FFMPEG BUILD PRIMARY DEPENDENCIES
 #
 #===============================================================================================
-
+platform_deps() {
+  echo "INFO: installing platform specific dependencies"
+  build_dlfcn
+  build_mingw_std_threads
+}
 build_dlfcn() {
   local repo="https://github.com/dlfcn-win32/dlfcn-win32"
   local lib="dlfcn-win32"
@@ -49,9 +53,12 @@ build_libxavs() {
 #--enable-libdavs2 (from build_libdavs2) - AVS2 video decoding.
 build_libdavs2() {
   if [[ $disable_libdavs2 != 1 && $enable_libdavs2 == 1 ]]; then
+  local repo="https://github.com/pkuvcl/davs2"
+  local lib="libdavs2"
+  local repo_ver="1.7"
 	change_dir "$src_dir"
-	do_git_checkout https://github.com/pkuvcl/davs2
-	change_dir "$src_dir/davs2/build/linux"
+	do_git_checkout "$repo" "$lib" "$repo_ver"
+	change_dir "$src_dir/$lib/build/linux"
 	if [[ $host_target == "i686-w64-mingw32" ]]; then
 		do_configure "--cross-prefix=$cross_prefix --host=$host_target --prefix=$dependency_install_prefix --enable-pic --disable-asm"
 	else
@@ -65,9 +72,12 @@ build_libdavs2() {
 build_libxavs2() {
   if [[ $disable_libxavs2 != 1 && $enable_libxavs2 == 1 ]]; then
 	if [[ $host_target != 'i686-w64-mingw32' ]]; then
-		change_dir "$src_dir"
-		do_git_checkout https://github.com/pkuvcl/xavs2 xavs2
-		change_dir "$src_dir/xavs2"
+    local repo="https://github.com/pkuvcl/xavs2"
+    local lib="libxavs2"
+    local repo_ver="1.4"
+    change_dir "$src_dir"
+    do_git_checkout "$repo" "$lib" "$repo_ver"
+    change_dir "$src_dir/$lib"
 		for file in "${PWD}/build/linux/already_configured"*; do
 			if [[ -e "$file" ]]; then
 				curl "https://github.com/pkuvcl/xavs2/compare/master...1480c1:xavs2:gcc14/pointerconversion.patch" | git apply -v
@@ -82,18 +92,24 @@ build_libxavs2() {
 }
 
 build_mingw_std_threads() {
+  local repo="https://github.com/meganz/mingw-std-threads"
+  local lib="mingw-std-threads"
+  local repo_ver="1.0.0"
 	change_dir "$src_dir"
-	do_git_checkout https://github.com/meganz/mingw-std-threads # it needs std::mutex too :|
-	change_dir "$src_dir/mingw-std-threads"
+	do_git_checkout "$repo" "$lib" "$repo_ver"
+	change_dir "$src_dir/$lib"
 	cp *.h "$dependency_install_prefix/include"
 	change_dir "$src_dir"
 }
 #   --disable-zlib           disable zlib [autodetect]
 build_zlib() {
   if [[ $disable_zlib != 1 ]]; then
+  local repo="https://github.com/madler/zlib"
+  local lib="zlib"
+  local repo_ver="v1.3.1"
 	change_dir "$src_dir"
-	do_git_checkout https://github.com/madler/zlib zlib
-	change_dir "$src_dir/zlib"
+	do_git_checkout "$repo" "$lib" "$repo_ver"
+	change_dir "$src_dir/$lib"
 	local make_options
 	export ARFLAGS=rcs # Native can't take ARFLAGS; https://stackoverflow.com/questions/21396988/zlib-build-not-configuring-properly-with-cross-compiler-ignores-ar
 	# TODO: Allow shared library build
@@ -106,9 +122,12 @@ build_zlib() {
 #--enable-libcaca (from build_libcaca) - Textual display of video.
 build_libcaca() {
   if [[ $disable_libcaca != 1 && $enable_libcaca == 1 ]]; then
-	change_dir "$src_dir"
-	do_git_checkout https://github.com/cacalabs/libcaca libcaca 813baea7a7bc28986e474541dd1080898fac14d7
-	change_dir "$src_dir/libcaca"
+  local lib="libcaca"
+  local repo_ver="v0.99.beta20"
+  local repo="https://github.com/cacalabs/libcaca"
+  change_dir "$src_dir"
+  do_git_checkout "$repo" "$lib" "$repo_ver"
+  change_dir "$src_dir/$lib"
 	apply_patch "file://$PATCHDIR/libcaca_git_stdio-cruft.diff" -p1 # Fix WinXP incompatibility.
 	change_dir "$src_dir/libcaca/caca"
 	sed -i.bak "s/__declspec(dllexport)//g" *.h # get rid of the declspec lines otherwise the build will fail for undefined symbols
@@ -121,9 +140,13 @@ build_libcaca() {
 }
 #   --disable-bzlib          disable bzlib [autodetect]
 build_bzlib() {
+  # https://gitlab.com/bzip2/bzip2
+  local lib="bzip2"
+  local repo="https://sourceware.org/pub/bzip2/bzip2-1.0.8.tar.gz"
+  local repo_ver="bzip2-1.0.8"
 	change_dir "$src_dir"
-	download_and_unpack_file https://sourceware.org/pub/bzip2/bzip2-1.0.8.tar.gz
-	change_dir "$src_dir/bzip2"
+	download_and_unpack_file "$repo" "$lib"
+	change_dir "$src_dir/$lib"
 	apply_patch "file://$PATCHDIR/bzip2-1.0.8_brokenstuff.diff"
 	if [[ ! -f ./libbz2.a ]] || [[ -f $dependency_install_prefix/lib/libbz2.a && ! $(/usr/bin/env md5sum ./libbz2.a) = $(/usr/bin/env md5sum "$dependency_install_prefix"/lib/libbz2.a) ]]; then # Not built or different build installed
 		do_make "libbz2.a $compiler_flags"
@@ -149,9 +172,15 @@ EOF
 #   --disable-lzma           disable lzma [autodetect]
 build_lzma() {
   if [[ $disable_lzma != 1 ]]; then
-	change_dir "$src_dir"
-	download_and_unpack_file https://sourceforge.net/projects/lzmautils/files/xz-5.8.1.tar.xz
-	change_dir "$src_dir/xz-5.8.1"
+	echo "NOTE FROM LZMA DEV: Users of LZMA Utils should 
+  move to XZ Utils. XZ Utils support the legacy 
+  .lzma format used by LZMA Utils, and can also 
+  emulate the command line tools of LZMA Utils."
+  local lib="xz"
+  local repo="https://sourceforge.net/projects/lzmautils/files/xz-5.8.1.tar.xz"
+  change_dir "$src_dir"
+	download_and_unpack_file "$repo" "$lib"
+  change_dir "$src_dir/$lib"
 	generic_configure "--disable-xz --disable-xzdec --disable-lzmadec --disable-lzmainfo --disable-scripts --disable-doc --disable-nls"
 	do_make_and_make_install
 	change_dir "$src_dir"
@@ -160,9 +189,12 @@ build_lzma() {
 #   --disable-iconv          disable iconv [autodetect]
 build_iconv() {
   if [[ $disable_iconv != 1 ]]; then
-	change_dir "$src_dir"
-	download_and_unpack_file https://ftp.gnu.org/pub/gnu/libiconv/libiconv-1.18.tar.gz
-	change_dir "$src_dir/libiconv-1.18"
+	local lib="libiconv"
+  local repo="https://ftp.gnu.org/gnu/libiconv/libiconv-1.18.tar.gz"
+  local repo_ver="v1.18"
+  change_dir "$src_dir"
+	download_and_unpack_file "$repo" "$lib"
+  change_dir "$src_dir/$lib"
 	generic_configure "--disable-nls"
 	do_make "install-lib" # No need for 'do_make_install', because 'install-lib' already has install-instructions.
 	change_dir "$src_dir"

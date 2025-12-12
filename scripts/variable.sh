@@ -41,11 +41,10 @@ export PKG_CONFIG_LIBDIR= # disable pkg-config from finding [and using] normal l
 export original_path=$PATH
 
 export BUILD_STEPS=(
-"build_dlfcn" \
+"platform_deps" \
 "build_libxavs" \
 "build_libdavs2" \
 "build_libxavs2" \
-"build_mingw_std_threads" \
 "build_zlib" \
 "build_libcaca" \
 "build_bzlib" \
