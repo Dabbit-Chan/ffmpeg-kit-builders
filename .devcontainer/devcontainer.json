@@ -1,0 +1,47 @@
+{
+  "name": "ffmpeg-kit-builders",
+  "build": {
+    "dockerfile": "Dockerfile"
+  },
+  "features": {
+    "ghcr.io/devcontainers/features/common-utils:2": {
+      "installZsh": "true",
+      "configureZshAsDefaultShell": "true",
+      "username": "vscode"
+    }
+  },
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "ms-vscode.cpptools",         // Debugging and IntelliSense
+        "ms-vscode.cmake-tools",      // If you use CMake
+        "mesonbuild.mesonbuild",      // Since you asked about Meson earlier
+        "twxs.cmake",                 // Syntax highlighting for CMake
+        "Dart-Code.flutter",          // Official Flutter extension
+        "Dart-Code.dart-code",        // Official Dart extension
+        "eamodio.gitlens",            // Better Git history visualization
+        "editorconfig.editorconfig",  // Standardizes indentation across languages
+        "shakram02.bash-beautify",
+        "rogalmic.bash-debug",
+        "mads-hartmann.bash-ide-vscode",
+        "jeff-hykin.better-shellscript-syntax",
+        "fnando.linter",
+        "remisa.shellman",
+        "tetradresearch.vscode-h2o"
+      ],
+      "settings": {
+        // format on save is crucial for Dart/Rust
+        "editor.formatOnSave": true,
+        "[dart]": {
+          "editor.defaultFormatter": "Dart-Code.dart-code",
+          "editor.rulers": [80]
+        },
+        // Ensure the terminal uses the installed Zsh
+        "terminal.integrated.defaultProfile.linux": "zsh"
+      }
+    }
+  },
+  "forwardPorts": [3000, 8000],
+  "postCreateCommand": "flutter pub get && cargo build && echo 'Container ready!'",
+  "remoteUser": "vscode"
+}

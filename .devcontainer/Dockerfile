@@ -5,9 +5,6 @@ FROM mcr.microsoft.com/devcontainers/base:ubuntu-24.04
 ARG DEBIAN_FRONTEND=noninteractive
 
 # Update and install all requested system packages
-# - build-essential covers: gcc, g++
-# - texinfo covers: makeinfo
-# - xz-utils covers: xz
 RUN apt-get update && \
     apt-get install -qq --no-install-recommends \
     ragel \
@@ -54,7 +51,6 @@ RUN apt-get update && \
     gettext \
     help2man \
     libtool \
-    meson \
     p7zip-full \
     python3-venv \
     binutils \
@@ -66,8 +62,41 @@ RUN apt-get update && \
     libssl-dev \
     zlib1g-dev \
     libglib2.0-dev \
-    libglib2.0-dev-bin && \
-    curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+    libglib2.0-dev-bin \
+    mingw-w64 && \ 
+    # Install Rust
+    curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y && \
+    # Source environment for the CURRENT session to keep running commands
+    . "$HOME/.cargo/env" && \
+    # Add Windows Target
+    rustup target add x86_64-pc-windows-gnu && \
+    # Verify Installation
+    rustc --version && \
+    cargo --version && \
+    # Install cargo-c (Standard compile from source)
+    cargo install cargo-c && \
+    #Install latest meson
+    pip3 install --user meson --break-system-packages && \
     # Cleanup to keep image small
     apt-get clean -y && \
     rm -rf /var/lib/apt/lists/*
+
+# Persist the PATH for future sessions (e.g. when you log in)
+# Note: Since this is a devcontainer base, $HOME is usually /root for the build
+# but users might log in as 'vscode'. If you need Rust for the 'vscode' user,
+# you must switch USER or adjust permissions. Assuming root here:
+ENV PATH="/root/.cargo/bin:${PATH}"
+
+# --- INSTALL FLUTTER ---
+# 1. Install dependencies (already covered by your apt-get, but curl/git/unzip are vital)
+# 2. Clone Flutter to a system directory
+RUN git clone https://github.com/flutter/flutter.git -b stable /usr/local/flutter
+
+# 3. Set permissions so 'vscode' user can use/upgrade it
+RUN chown -R root:users /usr/local/flutter && \
+    chmod -R 775 /usr/local/flutter
+# 4. Add to PATH permanently
+ENV PATH="/usr/local/flutter/bin:${PATH}"
+
+# 5. Mark directory as safe for Git (fixes "dubious ownership" error)
+RUN git config --system --add safe.directory /usr/local/flutter
