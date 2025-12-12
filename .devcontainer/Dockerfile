@@ -49,7 +49,6 @@ RUN apt-get update && \
     python3-setuptools \
     ninja-build \
     autoconf-archive \
-    cargo \
     g++ \
     gcc \
     gettext \
@@ -64,9 +63,11 @@ RUN apt-get update && \
     xutils-dev \
     python3-numpy \
     cython3 \
+    libssl-dev \
     zlib1g-dev \
     libglib2.0-dev \
     libglib2.0-dev-bin && \
+    curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
     # Cleanup to keep image small
     apt-get clean -y && \
     rm -rf /var/lib/apt/lists/*

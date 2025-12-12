@@ -11,9 +11,12 @@
 #===============================================================================================
 
 build_dlfcn() {
+  local repo="https://github.com/dlfcn-win32/dlfcn-win32"
+  local lib="dlfcn-win32"
+  local repo_ver="v1.4.2"
 	change_dir "$src_dir"
-	do_git_checkout https://github.com/dlfcn-win32/dlfcn-win32
-	change_dir "$src_dir/dlfcn-win32"
+	do_git_checkout "$repo" "$lib" "$repo_ver"
+	change_dir "$src_dir/$lib"
 	if [[ ! -f Makefile.bak ]]; then # Change CFLAGS.
 		sed -i.bak "s/-O3/-O2/" Makefile
 	fi
@@ -25,9 +28,12 @@ build_dlfcn() {
 #--enable-libxavs (from build_libxavs) - AVS video encoding.
 build_libxavs() {
   if [[ $disable_libxavs != 1 && $enable_libxavs == 1 ]]; then
+  local repo="https://github.com/Distrotech/xavs"
+  local lib="xavs"
+  local repo_ver="distrotech-xavs-git"
 	change_dir "$src_dir"
-	do_git_checkout https://github.com/Distrotech/xavs xavs
-	change_dir "$src_dir/xavs"
+	do_git_checkout "$repo" "$lib" "$repo_ver"
+	change_dir "$src_dir/$lib"
 	if [[ ! -f Makefile.bak ]]; then
 		sed -i.bak "s/O4/O2/" configure # Change CFLAGS.
 	fi
@@ -43,6 +49,9 @@ build_libxavs() {
 #--enable-libdavs2 (from build_libdavs2) - AVS2 video decoding.
 build_libdavs2() {
   if [[ $disable_libdavs2 != 1 && $enable_libdavs2 == 1 ]]; then
+  local repo=
+  local lib=
+  local repo_ver=
 	change_dir "$src_dir"
 	do_git_checkout https://github.com/pkuvcl/davs2
 	change_dir "$src_dir/davs2/build/linux"
@@ -59,6 +68,9 @@ build_libdavs2() {
 build_libxavs2() {
   if [[ $disable_libxavs2 != 1 && $enable_libxavs2 == 1 ]]; then
 	if [[ $host_target != 'i686-w64-mingw32' ]]; then
+    local repo=
+    local lib=
+    local repo_ver=
 		change_dir "$src_dir"
 		do_git_checkout https://github.com/pkuvcl/xavs2 xavs2
 		change_dir "$src_dir/xavs2"
@@ -76,6 +88,9 @@ build_libxavs2() {
 }
 
 build_mingw_std_threads() {
+  local repo=
+  local lib=
+  local repo_ver=
 	change_dir "$src_dir"
 	do_git_checkout https://github.com/meganz/mingw-std-threads # it needs std::mutex too :|
 	change_dir "$src_dir/mingw-std-threads"
@@ -85,6 +100,9 @@ build_mingw_std_threads() {
 #   --disable-zlib           disable zlib [autodetect]
 build_zlib() {
   if [[ $disable_zlib != 1 ]]; then
+  local repo=
+  local lib=
+  local repo_ver=
 	change_dir "$src_dir"
 	do_git_checkout https://github.com/madler/zlib zlib
 	change_dir "$src_dir/zlib"
