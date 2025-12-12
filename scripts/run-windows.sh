@@ -203,9 +203,12 @@ build_iconv() {
 #   --disable-sdl2           disable sdl2 [autodetect]
 build_sdl2() {
   if [[ $disable_sdl2 != 1 ]]; then
-	change_dir "$src_dir"
-	download_and_unpack_file https://www.libsdl.org/release/SDL2-2.32.10.tar.gz
-	change_dir "$src_dir/SDL2-2.32.10"
+	local lib="sdl2"
+  local repo="https://github.com/libsdl-org/SDL"
+  local repo_ver="release-2.32.8"
+  change_dir "$src_dir"
+	do_git_checkout "$repo" "$lib" "$repo_ver"
+  change_dir "$src_dir/$lib"
 	apply_patch "file://$PATCHDIR/SDL2-2.32.10_lib-only.diff"
 	if [[ ! -f configure.bak ]]; then
 		sed -i.bak "s/ -mwindows//" configure # Allow ffmpeg to output anything to console.
@@ -224,12 +227,10 @@ build_sdl2() {
 #   --disable-amf            disable AMF video encoding code [autodetect]
 build_amf() {
   if [[ $disable_amf != 1 ]]; then
-	change_dir "$src_dir"
-	# was https://github.com/GPUOpen-LibrariesAndSDKs/AMF too big
-	# or https://github.com/DeadSix27/AMF smaller
-	# but even smaller!
-	do_git_checkout https://github.com/GPUOpen-LibrariesAndSDKs/AMF amf_headers
-	change_dir "$src_dir/amf_headers"
+	local lib="amf_headers"
+  local repo="https://github.com/GPUOpen-LibrariesAndSDKs/AMF"
+  do_git_checkout "$repo" "$lib"
+	change_dir "$src_dir/$lib"
 	if [ ! -f "already_installed" ]; then
 		#rm -rf "./Thirdparty" # ?? plus too chatty...
 		if [ ! -d "$dependency_install_prefix/include/AMF" ]; then
@@ -244,10 +245,12 @@ build_amf() {
 #--enable-libvpl (from build_libvpl) - Intel oneVPL (Quick Sync Video) support.
 build_libvpl() {
   if [[ $disable_libvpl != 1 && $enable_libvpl == 1 ]]; then
-	change_dir "$src_dir"
-	# build_intel_qsv_mfx
-	do_git_checkout https://github.com/intel/libvpl libvpl # f8d9891
-	change_dir "$src_dir/libvpl"
+	local lib="libvpl"
+  local repo="https://github.com/intel/libvpl"
+  local repo_ver="v2.15.0"
+  change_dir "$src_dir"
+	do_git_checkout "$repo" "$lib" "$repo_ver"
+  change_dir "$src_dir/$lib"
 	if [ "$bits_target" = "32" ]; then
 		apply_patch "https://raw.githubusercontent.com/msys2/MINGW-packages/master/mingw-w64-libvpl/0003-cmake-fix-32bit-install.patch" -p1
 	fi

@@ -309,8 +309,9 @@ build_amf() {
   if [[ $disable_amf != 1 && $enable_amf == 1 ]]; then
   # was https://github.com/GPUOpen-LibrariesAndSDKs/AMF
   local lib="amf_headers"
-  do_git_checkout https://github.com/GPUOpen-LibrariesAndSDKs/AMF amf_headers
-	change_dir "$src_dir/amf_headers"
+  local repo="https://github.com/GPUOpen-LibrariesAndSDKs/AMF"
+  do_git_checkout "$repo" "$lib"
+	change_dir "$src_dir/$lib"
   local touch_name=$(get_small_touchfile_name "already_installed_${host_name}")
 	if [ ! -f "$touch_name" ]; then
 		if [ ! -d "$dependency_install_prefix/include/AMF" ]; then
