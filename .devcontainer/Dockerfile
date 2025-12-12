@@ -63,7 +63,8 @@ RUN apt-get update && \
     zlib1g-dev \
     libglib2.0-dev \
     libglib2.0-dev-bin \
-    mingw-w64 && \ 
+    shellcheck \
+    mingw-w64 && \
     # Install Rust
     curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y && \
     # Source environment for the CURRENT session to keep running commands
