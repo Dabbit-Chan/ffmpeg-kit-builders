@@ -945,10 +945,10 @@ build_libfontconfig() {
   if [[ $disable_libfontconfig != 1 && $enable_libfontconfig == 1 ]]; then
   build_libfreetype
   build_libxml2 1
+  activate_meson
   local lib="fontconfig"
   local repo="https://gitlab.freedesktop.org/fontconfig/fontconfig"
   local repo_ver="2.17.1"
-  activate_meson
   change_dir "$src_dir"
   do_git_checkout "$repo" "$lib"
   change_dir "$src_dir/$lib"

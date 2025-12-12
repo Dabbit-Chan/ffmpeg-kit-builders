@@ -271,10 +271,13 @@ build_libvpl() {
 # --disable-ffnvcodec      disable dynamically linked Nvidia code [autodetect]
 build_nvenc() {
   if [[ $enable_nvenc == 1 || $enable_cuvid == 1 || $enable_nvdec == 1 || $enable_ffnvcodec == 1 ]]; then
-  echo "WARNING: Including this library will make the binaries non-redistributable"
+  echo "WARNING: This is a non-gpl library. Binaries including this library are non-redistributable!"
+  local lib="nvenc"
+  local repo="https://github.com/FFmpeg/nv-codec-headers"
+  local repo_ver="n13.0.19.0"
 	change_dir "$src_dir"
-	do_git_checkout https://github.com/FFmpeg/nv-codec-headers
-	change_dir "$src_dir/nv-codec-headers"
+  do_git_checkout "$repo" "$lib" "$repo_ver"
+  change_dir "$src_dir/$lib"
 	do_make_install "PREFIX=$dependency_install_prefix" # just copies in headers
 	change_dir "$src_dir"
   else
@@ -295,34 +298,49 @@ build_cuvid() {
 #--enable-libzimg (from build_libzimg) - High-quality zscale scaling filter.
 build_libzimg() {
   if [[ $disable_libzimg != 1 && $enable_libzimg == 1 ]]; then
-	change_dir "$src_dir"
-	do_git_checkout_and_make_install https://github.com/sekrit-twc/zimg zimg
+	local lib="libzimg"
+  local repo="https://github.com/sekrit-twc/zimg"
+  local repo_ver="v3.0.6"
+  change_dir "$src_dir"
+  do_git_checkout "$repo" "$lib" "$repo_ver"
+  change_dir "$src_dir/$lib"
+  generic_configure_make_install "--enable-static \
+--disable-shared \
+--with-pic"
 	change_dir "$src_dir"
 	fi
 }
 #--enable-libopenjpeg (from build_libopenjpeg) - JPEG 2000 support.
 build_libopenjpeg() {
   if [[ $disable_libopenjpeg != 1 && $enable_libopenjpeg == 1 ]]; then
-	change_dir "$src_dir"
-	do_git_checkout https://github.com/uclouvain/openjpeg openjpeg
-	change_dir "$src_dir/openjpeg"
+	local lib="libopenjpeg"
+  local repo="https://github.com/uclouvain/openjpeg"
+  local repo_ver="v2.5.4"
+  change_dir "$src_dir"
+  do_git_checkout "$repo" "$lib" "$repo_ver"
+  change_dir "$src_dir/$lib"
 	do_cmake_and_install "-DCMAKE_CROSSCOMPILING=1 -DOPJ_BIG_ENDIAN=0 -DBUILD_CODEC=0"
 	change_dir "$src_dir"
 	fi
 }
 #--enable-opengl (from build_glew and build_glfw) - OpenGL rendering support.
 build_opengl() {
+  if [[ $disable_opengl != 1 && $enable_opengl == 1 ]]; then
   build_glew
   build_glfw
+  local lib="opengl"
+  fi
 }
 
 build_glew() {
   if [[ $disable_opengl != 1 && $enable_opengl == 1 ]]; then
-	change_dir "$src_dir"
-	download_and_unpack_file https://sourceforge.net/projects/glew/files/glew/2.2.0/glew-2.2.0.tgz glew-2.2.0
-	change_dir "$src_dir/glew-2.2.0/build"
-	local cmake_params=""
-	cmake_params+=" -DWIN32=1"
+	local lib="glew"
+  local repo="https://sourceforge.net/projects/glew/files/glew/2.1.0/glew-2.1.0.tgz/download"
+  local repo_ver="glew-2.2.0"
+  change_dir "$src_dir"
+  download_and_unpack_file "$repo" "$lib"
+  change_dir "$src_dir/$lib/build" 1
+	local cmake_params=" -DWIN32=1"
 	do_cmake_from_build_dir ./cmake "$cmake_params" # "-DWITH_FFMPEG=0 -DOPENCV_GENERATE_PKGCONFIG=1 -DHAVE_DSHOW=0"
 	do_make_and_make_install
 	change_dir "$src_dir"
@@ -331,25 +349,34 @@ build_glew() {
 
 build_glfw() {
   if [[ $disable_opengl != 1 && $enable_opengl == 1 ]]; then
+	local lib="glfw"
+  local repo="https://github.com/glfw/glfw"
+  local repo_ver="3.4"
 	change_dir "$src_dir"
-	download_and_unpack_file https://github.com/glfw/glfw/releases/download/3.4/glfw-3.4.zip glfw-3.4
-	change_dir "$src_dir/glfw-3.4"
+  do_git_checkout "$repo" "$lib" "$repo_ver"
+	change_dir "$src_dir/$lib"
 	do_cmake_and_install "-DGLFW_BUILD_WAYLAND=OFF -DGLFW_BUILD_X11=OFF -DGLFW_BUILD_WIN32=ON"
 	change_dir "$src_dir"
 	fi
 }
 
 build_libpng() {
+	local lib="libpng"
+  local repo_ver="v1.6.53"
+  local repo="https://github.com/glennrp/libpng"
 	change_dir "$src_dir"
-	do_git_checkout_and_make_install https://github.com/glennrp/libpng
+	do_git_checkout_and_make_install "$repo" "$lib" "$repo_ver"
 	change_dir "$src_dir"
 }
 #--enable-libwebp (from build_libwebp) - WebP image encoding.
 build_libwebp() {
   if [[ $disable_libwebp != 1 && $enable_libwebp == 1 ]]; then
-	change_dir "$src_dir"
-	do_git_checkout https://chromium.googlesource.com/webm/libwebp libwebp
-	change_dir "$src_dir/libwebp"
+	local lib="libwebp"
+  local repo="https://chromium.googlesource.com/webm/libwebp"
+  local repo_ver="v1.6.0"
+  change_dir "$src_dir"
+	do_git_checkout "$repo" "$lib" "$repo_ver"
+	change_dir "$src_dir/$lib"
 	# TODO: Allow shared library build
 	export LIBPNG_CONFIG="$dependency_install_prefix/bin/libpng-config --static" # LibPNG somehow doesn't get autodetected.
 	generic_configure "--disable-wic"
@@ -361,9 +388,12 @@ build_libwebp() {
 #--enable-libxml2 (from build_libxml2) - XML parsing for DASH manifests.
 build_libxml2() {
   if [[ $disable_libxml2 != 1 && $enable_libxml2 == 1 ]]; then
-	change_dir "$src_dir"
-	do_git_checkout https://gitlab.gnome.org/GNOME/libxml2 libxml2
-	change_dir "$src_dir/libxml2"
+	local lib="libxml2"
+  local repo="https://gitlab.gnome.org/GNOME/libxml2"
+  local repo_ver="v2.15.1"
+  change_dir "$src_dir"
+  do_git_checkout "$repo" "$lib" "$repo_ver"
+  change_dir "$src_dir/$lib"
 	generic_configure "--with-ftp=no --with-http=no --with-python=no"
 	do_make_and_make_install
 	change_dir "$src_dir"
@@ -371,9 +401,12 @@ build_libxml2() {
 }
 
 build_brotli() {
+	local lib="brotli"
+  local repo="https://github.com/google/brotli"
+  local repo_ver="v1.2.0"
 	change_dir "$src_dir"
-	do_git_checkout https://github.com/google/brotli brotli v1.0.9 # v1.1.0 static headache stay away
-	change_dir "$src_dir/brotli"
+	do_git_checkout "$repo" "$lib" "$repo_ver"
+	change_dir "$src_dir/$lib"
 	if [ ! -f "brotli.exe" ]; then
 		remove_path -f configure
 	fi
@@ -389,9 +422,12 @@ build_brotli() {
 build_libfreetype() {
   if [[ $disable_libfreetype != 1 && $enable_libfreetype == 1 ]]; then
 	activate_meson
-	change_dir "$src_dir"
-	do_git_checkout https://github.com/freetype/freetype freetype
-	change_dir "$src_dir/freetype"
+	local lib="freetype"
+  local repo="https://github.com/freetype/freetype"
+  local repo_ver="VER-2-14-1"
+  change_dir "$src_dir"
+  do_git_checkout "$repo" "$lib" "$repo_ver"
+  change_dir "$src_dir/$lib"
 	local config_options=""
 	if [[ -e $PKG_CONFIG_PATH/harfbuzz.pc ]]; then
 		local config_options+=" -Dharfbuzz=enabled"
@@ -408,11 +444,14 @@ build_libfreetype() {
 #--enable-libharfbuzz (from build_harfbuzz) - Complex text shaping for drawtext.
 build_libharfbuzz() {
   if [[ $disable_libharfbuzz != 1 && $enable_libharfbuzz == 1 ]]; then
-	change_dir "$src_dir"
 	activate_meson
 	build_freetype
-	do_git_checkout https://github.com/harfbuzz/harfbuzz harfbuzz "10.4.0" # 11.0.0 no longer found by ffmpeg via this method, multiple issues, breaks harfbuzz freetype circular depends hack
-	change_dir "$src_dir/harfbuzz"
+	local lib="harfbuzz"
+  local repo_ver="10.4.0"
+  local repo="https://github.com/harfbuzz/harfbuzz"
+  change_dir "$src_dir"
+  do_git_checkout "$repo" "$lib" "$repo_ver" # 11.0.0 no longer found by ffmpeg via this method, multiple issues, breaks harfbuzz freetype circular depends hack
+  change_dir "$src_dir/$lib"
 	if [[ ! -f DUN ]]; then
 		local meson_options="-Dglib=disabled -Dgobject=disabled -Dcairo=disabled -Dicu=disabled -Dtests=disabled -Dintrospection=disabled -Ddocs=disabled"
 		local cross_file=$(get_meson_cross_file)
@@ -430,10 +469,13 @@ build_libharfbuzz() {
 #--enable-libvmaf (from build_libvmaf) - Netflix's VMAF video quality metric filter.
 build_libvmaf() {
   if [[ $disable_libvmaf != 1 && $enable_libvmaf == 1 ]]; then
-	change_dir "$src_dir"
-	do_git_checkout https://github.com/Netflix/vmaf vmaf
-	activate_meson
-	change_dir "$src_dir/vmaf/libvmaf"
+  activate_meson
+	local lib="libvmaf"
+  local repo="https://github.com/Netflix/vmaf"
+  local repo_ver="v3.0.0"
+  change_dir "$src_dir"
+	do_git_checkout "$repo" "$lib" "$repo_ver"
+  change_dir "$src_dir/$lib/libvmaf"
 	local meson_options="-Denable_float=true -Dbuilt_in_models=true -Denable_tests=false -Denable_docs=false"
 	local cross_file=$(get_meson_cross_file)
 	meson_options+=" --cross-file=$cross_file"
@@ -447,9 +489,12 @@ build_libvmaf() {
 build_libfontconfig() {
   if [[ $disable_libfontconfig != 1 && $enable_libfontconfig == 1 ]]; then
 	activate_meson
-	change_dir "$src_dir"
-	do_git_checkout https://gitlab.freedesktop.org/fontconfig/fontconfig fontconfig
-	change_dir "$src_dir/fontconfig"
+	local lib="libaribcaption"
+  local repo_ver="v1.1.1"
+  local repo="https://github.com/xqq/libaribcaption"
+  change_dir "$src_dir"
+  do_git_checkout "$repo" "$lib" "$repo_ver"
+  change_dir "$src_dir/$lib"
 	local meson_options="-Ddoc=disabled -Diconv=enabled -Dxml-backend=libxml2 -Dtests=disabled"
 	local cross_file=$(get_meson_cross_file)
 	meson_options+=" --cross-file=$cross_file"
