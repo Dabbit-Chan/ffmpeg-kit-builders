@@ -49,9 +49,6 @@ build_libxavs() {
 #--enable-libdavs2 (from build_libdavs2) - AVS2 video decoding.
 build_libdavs2() {
   if [[ $disable_libdavs2 != 1 && $enable_libdavs2 == 1 ]]; then
-  local repo=
-  local lib=
-  local repo_ver=
 	change_dir "$src_dir"
 	do_git_checkout https://github.com/pkuvcl/davs2
 	change_dir "$src_dir/davs2/build/linux"
@@ -68,9 +65,6 @@ build_libdavs2() {
 build_libxavs2() {
   if [[ $disable_libxavs2 != 1 && $enable_libxavs2 == 1 ]]; then
 	if [[ $host_target != 'i686-w64-mingw32' ]]; then
-    local repo=
-    local lib=
-    local repo_ver=
 		change_dir "$src_dir"
 		do_git_checkout https://github.com/pkuvcl/xavs2 xavs2
 		change_dir "$src_dir/xavs2"
@@ -88,9 +82,6 @@ build_libxavs2() {
 }
 
 build_mingw_std_threads() {
-  local repo=
-  local lib=
-  local repo_ver=
 	change_dir "$src_dir"
 	do_git_checkout https://github.com/meganz/mingw-std-threads # it needs std::mutex too :|
 	change_dir "$src_dir/mingw-std-threads"
@@ -100,9 +91,6 @@ build_mingw_std_threads() {
 #   --disable-zlib           disable zlib [autodetect]
 build_zlib() {
   if [[ $disable_zlib != 1 ]]; then
-  local repo=
-  local lib=
-  local repo_ver=
 	change_dir "$src_dir"
 	do_git_checkout https://github.com/madler/zlib zlib
 	change_dir "$src_dir/zlib"
