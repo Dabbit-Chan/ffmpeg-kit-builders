@@ -68,8 +68,6 @@ export BUILD_STEPS=(
 "build_libfontconfig" \
 "build_gmp" \
 "build_libnettle" \
-"build_unistring" \
-"build_libidn2" \
 "build_zstd" \
 "build_openssl" \
 "build_gnutls" \
@@ -95,10 +93,8 @@ export BUILD_STEPS=(
 "build_libsoxr" \
 "build_libflite" \
 "build_libsnappy" \
-"build_vamp_plugin" \
 "build_fftw" \
 "build_chromaprint" \
-"build_libsamplerate" \
 "build_librubberband" \
 "build_frei0r" \
 "build_svt_hevc" \

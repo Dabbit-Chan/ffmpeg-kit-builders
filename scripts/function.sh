@@ -3050,3 +3050,57 @@ uninstall_manifest() {
     echo "WARNING: $manifest not found."
   fi
 }
+pick_gpu_support() {
+    if [[ -n $1 ]]; then
+        export gpu_support=$1
+    fi
+    while [[ ! "${gpu_support,,}" =~ ^([1-2]|yes|y|no|n)$ ]]; do
+        # shellcheck disable=SC2199
+        if [[ -n "${unknown_opts[@]}" ]]; then
+            echo -e -n 'Unknown option(s)'
+            for unknown_opt in "${unknown_opts[@]}"; do
+                echo -e -n " '$unknown_opt'"
+            done
+            echo -e ', ignored.'
+            echo
+        fi
+        cat <<'EOF'
+Do you want to enable GPU support for TensorFlow?
+  1. yes
+  2. no [default]
+EOF
+        local timeout=10
+        export gpu_support=""
+        echo -ne 'Input your choice [1-2] (defaulting to "no" in 10 seconds): '
+        for ((i=timeout; i>0; i--)); do
+            if read -r -t 1 gpu_support; then
+                break
+            fi
+            if (( i > 1 )); then
+                echo -ne "\rInput your choice [1-2] (defaulting to \"no\" in $((i-1)) seconds): "
+            else
+                echo -ne "\rInput your choice [1-2] (defaulting to \"no\" in 0 seconds): "
+            fi
+        done
+        
+        # Check if timeout occurred
+        if [[ -z "$gpu_support" ]] && (( i == 0 )); then
+            echo "No input received within 10 seconds. Defaulting to 'no'."
+            export gpu_support="no"
+        fi
+    done
+    case "${gpu_support,,}" in
+        1|yes|y) 
+            export gpu_support="yes"
+            return 0
+            ;;
+        2|no|n|"") 
+            export gpu_support="no"
+            return 1
+            ;;
+        *)
+            echo -e 'Your choice was not valid, please try again.'
+            echo
+            ;;
+    esac
+}

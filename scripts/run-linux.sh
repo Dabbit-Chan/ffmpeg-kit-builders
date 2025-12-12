@@ -504,7 +504,7 @@ build_libvo_amrwbenc() {
 }
 # build_libopencore_amrnb # config_options+= --enable-libopencore-amrnb   # enable AMR-NB de/encoding via libopencore-amrnb [no]
 build_libopencore_amrnb() {
-  if [[ $disable_libopencore_amrnb != 1 && $enable_libopencore_amrnb == 1 ]]; then
+  if [[ $disable_libopencore_amrnb != 1 && $enable_libopencore_amrnb == 1 ]] || [[ -n "$1" ]]; then
   local lib="libopencore_amrnb"
   local repo="https://sourceforge.net/projects/opencore-amr/files/opencore-amr/opencore-amr-0.1.6.tar.gz"
   change_dir "$src_dir"
@@ -516,7 +516,7 @@ build_libopencore_amrnb() {
 build_libopencore_amrwb() {
   if [[ $disable_libopencore_amrwb != 1 && $enable_libopencore_amrwb == 1 ]]; then
   local lib="libopencore_amrwb"
-  build_libopencore_amrnb
+  build_libopencore_amrnb 1
   fi
 }
 # build_liblcevc_dec      # config_options+= --enable-liblcevc-dec        # enable LCEVC decoding via liblcevc-dec [no]
@@ -575,7 +575,7 @@ build_frei0r() {
   local repo_ver="v2.5.1"
   change_dir "$src_dir"
   do_git_checkout "$repo" "$lib" "$repo_dir"
-  change_dir "$src_dir/$lib/build"
+  change_dir "$src_dir/$lib/build" 1
   do_cmake_and_install "-DWITHOUT_OPENCV=1"
   change_dir "$src_dir"
   fi
@@ -612,7 +612,7 @@ build_gmp() {
   local lib="gmp"
   local repo="https://ftp.gnu.org/pub/gnu/gmp/gmp-6.3.0.tar.xz"
   change_dir "$src_dir"
-  download_and_unpack_file https://ftp.gnu.org/pub/gnu/gmp/gmp-6.3.0.tar.xz
+  download_and_unpack_file "$repo" "$lib"
   change_dir "$src_dir/$lib"
   generic_configure_make_install "ABI=$bits_target"
   change_dir "$src_dir"
@@ -755,7 +755,9 @@ build_libass() {
   local lib="libass"
   local repo="https://github.com/libass/libass"
   local repo_ver="0.17.4"
+  change_dir "$src_dir"
   do_git_checkout_and_make_install "$repo" "$lib" "$repo_ver"
+  change_dir "$src_dir"
   fi
 }
 # build_libbluray         # config_options+= --enable-libbluray           # enable BluRay reading using libbluray [no]
@@ -1326,7 +1328,7 @@ build_libmp3lame() {
   local repo="https://sourceforge.net/projects/lame/files/lame/3.100/lame-3.100.tar.gz/download"
   local repo_ver="r6525"
   change_dir "$src_dir"
-  generic_download_and_make_and_install "$repo" "$lib"
+  generic_download_and_make_and_install "$repo" "$lib" "--enable-nasm --enable-libmpg123"
   change_dir "$src_dir"
   fi
 }
@@ -1437,6 +1439,7 @@ build_flac() {
 # build_libopenmpt        # config_options+= --enable-libopenmpt          # enable decoding tracked files via libopenmpt [no]
 build_libopenmpt() {
   if [[ $disable_libopenmpt != 1 && $enable_libopenmpt == 1 ]]; then
+  build_flac
   build_zlib
   build_mpg123
   build_libogg
@@ -2000,60 +2003,6 @@ build_libsvtav1() {
       echo -e "WARNING: 32bit not supported" | tee -a "$LOG_FILE"
     fi
   fi
-}
-pick_gpu_support() {
-    if [[ -n $1 ]]; then
-        export gpu_support=$1
-    fi
-    while [[ ! "${gpu_support,,}" =~ ^([1-2]|yes|y|no|n)$ ]]; do
-        # shellcheck disable=SC2199
-        if [[ -n "${unknown_opts[@]}" ]]; then
-            echo -e -n 'Unknown option(s)'
-            for unknown_opt in "${unknown_opts[@]}"; do
-                echo -e -n " '$unknown_opt'"
-            done
-            echo -e ', ignored.'
-            echo
-        fi
-        cat <<'EOF'
-Do you want to enable GPU support for TensorFlow?
-  1. yes
-  2. no [default]
-EOF
-        local timeout=10
-        export gpu_support=""
-        echo -ne 'Input your choice [1-2] (defaulting to "no" in 10 seconds): '
-        for ((i=timeout; i>0; i--)); do
-            if read -r -t 1 gpu_support; then
-                break
-            fi
-            if (( i > 1 )); then
-                echo -ne "\rInput your choice [1-2] (defaulting to \"no\" in $((i-1)) seconds): "
-            else
-                echo -ne "\rInput your choice [1-2] (defaulting to \"no\" in 0 seconds): "
-            fi
-        done
-        
-        # Check if timeout occurred
-        if [[ -z "$gpu_support" ]] && (( i == 0 )); then
-            echo "No input received within 10 seconds. Defaulting to 'no'."
-            export gpu_support="no"
-        fi
-    done
-    case "${gpu_support,,}" in
-        1|yes|y) 
-            export gpu_support="yes"
-            return 0
-            ;;
-        2|no|n|"") 
-            export gpu_support="no"
-            return 1
-            ;;
-        *)
-            echo -e 'Your choice was not valid, please try again.'
-            echo
-            ;;
-    esac
 }
 # build_libtensorflow     # config_options+= --enable-libtensorflow       # enable TensorFlow as a DNN module backend for DNN based filters like sr [no]
 build_libtensorflow() {

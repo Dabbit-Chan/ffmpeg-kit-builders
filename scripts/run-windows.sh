@@ -13,6 +13,10 @@ platform_deps() {
   echo "INFO: installing platform specific dependencies"
   build_dlfcn
   build_mingw_std_threads
+  # build_unistring
+  # build_libidn2
+  # build_vamp_plugin
+  # build_libsamplerate
 }
 build_dlfcn() {
   local repo="https://github.com/dlfcn-win32/dlfcn-win32"
@@ -508,9 +512,11 @@ build_libfontconfig() {
 #--enable-gmp (from build_gmp) - For RTMPE support.
 build_gmp() {
   if [[ $disable_gmp != 1 && $enable_gmp == 1 ]]; then
-	change_dir "$src_dir"
-	download_and_unpack_file https://ftp.gnu.org/pub/gnu/gmp/gmp-6.3.0.tar.xz
-	change_dir "$src_dir/gmp-6.3.0"
+	local lib="gmp"
+  local repo="https://ftp.gnu.org/pub/gnu/gmp/gmp-6.3.0.tar.xz"
+  change_dir "$src_dir"
+  download_and_unpack_file "$repo" "$lib"
+  change_dir "$src_dir/$lib"
 	export CC_FOR_BUILD=/usr/bin/gcc # WSL seems to need this..
 	export CPP_FOR_BUILD=usr/bin/cpp
 	generic_configure "ABI=$bits_target"
@@ -522,9 +528,11 @@ build_gmp() {
 }
 
 build_libnettle() {
+	local lib="nettle"
+  local repo="https://ftp.gnu.org/gnu/nettle/nettle-3.10.2.tar.gz"
 	change_dir "$src_dir"
-	download_and_unpack_file https://ftp.gnu.org/gnu/nettle/nettle-3.10.2.tar.gz
-	change_dir "$src_dir/nettle-3.10.2"
+	download_and_unpack_file "$repo" "$lib"
+	change_dir "$src_dir/$lib"
 	local config_options="--disable-openssl --disable-documentation" # in case we have both gnutls and openssl, just use gnutls [except that gnutls uses this so...huh?
 	generic_configure "$config_options" # in case we have both gnutls and openssl, just use gnutls [except that gnutls uses this so...huh? https://github.com/rdp/ffmpeg-windows-build-helpers/issues/25#issuecomment-28158515
 	do_make_and_make_install            # What's up with "Configured with: ... --with-gmp=/cygdrive/d/ffmpeg-windows-build-helpers-master/native_build/windows/ffmpeg_local_builds/prebuilt/cross_compilers/pkgs/gmp/gmp-6.1.2-i686" in 'config.log'? Isn't the 'gmp-6.1.2' above being used?
@@ -532,24 +540,31 @@ build_libnettle() {
 }
 
 build_unistring() {
+  local lib="libunistring"
+  local repo="https://ftp.gnu.org/gnu/libunistring/libunistring-1.4.1.tar.gz"
 	change_dir "$src_dir"
-	generic_download_and_make_and_install https://ftp.gnu.org/gnu/libunistring/libunistring-1.4.1.tar.gz
+	generic_download_and_make_and_install "$repo" "$lib"
 	change_dir "$src_dir"
 }
 
 build_libidn2() {
+  local repo="https://ftp.gnu.org/gnu/libidn/libidn2-2.3.8.tar.gz"
+  local lib="libidn2"
 	change_dir "$src_dir"
-	download_and_unpack_file https://ftp.gnu.org/gnu/libidn/libidn2-2.3.8.tar.gz
-	change_dir "$src_dir/libidn2-2.3.8"
+	download_and_unpack_file "$repo" "$lib"
+	change_dir "$src_dir/$lib"
 	generic_configure "--disable-doc --disable-rpath --disable-nls --disable-gtk-doc-html --disable-fast-install"
 	do_make_and_make_install
 	change_dir "$src_dir"
 }
 
 build_zstd() {
+	local lib="zstd"
+  local repo="https://github.com/facebook/zstd"
+  local repo_ver="v1.5.7"
 	change_dir "$src_dir"
-	do_git_checkout https://github.com/facebook/zstd zstd v1.5.7
-	change_dir "$src_dir/zstd"
+	do_git_checkout "$repo" "$lib" "$repo_ver"
+	change_dir "$src_dir/$lib"
 	do_cmake "-S build/cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DZSTD_BUILD_SHARED=OFF -DZSTD_USE_STATIC_RUNTIME=ON -DCMAKE_BUILD_WITH_INSTALL_RPATH=OFF"
 	do_ninja_and_ninja_install
 	change_dir "$src_dir"
@@ -557,9 +572,11 @@ build_zstd() {
 #--enable-gnutls (from build_gnutls) - For HTTPS and other secure protocols.
 build_gnutls() {
   if [[ $disable_gnutls != 1 && $enable_gnutls == 1 ]]; then
-	change_dir "$src_dir"
-	download_and_unpack_file https://www.gnupg.org/ftp/gcrypt/gnutls/v3.8/gnutls-3.8.9.tar.xz # v3.8.10 not found by ffmpeg with identical .pc?
-	change_dir "$src_dir/gnutls-3.8.9"
+	local lib="gnutls"
+  local repo="https://www.gnupg.org/ftp/gcrypt/gnutls/v3.8/gnutls-3.8.9.tar.xz"
+  change_dir "$src_dir"
+  download_and_unpack_file "$repo" "$lib" # v3.8.10 not found by ffmpeg with identical .pc?
+  change_dir "$src_dir/$lib"
 	export CFLAGS="-Wno-int-conversion"
 	local config_options+=" --disable-non-suiteb-curves"
 	generic_configure "--disable-cxx --disable-doc --disable-tools --disable-tests --disable-nls --disable-rpath --disable-libdane --disable-gcc-warnings --disable-code-coverage
@@ -572,7 +589,6 @@ build_gnutls() {
 }
 
 build_curl() {
-	change_dir "$src_dir"
 	build_libssh2
 	build_zstd
 	build_brotli
@@ -580,9 +596,12 @@ build_curl() {
 	build_nghttp2
 	local config_options=""
 	export CPPFLAGS+="$CPPFLAGS -DNGHTTP2_STATICLIB -DPSL_STATIC $config_options"
+	local lib="curl"
+  local repo="https://github.com/curl/curl"
+  local repo_ver="8.17.0"
 	change_dir "$src_dir"
-	do_git_checkout https://github.com/curl/curl curl curl-8_16_0
-	change_dir "$src_dir/curl"
+	do_git_checkout "$repo" "$lib" "$repo_ver"
+	change_dir "$src_dir/$lib"
 	generic_configure "--with-libssh2 --with-libpsl --with-libidn2 --disable-debug --enable-hsts --with-brotli --enable-versioned-symbols --enable-sspi --with-schannel"
 	do_make_and_make_install
 	reset_cppflags
@@ -590,16 +609,25 @@ build_curl() {
 }
 
 build_libogg() {
+	local lib="libogg"
+  local repo="https://github.com/xiph/ogg"
+  local repo_ver="v1.3.6"
 	change_dir "$src_dir"
-	do_git_checkout_and_make_install https://github.com/xiph/ogg
+	do_git_checkout "$repo" "$lib" "$repo_ver"
+  change_dir "$src_dir/$lib/build" 1
+	do_cmake_from_build_dir "$src_dir/$lib" 
+  do_make_and_make_install
 	change_dir "$src_dir"
 }
 #--enable-libvorbis (from build_libvorbis) - Vorbis audio encoding/decoding.
 build_libvorbis() {
   if [[ $disable_libvorbis != 1 && $enable_libvorbis == 1 ]]; then
-	change_dir "$src_dir"
-	do_git_checkout https://github.com/xiph/vorbis
-	change_dir "$src_dir/vorbis"
+	local lib="libvorbis"
+  local repo="https://github.com/xiph/vorbis"
+  local repo_ver="v1.3.7"
+  change_dir "$src_dir"
+	do_git_checkout "$repo" "$lib" "$repo_ver"
+	change_dir "$src_dir/$lib"
 	generic_configure "--disable-docs --disable-examples --disable-oggtest"
 	do_make_and_make_install
 	change_dir "$src_dir"
@@ -608,9 +636,12 @@ build_libvorbis() {
 #--enable-libopus (from build_libopus) - Opus audio encoding/decoding.
 build_libopus() {
   if [[ $disable_libopus != 1 && $enable_libopus == 1 ]]; then
-	change_dir "$src_dir"
-	do_git_checkout https://github.com/xiph/opus opus origin/main
-	change_dir "$src_dir/opus"
+	local lib="libopus"
+  local repo="https://github.com/xiph/opus"
+  local repo_ver="v1.5.2"
+  change_dir "$src_dir"
+  do_git_checkout "$repo" "$lib"
+  change_dir "$src_dir/$lib"
 	generic_configure "--disable-doc --disable-extra-programs --disable-stack-protector"
 	do_make_and_make_install
 	change_dir "$src_dir"
@@ -618,9 +649,12 @@ build_libopus() {
 }
 
 build_libspeexdsp() {
-	change_dir "$src_dir"
-	do_git_checkout https://github.com/xiph/speexdsp
-	change_dir "$src_dir/speexdsp"
+  local lib="libspeexdsp"
+  local repo="https://github.com/xiph/speexdsp"
+  local repo_ver="SpeexDSP-1.2.1"
+  change_dir "$src_dir"
+  do_git_checkout "$repo" "$lib"
+  change_dir "$src_dir/$lib"
 	generic_configure "--disable-examples"
 	do_make_and_make_install
 	change_dir "$src_dir"
@@ -628,9 +662,13 @@ build_libspeexdsp() {
 #--enable-libspeex (from build_libspeex) - Speex speech audio codec.
 build_libspeex() {
   if [[ $disable_libspeex != 1 && $enable_libspeex == 1 ]]; then
-	change_dir "$src_dir"
-	do_git_checkout https://github.com/xiph/speex
-	change_dir "$src_dir/speex"
+  build_libspeexdsp
+	local lib="libspeex"
+  local repo="https://github.com/xiph/speexdsp"
+  local repo_ver="SpeexDSP-1.2.1" 
+  change_dir "$src_dir"
+  do_git_checkout "$repo" "$lib" "$repo_ver"
+	change_dir "$src_dir/$lib"
 	export SPEEXDSP_CFLAGS="-I$dependency_install_prefix/include"
 	export SPEEXDSP_LIBS="-L$dependency_install_prefix/lib -lspeexdsp" # 'configure' somehow can't find SpeexDSP with 'pkg-config'.
 	generic_configure "--disable-binaries"                           # If you do want the libraries, then 'speexdec.exe' needs 'LDFLAGS=-lwinmm'.
@@ -643,9 +681,12 @@ build_libspeex() {
 #--enable-libtheora (from build_libtheora) - Theora video encoding.
 build_libtheora() {
   if [[ $disable_libtheora != 1 && $enable_libtheora == 1 ]]; then
-	change_dir "$src_dir"
-	do_git_checkout https://github.com/xiph/theora
-	change_dir "$src_dir/theora"
+	local lib="libtheora"
+  local repo="https://github.com/xiph/theora"
+  local repo_ver="v1.2.0"
+  change_dir "$src_dir"
+	do_git_checkout "$repo" "$lib" "$repo_ver"
+	change_dir "$src_dir/$lib"
 	generic_configure "--disable-doc --disable-spec --disable-oggtest --disable-vorbistest --disable-examples --disable-asm" # disable asm: avoid [theora @ 0x1043144a0]error in unpack_block_qpis in 64 bit... [OK OS X 64 bit tho...]
 	do_make_and_make_install
 	change_dir "$src_dir"
@@ -653,50 +694,61 @@ build_libtheora() {
 }
 #--enable-libgsm
 build_libgsm() {
-  build_libsndfile  
-}
-build_libsndfile() {
   if [[ $disable_libgsm != 1 && $enable_libgsm == 1 ]]; then
-	change_dir "$src_dir"
-	do_git_checkout https://github.com/libsndfile/libsndfile
-	change_dir "$src_dir/libsndfile"
-	generic_configure "--disable-sqlite --disable-external-libs --disable-full-suite"
-	do_make_and_make_install
-	if [[ ! -f $dependency_install_prefix/lib/libgsm.a ]]; then
+  build_libsndfile
+  local lib="libsndfile"
+  local repo="https://github.com/libsndfile/libsndfile"
+  local repo_ver="1.2.2"
+  change_dir "$src_dir/$lib"
+  if [[ ! -f $dependency_install_prefix/lib/libgsm.a ]]; then
 		install -m644 src/GSM610/gsm.h "$dependency_install_prefix/include/gsm.h" || exit_message 1 "could not install src/GSM610/gsm.h"
 		install -m644 src/GSM610/.libs/libgsm.a "$dependency_install_prefix/lib/libgsm.a" || exit_message 1 "could not install src/GSM610/.libs/libgsm.a"
 	else
 		echo -e "already installed GSM 6.10 ..."
 	fi
+  change_dir "$src_dir"
+  fi
+}
+build_libsndfile() {
+	local lib="libsndfile"
+  local repo="https://github.com/libsndfile/libsndfile"
+  local repo_ver="1.2.2"
 	change_dir "$src_dir"
-	fi
+	do_git_checkout "$repo" "$lib" "$repo_ver"
+	change_dir "$src_dir/$lib"
+	generic_configure "--disable-sqlite --disable-external-libs --disable-full-suite"
+	do_make_and_make_install
+	change_dir "$src_dir"
 }
 
 build_mpg123() {
+	local lib="mpg123"
+  local repo="https://sourceforge.net/projects/mpg123/files/mpg123/1.33.3/mpg123-1.33.3.tar.bz2/download"
+  local repo_ver="r5008"
 	change_dir "$src_dir"
-	do_svn_checkout svn://scm.orgis.org/mpg123/trunk mpg123_svn r5008 # avoid Think again failure
-	change_dir "$src_dir/mpg123_svn"
-	generic_configure_make_install
+	generic_download_and_make_and_install "$repo" "$lib"
 	change_dir "$src_dir"
 }
 #--enable-libmp3lame (from build_lame) - High-quality MP3 audio encoding.
 build_libmp3lame() {
   if [[ $disable_libmp3lame != 1 && $enable_libmp3lame == 1 ]]; then
-	change_dir "$src_dir"
-	do_svn_checkout https://svn.code.sf.net/p/lame/svn/trunk/lame libmp3lame r6525 # anything other than r6525 fails
-	change_dir "$src_dir/libmp3lame"
-	# sed -i.bak '1s/^\xEF\xBB\xBF//' libmp3lame/i386/nasm.h # Remove a UTF-8 BOM that breaks nasm if it's still there; should be fixed in trunk eventually https://sourceforge.net/p/lame/patches/81/
-	generic_configure "--enable-nasm --enable-libmpg123"
-	do_make_and_make_install
+	local lib="libmp3lame"
+  local repo="https://sourceforge.net/projects/lame/files/lame/3.100/lame-3.100.tar.gz/download"
+  local repo_ver="r6525"
+  change_dir "$src_dir"
+  generic_download_and_make_and_install "$repo" "$lib" "--enable-nasm --enable-libmpg123"
 	change_dir "$src_dir"
 	fi
 }
 #--enable-libtwolame (from build_twolame) - MP2 audio encoding.
 build_libtwolame() {
   if [[ $disable_libtwolame != 1 && $enable_libtwolame == 1 ]]; then
-	change_dir "$src_dir"
-	do_git_checkout https://github.com/njh/twolame twolame "origin/main"
-	change_dir "$src_dir/twolame"
+	local lib="libtwolame"
+  local repo="https://github.com/njh/twolame"
+  local repo_ver="0.4.0"
+  change_dir "$src_dir"
+	do_git_checkout "$repo" "$lib" "$repo_ver"
+	change_dir "$src_dir/$lib"
 	if [[ ! -f Makefile.am.bak ]]; then # Library only, front end refuses to build for some reason with git master
 		sed -i.bak "/^SUBDIRS/s/ frontend.*//" Makefile.am || exit_message 1 "could not update makefile for twolame"
 	fi
@@ -706,13 +758,36 @@ build_libtwolame() {
 	change_dir "$src_dir"
 	fi
 }
+build_sdl12_compat() {
+  build_sdl2 1
+  local repo="https://github.com/libsdl-org/sdl12-compat"
+  local lib="sdl12-compat"
+  local repo_ver="release-1.2.72"
+  change_dir "$src_dir"
+	do_git_checkout "$repo" "$lib" "$repo_ver"
+  change_dir "$src_dir/$lib"
+  do_cmake_and_install "-DCMAKE_EXE_LINKER_FLAGS=\"-lm\" -DSDL12TESTS=OFF"
+  change_dir "$src_dir"
+}
 #--enable-libopenmpt (from build_openmpt) - OpenMPT tracker music library.
 build_libopenmpt() {
   if [[ $disable_libopenmpt != 1 && $enable_libopenmpt == 1 ]]; then
 	build_flac
-	change_dir "$src_dir"
-	do_git_checkout https://github.com/OpenMPT/openmpt openmpt # OpenMPT-1.30
-	change_dir "$src_dir/openmpt"
+  build_zlib
+  build_mpg123
+  build_libogg
+  build_libvorbis 1
+  build_sdl2 1
+  build_sdl12_compat
+  build_libsndfile
+	local lib="libopenmpt"
+  #local repo="https://github.com/OpenMPT/openmpt" # doesnt work from git for some reason
+  local repo="https://lib.openmpt.org/files/libopenmpt/src/libopenmpt-0.8.3+release.autotools.tar.gz"
+  local repo_ver="libopenmpt-0.8.3"
+  change_dir "$src_dir"
+  download_and_unpack_file "$repo" "$lib"
+  #do_git_checkout "$repo" "$lib" "$repo_ver"
+  change_dir "$src_dir/$lib"
 	# TODO: Allow shared library build
 	do_make_and_make_install "PREFIX=$dependency_install_prefix CONFIG=mingw64-win64 EXESUFFIX=.exe SOSUFFIX=.dll SOSUFFIXWINDOWS=1 DYNLINK=0 SHARED_LIB=0 STATIC_LIB=1 
       SHARED_SONAME=0 IS_CROSS=1 NO_ZLIB=0 NO_LTDL=0 NO_DL=0 NO_MPG123=0 NO_OGG=0 NO_VORBIS=0 NO_VORBISFILE=0 NO_PORTAUDIO=1 NO_PORTAUDIOCPP=1 NO_PULSEAUDIO=1 NO_SDL=0 
@@ -724,23 +799,27 @@ build_libopenmpt() {
 # --enable-libopencore-amrnb (from build_libopencore) - AMR-NB audio codec.
 # --enable-libopencore-amrwb enable AMR-WB decoding via libopencore-amrwb [no]
 build_libopencore_amrnb() {
-  if [[ $disable_libopencore_amrnb != 1 && $enable_libopencore_amrnb == 1 || $enable_libopencore_amrwb == 1 ]]; then
-	change_dir "$src_dir"
-	generic_download_and_make_and_install https://sourceforge.net/projects/opencore-amr/files/opencore-amr/opencore-amr-0.1.6.tar.gz
+  if [[ $disable_libopencore_amrnb != 1 && $enable_libopencore_amrnb == 1 ]] || [[ -n "$1" ]]; then
+	local lib="libopencore_amrnb"
+  local repo="https://sourceforge.net/projects/opencore-amr/files/opencore-amr/opencore-amr-0.1.6.tar.gz"
+  change_dir "$src_dir"
+  generic_download_and_make_and_install "$repo" "$lib"
 	change_dir "$src_dir"
 	fi
 }
 
 build_libopencore_amrwb() {
-  build_libopencore_amrnb
+  build_libopencore_amrnb 1
 }
 
 #--enable-libilbc (from build_libilbc) - iLBC speech audio codec.
 build_libilbc() {
   if [[ $disable_libilbc != 1 && $enable_libilbc == 1 ]]; then
-	change_dir "$src_dir"
-	do_git_checkout https://github.com/TimothyGu/libilbc libilbc
-	change_dir "$src_dir/libilbc"
+	local lib="libilbc"
+  local repo="https://github.com/TimothyGu/libilbc"
+  local repo_ver="v3.0.4"
+  do_git_checkout "$repo" "$lib" "$repo_ver"
+  change_dir "$src_dir/$lib"
 	do_cmake "-B build -GNinja"
 	do_ninja_and_ninja_install
 	change_dir "$src_dir"
@@ -749,9 +828,11 @@ build_libilbc() {
 #--enable-libmodplug (from build_libmodplug) - ModPlug tracker music library.
 build_libmodplug() {
   if [[ $disable_libmodplug != 1 && $enable_libmodplug == 1 ]]; then
-	change_dir "$src_dir"
-	do_git_checkout https://github.com/Konstanty/libmodplug
-	change_dir "libmodplug"
+	local lib="libmodplug"
+  local repo="https://github.com/Konstanty/libmodplug"
+  change_dir "$src_dir"
+  do_git_checkout "$repo" "$lib"
+  change_dir "$src_dir/$lib"
 	sed -i.bak 's/__declspec(dllexport)//' "$dependency_install_prefix/include/libmodplug/modplug.h" #strip DLL import/export directives
 	sed -i.bak 's/__declspec(dllimport)//' "$dependency_install_prefix/include/libmodplug/modplug.h"
 	generic_configure_make_install # or could use cmake I guess
@@ -762,9 +843,10 @@ build_libmodplug() {
 build_libgme() {
   if [[ $disable_libgme != 1 && $enable_libgme == 1 ]]; then
 	# do_git_checkout https://bitbucket.org/mpyne/game-music-emu
-	change_dir "$src_dir"
-	download_and_unpack_file "https://bitbucket.org/mpyne/game-music-emu/downloads/game-music-emu-0.6.3.tar.xz" "libgme"
-	change_dir "$src_dir/libgme"
+	local lib="libgme"
+  local repo="https://bitbucket.org/mpyne/game-music-emu/downloads/game-music-emu-0.6.3.tar.xz"
+  download_and_unpack_file "$repo" "$lib"
+  change_dir "$src_dir/$lib"
 	do_cmake_and_install "-DENABLE_UBSAN=0"
 	change_dir "$src_dir"
 	fi
@@ -772,10 +854,13 @@ build_libgme() {
 #--enable-libbluray (from build_libbluray) - Reading Blu-ray discs.
 build_libbluray() {
   if [[ $disable_libbluray != 1 && $enable_libbluray == 1 ]]; then
-	change_dir "$src_dir"
-	do_git_checkout https://code.videolan.org/videolan/libbluray
-	activate_meson
-	change_dir "$src_dir/libbluray"
+	local lib="libbluray"
+  local repo="https://code.videolan.org/videolan/libbluray"
+  local repo_ver="1.4.0"
+  activate_meson
+  change_dir "$src_dir"
+  do_git_checkout "$repo" "$lib" "$repo_ver"
+  change_dir "$src_dir/$lib"
 	apply_patch "https://raw.githubusercontent.com/m-ab-s/mabs-patches/master/libbluray/0001-dec-prefix-with-libbluray-for-now.patch" -p1
 	local meson_options="-Denable_examples=false -Dbdj_jar=disabled --wrap-mode=default"
 	local cross_file=$(get_meson_cross_file)
@@ -789,9 +874,13 @@ build_libbluray() {
 #--enable-libbs2b (from build_libbs2b) - Bauer stereophonic-to-binaural DSP.
 build_libbs2b() {
   if [[ $disable_libbs2b != 1 && $enable_libbs2b == 1 ]]; then
-	change_dir "$src_dir"
-	download_and_unpack_file https://downloads.sourceforge.net/project/bs2b/libbs2b/3.1.0/libbs2b-3.1.0.tar.gz
-	change_dir "$src_dir/libbs2b-3.1.0"
+  build_libsndfile
+	local lib="libbs2b"
+  local repo="https://downloads.sourceforge.net/project/bs2b/libbs2b/3.1.0/libbs2b-3.1.0.tar.gz"
+  local repo_ver="3.1.0"
+  change_dir "$src_dir"
+  download_and_unpack_file "$repo" "$lib"
+  change_dir "$src_dir/$lib"
 	apply_patch "file://$PATCHDIR/libbs2b.patch"
 	sed -i.bak "s/AC_FUNC_MALLOC//" configure.ac # #270
 	export LIBS=-lm                              # avoid pow failure linux native
@@ -803,9 +892,12 @@ build_libbs2b() {
 #--enable-libsoxr (from build_libsoxr) - High-quality audio resampling.
 build_libsoxr() {
   if [[ $disable_libsoxr != 1 && $enable_libsoxr == 1 ]]; then
-	change_dir "$src_dir"
-	do_git_checkout https://github.com/chirlu/soxr soxr
-	change_dir "$src_dir/soxr"
+	local lib="libsoxr"
+  local repo="https://github.com/chirlu/soxr"
+  local repo_ver="0.1.3" 
+  change_dir "$src_dir"
+  do_git_checkout "$repo" "$lib" "$repo_ver"
+	change_dir "$src_dir/$lib"
 	do_cmake_and_install "-DWITH_OPENMP=0 -DBUILD_TESTS=0 -DBUILD_EXAMPLES=0"
 	change_dir "$src_dir"
 	fi
@@ -814,9 +906,12 @@ build_libsoxr() {
 #--enable-libflite (from build_libflite) - Flite text-to-speech synthesis.
 build_libflite() {
   if [[ $disable_libflite != 1 && $enable_libflite == 1 ]]; then
-	change_dir "$src_dir"
-	do_git_checkout https://github.com/festvox/flite flite
-	change_dir "$src_dir/flite"
+	local lib="flite"
+  local repo="https://github.com/festvox/flite"
+  local repo_ver="v2.2"
+  change_dir "$src_dir"
+  do_git_checkout "$repo" "$lib" "$repo_ver"
+  change_dir "$src_dir/$lib"
 	apply_patch "file://$PATCHDIR/flite-2.1.0_mingw-w64-fixes.patch"
 	if [[ ! -f main/Makefile.bak ]]; then
 		sed -i.bak "s/cp -pd/cp -p/" main/Makefile # friendlier cp for OS X
@@ -834,9 +929,12 @@ build_libflite() {
 #--enable-libsnappy (from build_libsnappy) - Snappy compression, for hap encoding.
 build_libsnappy() {
   if [[ $disable_libsnappy != 1 && $enable_libsnappy == 1 ]]; then
-	change_dir "$src_dir"
-	do_git_checkout https://github.com/google/snappy snappy # got weird failure once 1.1.8
-	change_dir "$src_dir/snappy"
+	local lib="libsnappy"
+  local repo="https://github.com/google/snappy"
+  local repo_ver="1.2.2" 
+  change_dir "$src_dir"
+  do_git_checkout "$repo" "$lib" "$repo_ver"
+	change_dir "$src_dir/$lib"
 	do_cmake_and_install "-DBUILD_BINARY=OFF -DCMAKE_BUILD_TYPE=Release -DSNAPPY_BUILD_TESTS=OFF -DSNAPPY_BUILD_BENCHMARKS=OFF" # extra params from deadsix27 and from new cMakeLists.txt content
 	remove_path -f "$dependency_install_prefix/lib/libsnappy.dll.a"                                                               # unintall shared :|
 	change_dir "$src_dir"
@@ -864,10 +962,11 @@ build_vamp_plugin() {
 }
 
 build_fftw() {
+	local lib="fftw"
+  local repo="http://fftw.org/fftw-3.3.10.tar.gz"
 	change_dir "$src_dir"
-	download_and_unpack_file http://fftw.org/fftw-3.3.10.tar.gz
-	change_dir "$src_dir/fftw-3.3.10"
-	# TODO: Allow shared library build
+	download_and_unpack_file "$repo" "$lib"
+	change_dir "$src_dir/$lib"
 	generic_configure "--disable-doc --prefix=$dependency_install_prefix --host=$host_target --enable-static --disable-shared"
 	do_make_and_make_install
 	change_dir "$src_dir"
@@ -875,20 +974,25 @@ build_fftw() {
 #--enable-chromaprint (from build_chromaprint) - Audio fingerprinting.
 build_chromaprint() {
   if [[ $disable_chromaprint != 1 && $enable_chromaprint == 1 ]]; then
-	echo -e "$dependency_install_prefix"
 	build_fftw
-	change_dir "$src_dir"
-	do_git_checkout https://github.com/acoustid/chromaprint chromaprint
-	change_dir "$src_dir/chromaprint"
+	local lib="chromaprint"
+  local repo="https://github.com/acoustid/chromaprint"
+  local repo_ver="v1.6.0"
+  change_dir "$src_dir"
+  do_git_checkout "$repo" "$lib" "$repo_ver"
+  change_dir "$src_dir/$lib"
 	do_cmake_and_install "-DCMAKE_BUILD_TYPE=Release -DBUILD_TOOLS=OFF -DBUILD_TESTS=OFF -DFFT_LIB=fftw3 -DCMAKE_TOOLCHAIN_FILE=$(get_generic_cmake_toolchain)"
 	change_dir "$src_dir"
 	fi
 }
 
 build_libsamplerate() {
+  local lib="libsamplerate"
+  local repo="https://github.com/erikd/libsamplerate"
+  local repo_ver="0.2.2"
 	# I think this didn't work with ubuntu 14.04 [too old automake or some odd] :|
 	change_dir "$src_dir"
-	do_git_checkout_and_make_install https://github.com/erikd/libsamplerate
+	do_git_checkout_and_make_install "$repo" "$lib" "$repo_ver"
 	# but OS X can't use 0.1.9 :|
 	# rubberband can use this, but uses speex bundled by default [any difference? who knows!]
 	change_dir "$src_dir"
@@ -896,9 +1000,13 @@ build_libsamplerate() {
 #--enable-librubberband (from build_librubberband) - High-quality audio time-stretching.
 build_librubberband() {
   if [[ $disable_librubberband != 1 && $enable_librubberband == 1 ]]; then
-	change_dir "$src_dir"
-	do_git_checkout https://github.com/breakfastquay/rubberband rubberband 18c06ab8c431854056407c467f4755f761e36a8e
-	change_dir "$src_dir/rubberband"
+	local lib="librubberband"
+  local repo="https://github.com/breakfastquay/rubberband"
+  local repo_ver="v4.0.0"
+  activate_meson
+  change_dir "$src_dir"
+	do_git_checkout "$repo" "$lib" "$repo_ver"
+	change_dir "$src_dir/$lib"
 	apply_patch "file://$PATCHDIR/rubberband_git_static-lib.diff" # create install-static target
 	do_configure "--host=$host_target --prefix=$dependency_install_prefix --disable-ladspa"
 	# TODO: Allow shared library build
@@ -912,9 +1020,12 @@ build_frei0r() {
   if [[ $disable_frei0r != 1 && $enable_frei0r == 1 ]]; then
 	#do_git_checkout https://github.com/dyne/frei0r
 	#cd frei0r
-	change_dir "$src_dir"
-	download_and_unpack_file https://github.com/dyne/frei0r/archive/refs/tags/v2.3.3.tar.gz frei0r-2.3.3
-	change_dir "$src_dir/frei0r-2.3.3"
+	local lib="frei0r"
+  local repo="https://github.com/dyne/frei0r"
+  local repo_ver="v2.5.1"
+  change_dir "$src_dir"
+  do_git_checkout "$repo" "$lib" "$repo_dir"
+  change_dir "$src_dir/$lib/build" 1
 	sed -i.bak 's/-arch i386//' CMakeLists.txt # OS X https://github.com/dyne/frei0r/issues/64
 	do_cmake_and_install "-DWITHOUT_OPENCV=1"  # XXX could look at this more...
 
@@ -944,9 +1055,12 @@ build_libsvtav1() {
   if [[ $disable_libsvtav1 != 1 && $enable_libsvtav1 == 1 ]]; then
 	if [[ "$bits_target" != "32" ]]; then
 		build_cpuinfo
-		change_dir "$src_dir"
-		do_git_checkout https://gitlab.com/AOMediaCodec/SVT-AV1 SVT-AV1
-		change_dir "$src_dir/SVT-AV1"
+		local lib="libsvtav1"
+    local repo="https://gitlab.com/AOMediaCodec/SVT-AV1"
+    local repo_ver="v3.1.2"
+    change_dir "$src_dir"
+    do_git_checkout "$repo" "$lib" "$repo_ver"
+    change_dir "$src_dir/$lib"
 		do_cmake "-B build -GNinja -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=OFF -DUSE_CPUINFO=SYSTEM" # -DSVT_AV1_LTO=OFF if fails try adding this
 		do_ninja_and_ninja_install
 		change_dir "$src_dir"
@@ -956,9 +1070,12 @@ build_libsvtav1() {
 #--enable-libvidstab (from build_vidstab) - Video stabilization filters.
 build_libvidstab() {
   if [[ $disable_libvidstab != 1 && $enable_libvidstab == 1 ]]; then
-	change_dir "$src_dir"
-	do_git_checkout https://github.com/georgmartius/vid.stab vid.stab
-	change_dir "$src_dir/vid.stab"
+	local lib="libvidstab"
+  local repo="https://github.com/georgmartius/vid.stab"
+  local repo_ver="v1.1.1"
+  change_dir "$src_dir"
+	do_git_checkout "$repo" "$lib" "$repo_ver"
+  change_dir "$src_dir/$lib"
 	do_cmake_and_install "-DUSE_OMP=0" # '-DUSE_OMP' is on by default, but somehow libgomp ('cygwin_local_install/lib/gcc/i686-pc-cygwin/5.4.0/include/omp.h') can't be found, so '-DUSE_OMP=0' to prevent a compilation error.
 	change_dir "$src_dir"
 	fi
@@ -966,9 +1083,12 @@ build_libvidstab() {
 #--enable-libmysofa (from build_libmysofa) - Sofalizer filter for HRTF audio.
 build_libmysofa() {
   if [[ $disable_libmysofa != 1 && $enable_libmysofa == 1 ]]; then
-	change_dir "$src_dir"
-	do_git_checkout https://github.com/hoene/libmysofa libmysofa "origin/main"
-	change_dir "$src_dir/libmysofa"
+	local lib="libmysofa"
+  local repo="https://github.com/hoene/libmysofa"
+  local repo_ver="latest"
+  change_dir "$src_dir"
+  do_git_checkout "$repo" "$lib" "$repo_ver"
+  change_dir "$src_dir/$lib"
 	local cmake_params="-DBUILD_TESTS=0"
 	do_cmake "$cmake_params"
 	do_make_and_make_install
@@ -978,10 +1098,12 @@ build_libmysofa() {
 #--enable-decklink (from build_libdecklink) - Blackmagic DeckLink I/O support.
 build_decklink() {
   if [[ $disable_decklink != 1 && $enable_decklink == 1 ]]; then
-  echo "WARNING: Including this library will make the binaries non-redistributable"
+  echo "WARNING: This is a non-gpl library. Binaries including this library are non-redistributable!"
+	local lib="decklink"
+  local repo="https://gitlab.com/m-ab-s/decklink-headers"
+  local repo_ver="40eb094072004d8a8416e3c57721967df8b1d10c"
 	change_dir "$src_dir"
-	do_git_checkout https://gitlab.com/m-ab-s/decklink-headers decklink-headers 47d84f8d272ca6872b5440eae57609e36014f3b6
-	change_dir "$src_dir/decklink-headers"
+  do_git_checkout "$repo" "$lib" "$repo_ver"
 	do_make_install "PREFIX=$dependency_install_prefix"
 	change_dir "$src_dir"
 	fi
@@ -989,9 +1111,12 @@ build_decklink() {
 #--enable-libzvbi (from build_zvbi) - Teletext support.
 build_libzvbi() {
   if [[ $disable_libzvbi != 1 && $enable_libzvbi == 1 ]]; then
-	change_dir "$src_dir"
-	do_git_checkout https://github.com/zapping-vbi/zvbi zvbi
-	change_dir "$src_dir/zvbi"
+	local lib="libzvbi"
+  local repo="https://github.com/zapping-vbi/zvbi"
+  local repo_ver="v0.2.44"
+  change_dir "$src_dir"
+  do_git_checkout "$repo" "$lib" "$repo_ver"
+  change_dir "$src_dir/$lib"
 	generic_configure "--disable-dvb --disable-bktr --disable-proxy --disable-nls --without-doxygen --disable-examples --disable-tests --without-libiconv-prefix"
 	do_make_and_make_install
 	change_dir "$src_dir"
@@ -1000,28 +1125,42 @@ build_libzvbi() {
 #--enable-libfribidi (from build_fribidi) - Bidirectional text support for drawtext.
 build_libfribidi() {
   if [[ $disable_libfribidi != 1 && $enable_libfribidi == 1 ]]; then
-	change_dir "$src_dir"
-	download_and_unpack_file https://github.com/fribidi/fribidi/releases/download/v1.0.16/fribidi-1.0.16.tar.xz # Get c2man errors building from repo
-	change_dir "$src_dir/fribidi-1.0.16"
-	generic_configure "--disable-debug --disable-deprecated --disable-docs"
-	do_make_and_make_install
+	local lib="fribidi"
+  local repo="https://github.com/fribidi/fribidi"
+  local repo_ver="v1.0.16"
+  activate_meson
+  change_dir "$src_dir"
+  do_git_checkout "$repo" "$lib" "$repo_ver"
+  change_dir "$src_dir/$lib"
+	local meson_options="-Ddefault_library=static -Ddeprecated=false -Ddocs=false -Dtests=false"
+  local cross_file=$(get_meson_cross_file)
+	meson_options+=" --cross-file=$cross_file"
+  generic_meson "$meson_options" "setup build"
+  do_ninja_and_ninja_install
 	change_dir "$src_dir"
 	fi
 }
 #--enable-libass (from build_libass) - Advanced subtitle rendering (.ass, .ssa).
 build_libass() {
   if [[ $disable_libass != 1 && $enable_libass == 1 ]]; then
-	change_dir "$src_dir"
-	do_git_checkout_and_make_install https://github.com/libass/libass
-	change_dir "$src_dir"
+	local lib="libass"
+  local repo="https://github.com/libass/libass"
+  local repo_ver="0.17.4"
+  change_dir "$src_dir"
+  do_git_checkout_and_make_install "$repo" "$lib" "$repo_ver"
+  change_dir "$src_dir"
 	fi
 }
 #--enable-libxvid (from build_libxvid) - Xvid (MPEG-4) video encoding.
 build_libxvid() {
   if [[ $disable_libxvid != 1 && $enable_libxvid == 1 ]]; then
-	change_dir "$src_dir"
-	download_and_unpack_file https://downloads.xvid.com/downloads/xvidcore-1.3.7.tar.gz xvidcore
-	change_dir "$src_dir/xvidcore/build/generic"
+	local lib="libxvid"
+  # local repo="https://downloads.xvid.com/downloads/xvidcore-1.3.7.tar.gz"
+  local repo="https://github.com/openkylin/xvidcore"
+  local repo_ver="upstream/1.3.7"
+  change_dir "$src_dir"
+  do_git_checkout "$repo" "$lib" "$repo_ver"
+  change_dir "$src_dir/$lib/build/generic"
 	apply_patch "file://$PATCHDIR/xvidcore-1.3.7_static-lib.patch"
 	do_configure "--host=$host_target --prefix=$dependency_install_prefix" # no static option...
 	do_make_and_make_install
@@ -1032,9 +1171,13 @@ build_libxvid() {
 build_libsrt() {
   if [[ $disable_libsrt != 1 && $enable_libsrt == 1 ]]; then
 	# do_git_checkout https://github.com/Haivision/srt # might be able to use these days...?
-	change_dir "$src_dir"
-	download_and_unpack_file https://github.com/Haivision/srt/archive/v1.5.4.tar.gz srt-1.5.4
-	change_dir "$src_dir/srt-1.5.4"
+	local lib="libsrt"
+  # do_git_checkout https://github.com/Haivision/srt # might be able to use these days...?
+  local repo="https://github.com/Haivision/srt"
+  local repo_ver="v1.5.4" 
+  change_dir "$src_dir"
+  do_git_checkout "$repo" "$lib" "$repo_ver"
+	change_dir "$src_dir/$lib"
 	apply_patch "file://$PATCHDIR/srt.app.patch" -p1
 	# CMake Warning at CMakeLists.txt:893 (message):
 	#   On MinGW, some C++11 apps are blocked due to lacking proper C++11 headers
@@ -1048,10 +1191,12 @@ build_libsrt() {
 build_libaribcaption() {
   if [[ $disable_libaribcaption != 1 && $enable_libaribcaption == 1 ]]; then
 	if [[ $ffmpeg_git_checkout_version != *"n6.0"* ]] && [[ $ffmpeg_git_checkout_version != *"n5"* ]] && [[ $ffmpeg_git_checkout_version != *"n4"* ]] && [[ $ffmpeg_git_checkout_version != *"n3"* ]] && [[ $ffmpeg_git_checkout_version != *"n2"* ]]; then
-		change_dir "$src_dir"
-		do_git_checkout https://github.com/xqq/libaribcaption
-		mkdir libaribcaption/build
-		change_dir "$src_dir/libaribcaption/build"
+		local lib="libaribcaption"
+    local repo_ver="v1.1.1"
+    local repo="https://github.com/xqq/libaribcaption"
+    change_dir "$src_dir"
+    do_git_checkout "$repo" "$lib" "$repo_ver"
+    change_dir "$src_dir/$lib"
 		do_cmake_from_build_dir "$src_dir/libaribcaption" "-DCMAKE_BUILD_TYPE=Release"
 		do_make_and_make_install
 		change_dir "$src_dir"
@@ -1072,9 +1217,12 @@ build_libtesseract() {
 	build_libtiff
 	build_libleptonica
 	build_libarchive
-	change_dir "$src_dir"
-	do_git_checkout https://github.com/tesseract-ocr/tesseract tesseract
-	change_dir "$src_dir/tesseract"
+	local lib="libtesseract"
+  local repo="https://github.com/tesseract-ocr/tesseract"
+  local repo_ver="5.5.1"
+  change_dir "$src_dir"
+	do_git_checkout "$repo" "$lib" "$repo_ver"
+	change_dir "$src_dir/$lib"
 	export CPPFLAGS="$CPPFLAGS -DCURL_STATICLIB"
 	generic_configure "--disable-openmp --with-archive --disable-graphics --disable-tessdata-prefix --with-curl LIBLEPT_HEADERSDIR=$dependency_install_prefix/include --datadir=$dependency_install_prefix/bin"
 	do_make_and_make_install
@@ -1092,9 +1240,12 @@ build_libtesseract() {
 build_liblensfun() {
   if [[ $disable_liblensfun != 1 && $enable_liblensfun == 1 ]]; then
 	build_glib
-	change_dir "$src_dir"
-	do_git_checkout "https://github.com/lensfun/lensfun.git" "lensfun"
-	change_dir "$src_dir/lensfun"
+	local lib="liblensfun"
+  local repo="https://github.com/lensfun/lensfun"
+  local repo_ver="v0.3.4"
+  change_dir "$src_dir"
+  do_git_checkout "$repo" "$lib" "$repo_ver"
+  change_dir "$src_dir/$lib"
 	export CPPFLAGS="$CPPFLAGS -DGLIB_STATIC_COMPILATION"
 	export CXXFLAGS="$CFLAGS -DGLIB_STATIC_COMPILATION"
 	# TODO: Allow shared library build
@@ -1109,26 +1260,54 @@ build_liblensfun() {
 #--enable-libtensorflow (from build_libtensorflow) - TensorFlow support for AI filters.
 build_libtensorflow() {
   if [[ $disable_libtensorflow != 1 && $enable_libtensorflow == 1 ]]; then
+  local lib="libtensorflow"
+  pick_gpu_support
+  if truthy "$gpu_support"; then
+      local repo="https://storage.googleapis.com/tensorflow/libtensorflow/libtensorflow-gpu-windows-x86_64-2.10.0.zip"
+      local subdir="gpu"
+      echo "WARNING: uninstalling cpu libtensorflow if installed." >> "$LOG_FILE"
+      uninstall_manifest "$install_pkgconfig_dir/${lib}_cpu_manifest" > >(redirect_output) 2>&1
+  else
+      local repo="https://storage.googleapis.com/tensorflow/versions/2.18.1/libtensorflow-cpu-windows-x86_64.zip"
+      local subdir="cpu"
+      echo "WARNING: uninstalling gpu libtensorflow if installed." >> "$LOG_FILE"
+      uninstall_manifest "$install_pkgconfig_dir/${lib}_gpu_manifest" > >(redirect_output) 2>&1
+  fi
+  echo "WARNING: sit tight, this may take a while due to the size of this library" | tee -a "$LOG_FILE"
+  # "https://github.com/tensorflow/tensorflow"
+  local manifest="$install_pkgconfig_dir/${lib}_${subdir}_manifest"
+  uninstall_manifest "$manifest" > >(redirect_output) 2>&1
+  change_dir "$src_dir/$lib" 1
+	download_and_unpack_file "$repo" "$src_dir/$lib/$subdir"
+	change_dir "$src_dir/$lib/$subdir"
+  echo > "$manifest" && chmod -R u+rwx "$manifest"
+  cp -rfv "$src_dir/$lib/$subdir/lib"* "$dependency_install_prefix" 2>&1 | sed -n "s/.*' -> '\(.*\)'/\1/p" >> "$manifest"
+  cp -rfv "$src_dir/$lib/$subdir/include"* "$dependency_install_prefix" 2>&1 | sed -n "s/.*' -> '\(.*\)'/\1/p" >> "$manifest"
+  cat >> "$dependency_install_prefix/lib/pkgconfig/tensorflow.pc" << EOF
+prefix=${dependency_install_prefix}
+exec_prefix=\${prefix}
+libdir=\${exec_prefix}/lib
+includedir=\${prefix}/include
+
+Name: tensorflow
+Description: TensorFlow C Library (${subdir})
+Version: 2.18.0
+Libs: -L\${libdir} -ltensorflow -ltensorflow_framework
+Cflags: -I\${includedir}
+EOF
+  echo "$dependency_install_prefix/lib/pkgconfig/tensorflow.pc" >> "$manifest"
 	change_dir "$src_dir"
-	if [[ ! -e Tensorflow ]]; then
-		create_dir "$src_dir/Tensorflow"
-		change_dir "$src_dir/Tensorflow"
-		wget "https://storage.googleapis.com/tensorflow/versions/2.18.1/libtensorflow-cpu-windows-x86_64.zip" # tensorflow.dll required by ffmpeg to run
-		unzip -o "libtensorflow-cpu-windows-x86_64.zip" -d "$dependency_install_prefix"
-		remove_path -f "libtensorflow-cpu-windows-x86_64.zip"
-		change_dir ..
-	else
-		echo -e "Tensorflow already installed"
-	fi
-	change_dir "$src_dir"
-	fi
+  fi
 }
 #--enable-libvpx (from build_libvpx) - VP8/VP9 video encoding/decoding.
 build_libvpx() {
   if [[ $disable_libvpx != 1 && $enable_libvpx == 1 ]]; then
-	change_dir "$src_dir"
-	do_git_checkout https://chromium.googlesource.com/webm/libvpx libvpx "origin/main"
-	change_dir "$src_dir/libvpx"
+	local lib="libvpx"
+  local repo="https://chromium.googlesource.com/webm/libvpx"
+  local repo_ver="v1.15.2"
+  change_dir "$src_dir"
+	do_git_checkout "$repo" "$lib" "$repo_ver"
+  change_dir "$src_dir/$lib"
 	# apply_patch file://$PATCHDIR/vpx_160_semaphore.patch -p1 # perhaps someday can remove this after 1.6.0 or mingw fixes it LOL
 	if [[ "$bits_target" = "32" ]]; then
 		local config_options="--target=x86-win32-gcc"
@@ -1148,7 +1327,7 @@ build_libvpx() {
 build_libx265() {
   if [[ $disable_libx265 != 1 && $enable_libx265 == 1 ]]; then
 	change_dir "$src_dir"
-	local checkout_dir=x265
+	local checkout_dir="libx265"
 	local remote="https://bitbucket.org/multicoreware/x265_git"
 	if [[ -n $x265_git_checkout_version ]]; then
 		checkout_dir+="_$x265_git_checkout_version"
