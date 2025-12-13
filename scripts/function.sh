@@ -2112,8 +2112,8 @@ install_local_dependency() {
   eval "apt-get update && sudo apt-get install -y $*" > >(redirect_output) 2>&1 || exit_message 1 "failed to install required dependencies"
 }
 
-# Usage: convert_msvc_to_mingw <directory_to_scan> <toolchain_prefix> <output_pc_file>
-# Example: convert_msvc_to_mingw -t=./openvino_dist -c=x86_64-w64-mingw32- -o=libopenvino.pc -i=build
+# Usage: convert_msvc_to_mingw -t=<directory_to_scan> -c=<toolchain_prefix> -o=<output_pc_file> -i=<install dir> -v=<version> -n=<descriptive name> -d=<description>
+# Example: convert_msvc_to_mingw -t=./openvino_dist -c=x86_64-w64-mingw32- -o=libopenvino.pc -i=build -v=1.0 -n="OpenVINO Toolkit"  -d="Open-source software toolkit for optimizing and deploying deep learning models"
 convert_msvc_to_mingw() {
     local TARGET_DIR=""
     local TOOLCHAIN_PREFIX=""
@@ -2128,6 +2128,9 @@ convert_msvc_to_mingw() {
             -c=*|--toolchain=*) TOOLCHAIN_PREFIX="${1#*=}"; shift ;;
             -o=*|--libname=*) LIB_NAME="${1#*=}"; shift ;;
             -i=*|--install=*) LIB_INSTALL_DIR="${1#*=}"; shift ;;
+            -v=*|--version=*) LIB_VERSION="${1#*=}"; shift ;;
+            -n=*|--name=*) LIB_DESC_NAME="${1#*=}"; shift ;;
+            -d=*|--desc=*) LIB_DESC="${1#*=}"; shift ;;
             --) shift; break ;;
             *) echo "ERROR: Unknown option '$1'"; return 1 ;;
         esac
@@ -2253,9 +2256,9 @@ libdir=\${prefix}/lib
 includedir=\${prefix}/include
 bindir=\${prefix}/bin
 
-Name: ${LIB_NAME}
-Description: OpenVINO libraries (MinGW Converted Bundle)
-Version: 2025.0.0
+Name: ${LIB_DESC_NAME}
+Description: ${LIB_DESC}
+Version: $LIB_VERSION
 Libs: -L\${libdir} ${LIBS_FLAG} -lstdc++
 Cflags: -I\${includedir}
 EOF

@@ -97,8 +97,6 @@ export BUILD_STEPS=(
 "build_chromaprint" \
 "build_librubberband" \
 "build_frei0r" \
-"build_svt_hevc" \
-"build_svt_vp9" \
 "build_libsvtav1" \
 "build_libvidstab" \
 "build_libmysofa" \
@@ -123,7 +121,6 @@ export BUILD_STEPS=(
 "build_libshaderc" \
 "build_avisynth" \
 "build_libvvenc" \
-"build_libvvdec" \
 "build_libx264" \
 "build_libjsoncpp" \
 "build_libcodec2" \

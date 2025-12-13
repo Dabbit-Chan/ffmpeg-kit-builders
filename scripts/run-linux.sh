@@ -14,7 +14,7 @@ build_libjsoncpp() {
   local repo_ver="1.9.6"
 	change_dir "$src_dir"
 	do_git_checkout "$repo" "$lib" "$repo_ver"
-	change_dir "$src_dir/jsoncpp"
+	change_dir "$src_dir/$lib"
   local meson_options="--prefix=$dependency_install_prefix -Ddefault_library=static"
 	do_meson "$meson_options" "setup build"
 	do_ninja_and_ninja_install
@@ -383,8 +383,9 @@ build_omx() {
 build_vulkan_static() {
   if [[ $disable_vulkan_static != 1 && $enable_vulkan_static == 1 ]]; then
   local lib="Vulkan-Shim-Loader"
+  local repo="https://github.com/BtbN/Vulkan-Shim-Loader"
 	change_dir "$src_dir"
-	do_git_checkout https://github.com/BtbN/Vulkan-Shim-Loader "$lib"
+	do_git_checkout "$repo" "$lib"
 	change_dir "$src_dir/$lib"
 	build_vulkan "-DCMAKE_BUILD_TYPE=Release -DVULKAN_SHIM_IMPERSONATE=ON"
 	change_dir "$src_dir"
@@ -679,7 +680,7 @@ build_gnutls() {
 }
 # build_lcms2             # config_options+= --enable-lcms2               # enable ICC profile support via LittleCMS 2 [no]
 build_lcms2() {
-  if [[ $disable_lcms2 != 1 && $enable_lcms2 == 1 ]]; then
+  if [[ $disable_lcms2 != 1 && $enable_lcms2 == 1 ]] || [[ -n "$1" ]]; then
   local lib="lcms2"
   local repo_ver="lcms2.17"
   local repo="https://github.com/mm2/Little-CMS"
@@ -696,7 +697,7 @@ build_lcms2() {
 # build_libaom            # config_options+= --enable-libaom              # enable AV1 video encoding/decoding via libaom [no]
 build_libaom() {
   if [[ $disable_libaom != 1 && $enable_libaom == 1 ]]; then
-    local lib="aom"
+    local lib="libaom"
     local repo_ver="v3.13.1"
     local repo="https://aomedia.googlesource.com/aom"
     change_dir "$src_dir"
@@ -907,8 +908,10 @@ build_libdvdnav() {
   fi
 }
 build_libdvdcss() {
+  local lib="libdvdcss"
+  local repo="https://download.videolan.org/pub/videolan/libdvdcss/1.2.13/libdvdcss-1.2.13.tar.bz2"
 	change_dir "$src_dir"
-	generic_download_and_make_and_install https://download.videolan.org/pub/videolan/libdvdcss/1.2.13/libdvdcss-1.2.13.tar.bz2
+	generic_download_and_make_and_install "$repo" "$lib"
   change_dir "$src_dir"
 }
 # build_libdvdread        # config_options+= --enable-libdvdread          # enable libdvdread, needed for DVD demuxing [no]
@@ -1574,7 +1577,7 @@ build_vulkan_loader() {
 build_libplacebo() {
   if [[ $disable_libplacebo != 1 && $enable_libplacebo == 1 ]]; then
   build_vulkan_loader
-	build_lcms
+	build_lcms2 1
 	build_libunwind
 	build_libxxhash
 	build_spirv_cross
@@ -1603,10 +1606,10 @@ build_libplacebo() {
 build_libpulse() {
   if [[ $disable_libpulse != 1 && $enable_libpulse == 1 ]]; then
   build_iconv
+  activate_meson
   local lib="libpulse"
   local repo="https://github.com/pulseaudio/pulseaudio"
   local repo_ver="v17.0"
-  activate_meson
   change_dir "$src_dir"
   do_git_checkout "$repo" "$lib" "$repo_ver"
   change_dir "$src_dir/$lib"
@@ -2028,8 +2031,8 @@ build_libtensorflow() {
 	download_and_unpack_file "$repo" "$src_dir/$lib/$subdir"
 	change_dir "$src_dir/$lib/$subdir"
   echo > "$manifest" && chmod -R u+rwx "$manifest"
-  cp -rfv "$src_dir/$lib/$subdir/lib"* "$dependency_install_prefix" 2>&1 | sed -n "s/.*' -> '\(.*\)'/\1/p" >> "$manifest"
-  cp -rfv "$src_dir/$lib/$subdir/include"* "$dependency_install_prefix" 2>&1 | sed -n "s/.*' -> '\(.*\)'/\1/p" >> "$manifest"
+  [[ -d "lib" ]] && (cp -rfv "$src_dir/$lib/$subdir/lib"* "$dependency_install_prefix" 2>&1 | sed -n "s/.*' -> '\(.*\)'/\1/p" >> "$manifest" || exit_message 1 "could not install $lib libs")
+  [[ -d "include" ]] && (cp -rfv "$src_dir/$lib/$subdir/include"* "$dependency_install_prefix" 2>&1 | sed -n "s/.*' -> '\(.*\)'/\1/p" >> "$manifest" || exit_message 1 "could not install $lib includes")
   cat >> "$dependency_install_prefix/lib/pkgconfig/tensorflow.pc" << EOF
 prefix=${dependency_install_prefix}
 exec_prefix=\${prefix}

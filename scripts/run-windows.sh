@@ -12,7 +12,9 @@
 platform_deps() {
   echo "INFO: installing platform specific dependencies"
   build_dlfcn
-  build_mingw_std_threads
+  build_libvvdec
+  build_svt_hevc
+  build_svt_hevc
   # build_unistring
   # build_libidn2
   # build_vamp_plugin
@@ -301,7 +303,7 @@ build_cuvid() {
 }
 #--enable-libzimg (from build_libzimg) - High-quality zscale scaling filter.
 build_libzimg() {
-  if [[ $disable_libzimg != 1 && $enable_libzimg == 1 ]]; then
+  if [[ $disable_libzimg != 1 && $enable_libzimg == 1 ]] || [[ -n "$1" ]]; then
 	local lib="libzimg"
   local repo="https://github.com/sekrit-twc/zimg"
   local repo_ver="v3.0.6"
@@ -1261,6 +1263,7 @@ build_liblensfun() {
 build_libtensorflow() {
   if [[ $disable_libtensorflow != 1 && $enable_libtensorflow == 1 ]]; then
   local lib="libtensorflow"
+  local lib_dir="$lib-$host_target"
   pick_gpu_support
   if truthy "$gpu_support"; then
       local repo="https://storage.googleapis.com/tensorflow/libtensorflow/libtensorflow-gpu-windows-x86_64-2.10.0.zip"
@@ -1277,12 +1280,18 @@ build_libtensorflow() {
   # "https://github.com/tensorflow/tensorflow"
   local manifest="$install_pkgconfig_dir/${lib}_${subdir}_manifest"
   uninstall_manifest "$manifest" > >(redirect_output) 2>&1
-  change_dir "$src_dir/$lib" 1
-	download_and_unpack_file "$repo" "$src_dir/$lib/$subdir"
-	change_dir "$src_dir/$lib/$subdir"
+  change_dir "$src_dir/$lib_dir" 1
+	download_and_unpack_file "$repo" "$src_dir/$lib_dir/$subdir"
+  change_dir "$src_dir/$lib_dir/$subdir"
+  if ! check_pkg_config_batch "$dependency_install_prefix/lib/pkgconfig/tensorflow.pc" > >(redirect_output) 2>&1; then
+  convert_msvc_to_mingw -t="$src_dir/$lib_dir/$subdir" -c="$cross_prefix" -o="tensorflow" -i="mingw-bundle" > >(redirect_output) 2>&1
+	change_dir "$src_dir/$lib_dir/$subdir/mingw-bundle/"
   echo > "$manifest" && chmod -R u+rwx "$manifest"
-  cp -rfv "$src_dir/$lib/$subdir/lib"* "$dependency_install_prefix" 2>&1 | sed -n "s/.*' -> '\(.*\)'/\1/p" >> "$manifest"
-  cp -rfv "$src_dir/$lib/$subdir/include"* "$dependency_install_prefix" 2>&1 | sed -n "s/.*' -> '\(.*\)'/\1/p" >> "$manifest"
+  [[ -d "3rdparty" ]] && (cp -rfv "$src_dir/$lib_dir/$subdir/mingw-bundle/3rdparty"* "$dependency_install_prefix/"  2>&1 | sed -n "s/.*' -> '\(.*\)'/\1/p" >> "$manifest"; true)
+  [[ -d "bin" ]] && (cp -rfv "$src_dir/$lib_dir/$subdir/mingw-bundle/bin"* "$dependency_install_prefix/"  2>&1 | sed -n "s/.*' -> '\(.*\)'/\1/p" >> "$manifest"; true)
+  [[ -d "include" ]] && (cp -rfv "$src_dir/$lib_dir/$subdir/mingw-bundle/include"* "$dependency_install_prefix/"  2>&1 | sed -n "s/.*' -> '\(.*\)'/\1/p" >> "$manifest"; true)
+  [[ -d "lib" ]] && (cp -rfv "$src_dir/$lib_dir/$subdir/mingw-bundle/lib"* "$dependency_install_prefix/"  2>&1 | sed -n "s/.*' -> '\(.*\)'/\1/p" >> "$manifest"; true)
+  [[ -d "share" ]] && (cp -rfv "$src_dir/$lib_dir/$subdir/mingw-bundle/share"* "$dependency_install_prefix/"  2>&1 | sed -n "s/.*' -> '\(.*\)'/\1/p" >> "$manifest"; true)
   cat >> "$dependency_install_prefix/lib/pkgconfig/tensorflow.pc" << EOF
 prefix=${dependency_install_prefix}
 exec_prefix=\${prefix}
@@ -1297,6 +1306,7 @@ Cflags: -I\${includedir}
 EOF
   echo "$dependency_install_prefix/lib/pkgconfig/tensorflow.pc" >> "$manifest"
 	change_dir "$src_dir"
+  fi
   fi
 }
 #--enable-libvpx (from build_libvpx) - VP8/VP9 video encoding/decoding.
@@ -1397,9 +1407,12 @@ EOF
 #--enable-libopenh264 (from build_libopenh264) - H.264 video encoding from Cisco.
 build_libopenh264() {
   if [[ $disable_libopenh264 != 1 && $enable_libopenh264 == 1 ]]; then
-	change_dir "$src_dir"
-	do_git_checkout "https://github.com/cisco/openh264.git" openh264 v2.6.0 #75b9fcd2669c75a99791 # wels/codec_api.h weirdness
-	change_dir "$src_dir/openh264"
+	local lib="libopenh264"
+  local repo="https://github.com/cisco/openh264.git"
+  local repo_ver="openh264 v2.6.0" #75b9fcd2669c75a99791 # wels/codec_api.h weirdness
+  change_dir "$src_dir"
+  do_git_checkout "$repo" "$lib" "$repo_ver"
+  change_dir "$src_dir/$lib"
 	sed -i.bak "s/_M_X64/_M_DISABLED_X64/" codec/encoder/core/inc/param_svc.h # for 64 bit, avoid missing _set_FMA3_enable, it needed to link against msvcrt120 to get this or something weird?
 	if [[ $bits_target == 32 ]]; then
 		local arch=i686 # or x86?
@@ -1414,16 +1427,19 @@ build_libopenh264() {
 # --enable-libaom (from build_libaom) - AV1 video encoding/decoding.
 build_libaom() {
   if [[ $disable_libaom != 1 && $enable_libaom == 1 ]]; then
-	change_dir "$src_dir"
-	do_git_checkout https://aomedia.googlesource.com/aom aom
+	local lib="aom"
+  local repo_ver="v3.13.1"
+  local repo="https://aomedia.googlesource.com/aom"
+  change_dir "$src_dir"
+  do_git_checkout "$repo" "$lib" "$repo_ver"
+  change_dir "$src_dir/$lib"
 	if [ "$bits_target" = "32" ]; then
 		local config_options="-DCMAKE_TOOLCHAIN_FILE=../build/cmake/toolchains/x86-mingw-gcc.cmake -DAOM_TARGET_CPU=x86"
 	else
 		local config_options="-DCMAKE_TOOLCHAIN_FILE=../build/cmake/toolchains/x86_64-mingw-gcc.cmake -DAOM_TARGET_CPU=x86_64"
 	fi
-	create_dir "$src_dir/aom/aom_build"
-	change_dir "$src_dir/aom/aom_build"
-	do_cmake_from_build_dir "$src_dir/aom" "$config_options"
+	change_dir "$src_dir/$lib/build" 1
+	do_cmake_from_build_dir "$src_dir/$lib" "$config_options"
 	do_make_and_make_install
 	change_dir "$src_dir"
 	fi
@@ -1431,10 +1447,13 @@ build_libaom() {
 #--enable-libdav1d (from build_dav1d) - High-performance AV1 video decoding.
 build_libdav1d() {
   if [[ $disable_libdav1d != 1 && $enable_libdav1d == 1 ]]; then
-	change_dir "$src_dir"
-	do_git_checkout https://code.videolan.org/videolan/dav1d libdav1d
-	activate_meson
-	change_dir "$src_dir/libdav1d"
+	local lib="libdav1d"
+  local repo_ver="1.5.2"
+  local repo="https://code.videolan.org/videolan/dav1d"
+  activate_meson
+  change_dir "$src_dir"
+  do_git_checkout "$repo" "$lib" "$repo_ver"
+  change_dir "$src_dir/$lib"
 	if [[ $bits_target == 32 || $bits_target == 64 ]]; then   # XXX why 64???
 		apply_patch "file://$PATCHDIR/david_no_asm.patch" -p1 # XXX report
 	fi
@@ -1452,18 +1471,27 @@ build_libdav1d() {
 # --enable-vulkan (from build_vulkan) - Vulkan support.
 # --disable-vulkan         disable Vulkan code [autodetect]
 build_vulkan() {
-  if [[ $disable_vulkan != 1 && $enable_vulkan == 1 ]]; then
-	change_dir "$src_dir"
-	do_git_checkout https://github.com/KhronosGroup/Vulkan-Headers Vulkan-Headers v1.4.326
-	change_dir "$src_dir/Vulkan-Headers"
-	do_cmake_and_install "-DCMAKE_BUILD_TYPE=Release -DVULKAN_HEADERS_ENABLE_MODULE=NO -DVULKAN_HEADERS_ENABLE_TESTS=NO -DVULKAN_HEADERS_ENABLE_INSTALL=YES"
+  if [[ ($disable_vulkan != 1 && $enable_vulkan == 1) || -n $extra_args ]]; then
+	local lib="Vulkan-Headers"
+  local repo="https://github.com/KhronosGroup/Vulkan-Headers"
+  local repo_ver="v1.4.335"
+  change_dir "$src_dir"
+	do_git_checkout "$repo" "$lib" "$repo_ver"
+  change_dir "$src_dir/$lib"
+	do_cmake_and_install "-DCMAKE_BUILD_TYPE=Release -DVULKAN_HEADERS_ENABLE_MODULE=NO -DVULKAN_HEADERS_ENABLE_TESTS=NO -DVULKAN_HEADERS_ENABLE_INSTALL=YES $extra_args"
 	change_dir "$src_dir"
 	fi
 }
 # --enable-vulkan-static         # enable statically link to libvulkan [no]
 build_vulkan_static() {
   if [[ $disable_vulkan_static != 1 && $enable_vulkan_static == 1 ]]; then
-	build_vulkan_loader
+	local lib="Vulkan-Shim-Loader"
+  local repo="https://github.com/BtbN/Vulkan-Shim-Loader"
+	change_dir "$src_dir"
+	do_git_checkout "$repo" "$lib"
+	change_dir "$src_dir/$lib"
+	build_vulkan "-DCMAKE_BUILD_TYPE=Release -DVULKAN_SHIM_IMPERSONATE=ON"
+	change_dir "$src_dir"
 	fi
 }
 #--enable-libplacebo (from build_libplacebo) - Advanced video rendering library (Vulkan/OpenGL).
@@ -1475,11 +1503,14 @@ build_libplacebo() {
 	build_libxxhash
 	build_spirv_cross
 	build_libdovi
-	build_libshaderc
-	change_dir "$src_dir"
-	do_git_checkout https://code.videolan.org/videolan/libplacebo libplacebo #515da9548ad734d923c7d0988398053f87b454d5
-	activate_meson
-	change_dir "$src_dir/libplacebo"
+	build_libshaderc 1
+  activate_meson
+	local lib="libplacebo"
+  local repo="https://code.videolan.org/videolan/libplacebo"
+  local repo_ver="v7.351.0"
+  change_dir "$src_dir"
+  do_git_checkout "$repo" "$lib" "$repo_ver"
+  change_dir "$src_dir/$lib"
 	apply_patch "file://$PATCHDIR/fix_libplacebo_absolute_path.patch" -p1 # latest meson version wont work without patch
 	git submodule update --init --recursive --depth=1 --filter=blob:none
 	local config_options=""
@@ -1502,11 +1533,13 @@ build_libplacebo() {
 #--enable-avisynth (from build_avisynth) - AviSynth script support.
 build_avisynth() {
   if [[ $disable_avisynth != 1 && $enable_avisynth == 1 ]]; then
+  local lib="avisynth"
+  local repo="https://github.com/AviSynth/AviSynthPlus"
+  local repo_ver="v3.7.5"
 	change_dir "$src_dir"
-	do_git_checkout https://github.com/AviSynth/AviSynthPlus avisynth
-	create_dir "$src_dir/avisynth/avisynth-build"
-	change_dir "$src_dir/avisynth/avisynth-build"
-	do_cmake_from_build_dir "$src_dir/avisynth" -DHEADERS_ONLY:bool=on
+	do_git_checkout "$repo" "$lib" "$repo_ver"
+	change_dir "$src_dir/$lib/build" 1
+	do_cmake_from_build_dir "$src_dir/avisynth" "-DHEADERS_ONLY:bool=on"
 	do_make "$compiler_flags VersionGen install"
 	change_dir "$src_dir"
 	fi
@@ -1514,9 +1547,12 @@ build_avisynth() {
 #--enable-libvvenc (from build_libvvenc) - VVC (H.266) video encoding.
 build_libvvenc() {
   if [[ $disable_libvvenc != 1 && $enable_libvvenc == 1 ]]; then
-	change_dir "$src_dir"
-	do_git_checkout https://github.com/fraunhoferhhi/vvenc libvvenc
-	change_dir "$src_dir/libvvenc"
+	local lib="libvvenc"
+  local repo="https://github.com/fraunhoferhhi/vvenc"
+  local repo_ver="v1.13.1"
+  change_dir "$src_dir"
+	do_git_checkout "$repo" "$lib" "$repo_ver"
+  change_dir "$src_dir/$lib"
 	do_cmake "-B build -DCMAKE_BUILD_TYPE=Release -DVVENC_ENABLE_LINK_TIME_OPT=OFF -DVVENC_INSTALL_FULLFEATURE_APP=ON -GNinja"
 	do_ninja_and_ninja_install
 	change_dir "$src_dir"
@@ -1589,10 +1625,12 @@ build_libx264() {
 # shellcheck disable=SC2082
 build_libcodec2() {
   if [[ $disable_libcodec2 != 1 && $enable_libcodec2 == 1 ]]; then
-	change_dir "$src_dir"
-	local lib="codec2"
-	do_git_checkout https://github.com/drowe67/codec2
-	change_dir "$src_dir/$lib/build" 1
+	local lib="libcodec2"
+  local repo_ver="1.2.0"
+  local repo="https://github.com/drowe67/codec2"
+  change_dir "$src_dir"
+  do_git_checkout "$repo" "$lib" "$repo_ver"
+  change_dir "$src_dir/$lib/build" 1
 	local cmake_params="-DUNITTEST=FALSE"
 	cmake_params+=" -DCMAKE_TOOLCHAIN_FILE=$(get_generic_cmake_toolchain) "
 	local target_proc=AMD64
@@ -1609,10 +1647,12 @@ build_libcodec2() {
 #     --enable-libjxl (JPEG XL image format)
 build_libjxl() {
   if [[ $disable_libjxl != 1 && $enable_libjxl == 1 ]]; then
-	change_dir "$src_dir"
 	local lib="libjxl"
-	do_git_checkout https://github.com/libjxl/libjxl
-	change_dir "$src_dir/$lib/build" 1
+  local repo="https://github.com/libjxl/libjxl"
+  local repo_ver="v0.7.2"
+  change_dir "$src_dir"
+  do_git_checkout "$repo" "$lib" "$repo_ver"
+  change_dir "$src_dir/$lib/build" 1
 	local cmake_params=" -DCMAKE_TOOLCHAIN_FILE=$(get_generic_cmake_toolchain) -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=OFF"
 	local target_proc=AMD64
 	if [ "$bits_target" = "32" ]; then
@@ -1627,10 +1667,12 @@ build_libjxl() {
 #     --enable-libkvazaar (Alternative HEVC/H.265 encoder)
 build_libkvazaar() {
   if [[ $disable_libkvazaar != 1 && $enable_libkvazaar == 1 ]]; then
-	local lib="kvazaar"
-	change_dir "$src_dir"
-	do_git_checkout https://github.com/ultravideo/kvazaar
-	change_dir "$src_dir/$lib/build" 1
+	local lib="libkvazaar"
+  local repo="https://github.com/ultravideo/kvazaar"
+  local repo_ver="v2.3.2"
+  change_dir "$src_dir"
+  do_git_checkout "$repo" "$lib" "$repo_ver"
+  change_dir "$src_dir/$lib/build" 1
 	local cmake_params=" -DCMAKE_TOOLCHAIN_FILE=$(get_generic_cmake_toolchain) -DCMAKE_BUILD_TESTS=OFF"
 	local target_proc=AMD64
 	if [ "$bits_target" = "32" ]; then
@@ -1643,11 +1685,12 @@ build_libkvazaar() {
 }
 # --enable-openssl  enable openssl, needed for https support if gnutls, libtls or mbedtls is not used [no]
 build_openssl() {
-  if [[ $disable_openssl != 1 && $enable_openssl == 1 ]]; then
+  if [[ $disable_openssl != 1 && $enable_openssl == 1 ]] || [[ -n "$1" ]]; then
   local lib="openssl"
-	# https://github.com/openssl/openssl 
-	change_dir "$src_dir"
-	do_git_checkout https://github.com/openssl/openssl "openssl" "openssl-3.6.0"
+  # https://github.com/openssl/openssl 
+  local repo="https://github.com/openssl/openssl"
+  local repo_ver="openssl-3.6.0"
+  do_git_checkout "$repo" "$lib" "$repo_ver"
 	change_dir "$src_dir/$lib"
   do_configure "mingw64 --release --cross-compile-prefix=$cross_prefix --prefix=$dependency_install_prefix --openssldir=$dependency_install_prefix/ssl --libdir=lib no-shared no-tests no-docs no-demos no-legacy" "./Configure"
 	do_make_and_make_install
@@ -1659,10 +1702,11 @@ build_openssl() {
 build_librav1e() {
   if [[ $disable_librav1e != 1 && $enable_librav1e == 1 ]]; then
 	local lib="librav1e"
-	# https://github.com/xiph/rav1e
-	change_dir "$src_dir"
-  do_git_checkout https://github.com/xiph/rav1e "$lib"
-	change_dir "$src_dir/$lib"
+  local repo="https://github.com/xiph/rav1e"
+  local repo_ver="v0.8.1"
+  change_dir "$src_dir"
+  do_git_checkout "$repo" "$lib" "$repo_ver" 
+  change_dir "$src_dir/$lib"
   unset CC CXX AR WINDRES STRIP PKG_CONFIG_ALLOW_CROSS
   export CROSS_ROOT=$toolchain_bin_path
   export PATH=$CROSS_ROOT:$PATH
@@ -1689,11 +1733,12 @@ build_librav1e() {
 #     --enable-libxeve (EVC encoder)
 build_libxeve() {
   if [[ $disable_libxeve != 1 && $enable_libxeve == 1 ]]; then
-	local lib="xeve"
-	# encoder
-	# https://github.com/mpeg5/xeve
-	change_dir "$src_dir"
-	do_git_checkout https://github.com/mpeg5/xeve "$lib" "$lib-0.5.0"
+	local lib="libxeve"
+  # https://github.com/mpeg5/xeve
+  local repo="https://github.com/mpeg5/xeve"
+  local repo_ver="v0.5.0"
+  change_dir "$src_dir"
+	do_git_checkout "$repo" "$lib" "$repo_ver"
 	change_dir "$src_dir/$lib/build" 1
 	local cmake_params=" -DCMAKE_TOOLCHAIN_FILE=$(get_generic_cmake_toolchain)"
 	local target_proc=AMD64
@@ -1720,11 +1765,11 @@ EOF
 #     --enable-libxevd (EVC decoder)
 build_libxevd() {
   if [[ $disable_libxevd != 1 && $enable_libxevd == 1 ]]; then
-	local lib="xevd"
-	# decoder
-	# https://github.com/mpeg5/xevd
-	change_dir "$src_dir"
-	do_git_checkout https://github.com/mpeg5/xevd "$lib" "$lib-0.5.0"
+	local lib="libxevd"
+  local repo="https://github.com/mpeg5/xevd"
+  local repo_ver="v0.5.0"
+  change_dir "$src_dir"
+	do_git_checkout "$repo" "$lib" "$repo_ver"
 	change_dir "$src_dir/$lib/build" 1
 	local cmake_params=" -DCMAKE_TOOLCHAIN_FILE=$(get_generic_cmake_toolchain)"
 	local target_proc=AMD64
@@ -1751,26 +1796,20 @@ EOF
 #     --enable-ladspa (LADSPA audio plugins) An API standard for audio plugins.
 build_ladspa() {
   if [[ $disable_ladspa != 1 && $enable_ladspa == 1 ]]; then
-  # TODO: LINUX --enable-ladspa
-  echo "Only available in Linux build"
-# 		# linux only
-# 		#  http://www.ladspa.org/download/ladspa_sdk_1.17.tgz
-	local lib="ladspa"
-# 		change_dir "$src_dir"
-# 		do_git_checkout "https://salsa.debian.org/multimedia-team/ladspa-sdk" "$lib"
-# 		change_dir "$src_dir/$lib"
-# 		change_dir "$src_dir"
+  echo "INFO: Only available on Android build"
+  echo "INFO: No ladspa library to compile. Library built into OS."
 	fi
 }
 
 #     --enable-lv2 (LV2 audio plugins) An API standard for audio plugins for audio production.
 build_lv2() {
   if [[ $disable_lv2 != 1 && $enable_lv2 == 1 ]]; then
-		# https://github.com/lv2/lv2
-		local lib="lv2"
-    activate_meson
+		activate_meson
+    local lib="lv2"
+    local repo="https://github.com/lv2/lv2"
+    local repo_ver="v1.18.10"
     change_dir "$src_dir"
-    do_git_checkout https://github.com/lv2/lv2 "$lib" # meson build for fontconfig no good
+    do_git_checkout "$repo" "$lib" "$repo_ver"
     change_dir "$src_dir/$lib"
     local cross_file=$(get_meson_cross_file)
     local meson_options="-Dtests=disabled -Ddocs=disabled -Donline_docs=false"
@@ -1802,11 +1841,12 @@ We apologize for any inconvenience this has caused.
 #     --enable-libcdio (Audio CD grabbing) Library for CD-ROM and CD-image access.
 build_libcdio() {
   if [[ $disable_libcdio != 1 && $enable_libcdio == 1 ]]; then
-		# https://github.com/libcdio/libcdio
 	local lib="libcdio"
-	change_dir "$src_dir"
-		do_git_checkout https://github.com/libcdio/libcdio "$lib"
-		change_dir "$src_dir/$lib"
+  local repo_ver="2.2.0"
+  local repo="https://github.com/libcdio/libcdio"
+  change_dir "$src_dir"
+  do_git_checkout "$repo" "$lib" "$repo_ver"
+  change_dir "$src_dir/$lib"
 		if [[ ! -f "configure" ]]; then
       autoreconf -fiv || exit_message 1
     fi
@@ -1822,30 +1862,25 @@ build_libcdio() {
 #     --enable-libfdk-aac The Fraunhofer FDK AAC library.
 build_libfdk_aac() {
   if [[ $disable_libfdk_aac != 1 && $enable_libfdk_aac == 1 ]]; then
-  echo "WARNING: Including this library will make the binaries non-redistributable"
+  echo "WARNING: This is a non-gpl library. Binaries including this library are non-redistributable!"
+  local lib="libfdk_aac"
+  local repo="https://github.com/mstorsjo/fdk-aac"
+  local repo_ver="v2.0.3"
 	change_dir "$src_dir"
-		local checkout_dir=fdk-aac
-    if [[ -n $fdk_aac_git_checkout_version ]]; then
-      checkout_dir+="_$fdk_aac_git_checkout_version"
-      do_git_checkout "https://github.com/mstorsjo/fdk-aac.git" "$checkout_dir" "refs/tags/$fdk_aac_git_checkout_version"
-    else
-      do_git_checkout "https://github.com/mstorsjo/fdk-aac.git" "$checkout_dir"
-    fi
-  	change_dir "$src_dir/$checkout_dir"
-    if [[ ! -f "configure" ]]; then
-      autoreconf -fiv || exit_message 1
-    fi
-    generic_configure_make_install
+  do_git_checkout "$repo" "$lib" "$repo_ver"
+  change_dir "$src_dir/$lib"
+  generic_configure_make_install
   change_dir "$src_dir"
 	fi
 }
 
 build_tre() {
-  if [[ $disable_libjack != 1 && $enable_libjack == 1 ]]; then
   # https://github.com/laurikari/tre
     local lib="tre"
+    local repo="https://github.com/laurikari/tre"
+    local repo_ver="TRE 0.9.0"
     change_dir "$src_dir"
-    do_git_checkout https://github.com/laurikari/tre "$lib" "TRE 0.9.0" # meson build for fontconfig no good
+    do_git_checkout "$repo" "$lib" "$repo_ver" # meson build for fontconfig no good
     change_dir "$src_dir/$lib"
     if git apply --reverse --check --ignore-space-change --ignore-whitespace --verbose "$PATCHDIR/tre_tre-internal.diff" >/dev/null 2>&1; then
       echo "INFO: Patch already applied. Skipping." >>"$LOG_FILE"
@@ -1856,7 +1891,6 @@ build_tre() {
     fi
     generic_configure_make_install "--disable-nls"
     change_dir "$src_dir"
-  fi
 }
 
 build_portaudio() {
@@ -1885,8 +1919,10 @@ build_libjack() {
     build_portaudio
 		# https://github.com/jackaudio/jack2
     local lib="libjack"
+    local repo="https://github.com/jackaudio/jack2"
+    local repo_ver="v19.7.0"
     change_dir "$src_dir"
-    do_git_checkout https://github.com/jackaudio/jack2 "$lib" "v1.9.22"
+    do_git_checkout "$repo" "$lib" "$repo_ver"
     change_dir "$src_dir/$lib"
     export CC="${cross_prefix}gcc"
     export CXX="${cross_prefix}g++"
@@ -1908,11 +1944,13 @@ build_libjack() {
 #     --enable-libpulse (PulseAudio support).
 build_libpulse() {
   if [[ $disable_libpulse != 1 && $enable_libpulse == 1 ]]; then
+    activate_meson
 		# https://github.com/pulseaudio/pulseaudio
     local lib="libpulse"
-    activate_meson
+    local repo="https://github.com/pulseaudio/pulseaudio"
+    local repo_ver="v17.0"
     change_dir "$src_dir"
-    do_git_checkout https://github.com/pulseaudio/pulseaudio "$lib" "v17.0"
+    do_git_checkout "$repo" "$lib" "$repo_ver"
     change_dir "$src_dir/$lib"
     remove_path -rf "$src_dir/$lib/build"
     echo "17.0" > "$src_dir/$lib/.tarball-version"
@@ -1954,9 +1992,12 @@ build_libpulse() {
 build_libshine() {
   if [[ $disable_libshine != 1 && $enable_libshine == 1 ]]; then
 	# https://github.com/toots/shine 
-	change_dir "$src_dir"
-	do_git_checkout https://github.com/toots/shine
-	change_dir "$src_dir/shine"
+	local lib="libshine"
+  local repo="https://github.com/toots/shine"
+  local repo_ver="3.1.1" 
+  change_dir "$src_dir"
+  do_git_checkout "$repo" "$lib" "$repo_ver"
+	change_dir "$src_dir/$lib"
 	generic_configure_make_install
 	change_dir "$src_dir"
 	fi
@@ -1966,10 +2007,12 @@ build_libshine() {
 build_openal() {
   if [[ $disable_openal != 1 && $enable_openal == 1 ]]; then
 	# https://github.com/kcat/openal-soft
-	local lib="openal-soft"
-	change_dir "$src_dir"
-	do_git_checkout https://github.com/kcat/openal-soft
-	change_dir "$src_dir/$lib/build" 1
+	local lib="openal"
+  local repo="https://github.com/kcat/openal-soft"
+  local repo_ver="1.24.3"
+  change_dir "$src_dir"
+  do_git_checkout "$repo" "$lib" "$repo_ver"
+  change_dir "$src_dir/$lib/build" 1
 	local cmake_params=" -DCMAKE_TOOLCHAIN_FILE=$(get_generic_cmake_toolchain) \
 -DCMAKE_BUILD_TYPE=Release \
 -DALSOFT_UTILS=OFF \
@@ -1992,9 +2035,11 @@ build_pocketsphinx() {
   if [[ $disable_pocketsphinx != 1 && $enable_pocketsphinx == 1 ]]; then
 	# https://github.com/cmusphinx/pocketsphinx
 	local lib="pocketsphinx"
+  local repo="https://github.com/cmusphinx/pocketsphinx"
+  local repo_ver="v5.0.4"
 	change_dir "$src_dir"
-	do_git_checkout https://github.com/cmusphinx/pocketsphinx
-	change_dir "$src_dir/$lib/build" 1
+  do_git_checkout "$repo" "$lib" "$repo_ver"
+	change_dir "$src_dir/$lib"
 	local cmake_params=" -DCMAKE_TOOLCHAIN_FILE=$(get_generic_cmake_toolchain) -DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=OFF"
 	local target_proc=AMD64
 	if [ "$bits_target" = "32" ]; then
@@ -2009,10 +2054,12 @@ build_pocketsphinx() {
 build_whisper() {
   if [[ $disable_whisper != 1 && $enable_whisper == 1 ]]; then
 	# https://github.com/ggerganov/whisper.cpp
-	local lib="whisper.cpp"
+	local lib="whisper"
+  local repo="https://github.com/ggerganov/whisper.cpp"
+  local repo_ver="v1.8.2"
 	change_dir "$src_dir"
-	do_git_checkout https://github.com/ggerganov/whisper.cpp "whisper.cpp"
-	change_dir "$src_dir/$lib/build" 1
+  do_git_checkout "$repo" "$lib" "$repo_ver"
+  change_dir "$src_dir/$lib/build" 1
 	local cmake_params=" -DCMAKE_TOOLCHAIN_FILE=$(get_generic_cmake_toolchain) \
 -DCMAKE_BUILD_TYPE=Release \
 -DWHISPER_BUILD_EXAMPLES=OFF \
@@ -2039,8 +2086,10 @@ build_gcrypt() {
   build_libgpg_error
 	# https://github.com/gpg/libgcrypt
 	local lib="libgcrypt"
+  local repo="https://github.com/gpg/libgcrypt"
+  local repo_ver="libgcrypt-1.11.2"
   change_dir "$src_dir"
-  do_git_checkout https://github.com/gpg/libgcrypt "$lib"
+  do_git_checkout "$repo" "$lib" "$repo_ver"
   change_dir "$src_dir/$lib"
   export CC="${cross_prefix}gcc"
   export CXX="${cross_prefix}g++"
@@ -2059,9 +2108,11 @@ build_librist() {
   if [[ $disable_librist != 1 && $enable_librist == 1 ]]; then
 	# https://code.videolan.org/rist/librist
 	local lib="librist"
+  local repo="https://code.videolan.org/rist/librist"
+  local repo_ver="v0.2.11"
   activate_meson
   change_dir "$src_dir"
-  do_git_checkout https://code.videolan.org/rist/librist "$lib"
+  do_git_checkout "$repo" "$lib" "$repo_ver" 
   change_dir "$src_dir/$lib"
   if git apply --reverse --check --ignore-space-change --ignore-whitespace --verbose "$PATCHDIR/librist_time-shim.diff" >/dev/null 2>&1; then
     echo "INFO: Patch already applied. Skipping." >>"$LOG_FILE"
@@ -2084,9 +2135,12 @@ build_librtmp() {
   if [[ $disable_librtmp != 1 && $enable_librtmp == 1 ]]; then
 	# https://github.com/mirror/rtmpdump
 	local lib="librtmp"
-  change_dir "$src_dir"
-  do_git_checkout https://github.com/mirror/rtmpdump "$lib"
-  change_dir "$src_dir/$lib"
+  local repo="git://git.ffmpeg.org/rtmpdump"
+  local repo_ver="2.6"
+  activate_meson
+	change_dir "$src_dir"
+	do_git_checkout "$repo" "$lib" "$repo_ver"
+	change_dir "$src_dir/$lib"
   #fix clean command
   sed -i 's/rm -f \*.o \*.a \*.$(SOX) \*$(SO_EXT)/rm -f *.o *.a *.so* *.dll *.dylib/g' librtmp/Makefile
   if grep -q "-lcrypt32" "librtmp/Makefile"; then
@@ -2109,8 +2163,10 @@ build_librabbitmq() {
   if [[ $disable_librabbitmq != 1 && $enable_librabbitmq == 1 ]]; then
 	# https://github.com/alanxz/rabbitmq-c
 	local lib="librabbitmq"
+  local repo="https://github.com/alanxz/rabbitmq-c"
+  local repo_ver="v0.15.0"
   change_dir "$src_dir"
-  do_git_checkout https://github.com/alanxz/rabbitmq-c "$lib"
+  do_git_checkout "$repo" "$lib" "$repo_ver" 
   change_dir "$src_dir/$lib"
   if git apply --reverse --check --ignore-space-change --ignore-whitespace --verbose "$PATCHDIR/librabbitmq_amqp_socket.diff" >/dev/null 2>&1; then
     echo "INFO: Patch already applied. Skipping." >>"$LOG_FILE"
@@ -2150,9 +2206,12 @@ build_libssh() {
   if [[ $disable_libssh != 1 && $enable_libssh == 1 ]]; then
 	# https://github.com/canonical/libssh
 	local lib="libssh"
+  # https://github.com/canonical/libssh
+  local repo="https://github.com/canonical/libssh"
+  local repo_ver="libssh-0.11.1" 
   change_dir "$src_dir"
-  do_git_checkout https://github.com/canonical/libssh "$lib" "libssh-0.11.1"
-  change_dir "$src_dir/$lib/build" 1
+  do_git_checkout "$repo" "$lib" "$repo_ver"
+	change_dir "$src_dir/$lib/build" 1
   local cmake_params="-DCMAKE_TOOLCHAIN_FILE=$(get_generic_cmake_toolchain) \
 -DBUILD_SHARED_LIBS=OFF \
 -DWITH_STATIC_LIB=ON \
@@ -2174,9 +2233,12 @@ build_libssh() {
 build_libtls() {
   if [[ $disable_libtls != 1 && $enable_libtls == 1 ]]; then
 	# https://github.com/PowerShell/LibreSSL
-	local lib="LibreSSL"
+	local lib="libtls"
+  # https://github.com/PowerShell/LibreSSL
+  local repo="https://github.com/PowerShell/LibreSSL"
+  local repo_ver="V4.0.0.0"
   change_dir "$src_dir"
-  do_git_checkout https://github.com/PowerShell/LibreSSL "$lib" "V4.0.0.0"
+	do_git_checkout "$repo" "$lib" "$repo_ver"
   change_dir "$src_dir/$lib/build" 1
   local cmake_params="-DCMAKE_TOOLCHAIN_FILE=$(get_generic_cmake_toolchain) \
 -DCMAKE_INSTALL_PREFIX=${dependency_install_prefix} \
@@ -2194,8 +2256,10 @@ build_libzmq() {
   if [[ $disable_libzmq != 1 && $enable_libzmq == 1 ]]; then
 	# https://github.com/zeromq/libzmq libzmq 4.3.5
 	local lib="libzmq"
+  local repo="https://github.com/zeromq/libzmq"
+  local repo_ver="v4.3.5"
   change_dir "$src_dir"
-  do_git_checkout https://github.com/zeromq/libzmq "$lib" "libzmq 4.3.5"
+  do_git_checkout "$repo" "$lib" "$repo_ver"
   change_dir "$src_dir/$lib"
   export CC="${cross_prefix}gcc"
   export CXX="${cross_prefix}g++"
@@ -2222,8 +2286,10 @@ build_mbedtls() {
   if [[ $disable_mbedtls != 1 && $enable_mbedtls == 1 ]]; then
 	# https://github.com/Mbed-TLS/mbedtls "v3.6.5"
 	local lib="mbedtls"
+  local repo="https://github.com/Mbed-TLS/mbedtls"
+  local repo_ver="v3.6.5"
   change_dir "$src_dir"
-  do_git_checkout https://github.com/Mbed-TLS/mbedtls "$lib" "v3.6.5"
+  do_git_checkout "$repo" "$lib" "$repo_ver"
   change_dir "$src_dir/$lib"
   local cmake_params="-DCMAKE_TOOLCHAIN_FILE=$(get_generic_cmake_toolchain) \
 -DCMAKE_INSTALL_PREFIX=${dependency_install_prefix} \
@@ -2275,8 +2341,6 @@ build_mediafoundation() {
 #     --enable-libdc1394 (FireWire camera support)
 build_libdc1394() {
   if [[ $disable_libdc1394 != 1 && $enable_libdc1394 == 1 ]]; then
-		# TODO LINUX --enable-libdc1394"
-  echo "TODO --enable-libdc1394"
 	echo "Only available on Linux build"
 	# https://github.com/damienfirmonte/libdc1394
 	local lib="libdc1394"
@@ -2286,8 +2350,6 @@ build_libdc1394() {
 # --enable-rkmpp                         # enable Rockchip Media Process Platform code [no]
 build_rkmpp() {
   if [[ $disable_rkmpp != 1 && $enable_rkmpp == 1 ]]; then
-		# TODO LINUX --enable-rkmpp"
-  echo "TODO --enable-rkmpp"
 	echo "Only available on Linux build"
 	# 
 	local lib="rkmpp"
@@ -2297,8 +2359,6 @@ build_rkmpp() {
 #     --enable-libiec61883 (Another FireWire library)
 build_libiec61883() {
   if [[ $disable_libiec61883 != 1 && $enable_libiec61883 == 1 ]]; then
-		# TODO LINUX --enable-libiec61883"
-  echo "TODO --enable-libiec61883"
 	echo "Only available on Linux build"
 	# https://github.com/Mint-Fan/libiec61883
 	local lib="libiec61883"
@@ -2307,8 +2367,6 @@ build_libiec61883() {
 #     --enable-libv4l2 (Video4Linux2 for device capture on Linux)
 build_libv4l2() {
   if [[ $disable_libv4l2 != 1 && $enable_libv4l2 == 1 ]]; then
-		# TODO LINUX --enable-libv4l2"
-  echo "TODO --enable-libv4l2"
 	echo "Only available for Linux build"
 	# https://git.linuxtv.org/v4l-utils
 	local lib="libv4l2"
@@ -2318,10 +2376,14 @@ build_libv4l2() {
 build_opencl() {
   if [[ $disable_opencl != 1 && $enable_opencl == 1 ]]; then
 	# https://github.com/KhronosGroup/OpenCL-Headers
-  local lib="opencl-headers"
-  change_dir "$src_dir/opencl" 1
-  do_git_checkout https://github.com/KhronosGroup/OpenCL-Headers "$lib" "v2025.07.22"
-  change_dir "$src_dir/opencl/$lib"
+  local parentlib="opencl"
+  local lib="OpenCL-Headers"
+  local repo="https://github.com/KhronosGroup/OpenCL-Headers"
+  local repo_ver="v2025.07.22"
+  change_dir "$src_dir"
+  change_dir "$src_dir/$parentlib" 1
+  do_git_checkout "$repo" "$lib" "$repo_ver"
+  change_dir "$src_dir/$parentlib/$lib/build" 1
   local cmake_params="-DCMAKE_TOOLCHAIN_FILE=$(get_generic_cmake_toolchain) \
 -DCMAKE_INSTALL_PREFIX=${dependency_install_prefix} \
 -DCMAKE_BUILD_TYPE=Release \
@@ -2330,10 +2392,12 @@ build_opencl() {
   do_cmake_from_build_dir "$src_dir/opencl/$lib" "$cmake_params"
   do_make_and_make_install
   # https://github.com/KhronosGroup/OpenCL-ICD-Loader
-  lib="opencl-icd-loader"
-  change_dir "$src_dir/opencl"
-  do_git_checkout https://github.com/KhronosGroup/OpenCL-ICD-Loader "$lib" "v2025.07.22"
-  change_dir "$src_dir/opencl/$lib"
+  local lib="OpenCL-ICD-Loader"
+  local repo="https://github.com/KhronosGroup/OpenCL-ICD-Loader"
+  local repo_ver="v2025.07.22"
+  change_dir "$src_dir/$parentlib"
+  do_git_checkout "$repo" "$lib" "$repo_ver"
+  change_dir "$src_dir/$parentlib/$lib/build" 1
   local cmake_params="-DCMAKE_TOOLCHAIN_FILE=$(get_generic_cmake_toolchain) \
 -DCMAKE_INSTALL_PREFIX=${dependency_install_prefix} \
 -DCMAKE_BUILD_TYPE=Release \
@@ -2352,43 +2416,36 @@ build_libopenvino() {
     # https://github.com/openvinotoolkit/openvino # compiling from source fails and is complicated. using pre-built binaries
     # pre-compiled https://storage.openvinotoolkit.org/repositories/openvino/packages/2025.4/windows/openvino_toolkit_windows_2025.4.0.20398.8fdad55727d_x86_64.zip
     local lib="libopenvino"
-    change_dir "$src_dir/$lib" 1
-    download_and_unpack_file "https://storage.openvinotoolkit.org/repositories/openvino/packages/2025.4/windows/openvino_toolkit_windows_2025.4.0.20398.8fdad55727d_x86_64.zip" "$lib"
-    if ! check_pkg_config_batch "$dependency_install_prefix/lib/pkgconfig/*openvino*.pc" > >(redirect_output) 2>&1; then
-      convert_msvc_to_mingw -t="$src_dir/$lib/$lib/openvino_toolkit_windows_2025.4.0.20398.8fdad55727d_x86_64/runtime" -c="$cross_prefix" -o="$lib" -i="mingw-bundle" > >(redirect_output) 2>&1
-      change_dir "$src_dir/$lib/mingw-bundle/"
-      sed -i "s|^prefix=.*|prefix=${dependency_install_prefix}|g" "$src_dir/$lib/mingw-bundle/lib/pkgconfig/$lib.pc"
-      [[ -d "bin" ]] && (cp -rv bin/* "$dependency_install_prefix/bin/" > >(redirect_output) 2>&1 || exit_message 1 "could not install mingw-pcre bin")
-      [[ -d "include" ]] && (cp -rv include/* "$dependency_install_prefix/include/" > >(redirect_output) 2>&1 || exit_message 1 "could not install mingw-pcre include")
-      [[ -d "lib" ]] && (cp -rv lib/* "$dependency_install_prefix/lib/" > >(redirect_output) 2>&1 || exit_message 1 "could not install mingw-pcre lib")
-      [[ -d "share" ]] && (cp -rv share/* "$dependency_install_prefix/share/" > >(redirect_output) 2>&1 || exit_message 1 "could not install mingw-pcre share")
+    local repo="https://storage.openvinotoolkit.org/repositories/openvino/packages/2025.4/windows/openvino_toolkit_windows_2025.4.0.20398.8fdad55727d_x86_64.zip"
+    local lib_dir="$lib-$host_target"
+    change_dir "$src_dir"
+    local manifest="$install_pkgconfig_dir/${lib}_manifest"
+    uninstall_manifest "$manifest" > >(redirect_output) 2>&1
+    echo > "$manifest" && chmod -R u+rwx "$manifest"
+    download_and_unpack_file "$repo" "$lib_dir"
+    change_dir "$src_dir/$lib_dir"
+    if ! check_pkg_config_batch "$dependency_install_prefix/lib/pkgconfig/openvino.pc" > >(redirect_output) 2>&1; then
+      convert_msvc_to_mingw -t="$src_dir/$lib_dir/runtime" -c="$cross_prefix" -o="openvino" -i="mingw-bundle" > >(redirect_output) 2>&1
+      change_dir "$src_dir/$lib_dir/mingw-bundle/"
+      sed -i "s|^prefix=.*|prefix=${dependency_install_prefix}|g" "$src_dir/$lib_dir/mingw-bundle/lib/pkgconfig/openvino.pc"
+      [[ -d "3rdparty" ]] && (cp -rfv "$src_dir/$lib_dir/mingw-bundle/3rdparty"* "$dependency_install_prefix/"  2>&1 | sed -n "s/.*' -> '\(.*\)'/\1/p" >> "$manifest"; true)
+      [[ -d "bin" ]] && (cp -rfv "$src_dir/$lib_dir/mingw-bundle/bin"* "$dependency_install_prefix/"  2>&1 | sed -n "s/.*' -> '\(.*\)'/\1/p" >> "$manifest"; true)
+      [[ -d "include" ]] && (cp -rfv "$src_dir/$lib_dir/mingw-bundle/include"* "$dependency_install_prefix/"  2>&1 | sed -n "s/.*' -> '\(.*\)'/\1/p" >> "$manifest"; true)
+      [[ -d "lib" ]] && (cp -rfv "$src_dir/$lib_dir/mingw-bundle/lib"* "$dependency_install_prefix/"  2>&1 | sed -n "s/.*' -> '\(.*\)'/\1/p" >> "$manifest"; true)
+      [[ -d "share" ]] && (cp -rfv "$src_dir/$lib_dir/mingw-bundle/share"* "$dependency_install_prefix/"  2>&1 | sed -n "s/.*' -> '\(.*\)'/\1/p" >> "$manifest"; true)
+      echo "$dependency_install_prefix/lib/pkgconfig/openvino.pc" >> "$manifest"
     fi
     change_dir "$src_dir"
-    remove_path -rf "$src_dir/$lib/mingw-bundle/"
+    remove_path -rf "$src_dir/$lib_dir/mingw-bundle/"
 	fi
 }
 #     --enable-libtorch (PyTorch)
 build_libtorch() {
   if [[ $disable_libtorch != 1 && $enable_libtorch == 1 ]]; then
-    # TODO ABI Mismatch --enable-libtorch"
-	  echo "TODO --enable-libtorch"
     # https://github.com/pytorch/pytorch # compiling from source fails and is complicated. 
     # https://download.pytorch.org/libtorch/cpu/libtorch-win-shared-with-deps-2.9.1%2Bcpu.zip
     local lib="libtorch"
     echo -e "WARNING: [disabled] Using $lib may cause segmentation faults due to ABI mismatch (mingw vs mscv)" >>"$LOG_FILE"
-    # change_dir "$src_dir/$lib" 1
-    # download_and_unpack_file "https://download.pytorch.org/libtorch/cpu/libtorch-win-shared-with-deps-latest.zip" "$lib"
-    # if ! check_pkg_config_batch "$dependency_install_prefix/lib/pkgconfig/libtorch*.pc" > >(redirect_output) 2>&1; then
-    #   convert_msvc_to_mingw -t="$src_dir/$lib/$lib/libtorch" -c="$cross_prefix" -o="$lib" -i="mingw-bundle" > >(redirect_output) 2>&1
-    #   change_dir "$src_dir/$lib/mingw-bundle/"
-    #   sed -i "s|^prefix=.*|prefix=${dependency_install_prefix}|g" "$src_dir/$lib/mingw-bundle/lib/pkgconfig/$lib.pc"
-    #   [[ -d "bin" ]] && (cp -rv bin/* "$dependency_install_prefix/bin/" > >(redirect_output) 2>&1 || exit_message 1 "could not install mingw-pcre bin")
-    #   [[ -d "include" ]] && (cp -rv include/* "$dependency_install_prefix/include/" > >(redirect_output) 2>&1 || exit_message 1 "could not install mingw-pcre include")
-    #   [[ -d "lib" ]] && (cp -rv lib/* "$dependency_install_prefix/lib/" > >(redirect_output) 2>&1 || exit_message 1 "could not install mingw-pcre lib")
-    #   [[ -d "share" ]] && (cp -rv share/* "$dependency_install_prefix/share/" > >(redirect_output) 2>&1 || exit_message 1 "could not install mingw-pcre share")
-    # fi
-    # change_dir "$src_dir"
-    # remove_path -rf "$src_dir/$lib/mingw-bundle/"
 	fi
 }
 
@@ -2396,11 +2453,13 @@ build_libtorch() {
 build_lcms2() {
   if [[ $disable_lcms2 != 1 && $enable_lcms2 == 1 ]]; then
 	# https://github.com/mm2/Little-CMS
-	local lib="Little-CMS"
-	activate_meson
-	change_dir "$src_dir"
-	do_git_checkout https://github.com/mm2/Little-CMS "$lib" # meson build for fontconfig no good
-	change_dir "$src_dir/$lib"
+  activate_meson
+	local lib="lcms2"
+  local repo_ver="lcms2.17"
+  local repo="https://github.com/mm2/Little-CMS"
+  change_dir "$src_dir"
+  do_git_checkout "$repo" "$lib" "$repo_ver"
+  change_dir "$src_dir/$lib"
   local cross_file=$(get_meson_cross_file)
 	local meson_options="-Dtests=disabled -Dutils=false"
 	meson_options+=" --cross-file=$cross_file"
@@ -2415,10 +2474,13 @@ build_libglslang() {
   if [[ $disable_libglslang != 1 && $enable_libglslang == 1 ]]; then
   # https://github.com/KhronosGroup/SPIRV-Headers
   local parent_lib="libglslang"
+  change_dir "$src_dir"
   local lib="SPIRV-Headers"
+  local repo="https://github.com/KhronosGroup/SPIRV-Headers"
+  local repo_ver="vulkan-sdk-1.4.328.1"
   change_dir "$src_dir/$parent_lib" 1
-  do_git_checkout https://github.com/KhronosGroup/SPIRV-Headers "$lib" "vulkan-sdk-1.4.328.1"
-  change_dir "$src_dir/$parent_lib/$lib" 1
+  do_git_checkout "$repo" "$lib" "$repo_ver"
+  change_dir "$src_dir/$parent_lib/$lib"
   local cmake_params="-DCMAKE_TOOLCHAIN_FILE=$(get_generic_cmake_toolchain) \
 -DCMAKE_INSTALL_PREFIX=${dependency_install_prefix} \
 -DCMAKE_BUILD_TYPE=Release \
@@ -2428,9 +2490,11 @@ build_libglslang() {
   do_make_and_make_install
   # https://github.com/KhronosGroup/SPIRV-Tools
   local lib="SPIRV-Tools"
+  local repo="https://github.com/KhronosGroup/SPIRV-Tools"
+  local repo_ver="v2025.4"
   change_dir "$src_dir/$parent_lib"
-  do_git_checkout https://github.com/KhronosGroup/SPIRV-Tools "$lib" "v2025.4"
-  change_dir "$src_dir/$parent_lib/$lib" 1
+  do_git_checkout "$repo" "$lib" "$repo_ver"
+  change_dir "$src_dir/$parent_lib/$lib"
   local cmake_params="-DCMAKE_TOOLCHAIN_FILE=$(get_generic_cmake_toolchain) \
 -DCMAKE_INSTALL_PREFIX=${dependency_install_prefix} \
 -DCMAKE_BUILD_TYPE=Release \
@@ -2443,9 +2507,11 @@ build_libglslang() {
   do_make_and_make_install
 	# https://github.com/KhronosGroup/glslang
 	local lib="glslang"
+  local repo="https://github.com/KhronosGroup/glslang"
+  local repo_ver="Release 16.1.0"
   change_dir "$src_dir/$parent_lib"
-  do_git_checkout https://github.com/KhronosGroup/glslang "$lib" "Release 16.1.0"
-  change_dir "$src_dir/$parent_lib/$lib" 1
+  do_git_checkout "$repo" "$lib" "$repo_ver"
+  change_dir "$src_dir/$parent_lib/$lib"
   local cmake_params="-DCMAKE_TOOLCHAIN_FILE=$(get_generic_cmake_toolchain) \
 -DCMAKE_INSTALL_PREFIX=${dependency_install_prefix} \
 -DCMAKE_BUILD_TYPE=Release \
@@ -2481,8 +2547,10 @@ build_libklvanc() {
   if [[ $disable_libklvanc != 1 && $enable_libklvanc == 1 ]]; then
 	# https://github.com/stoth68000/libklvanc
 	local lib="libklvanc"
+  local repo="https://github.com/stoth68000/libklvanc"
+  local repo_ver="vid.obe.1.6.0"
   change_dir "$src_dir"
-  do_git_checkout https://github.com/stoth68000/libklvanc "$lib" "vid.obe.1.6.0"
+  do_git_checkout "$repo" "$lib" "$repo_ver"
   change_dir "$src_dir/$lib"
   export CC="${cross_prefix}gcc"
   export CXX="${cross_prefix}g++"
@@ -2516,12 +2584,14 @@ EOF
 #     --enable-liblc3 (LC3 audio codec)
 build_liblc3() {
   if [[ $disable_liblc3 != 1 && $enable_liblc3 == 1 ]]; then
+  activate_meson
 	# https://github.com/google/liblc3
 	local lib="liblc3"
-	activate_meson
-	change_dir "$src_dir"
-	do_git_checkout https://github.com/google/liblc3 "$lib"
-	change_dir "$src_dir/$lib"
+  local repo="https://github.com/google/liblc3"
+  local repo_ver="v1.1.3"
+  change_dir "$src_dir"
+  do_git_checkout "$repo" "$lib" "$repo_ver"
+  change_dir "$src_dir/$lib"
   local cross_file=$(get_meson_cross_file)
 	local meson_options="-Dtools=false -Dpython=false"
 	meson_options+=" --cross-file=$cross_file"
@@ -2536,9 +2606,11 @@ build_liblcevc_dec() {
   if [[ $disable_liblcevc_dec != 1 && $enable_liblcevc_dec == 1 ]]; then
 	# https://github.com/v-novaltd/LCEVCdec
 	local lib="liblcevc"
-	change_dir "$src_dir"
-	do_git_checkout https://github.com/v-novaltd/LCEVCdec "$lib"
-	change_dir "$src_dir/$lib/build" 1
+  local repo="https://github.com/v-novaltd/LCEVCdec"
+  local repo_ver="4.0.4"
+  change_dir "$src_dir"
+  do_git_checkout "$repo" "$lib" "$repo_ver"
+  change_dir "$src_dir/$lib/build" 1
 	local cmake_params=" -DCMAKE_TOOLCHAIN_FILE=$(get_generic_cmake_toolchain) \
 -DCMAKE_BUILD_TYPE=Release \
 -DBUILD_SHARED_LIBS=OFF \
@@ -2562,9 +2634,11 @@ build_liboapv() {
   if [[ $disable_liboapv != 1 && $enable_liboapv == 1 ]]; then
 	# https://github.com/AcademySoftwareFoundation/openapv
 	local lib="liboapv"
-	change_dir "$src_dir"
-	do_git_checkout https://github.com/AcademySoftwareFoundation/openapv "$lib"
-	change_dir "$src_dir/$lib/build" 1
+  local repo="https://github.com/AcademySoftwareFoundation/openapv"
+  local repo_ver="v0.2.0.4"
+  change_dir "$src_dir"
+  do_git_checkout "$repo" "$lib" "$repo_ver"
+  change_dir "$src_dir/$lib/build" 1
 	local cmake_params=" -DCMAKE_TOOLCHAIN_FILE=$(get_generic_cmake_toolchain) \
 -DCMAKE_BUILD_TYPE=Release \
 -DOAPV_BUILD_APPS=ON \
@@ -2585,8 +2659,10 @@ build_libqrencode() {
   if [[ $disable_libqrencode != 1 && $enable_libqrencode == 1 ]]; then
 	# https://github.com/fukuchi/libqrencode
 	local lib="libqrencode"
-	change_dir "$src_dir"
-	do_git_checkout https://github.com/fukuchi/libqrencode "$lib"
+  local repo="https://github.com/fukuchi/libqrencode"
+  local repo_ver="v4.1.1"
+  change_dir "$src_dir"
+	do_git_checkout "$repo" "$lib" "$repo_ver"
 	change_dir "$src_dir/$lib/build" 1
 	local cmake_params=" -DCMAKE_TOOLCHAIN_FILE=$(get_generic_cmake_toolchain) \
 -DCMAKE_BUILD_TYPE=Release \
@@ -2608,8 +2684,10 @@ build_libquirc() {
   if [[ $disable_libquirc != 1 && $enable_libquirc == 1 ]]; then
 	# https://github.com/dlbeer/quirc
 	local lib="libquirc"
+  local repo="https://github.com/dlbeer/quirc"
+  local repo_ver="master"
 	change_dir "$src_dir"
-	do_git_checkout https://github.com/dlbeer/quirc "$lib"
+	do_git_checkout "$repo" "$lib" "$repo_ver"
 	create_dir "$src_dir/$lib/build"
 	export CC="${cross_prefix}gcc"
 	export CXX="${cross_prefix}g++"
@@ -2633,16 +2711,18 @@ build_libquirc() {
 
 # --enable-librsvg (SVG image rendering).
 build_librsvg() {
+  if [[ $disable_librsvg != 1 && $enable_librsvg == 1 ]]; then
   build_pixman
   build_cairo
   build_pango
-  if [[ $disable_librsvg != 1 && $enable_librsvg == 1 ]]; then
+  activate_meson
 # 	# https://github.com/GNOME/librsvg
 	local lib="librsvg"
-	activate_meson
+  local repo="https://gitlab.gnome.org/GNOME/librsvg"
+  local repo_ver="2.61.3"
 	change_dir "$src_dir"
-	do_git_checkout https://github.com/GNOME/librsvg "$lib"
-	change_dir "$src_dir/$lib" 1
+	do_git_checkout "$repo" "$lib" "$repo_ver"
+	change_dir "$src_dir/$lib"
 	local meson_options="-Ddocs=disabled \
 -Dintrospection=disabled \
 -Dvala=disabled \
@@ -2667,9 +2747,8 @@ build_librsvg() {
 #     --enable-libuavs3d (AVS3 decoder)
 build_libuavs3d() {
   if [[ $disable_libuavs3d != 1 && $enable_libuavs3d == 1 ]]; then
-	# https://github.com/uavs3/uavs3d
 	local lib="libuavs3d"
-	local repo="https://github.com/uavs3/uavs3d"
+  local repo="https://github.com/uavs3/uavs3d"
   local repo_ver="1.0"
   change_dir "$src_dir"
 	do_git_checkout "$repo" "$lib" "$repo_ver"
@@ -2693,11 +2772,14 @@ build_libuavs3d() {
 build_vapoursynth() {
   if [[ $disable_vapoursynth != 1 && $enable_vapoursynth == 1 ]]; then
 	# https://github.com/vapoursynth/vapoursynth
-	local lib="vapoursynth"
-	activate_meson
+	build_libzimg 1
+  activate_meson
+  local lib="vapoursynth"
+  local repo="https://github.com/vapoursynth/vapoursynth"
+  local repo_ver="R73"
 	change_dir "$src_dir"
-	do_git_checkout https://github.com/vapoursynth/vapoursynth "$lib" # meson build for fontconfig no good
-	change_dir "$src_dir/$lib"
+  do_git_checkout "$repo" "$lib" "$repo_ver"
+  change_dir "$src_dir/$lib"
 	copy_path "src/vsscript/vsscript.cpp" "src/vsscript/vsscript.cpp.bak"
 	sed -i 's/#include <Windows.h>/#include <windows.h>/' src/vsscript/vsscript.cpp
   # patch to load windows python dependencies
@@ -2730,7 +2812,6 @@ build_metal() {
 #   --disable-sndio          disable sndio support [autodetect]
 build_sndio () {
   if [[ $disable_sndio != 1 && $enable_sndio == 1 ]]; then
-		# TODO No MinGW/Windows support --enable-sndio"
     echo "WARNING: Library does not have MinGW/windows support. Unable to enable on Windows currently."
     # https://github.com/ratchov/sndio
     local lib="sndio"
@@ -2827,48 +2908,54 @@ build_cuda_llvm() {
     echo "WARNING: Including this library will make the binaries non-redistributable"
 		# TODO --enable-cuda-llvm"
     echo "TODO --enable-cuda-llvm"
-    
   fi
 }
 #   --enable-cuda-nvcc       enable Nvidia CUDA compiler [no]
 build_cuda_nvcc() {
   if [[ $disable_cuda_nvcc != 1 && $enable_cuda_nvcc == 1 ]]; then
     echo "WARNING: Including this library will make the binaries non-redistributable"
-    # https://developer.download.nvidia.com/compute/cuda/redist/cuda_nvcc/windows-x86_64/cuda_nvcc-windows-x86_64-13.0.88-archive.zip
+    if [[ "$bits_target" != "32" ]]; then
     local lib="cuda-nvcc"
-    download_and_unpack_file https://developer.download.nvidia.com/compute/cuda/redist/cuda_nvcc/windows-x86_64/cuda_nvcc-windows-x86_64-13.0.88-archive.zip "$lib"
-    change_dir "$src_dir/$lib"
-    if ! check_pkg_config_batch "$dependency_install_prefix/lib/pkgconfig/$lib*.pc" > >(redirect_output) 2>&1; then
-      convert_msvc_to_mingw -t="$src_dir/$lib/cuda_nvcc-windows-x86_64-13.0.88-archive" -c="$cross_prefix" -o="$lib" -i="mingw-bundle" > >(redirect_output) 2>&1
-      change_dir "$src_dir/$lib/mingw-bundle/"
-      sed -i "s|^prefix=.*|prefix=${dependency_install_prefix}|g" "$src_dir/$lib/mingw-bundle/lib/pkgconfig/$lib.pc"
-      [[ -d "bin" ]] && (cp -rv bin/* "$dependency_install_prefix/bin/" > >(redirect_output) 2>&1 || exit_message 1 "could not install $lib bin")
-      [[ -d "include" ]] && (cp -rv include/* "$dependency_install_prefix/include/" > >(redirect_output) 2>&1 || exit_message 1 "could not install $lib include")
-      [[ -d "lib" ]] && (cp -rv lib/* "$dependency_install_prefix/lib/" > >(redirect_output) 2>&1 || exit_message 1 "could not install $lib lib")
-      [[ -d "share" ]] && (cp -rv share/* "$dependency_install_prefix/share/" > >(redirect_output) 2>&1 || exit_message 1 "could not install $lib share")
+    local lib_dir="$lib-$host_target"
+    # https://developer.download.nvidia.com/compute/cuda/redist/
+    local repo_ver="13.1.80"
+    local repo="https://developer.download.nvidia.com/compute/cuda/redist/cuda_nvcc/windows-x86_64/cuda_nvcc-windows-x86_64-13.0.88-archive.zip"
+    local manifest="$install_pkgconfig_dir/${lib}_manifest"
+    uninstall_manifest "$manifest" > >(redirect_output) 2>&1
+    echo > "$manifest" && chmod -R u+rwx "$manifest"
+    download_and_unpack_file "$repo" "$lib_dir"
+    change_dir "$src_dir/$lib_dir"
+    if ! check_pkg_config_batch "$dependency_install_prefix/lib/pkgconfig/$lib.pc" > >(redirect_output) 2>&1; then
+      convert_msvc_to_mingw -t="$src_dir/$lib_dir" -c="$cross_prefix" -o="$lib" -i="mingw-bundle" > >(redirect_output) 2>&1
+      change_dir "$src_dir/$lib_dir/mingw-bundle/"
+      sed -i "s|^prefix=.*|prefix=${dependency_install_prefix}|g" "$src_dir/$lib_dir/mingw-bundle/lib/pkgconfig/$lib.pc"
+      [[ -d "3rdparty" ]] && (cp -rfv "$src_dir/$lib_dir/mingw-bundle/3rdparty"* "$dependency_install_prefix/"  2>&1 | sed -n "s/.*' -> '\(.*\)'/\1/p" >> "$manifest"; true)
+      [[ -d "bin" ]] && (cp -rfv "$src_dir/$lib_dir/mingw-bundle/bin"* "$dependency_install_prefix/" 2>/dev/null | sed -n "s/.*' -> '\(.*\)'/\1/p" >> "$manifest"; true)
+      [[ -d "include" ]] && (cp -rfv "$src_dir/$lib_dir/mingw-bundle/include"* "$dependency_install_prefix/" 2>/dev/null | sed -n "s/.*' -> '\(.*\)'/\1/p" >> "$manifest"; true)
+      [[ -d "lib" ]] && (cp -rfv "$src_dir/$lib_dir/mingw-bundle/lib"* "$dependency_install_prefix/" 2>/dev/null | sed -n "s/.*' -> '\(.*\)'/\1/p" >> "$manifest"; true)
+      [[ -d "share" ]] && (cp -rfv "$src_dir/$lib_dir/mingw-bundle/share"* "$dependency_install_prefix/" 2>/dev/null | sed -n "s/.*' -> '\(.*\)'/\1/p" >> "$manifest"; true)
+      echo "$dependency_install_prefix/lib/pkgconfig/$lib.pc" >> "$manifest"
     fi
     change_dir "$src_dir"
-    remove_path -rf "$src_dir/$lib/mingw-bundle/"
+    remove_path -rf "$src_dir/$lib_dir/mingw-bundle/"
+    fi
   fi
 }
 #   --disable-d3d11va        disable Microsoft Direct3D 11 video acceleration code [autodetect]
 build_d3d11va() {
   if [[ $disable_d3d11va != 1 && $enable_d3d11va == 1 ]]; then
-    echo "WARNING: Including this library will make the binaries non-redistributable"
     echo "Only available on Windows build"
   fi
 }
 #   --disable-d3d12va        disable Microsoft Direct3D 12 video acceleration code [autodetect]
 build_d3d12va() {
   if [[ $disable_d3d12va != 1 && $enable_d3d12va == 1 ]]; then
-    echo "WARNING: Including this library will make the binaries non-redistributable"
     echo "Only available on Windows build"
   fi
 }
 #   --disable-dxva2          disable Microsoft DirectX 9 video acceleration code [autodetect]
 build_dxva2() {
   if [[ $disable_dxva2 != 1 && $enable_dxva2 == 1 ]]; then
-    echo "WARNING: Including this library will make the binaries non-redistributable"
     echo "Only available on Windows build"
   fi
 }
@@ -2883,7 +2970,6 @@ build_libdrm() {
 build_omx_rpi() {
   if [[ $disable_omx_rpi != 1 && $enable_omx_rpi == 1 ]]; then
     # https://github.com/tizonia/tizonia-openmax-il maybe?
-    echo "WARNING: Including this library will make the binaries non-redistributable"
     echo "Only available on Linux build"
     #
   fi
@@ -2900,7 +2986,6 @@ build_omx() {
 build_mmal() {
   if [[ $disable_mmal != 1 && $enable_mmal == 1 ]]; then
     # https://github.com/raspberrypi/userland/tree/master/interface/mmal maybe?
-    echo "WARNING: Including this library will make the binaries non-redistributable"
     echo "Only available on Linux build"
     #
   fi
@@ -2916,20 +3001,31 @@ build_libmfx() {
 build_libnpp() {
   if [[ $disable_libnpp != 1 && $enable_libnpp == 1 ]]; then
     echo "WARNING: Including this library will make the binaries non-redistributable"
-    local lib="libnpp"
     # https://developer.download.nvidia.com/compute/cuda/redist/libnpp/windows-x86_64/libnpp-windows-x86_64-13.0.1.2-archive.zip
-    download_and_unpack_file https://developer.download.nvidia.com/compute/cuda/redist/libnpp/windows-x86_64/libnpp-windows-x86_64-13.0.1.2-archive.zip "$lib"
-    change_dir "$src_dir/$lib"
-    if ! check_pkg_config_batch "$dependency_install_prefix/lib/pkgconfig/$lib*.pc" > >(redirect_output) 2>&1; then
-      convert_msvc_to_mingw -t="$src_dir/$lib/libnpp-windows-x86_64-13.0.1.2-archive" -c="$cross_prefix" -o="$lib" -i="mingw-bundle" > >(redirect_output) 2>&1
-      change_dir "$src_dir/$lib/mingw-bundle/"
-      sed -i "s|^prefix=.*|prefix=${dependency_install_prefix}|g" "$src_dir/$lib/mingw-bundle/lib/pkgconfig/$lib.pc"
-      [[ -d "bin" ]] && (cp -rv bin/* "$dependency_install_prefix/bin/" > >(redirect_output) 2>&1 || exit_message 1 "could not install $lib bin")
-      [[ -d "include" ]] && (cp -rv include/* "$dependency_install_prefix/include/" > >(redirect_output) 2>&1 || exit_message 1 "could not install $lib include")
-      [[ -d "lib" ]] && (cp -rv lib/* "$dependency_install_prefix/lib/" > >(redirect_output) 2>&1 || exit_message 1 "could not install $lib lib")
-      [[ -d "share" ]] && (cp -rv share/* "$dependency_install_prefix/share/" > >(redirect_output) 2>&1 || exit_message 1 "could not install $lib share")
+    if [[ "$bits_target" != "32" ]]; then
+    local lib="libnpp"
+    local lib_dir="$lib-$host_target"
+    local repo="https://developer.download.nvidia.com/compute/cuda/redist/libnpp/windows-x86_64/libnpp-windows-x86_64-13.0.1.2-archive.zip"
+    local repo_ver="13.0.1.2"
+    local manifest="$install_pkgconfig_dir/${lib}_manifest"
+    uninstall_manifest "$manifest" > >(redirect_output) 2>&1
+    echo > "$manifest" && chmod -R u+rwx "$manifest"
+    download_and_unpack_file "$repo" "$lib_dir"
+    change_dir "$src_dir/$lib_dir"
+    if ! check_pkg_config_batch "$dependency_install_prefix/lib/pkgconfig/npp.pc" > >(redirect_output) 2>&1; then
+      convert_msvc_to_mingw -t="$src_dir/$lib_dir" -c="$cross_prefix" -o="npp" -i="mingw-bundle" > >(redirect_output) 2>&1
+      change_dir "$src_dir/$lib_dir/mingw-bundle/"
+      sed -i "s|^prefix=.*|prefix=${dependency_install_prefix}|g" "$src_dir/$lib_dir/mingw-bundle/lib/pkgconfig/npp.pc"
+      [[ -d "3rdparty" ]] && (cp -rfv "$src_dir/$lib_dir/mingw-bundle/3rdparty"* "$dependency_install_prefix/"  2>&1 | sed -n "s/.*' -> '\(.*\)'/\1/p" >> "$manifest"; true)
+      [[ -d "bin" ]] && (cp -rv "$src_dir/$lib_dir/mingw-bundle/bin"* "$dependency_install_prefix/" > >(redirect_output) 2>&1 || exit_message 1 "could not install $lib bin")
+      [[ -d "include" ]] && (cp -rv "$src_dir/$lib_dir/mingw-bundle/include"* "$dependency_install_prefix/" > >(redirect_output) 2>&1 || exit_message 1 "could not install $lib include")
+      [[ -d "lib" ]] && (cp -rv "$src_dir/$lib_dir/mingw-bundle/lib"* "$dependency_install_prefix/" > >(redirect_output) 2>&1 || exit_message 1 "could not install $lib lib")
+      [[ -d "share" ]] && (cp -rv "$src_dir/$lib_dir/mingw-bundle/share"* "$dependency_install_prefix/" > >(redirect_output) 2>&1 || exit_message 1 "could not install $lib share")
+      echo "$dependency_install_prefix/lib/pkgconfig/npp.pc" >> "$manifest"
     fi
     change_dir "$src_dir"
+    remove_path -rf "$src_dir/$lib_dir/mingw-bundle/"
+    fi
   fi
 }
 #   --enable-libopencv       enable video filtering via libopencv [no]
@@ -2938,9 +3034,12 @@ build_libopencv() {
     #https://github.com/opencv/opencv
     build_mingw_std_threads
     #do_git_checkout https://github.com/opencv/opencv # too big :|
+    local lib="libopencv"
+    local repo="https://github.com/opencv/opencv/"
+    local repo_ver="4.12.0"
     change_dir "$src_dir"
-    download_and_unpack_file https://github.com/opencv/opencv/archive/3.4.5.zip opencv-3.4.5
-    create_dir "$src_dir/opencv-3.4.5/build"
+    do_git_checkout "$repo" "$lib" "$repo_ver"
+    change_dir "$src_dir/$lib/build" 1
     #change_dir "$src_dir/opencv-3.4.5"
     apply_patch "file://$PATCHDIR/opencv.detection_based.patch"
     change_dir "$src_dir"
@@ -2957,10 +3056,13 @@ build_libopencv() {
 
 #   --enable-libshaderc      enable GLSL->SPIRV compilation via libshaderc [no]
 build_libshaderc() {
-  if [[ $disable_libshaderc != 1 && $enable_libshaderc == 1 ]]; then
-	change_dir "$src_dir"
-	do_git_checkout https://github.com/google/shaderc shaderc 3a44d5d7850da3601aa43d523a3d228f045fb43d
-	change_dir "$src_dir/shaderc"
+  if [[ $disable_libshaderc != 1 && $enable_libshaderc == 1 ]] || [[ -n "$1" ]]; then
+	local lib="libshaderc"
+  local repo="https://github.com/google/shaderc"
+  local repo_ver="v2025.5"
+  change_dir "$src_dir"
+  do_git_checkout "$repo" "$lib" "$repo_ver"
+  change_dir "$src_dir/$lib"
 	./utils/git-sync-deps
 	# TODO: Allow shared library build
 	do_cmake "-B build -DCMAKE_BUILD_TYPE=release -GNinja -DSHADERC_SKIP_EXAMPLES=ON -DSHADERC_SKIP_TESTS=ON -DSPIRV_SKIP_TESTS=ON -DSHADERC_SKIP_COPYRIGHT_CHECK=ON -DENABLE_EXCEPTIONS=ON -DENABLE_GLSLANG_BINARIES=OFF -DSPIRV_SKIP_EXECUTABLES=ON -DSPIRV_TOOLS_BUILD_STATIC=ON -DBUILD_SHARED_LIBS=OFF"
@@ -2974,8 +3076,10 @@ build_libshaderc() {
 #   --enable-libvo-amrwbenc  enable AMR-WB encoding via libvo-amrwbenc [no]
 build_libvo_amrwbenc() {
   if [[ $disable_libvo_amrwbenc != 1 && $enable_libvo_amrwbenc == 1 ]]; then
+    local lib="libvo_amrwbenc"
+    local repo="https://sourceforge.net/projects/opencore-amr/files/vo-amrwbenc/vo-amrwbenc-0.1.3.tar.gz"
     change_dir "$src_dir"
-    generic_download_and_make_and_install https://sourceforge.net/projects/opencore-amr/files/vo-amrwbenc/vo-amrwbenc-0.1.3.tar.gz
+    generic_download_and_make_and_install "$repo" "$lib"
 	  change_dir "$src_dir"
   fi
 }
@@ -2990,7 +3094,6 @@ build_libxcb() {
 build_libxcb_shape() {
   if [[ $disable_libxcb_shape != 1 && $enable_libxcb_shape == 1 ]]; then
     echo "Only available on Linux build"
-    build_libxcb
     # https://gitlab.freedesktop.org/xorg/lib/libxcb
   fi
 }
@@ -2998,7 +3101,6 @@ build_libxcb_shape() {
 build_libxcb_shm() {
   if [[ $disable_libxcb_shm != 1 && $enable_libxcb_shm == 1 ]]; then
     echo "Only available on Linux build"
-    build_libxcb
     # https://gitlab.freedesktop.org/xorg/lib/libxcb
   fi
 }
@@ -3006,7 +3108,6 @@ build_libxcb_shm() {
 build_libxcb_xfixes() {
   if [[ $disable_libxcb_xfixes != 1 && $enable_libxcb_xfixes == 1 ]]; then
     echo "Only available on Linux build"
-    build_libxcb
     # https://gitlab.freedesktop.org/xorg/lib/libxcb
   fi
 }
@@ -3015,9 +3116,11 @@ build_libxcb_xfixes() {
 build_libdvdread() {
   if [[ $disable_libdvdread != 1 && $enable_libdvdread == 1 ]]; then
 	build_libdvdcss
-	change_dir "$src_dir"
-	download_and_unpack_file http://dvdnav.mplayerhq.hu/releases/libdvdread-4.9.9.tar.xz # last revision before 5.X series so still works with MPlayer
-	change_dir "$src_dir/libdvdread-4.9.9"
+	local lib="libdvdread"
+  local repo="http://dvdnav.mplayerhq.hu/releases/libdvdread-4.9.9.tar.xz" # last revision before 5.X series so still works with MPlayer
+  change_dir "$src_dir"
+  download_and_unpack_file "$repo" "$lib"  # 4.2.1. latest revision before 5.x series [?]
+  change_dir "$src_dir/$lib"
 	# XXXX better CFLAGS here...
 	generic_configure "CFLAGS=-DHAVE_DVDCSS_DVDCSS_H LDFLAGS=-ldvdcss --enable-dlfcn" # vlc patch: "--enable-libdvdcss" # XXX ask how I'm *supposed* to do this to the dvdread peeps [svn?]
 	do_make_and_make_install
@@ -3029,12 +3132,11 @@ build_libdvdread() {
 # --enable-libdvdnav                 # enable libdvdnav, needed for DVD demuxing [no]
 build_libdvdnav() {
   if [[ $disable_libdvdnav != 1 && $enable_libdvdnav == 1 ]]; then
-	change_dir "$src_dir"
-	download_and_unpack_file http://dvdnav.mplayerhq.hu/releases/libdvdnav-4.2.1.tar.xz # 4.2.1. latest revision before 5.x series [?]
-	change_dir "$src_dir/libdvdnav-4.2.1"
-	if [[ ! -f ./configure ]]; then
-		./autogen.sh
-	fi
+	local lib="libdvdnav"
+  local repo="http://dvdnav.mplayerhq.hu/releases/libdvdnav-4.2.1.tar.xz"
+  change_dir "$src_dir"
+  download_and_unpack_file "$repo" "$lib"  # 4.2.1. latest revision before 5.x series [?]
+  change_dir "$src_dir/$lib"
 	generic_configure_make_install
 	sed -i.bak 's/-ldvdnav.*/-ldvdnav -ldvdread -ldvdcss -lpsapi/' "$PKG_CONFIG_PATH/dvdnav.pc" # psapi for dlfcn ... [hrm?]
 	change_dir "$src_dir"
@@ -3058,9 +3160,11 @@ build_pango() {
   build_libfontconfig
  	# https://gitlab.gnome.org/GNOME/pango
 	local lib="pango"
+  local repo="https://gitlab.gnome.org/GNOME/pango"
+  local repo_ver="1.57.0"
   activate_meson
 	change_dir "$src_dir"
-	do_git_checkout https://gitlab.gnome.org/GNOME/pango "$lib"
+	do_git_checkout "$repo" "$lib" "$repo_ver"
 	change_dir "$src_dir/$lib"
   export PKG_CONFIG_PATH="$dependency_install_prefix/lib/pkgconfig"
 	local meson_options="-Ddocumentation=false \
@@ -3089,9 +3193,11 @@ build_pixman() {
   if [[ $disable_librsvg != 1 && $enable_librsvg == 1 ]]; then
  	# https://gitlab.freedesktop.org/pixman/pixman
 	local lib="pixman"
+  local repo="https://gitlab.freedesktop.org/pixman/pixman"
+  local repo_ver="pixman-0.46.4"
   activate_meson
 	change_dir "$src_dir"
-	do_git_checkout https://gitlab.freedesktop.org/pixman/pixman "$lib"
+	do_git_checkout "$repo" "$lib" "$repo_ver"
 	change_dir "$src_dir/$lib"
   local cross_file=$(get_meson_cross_file)
 	local meson_options="-Dtests=disabled -Ddemos=disabled"
@@ -3107,9 +3213,11 @@ build_cairo() {
   if [[ $disable_librsvg != 1 && $enable_librsvg == 1 ]]; then
  	# https://gitlab.freedesktop.org/cairo/cairo
 	local lib="cairo"
+  local repo="https://gitlab.freedesktop.org/cairo/cairo"
+  local repo_ver="1.18.4"
   activate_meson
 	change_dir "$src_dir"
-	do_git_checkout https://gitlab.freedesktop.org/cairo/cairo "$lib"
+	do_git_checkout "$repo" "$lib" "$repo_ver"
 	change_dir "$src_dir/$lib"
   local cross_file=$(get_meson_cross_file)
 	local meson_options="-Dtests=disabled -Dgtk_doc=false"
@@ -3124,8 +3232,10 @@ build_cairo() {
 build_libgpg_error() {
   # https://github.com/gpg/libgpg-error
   local lib="libgpg-error"
+  local repo="https://github.com/gpg/libgpg-error"
+  local repo_ver="libgpg-error-1.45"
   change_dir "$src_dir"
-  do_git_checkout https://github.com/gpg/libgpg-error "$lib"
+  do_git_checkout "$repo" "$lib" "$repo_ver"
   change_dir "$src_dir/$lib"
   export CC="${cross_prefix}gcc"
   export CXX="${cross_prefix}g++"
@@ -3137,40 +3247,50 @@ build_libgpg_error() {
 }
 
 build_lcms() {
+  local lib="lcms"
+  local repo="https://github.com/ImageMagick/lcms"
 	change_dir "$src_dir"
-	do_git_checkout_and_make_install https://github.com/ImageMagick/lcms
+	do_git_checkout_and_make_install "$repo" "$lib"
 	change_dir "$src_dir"
 }
 
 build_libjsoncpp() {
   activate_meson
+	local repo="https://github.com/open-source-parsers/jsoncpp"
+  local lib="jsoncpp"
+  local repo_ver="1.9.6"
 	change_dir "$src_dir"
-	do_git_checkout https://github.com/open-source-parsers/jsoncpp jsoncpp
-	change_dir "$src_dir/jsoncpp"
-	if [[ "$build_force" -eq 1 ]]; then
-		remove_path -rf already_*
-	fi
-	local config_options=""
-	local meson_options="$config_options"
+	do_git_checkout "$repo" "$lib" "$repo_ver"
+	change_dir "$src_dir/$lib"
 	get_meson_cross_jsoncpp
-	meson_options+=" --cross-file=${src_dir}/jsoncpp/meson-cross-jsoncpp.mingw.txt"
+	local meson_options+=" --cross-file=${src_dir}/jsoncpp/meson-cross-jsoncpp.mingw.txt"
 	do_meson "$meson_options" "setup build"
 	do_ninja_and_ninja_install
 	change_dir "$src_dir"
 }
 
 build_giflib() {
+	local lib="giflib"
+  local repo="https://sourceforge.net/projects/giflib/files/giflib-5.1.4.tar.gz"
+  local repo_ver="5.1.4"
 	change_dir "$src_dir"
-	generic_download_and_make_and_install https://sourceforge.net/projects/giflib/files/giflib-5.1.4.tar.gz
+	generic_download_and_make_and_install "$repo" "$lib"
 	change_dir "$src_dir"
 }
 
 build_libleptonica() {
 	build_libjpeg_turbo
 	build_giflib
+	build_zlib
+  build_libpng
+  build_libwebp 1
+  build_libtiff
+  local lib="libleptonica"
+  local repo="https://github.com/DanBloomberg/leptonica"
+  local repo_ver="1.86.0"
 	change_dir "$src_dir"
-	do_git_checkout "https://github.com/DanBloomberg/leptonica.git" "leptonica"
-	change_dir "$src_dir/leptonica"
+	do_git_checkout "$repo" "$lib" "$repo_ver"
+	change_dir "$src_dir/$lib"
 	export CPPFLAGS="-DOPJ_STATIC"
 	generic_configure_make_install
 	reset_cppflags
@@ -3179,22 +3299,30 @@ build_libleptonica() {
 
 build_libtiff() {
 	build_libjpeg_turbo # auto uses it?
+	local lib="libtiff"
+  local repo="https://download.osgeo.org/libtiff/tiff-4.7.1rc1.tar.gz" # "https://gitlab.com/libtiff/libtiff"
+  local repo_ver="v4.7.1"
 	change_dir "$src_dir"
-	generic_download_and_make_and_install http://download.osgeo.org/libtiff/tiff-4.7.1.tar.gz
+  download_and_unpack_file "$repo" "$lib"
+  change_dir "$src_dir/$lib"
 	sed -i.bak "s/-ltiff.*$/-ltiff -llzma -ljpeg -lz/" "$PKG_CONFIG_PATH/libtiff-4.pc" # static deps
 	change_dir "$src_dir"
 }
 
 build_gettext() {
+	local lib="liblc3"
+  local repo="https://ftp.gnu.org/pub/gnu/gettext/gettext-0.26.tar.gz"
 	change_dir "$src_dir"
-	generic_download_and_make_and_install "https://ftp.gnu.org/pub/gnu/gettext/gettext-0.26.tar.gz"
+	generic_download_and_make_and_install "$repo" "$lib"
 	change_dir "$src_dir"
 }
 
 build_libffi() {
+	local lib="libffi"
+  local repo="https://github.com/libffi/libffi/releases/download/v3.5.2/libffi-3.5.2.tar.gz"
 	change_dir "$src_dir"
-	download_and_unpack_file "https://github.com/libffi/libffi/releases/download/v3.5.2/libffi-3.5.2.tar.gz" # also dep
-	change_dir "$src_dir/libffi-3.5.2"
+	download_and_unpack_file "$repo" "$lib" # also dep
+	change_dir "$src_dir/$lib"
 	apply_patch "file://$PATCHDIR/libffi.patch" -p1
 	generic_configure_make_install
 	change_dir "$src_dir"
@@ -3203,10 +3331,12 @@ build_libffi() {
 build_glib() {
 	build_gettext
 	build_libffi
+  activate_meson
+	local lib="glib"
+  local repo="https://github.com/GNOME/glib"
 	change_dir "$src_dir"
-	do_git_checkout https://github.com/GNOME/glib glib
-	activate_meson
-	change_dir "$src_dir/glib"
+	do_git_checkout "$repo" "$lib"
+	change_dir "$src_dir/$lib"
   local cross_file=$(get_meson_cross_file)
 	local meson_options="--force-fallback-for=libpcre -Dforce_posix_threads=true -Dman-pages=disabled -Dsysprof=disabled -Dglib_debug=disabled -Dtests=false --wrap-mode=default"
 	# get_local_meson_cross_with_propeties
@@ -3218,9 +3348,12 @@ build_glib() {
 }
 
 build_lz4() {
+	local lib="lz4"
+  local repo="https://github.com/lz4/lz4/releases/download/v1.10.0/lz4-1.10.0.tar.gz"
+  local repo_ver="v1.10.0"
 	change_dir "$src_dir"
-	download_and_unpack_file https://github.com/lz4/lz4/releases/download/v1.10.0/lz4-1.10.0.tar.gz
-	change_dir "$src_dir/lz4-1.10.0"
+	download_and_unpack_file "$repo" "$lib"
+	change_dir "$src_dir/$lib"
 	# TODO: Allow shared library build
 	do_cmake "-S build/cmake -B build -GNinja -DCMAKE_BUILD_TYPE=Release -DBUILD_STATIC_LIBS=ON"
 	do_ninja_and_ninja_install
@@ -3229,28 +3362,37 @@ build_lz4() {
 
 build_libarchive() {
 	build_lz4
+  local lib="libarchive"
+  local repo="https://github.com/libarchive/libarchive"
+  local repo_ver="v3.8.4"
 	change_dir "$src_dir"
-	download_and_unpack_file https://github.com/libarchive/libarchive/releases/download/v3.8.1/libarchive-3.8.1.tar.gz
-	change_dir "$src_dir/libarchive-3.8.1"
+	do_git_checkout "$repo" "$lib" "$repo_ver"
+	change_dir "$src_dir/$lib"
 	generic_configure "--with-nettle --bindir=$dependency_install_prefix/bin --without-openssl --without-iconv --disable-posix-regex-lib"
 	do_make_install
 	change_dir "$src_dir"
 }
 
 build_flac() {
+	local lib="flac"
+  local repo="https://github.com/xiph/flac"
+  local repo_ver="1.5.0"
 	change_dir "$src_dir"
-	do_git_checkout https://github.com/xiph/flac flac
-	change_dir "$src_dir/flac"
+	do_git_checkout "$repo" "$lib" "$repo_ver"
+	change_dir "$src_dir/$lib"
 	do_cmake "-B build -DCMAKE_BUILD_TYPE=Release -DINSTALL_MANPAGES=OFF -GNinja"
 	do_ninja_and_ninja_install
 	change_dir "$src_dir"
 }
 
 build_libpsl() {
+	local lib="libpsl"
+  local repo="https://github.com/rockdaboot/libpsl"
+  local repo_ver="0.21.5"
 	change_dir "$src_dir"
+	do_git_checkout "$repo" "$lib" "$repo_ver"
+	change_dir "$src_dir/$lib"
 	export CFLAGS="-DPSL_STATIC"
-	download_and_unpack_file https://github.com/rockdaboot/libpsl/releases/download/0.21.5/libpsl-0.21.5.tar.gz
-	change_dir "$src_dir/libpsl-0.21.5"
 	generic_configure "--disable-nls --disable-rpath --disable-gtk-doc-html --disable-man --disable-runtime"
 	do_make_and_make_install
 	sed -i.bak "s/Libs: .*/& -lidn2 -lunistring -lws2_32 -liconv/" "$PKG_CONFIG_PATH/libpsl.pc"
@@ -3259,11 +3401,13 @@ build_libpsl() {
 }
 
 build_nghttp2() {
-	change_dir "$src_dir"
-	export CFLAGS="-DNGHTTP2_STATICLIB"
-	download_and_unpack_file https://github.com/nghttp2/nghttp2/releases/download/v1.67.1/nghttp2-1.67.1.tar.gz
-	change_dir "$src_dir/nghttp2-1.67.1"
-	# TODO: Allow shared library build
+	local lib="nghttp2"
+  local repo="https://github.com/nghttp2/nghttp2"
+  local repo_ver="v1.68.0"
+  change_dir "$src_dir"
+	do_git_checkout "$repo" "$lib" "$repo_ver"
+	change_dir "$src_dir/$lib"
+  export CFLAGS="$CFLAGS -DNGHTTP2_STATICLIB"
 	do_cmake "-B build -DENABLE_LIB_ONLY=1 -DBUILD_SHARED_LIBS=0 -DBUILD_STATIC_LIBS=1 -GNinja"
 	do_ninja_and_ninja_install
 	reset_cflags
@@ -3271,33 +3415,48 @@ build_nghttp2() {
 }
 
 build_libssh2() {
+	local lib="libssh2"
+  local repo="https://github.com/libssh2/libssh2"
+  local repo_ver="1.11.1"
 	change_dir "$src_dir"
-	generic_download_and_make_and_install https://github.com/libssh2/libssh2/releases/download/libssh2-1.11.1/libssh2-1.11.1.tar.gz
+	do_git_checkout "$repo" "$lib" "$repo_ver"
+	change_dir "$src_dir/$lib"
+  generic_configure_make_install "--enable-static --disable-shared"
 	change_dir "$src_dir"
 }
 
 build_cpuinfo() {
+	local lib="cpuinfo"
+  local repo="https://github.com/pytorch/cpuinfo"
 	change_dir "$src_dir"
-	do_git_checkout https://github.com/pytorch/cpuinfo
-	change_dir "$src_dir/cpuinfo"
+	do_git_checkout "$repo" "$lib"
+	change_dir "$src_dir/$lib"
 	do_cmake_and_install # builds included cpuinfo bugged
 	change_dir "$src_dir"
 }
 
 build_vulkan_loader() {
-	change_dir "$src_dir"
-	do_git_checkout https://github.com/BtbN/Vulkan-Shim-Loader Vulkan-Shim-Loader 9657ca8e395ef16c79b57c8bd3f4c1aebb319137
-	change_dir "$src_dir/Vulkan-Shim-Loader"
-	do_git_checkout https://github.com/KhronosGroup/Vulkan-Headers Vulkan-Headers v1.4.326
+	local parentlib="vulkan-loader"
+  local lib="Vulkan-Shim-Loader"
+  local repo="https://github.com/BtbN/Vulkan-Shim-Loader"
+	change_dir "$src_dir/$parentlib" 1
+	do_git_checkout "$repo" "$lib"
+	change_dir "$src_dir/$parentlib/$lib"
+  local lib="Vulkan-Headers"
+  local repo="https://github.com/KhronosGroup/Vulkan-Headers"
+  local repo_ver="v1.4.326"
+	do_git_checkout "$repo" "$lib" "$repo_ver"
 	do_cmake_and_install "-DCMAKE_BUILD_TYPE=Release -DVULKAN_SHIM_IMPERSONATE=ON"
 	change_dir "$src_dir"
 }
 
 build_libunwind() {
+	local lib="libunwind"
+  local repo="https://github.com/libunwind/libunwind"
+  local repo_ver="v1.8.3"
 	change_dir "$src_dir"
-	do_git_checkout https://github.com/libunwind/libunwind libunwind
-	change_dir "$src_dir/libunwind"
-	autoreconf -i
+	do_git_checkout "$repo" "$lib" "$repo_ver"
+	change_dir "$src_dir/$lib"
 	# TODO: Allow shared library build
 	do_configure "--host=x86_64-linux-gnu --prefix=$dependency_install_prefix --disable-shared --enable-static"
 	do_make_and_make_install
@@ -3305,18 +3464,24 @@ build_libunwind() {
 }
 
 build_libxxhash() {
+	local lib="libxxhash"
+  local repo="https://github.com/Cyan4973/xxHash"
+  local repo_ver="v0.8.3"
 	change_dir "$src_dir"
-	do_git_checkout https://github.com/Cyan4973/xxHash xxHash dev
-	change_dir "$src_dir/xxHash"
+	do_git_checkout "$repo" "$lib" "$repo_ver"
+	change_dir "$src_dir/$lib"
 	do_cmake "-S build/cmake -B build -DCMAKE_BUILD_TYPE=release -GNinja"
 	do_ninja_and_ninja_install
 	change_dir "$src_dir"
 }
 
 build_spirv_cross() {
+	local lib="SPIRV-Cross"
+  local repo="https://github.com/KhronosGroup/SPIRV-Cross"
+  local repo_ver="vulkan-sdk-1.4.328.1"
 	change_dir "$src_dir"
-	do_git_checkout https://github.com/KhronosGroup/SPIRV-Cross SPIRV-Cross b26ac3fa8bcfe76c361b56e3284b5276b23453ce
-	change_dir "$src_dir/SPIRV-Cross"
+	do_git_checkout "$repo" "$lib" "$repo_ver"
+	change_dir "$src_dir/$lib"
 	# TODO: Allow shared library build
 	do_cmake "-B build -GNinja -DSPIRV_CROSS_STATIC=ON -DSPIRV_CROSS_SHARED=OFF -DCMAKE_BUILD_TYPE=Release -DSPIRV_CROSS_CLI=OFF -DSPIRV_CROSS_ENABLE_TESTS=OFF -DSPIRV_CROSS_FORCE_PIC=ON -DSPIRV_CROSS_ENABLE_CPP=OFF"
 	do_ninja_and_ninja_install
@@ -3325,51 +3490,59 @@ build_spirv_cross() {
 }
 
 build_libdovi() {
+	local lib="libdovi"
+  local repo="https://github.com/quietvoid/dovi_tool"
+  local repo_ver="2.3.1"
 	change_dir "$src_dir"
-	do_git_checkout https://github.com/quietvoid/dovi_tool dovi_tool
-	change_dir "$src_dir/dovi_tool"
-	if [[ ! -e $dependency_install_prefix/lib/libdovi.a ]]; then
-		curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y && . "$HOME/.cargo/env" && rustup update && rustup target add x86_64-pc-windows-gnu # rustup self uninstall
-		wget https://github.com/quietvoid/dovi_tool/releases/download/2.3.1/dovi_tool-2.3.1-x86_64-pc-windows-msvc.zip
-		unzip -o dovi_tool-2.3.1-x86_64-pc-windows-msvc.zip -d "$dependency_install_prefix/bin"
-		remove_path -f dovi_tool-2.3.1-x86_64-pc-windows-msvc.zip
-		unset PKG_CONFIG_PATH
-		change_dir "$src_dir/dovi_tool/dolby_vision"
-		cargo install cargo-c --features=vendored-openssl
-		export PKG_CONFIG_PATH="$dependency_install_prefix/lib/pkgconfig"
-		# TODO: Allow shared library build
-		cargo cinstall --release --prefix="$dependency_install_prefix" --libdir="$dependency_install_prefix/lib" --library-type=staticlib --target x86_64-pc-windows-gnu
-		change_dir "$src_dir"
-	else
-		echo -e "libdovi already installed"
-	fi
+	do_git_checkout "$repo" "$lib" "$repo_ver"
+  change_dir "$src_dir/$lib/dolby_vision"
+  cargo_build_and_install "--release" "--package dolby_vision --release --library-type=staticlib"
+	# if [[ ! -e $dependency_install_prefix/lib/libdovi.a ]]; then
+	# 	curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y && . "$HOME/.cargo/env" && rustup update && rustup target add x86_64-pc-windows-gnu # rustup self uninstall
+	# 	wget https://github.com/quietvoid/dovi_tool/releases/download/2.3.1/dovi_tool-2.3.1-x86_64-pc-windows-msvc.zip
+	# 	unzip -o dovi_tool-2.3.1-x86_64-pc-windows-msvc.zip -d "$dependency_install_prefix/bin"
+	# 	remove_path -f dovi_tool-2.3.1-x86_64-pc-windows-msvc.zip
+	# 	unset PKG_CONFIG_PATH
+	# 	change_dir "$src_dir/$lib/dolby_vision"
+	# 	cargo install cargo-c --features=vendored-openssl
+	# 	export PKG_CONFIG_PATH="$dependency_install_prefix/lib/pkgconfig"
+	# 	# TODO: Allow shared library build
+	# 	cargo cinstall --release --prefix="$dependency_install_prefix" --libdir="$dependency_install_prefix/lib" --library-type=staticlib --target x86_64-pc-windows-gnu
+	# 	change_dir "$src_dir"
+	# else
+	# 	echo -e "libdovi already installed"
+	# fi
 	change_dir "$src_dir"
 }
 
 build_libjpeg_turbo() {
+	local lib="libjpeg-turbo"
+  local repo="https://github.com/libjpeg-turbo/libjpeg-turbo"
+  local repo_ver="3.1.2"
 	change_dir "$src_dir"
-	do_git_checkout https://github.com/libjpeg-turbo/libjpeg-turbo libjpeg-turbo "origin/main"
-	change_dir "$src_dir/libjpeg-turbo"
+	do_git_checkout "$repo" "$lib" "$repo_ver"
+	change_dir "$src_dir/$lib"
 	local cmake_params="-DENABLE_SHARED=0 -DCMAKE_ASM_NASM_COMPILER=yasm"
-		cmake_params+=" -DCMAKE_TOOLCHAIN_FILE=$(get_generic_cmake_toolchain)"
-		local target_proc=AMD64
-		if [ "$bits_target" = "32" ]; then
-			target_proc=X86
-		fi
+	cmake_params+=" -DCMAKE_TOOLCHAIN_FILE=$(get_generic_cmake_toolchain)"
 	do_cmake_and_install "$cmake_params"
 	change_dir "$src_dir"
 }
 
 build_libdvdcss() {
+	local lib="libdvdcss"
+  local repo="https://download.videolan.org/pub/videolan/libdvdcss/1.2.13/libdvdcss-1.2.13.tar.bz2"
 	change_dir "$src_dir"
-	generic_download_and_make_and_install https://download.videolan.org/pub/videolan/libdvdcss/1.2.13/libdvdcss-1.2.13.tar.bz2
+	generic_download_and_make_and_install "$repo" "$lib"
   change_dir "$src_dir"
 }
 
 build_libvvdec() {
+  local lib="libvvdec"
+  local repo="https://github.com/fraunhoferhhi/vvdec"
+  local repo_ver="v3.1.0"
 	change_dir "$src_dir"
-	do_git_checkout https://github.com/fraunhoferhhi/vvdec libvvdec
-	change_dir "$src_dir/libvvdec"
+	do_git_checkout "$repo" "$lib" "$repo_ver"
+	change_dir "$src_dir/$lib"
 	do_cmake "-B build -DCMAKE_BUILD_TYPE=Release -DVVDEC_ENABLE_LINK_TIME_OPT=OFF -DVVDEC_INSTALL_VVDECAPP=ON -GNinja"
 	do_ninja_and_ninja_install
 	change_dir "$src_dir"
@@ -3377,23 +3550,29 @@ build_libvvdec() {
 
 build_svt_hevc() {
 	if [[ "$bits_target" != "32" ]] && [[ $build_svt_hevc = y ]]; then
-		change_dir "$src_dir"
-		do_git_checkout https://github.com/OpenVisualCloud/SVT-HEVC
-		create_dir "$src_dir/SVT-HEVC/release"
-		do_cmake_from_build_dir "$src_dir/SVT-HEVC" "-DCMAKE_BUILD_TYPE=Release"
-		do_make_and_make_install
-		change_dir "$src_dir"
+  local lib="svt-hevc"
+  local repo="https://github.com/OpenVisualCloud/SVT-HEVC"
+  local repo_ver="v1.5.1"
+	change_dir "$src_dir"
+	do_git_checkout "$repo" "$lib" "$repo_ver"
+	change_dir "$src_dir/$lib/build" 1
+  do_cmake_from_build_dir "$src_dir/$lib" "-DCMAKE_BUILD_TYPE=Release"
+  do_make_and_make_install
+  change_dir "$src_dir"
 	fi
 }
 
 build_svt_vp9() {
 	if [[ "$bits_target" != "32" ]] && [[ $build_svt_vp9 = y ]]; then
-		change_dir "$src_dir"
-		do_git_checkout https://github.com/OpenVisualCloud/SVT-VP9
-		change_dir "$src_dir/SVT-VP9/Build"
-		do_cmake_from_build_dir "$src_dir/SVT-VP9" "-DCMAKE_BUILD_TYPE=Release"
-		do_make_and_make_install
-		change_dir "$src_dir"
+  local lib="svt-vp9"
+  local repo="https://github.com/OpenVisualCloud/SVT-VP9"
+  local repo_ver="v0.3.1"
+	change_dir "$src_dir"
+	do_git_checkout "$repo" "$lib" "$repo_ver"
+	change_dir "$src_dir/$lib/build" 1
+  do_cmake_from_build_dir "$src_dir/$lib" "-DCMAKE_BUILD_TYPE=Release"
+  do_make_and_make_install
+  change_dir "$src_dir"
 	fi
 }
 
