@@ -36,7 +36,10 @@
           ],
           "editor.formatOnSave": true
         },
-        "terminal.integrated.defaultProfile.linux": "bash"
+        "terminal.integrated.defaultProfile.linux": "bash",
+        "git.ignoredRepositories": [
+            "${workspaceFolder}/prebuilt"
+        ]
       }
     }
   },
