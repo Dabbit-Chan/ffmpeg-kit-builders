@@ -109,7 +109,7 @@ build_mingw_std_threads() {
 }
 # build_zlib              # config_options+= --disable-zlib               # disable zlib [autodetect]
 build_zlib() {
-  if [[ $disable_zlib != 1 ]] || [[ -n "$1" ]]; then
+  if [[ $disable_zlib != 1 && $enable_zlib == 1 ]] || [[ -n "$1" ]]; then
   local repo="https://github.com/madler/zlib"
   local lib="zlib"
   local repo_ver="v1.3.1"
@@ -177,7 +177,7 @@ EOF
 }
 # build_lzma              # config_options+= --disable-lzma               # disable lzma [autodetect]
 build_lzma() {
-  if [[ $disable_lzma != 1 ]]; then
+  if [[ $disable_lzma != 1 && $enable_lzma == 1 ]]; then
 	echo "NOTE FROM LZMA DEV: Users of LZMA Utils should 
   move to XZ Utils. XZ Utils support the legacy 
   .lzma format used by LZMA Utils, and can also 
@@ -194,7 +194,7 @@ build_lzma() {
 }
 # build_iconv             # config_options+= --disable-iconv              # disable iconv [autodetect]
 build_iconv() {
-  if [[ $disable_iconv != 1 ]]; then
+  if [[ $disable_iconv != 1 && $enable_iconv == 1 ]]; then
 	local lib="libiconv"
   local repo="https://ftp.gnu.org/gnu/libiconv/libiconv-1.18.tar.gz"
   local repo_ver="v1.18"
@@ -208,7 +208,7 @@ build_iconv() {
 }
 # build_sdl2              # config_options+= --disable-sdl2               # disable sdl2 [autodetect]
 build_sdl2() {
-  if [[ $disable_sdl2 != 1 ]] || [[ -n "$1" ]]; then
+  if [[ $disable_sdl2 != 1 && $enable_sdl2 == 1 ]] || [[ -n "$1" ]]; then
 	local lib="sdl2"
   local repo="https://github.com/libsdl-org/SDL"
   local repo_ver="release-2.32.8"
@@ -231,7 +231,7 @@ build_sdl2() {
 }
 # build_amf               # config_options+= --disable-amf                # disable AMF video encoding code [autodetect]
 build_amf() {
-  if [[ $disable_amf != 1 ]]; then
+  if [[ $disable_amf != 1 && $enable_amf == 1 ]]; then
 	local lib="amf_headers"
   local repo="https://github.com/GPUOpen-LibrariesAndSDKs/AMF"
   do_git_checkout "$repo" "$lib"
@@ -267,7 +267,7 @@ build_libvpl() {
 }
 # build_nvenc             # config_options+= --disable-nvenc              # disable Nvidia video encoding code [autodetect]
 build_nvenc() {
-  if [[ $enable_nvenc == 1 || $enable_cuvid == 1 || $enable_nvdec == 1 || $enable_ffnvcodec == 1 ]] || [[ -n "$1" ]]; then
+  if [[ $disable_nvenc != 1 && $enable_nvenc == 1 ]] || [[ -n "$1" ]]; then
   echo "WARNING: This is a non-gpl library. Binaries including this library are non-redistributable!"
   local lib="nvenc"
   local repo="https://github.com/FFmpeg/nv-codec-headers"
@@ -285,15 +285,21 @@ build_nvenc() {
 }
 # build_ffnvcodec         # config_options+= --disable-ffnvcodec          # disable dynamically linked Nvidia code [autodetect]
 build_ffnvcodec() {
+  if [[ $disable_ffnvcodec != 1 && $enable_ffnvcodec == 1 ]] || [[ -n "$1" ]]; then
 	build_nvenc 1
+  fi
 }
 # build_nvdec             # config_options+= --disable-nvdec              # disable Nvidia video decoding acceleration (via hwaccel) [autodetect]
 build_nvdec() {
+  if [[ $disable_nvdec != 1 && $enable_nvdec == 1 ]] || [[ -n "$1" ]]; then
   build_nvenc 1
+  fi
 }
 # build_cuvid             # config_options+= --disable-cuvid              # disable Nvidia CUVID support [autodetect]
 build_cuvid() {
+  if [[ $disable_cuvid != 1 && $enable_cuvid == 1 ]] || [[ -n "$1" ]]; then
   build_nvenc 1
+  fi
 }
 # build_libzimg           # config_options+= --enable-libzimg             # enable z.lib, needed for zscale filter [no]
 build_libzimg() {
@@ -804,7 +810,9 @@ build_libopencore_amrnb() {
 }
 # build_libopencore_amrwb # config_options+= --enable-libopencore-amrwb   # enable AMR-WB decoding via libopencore-amrwb [no]
 build_libopencore_amrwb() {
+  if [[ $disable_libopencore_amrwb != 1 && $enable_libopencore_amrwb == 1 ]] || [[ -n "$1" ]]; then
   build_libopencore_amrnb 1
+  fi
 }
 
 # build_libilbc           # config_options+= --enable-libilbc             # enable iLBC de/encoding via libilbc [no]
@@ -1463,6 +1471,7 @@ build_libdav1d() {
 }
 # build_vulkan            # config_options+= --disable-vulkan             # disable Vulkan code [autodetect]
 build_vulkan() {
+  extra_args="$1"
   if [[ ($disable_vulkan != 1 && $enable_vulkan == 1) || -n $extra_args ]]; then
 	local lib="Vulkan-Headers"
   local repo="https://github.com/KhronosGroup/Vulkan-Headers"
