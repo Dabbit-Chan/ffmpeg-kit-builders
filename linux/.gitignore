@@ -17,4 +17,4 @@
 /Makefile.in
 aclocal.m4
 Makefile.in
-already_*
+*already_*

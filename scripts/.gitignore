@@ -1,1 +1,2 @@
 *.bak
+/tests/test_samples/
