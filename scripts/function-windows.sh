@@ -153,10 +153,6 @@ configure_ffmpeg_kit() {
 		change_dir "${ffmpeg_kit_src_dir}"
 		autoreconf_library "ffmpeg-kit" || exit_message 1 "could not autoreconf ffmpeg-kit. See $LOG_FILE for details."
 		create_touch_file 0 "$touch_name"
-		local BUILD_DATE="-DFFMPEG_KIT_BUILD_DATE=$(date +%Y%m%d 2>>"${BASEDIR}"/build.log)"
-		export CFLAGS="${local_cflags} ${BUILD_DATE}"
-		export CXXFLAGS="${local_cxxfalgs} ${BUILD_DATE}"
-    export LDFLAGS="$LDFLAGS -lpthread"
 	fi
 
 	local config_options="--prefix=${ffmpeg_kit_install}"
@@ -170,6 +166,10 @@ configure_ffmpeg_kit() {
 		config_options+=" --disable-static"
 	fi
 	change_dir "${ffmpeg_kit_src_dir}"
+  local BUILD_DATE="-DFFMPEG_KIT_BUILD_DATE=$(date +%Y%m%d 2>>"${BASEDIR}"/build.log)"
+  export CFLAGS="${local_cflags} ${BUILD_DATE}"
+  export CXXFLAGS="${local_cxxfalgs} ${BUILD_DATE}"
+  export LDFLAGS="$LDFLAGS -lpthread"
 	do_configure "${config_options}" "./configure" "${TYPE_POSTFIX}" || exit_message 1 "unable to configure ffmpeg-kit. see $LOG_FILE for details."
 
 	echo -e "INFO: Done configuring ffmpeg kit" | tee -a "$LOG_FILE"

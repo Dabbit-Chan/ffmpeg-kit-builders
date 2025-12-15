@@ -17,7 +17,7 @@ echo "Destination: $DEST_DIR"
 echo
 
 # Directories to ignore
-IGNORE_DIRS="pkgconfig ffmpeg-kit_shared ffmpeg-kit_static build cross_compilers"
+IGNORE_DIRS="pkgconfig ffmpeg-kit_shared ffmpeg-kit_static build cross_compilers meson"
 
 license_count=0
 processed_dirs=0
@@ -63,6 +63,7 @@ for item in "$SOURCE_BASE"/*; do
             safe_filename="${dir_name}_${license_filename}"
             
             cp "$license_file" "$DEST_DIR/$safe_filename"
+            chmod -R u+rwx "$path"
             echo "  COPY: $license_filename -> $safe_filename"
             
             license_count=$((license_count + 1))
@@ -72,7 +73,7 @@ for item in "$SOURCE_BASE"/*; do
     
     rm -f /tmp/found_licenses.$$
     
-    if [ $found_files -eq 0 ]; then
+    if [ "$found_files" -eq 0 ]; then
         echo "  No LICENSE or COPYING files found in $dir_name"
         directories_without_licenses+=("$dir_name")
     else
@@ -86,7 +87,7 @@ echo "Processed directories: $processed_dirs"
 echo "Total LICENSE/COPYING files copied: $license_count"
 echo "Destination: $DEST_DIR"
 
-if [ $license_count -gt 0 ]; then
+if [ "$license_count" -gt 0 ]; then
     echo
     echo "Copied files:"
     ls -1 "$DEST_DIR"

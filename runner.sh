@@ -244,6 +244,10 @@ while [ $# -gt 0 ]; do
     export enable_lto="1"
     shift
 		;;
+  --release)
+    export create_release=1
+    shift
+    ;;
   --host-platform=*|--host=*)
     pick_host_platform "${1#*=}"
     shift

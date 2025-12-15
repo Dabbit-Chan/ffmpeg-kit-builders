@@ -1838,7 +1838,7 @@ do_meson() {
 	fi
 	if [[ -e "$local_meson" ]]; then
     # shellcheck disable=SC2206,SC2128
-    configure_command=(python "$local_meson" ${configure_name[*]})
+    configure_command=(python3 "$local_meson" ${configure_name[*]})
 	else
 		configure_command=(meson)
 	fi
@@ -3041,6 +3041,12 @@ create_ffmpeg_kit_bundle() {
 		copy_path "${BASEDIR}"/tools/license/LICENSE.GPLv3 "${LICENSE_BASEDIR}"/license.txt
 		create_touch_file 0 "$touch_name"
 	fi
+  if truthy "$create_release"; then
+    echo -e "INFO: Creating release bundle" | tee -a "$LOG_FILE"
+    create_dir "$work_dir/releases"
+    local out_dir=$(basename "$ffmpeg_kit_bundle")
+    zip_dir "$ffmpeg_kit_bundle" "$work_dir/releases/$out_dir"
+  fi
   chmod -R u+rwx "$work_dir"
 	echo -e "INFO: Done creating bundle" | tee -a "$LOG_FILE"
 }
@@ -3115,4 +3121,56 @@ EOF
             echo
             ;;
     esac
+}
+
+#!/bin/bash
+
+# Minimal zip folder function - supports only .zip format
+# Usage: zip_dir <input_folder> [output_name]
+zip_dir() {
+    # Check for zip command
+    if ! command -v zip >/dev/null 2>&1; then
+        echo "Error: 'zip' command not found. Install with: apt-get install zip / yum install zip / brew install zip" | tee -a "$LOG_FILE"
+        return 1
+    fi
+    
+    # Validate arguments
+    if [[ $# -lt 1 ]] || [[ $# -gt 2 ]]; then
+        echo "Usage: zip_folder <input_folder> [output_name]"
+        return 1
+    fi
+    
+    local input_folder="$1"
+    local output_name="${2:-}"
+    
+    # Validate input folder exists
+    if [[ ! -d "$input_folder" ]]; then
+        echo "Error: Input folder '$input_folder' not found" | tee -a "$LOG_FILE"
+        return 1
+    fi
+    
+    # Set default output name if not provided
+    if [[ -z "$output_name" ]]; then
+        local folder_name=$(basename "$input_folder")
+        # Remove trailing slash if present
+        folder_name="${folder_name%/}"
+        output_name="${folder_name}.zip"
+    fi
+    
+    # Ensure .zip extension
+    if [[ "$output_name" != *.zip ]]; then
+        output_name="${output_name}.zip"
+    fi
+    
+    # Create the zip archive
+    echo "Creating '$output_name' from '$input_folder'..."
+    if (zip -rq "$output_name" "$input_folder"); then
+        echo "Success: Created '$output_name'"
+        return 0
+    else
+        echo "Error: Failed to create zip archive" | tee -a "$LOG_FILE"
+        # Clean up partial output if created
+        [[ -f "$output_name" ]] && rm -f "$output_name"
+        return 1
+    fi
 }

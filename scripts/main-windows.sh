@@ -39,7 +39,7 @@ elif [[ -n "$build_from" ]]; then
 else
 	change_dir "$work_dir" || exit 1
 
-	if trythy "$build_dependencies_only"; then
+	if truthy "$build_dependencies_only"; then
 		echo -e "INFO: Building dependencies only..." | tee -a "$LOG_FILE"
 		echo -e "WARNING: This may fail if previous dependencies havent been built yet." | tee -a "$LOG_FILE"
 		build_all_ffmpeg_dependencies
