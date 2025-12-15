@@ -101,3 +101,12 @@ ENV PATH="/usr/local/flutter/bin:${PATH}"
 
 # 5. Mark directory as safe for Git (fixes "dubious ownership" error)
 RUN git config --system --add safe.directory /usr/local/flutter
+
+RUN dpkg --add-architecture i386
+
+RUN mkdir -pm755 /etc/apt/keyrings && \
+    wget -O /etc/apt/keyrings/winehq-archive.key https://dl.winehq.org/wine-builds/winehq.key && \
+    wget -NP /etc/apt/sources.list.d/ https://dl.winehq.org/wine-builds/ubuntu/dists/noble/winehq-noble.sources
+
+RUN apt-get update && \
+    apt-get install -y --install-recommends winehq-stable
