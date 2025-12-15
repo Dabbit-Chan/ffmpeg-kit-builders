@@ -52,6 +52,7 @@ Build Options:
 	--build-dependencies-only                                     Only build dependency binaries. Will not build app binaries.
 	--build-ffmpeg-only                                           build ffmpeg binaries only
 	--build-ffmpeg-kit-only                                       build ffmpeg-kit binaries and bundle only
+  --release                                                     create release zip files
 	--enable-static|--static[default]                             build static ffmpeg and ffmpeg-kit binaries
 	--enable-shared|--shared                                      build shared ffmpeg and ffmpeg-kit binaries
   --enable-nonfree|--nonfree                                    buil binaries will be non-redistributable
