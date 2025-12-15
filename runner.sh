@@ -50,10 +50,10 @@ Build Options:
 	--build-dependencies=[y]                                      [builds the ffmpeg dependencies. Disable it when the 
                                                                 dependencies was built once and can greatly reduce build time. ]
 	--build-dependencies-only                                     Only build dependency binaries. Will not build app binaries.
-	--build-ffmpeg-only=[n]                                       build ffmpeg binaries only
-	--build-ffmpeg-kit-only=[n]                                   build ffmpeg-kit binaries and bundle only
-	--enable-static|--static                                      build static ffmpeg and ffmpeg-kit binaries
-	--enable-shared|--shared[default]                             build shared ffmpeg and ffmpeg-kit binaries
+	--build-ffmpeg-only                                           build ffmpeg binaries only
+	--build-ffmpeg-kit-only                                       build ffmpeg-kit binaries and bundle only
+	--enable-static|--static[default]                             build static ffmpeg and ffmpeg-kit binaries
+	--enable-shared|--shared                                      build shared ffmpeg and ffmpeg-kit binaries
   --enable-nonfree|--nonfree                                    buil binaries will be non-redistributable
 	--clean-builds                                                clean ffmpeg and ffmpeg-kit builds based on 
                                                                 [--enable-static|--enable-shared(default)] and exit
@@ -297,12 +297,12 @@ while [ $# -gt 0 ]; do
 		export build_dependencies_only=1
 		shift
 		;;
-	--build-ffmpeg-only=*)
-		export build_ffmpeg_only="${1#*=}"
+	--build-ffmpeg-only)
+		export build_ffmpeg_only=1
 		shift
 		;;
-	--build-ffmpeg-kit-only=*)
-		export build_ffmpeg_kit_only="${1#*=}"
+	--build-ffmpeg-kit-only)
+		export build_ffmpeg_kit_only=1
 		shift
 		;;
 	--build-ffmpeg-kit-bundle-only=*)
@@ -310,13 +310,11 @@ while [ $# -gt 0 ]; do
 		shift
 		;;
 	--enable-static | --static)
-		export build_ffmpeg_static=y
-		export build_ffmpeg_shared=n
+		export build_static=y
 		shift
 		;;
 	--enable-shared | --shared)
-		export build_ffmpeg_static=n
-		export build_ffmpeg_shared=y
+		export build_static=n
 		shift
 		;;
   --enable-nonfree | --nonfree)
@@ -402,5 +400,7 @@ for arg in "$@"; do
 	fi
 done
 echo -e "$(date)" | tee -a "$LOG_FILE"
+
+setup_build_environment
 
 source "${SCRIPTDIR}/main-$host_platform.sh"

@@ -16,8 +16,7 @@ export SCRIPTDIR="$BASEDIR/scripts"
 
 # variables with their defaults
 export build_force="0"
-export build_ffmpeg_static=n
-export build_ffmpeg_shared=y
+export build_static=y
 export build_ffmpeg_kit_only=n
 export build_dvbtee=n
 export build_libmxf=n

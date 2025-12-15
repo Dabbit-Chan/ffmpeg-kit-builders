@@ -8,17 +8,11 @@ platform_deps() {
 
 # required for ffmpeg-kit
 build_libjsoncpp() {
-  activate_meson
-  local repo="https://github.com/open-source-parsers/jsoncpp"
-  local lib="jsoncpp"
-  local repo_ver="1.9.6"
-	change_dir "$src_dir"
-	do_git_checkout "$repo" "$lib" "$repo_ver"
-	change_dir "$src_dir/$lib"
-  local meson_options="--prefix=$dependency_install_prefix -Ddefault_library=static"
-	do_meson "$meson_options" "setup build"
-	do_ninja_and_ninja_install
-	change_dir "$src_dir"
+  mapfile -t missing_packages < <(get_missing_packages libjsoncpp-dev)
+  if [[ "${#missing_packages[*]}" -gt 0 ]]; then
+    echo -e "Installing needed dependencies ${missing_packages[*]}:\n  running: \"apt-get install ${missing_packages[*]} -y\""
+    eval "apt-get install ${missing_packages[*]} -y" > >(redirect_output) 2>&1
+  fi
 }
 
 

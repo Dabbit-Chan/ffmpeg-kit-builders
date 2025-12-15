@@ -11,10 +11,10 @@
 #===============================================================================================
 platform_deps() {
   echo "INFO: installing platform specific dependencies"
-  build_dlfcn
-  build_libvvdec
-  build_svt_hevc
-  build_svt_hevc
+  # build_dlfcn
+  # build_libvvdec
+  # build_svt_hevc
+  # build_svt_hevc
   # build_unistring
   # build_libidn2
   # build_vamp_plugin

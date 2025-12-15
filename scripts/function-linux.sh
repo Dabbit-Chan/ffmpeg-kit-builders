@@ -170,6 +170,7 @@ get_ldflags() {
 
 configure_ffmpeg_kit() {
   echo -e "INFO: Configuring ffmpeg kit" | tee -a "$LOG_FILE"
+  build_libjsoncpp
   reset_cflags
 	reset_cppflags
   set_toolchain_paths
@@ -200,7 +201,7 @@ configure_ffmpeg_kit() {
 	local config_options="--prefix=${ffmpeg_kit_install}"
 
 	config_options+=" --host=${host_target}"
-	if truthy "$build_ffmpeg_static"; then
+	if truthy "$build_static"; then
 		config_options+=" --enable-static"
 		config_options+=" --disable-shared"
 	else
@@ -238,13 +239,13 @@ detect_clang_version() {
 }
 
 set_toolchain_paths() {
-  clang_version=$(detect_clang_version)
+  #clang_version=$(detect_clang_version)
 
   if [[ $clang_version != "none" ]]; then
     local CLANG_POSTFIX="-$clang_version"
-    export LLVM_CONFIG_CFLAGS=$(llvm-config-"$clang_version" --cflags 2>>"$LOG_FILE")
-    export LLVM_CONFIG_INCLUDEDIR=$(llvm-config-"$clang_version" --includedir 2>>"$LOG_FILE")
-    export LLVM_CONFIG_LDFLAGS=$(llvm-config-"$clang_version" --ldflags 2>>"$LOG_FILE")
+    export LLVM_CONFIG_CFLAGS=$(llvm-config --cflags 2>>"$LOG_FILE")
+    export LLVM_CONFIG_INCLUDEDIR=$(llvm-config --includedir 2>>"$LOG_FILE")
+    export LLVM_CONFIG_LDFLAGS=$(llvm-config --ldflags 2>>"$LOG_FILE")
   else
     local CLANG_POSTFIX=""
     export LLVM_CONFIG_CFLAGS=$(llvm-config --cflags 2>>"$LOG_FILE")
@@ -260,7 +261,7 @@ set_toolchain_paths() {
   export RANLIB=$(command -v "llvm-ranlib$CLANG_POSTFIX")
   export STRIP=$(command -v "llvm-strip$CLANG_POSTFIX")
   export NM=$(command -v "llvm-nm$CLANG_POSTFIX")
-  export CFLAGS="$CFLAGS $(get_cflags "ffmpeg-kit") -I${ffmpeg_install_prefix}/include -I${dependency_install_prefix}/include -I${ffmpeg_source_dir} -I${ffmpeg_source_dir}/compat"
-  export CXXFLAGS=" $CXXFLAGS $(get_cxxflags "ffmpeg-kit") -I${ffmpeg_install_prefix}/include -I${dependency_install_prefix}/include -I${ffmpeg_source_dir} -I${ffmpeg_source_dir}/compat"
-  export LDFLAGS="$LDFLAGS $(get_ldflags "ffmpeg-kit") -L${ffmpeg_install_prefix}/lib -L${dependency_install_prefix}/lib -L${dependency_install_prefix}/lib/$host_target"
+  export CFLAGS="$CFLAGS -I${ffmpeg_install_prefix}/include -I${dependency_install_prefix}/include -I${ffmpeg_source_dir} -I${ffmpeg_source_dir}/compat"
+  export CXXFLAGS=" $CXXFLAGS -I${ffmpeg_install_prefix}/include -I${dependency_install_prefix}/include -I${ffmpeg_source_dir} -I${ffmpeg_source_dir}/compat"
+  export LDFLAGS="$LDFLAGS -L${ffmpeg_install_prefix}/lib -L${dependency_install_prefix}/lib -L${dependency_install_prefix}/lib/$host_target"
 }

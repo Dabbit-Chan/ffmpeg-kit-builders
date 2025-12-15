@@ -380,12 +380,16 @@ setup_windows_environment() {
     export host_target="$host_arch-w64-mingw32"
     export rust_target="$host_arch-pc-windows-gnu"
     export toolchain_root="mingw-w64-$host_arch"
-    export dependency_install_prefix="$(realpath "$work_dir/cross_compilers/$toolchain_root/$host_target")"
-    export toolchain_root_dir="$(realpath "$work_dir/cross_compilers/$toolchain_root")"
-    export toolchain_bin_path="$(realpath "$toolchain_root_dir"/bin)"
-    export PKG_CONFIG_PATH="$dependency_install_prefix/lib/pkgconfig"
-    export PATH="$toolchain_bin_path:$original_path"
-    export cross_prefix="$toolchain_bin_path/$host_target-"
+    export dependency_install_prefix="$work_dir/libraries"
+    #export dependency_install_prefix="$(realpath "$work_dir/cross_compilers/$toolchain_root/$host_target")"
+    export toolchain_root_dir="/usr/"
+    #export toolchain_root_dir="$(realpath "$work_dir/cross_compilers/$toolchain_root")"
+    export toolchain_bin_path="/usr/bin/"
+    #export toolchain_bin_path="$(realpath "$toolchain_root_dir"/bin)"
+    export PKG_CONFIG_PATH="$PKG_CONFIG_PATH:$dependency_install_prefix/lib/pkgconfig:$ffmpeg_install_prefix/lib/pkgconfig"
+    export PATH="$toolchain_bin_path:$original_path:$ffmpeg_install_prefix"
+    export cross_prefix="/usr/bin/$host_target-"
+    #export cross_prefix="$toolchain_bin_path/$host_target-"
     
     # Common compiler flags for Windows
     export compiler_flags="CC=${cross_prefix}gcc \
@@ -416,8 +420,8 @@ setup_linux_environment() {
     export host_target="$host_arch-$host_platform-gnu"
     export rust_target="$host_arch-unknown-linux-gnu"
     export dependency_install_prefix="$work_dir/libraries"
-    export PKG_CONFIG_PATH="$PKG_CONFIG_PATH:/usr/lib/$host_target/pkgconfig:/usr/lib/pkgconfig:$dependency_install_prefix/share/pkgconfig:$dependency_install_prefix/lib/pkgconfig:$dependency_install_prefix/lib/$host_target/pkgconfig:$work_dir/pkgconfig"
-    export PATH="$ffmpeg_install_prefix:$dependency_install_prefix:$original_path"
+    export PKG_CONFIG_PATH="$PKG_CONFIG_PATH:/usr/lib/$host_target/pkgconfig:/usr/lib/pkgconfig:$dependency_install_prefix/share/pkgconfig:$dependency_install_prefix/lib/pkgconfig:$dependency_install_prefix/lib/$host_target/pkgconfig:$work_dir/pkgconfig:$ffmpeg_install_prefix/lib/pkgconfig"
+    export PATH="$ffmpeg_install_prefix:$dependency_install_prefix:$original_path:$ffmpeg_install_prefix"
     export linux_cflags="-fstrict-aliasing -fPIC -DLINUX -I${dependency_install_prefix}/include"
     export CFLAGS="$linux_cflags"
     export linux_cppflags=''
@@ -490,7 +494,7 @@ get_ffmpeg_directory() {
 }
 
 get_build_type() {
-	if truthy "$build_ffmpeg_static"; then
+	if truthy "$build_static"; then
 		echo "static"
 	else
 		echo "shared"
@@ -2554,10 +2558,10 @@ configure_ffmpeg() {
   fi
 
 	# can't mix and match --enable-static --enable-shared unfortunately, or the final executable seems to just use shared if the're both present
-	if truthy "$build_ffmpeg_shared"; then
-		postpend_configure_opts=" --enable-shared --disable-static" # I guess this doesn't have to be at the end...
-	else
+	if truthy "$build_static"; then
 		postpend_configure_opts=" --enable-static --disable-shared"
+	else
+    postpend_configure_opts=" --enable-shared --disable-static" # I guess this doesn't have to be at the end...
 	fi
 
 	local config_options=""
@@ -2823,7 +2827,7 @@ build_exists() {
 
 	echo -e "INFO: Checking if build already exists..." | tee -a "$LOG_FILE"
 
-	if truthy "$build_ffmpeg_static"; then
+	if truthy "$build_static"; then
 		echo -e "INFO: Static build requested..." | tee -a "$LOG_FILE"
 		if [[ $static_build_exists == 0 ]] || truthy "$build_force"; then
 			build_dir="$work_dir/$(get_ffmpeg_directory static)" #ffmpeg_install_prefix
@@ -2836,7 +2840,7 @@ build_exists() {
 			echo -e "INFO: Static build already exists at $build_dir" | tee -a "$LOG_FILE"
       return 0
 		fi
-	elif truthy "$build_ffmpeg_shared"; then
+	elif ! truthy "$build_static"; then
 		echo -e "INFO: Shared build requested..." | tee -a "$LOG_FILE"
 		if [[ $shared_build_exists == 0 ]] || truthy "$build_force"; then
 			build_dir="$work_dir/$(get_ffmpeg_directory shared)" #ffmpeg_install_prefix
@@ -2857,7 +2861,8 @@ install_ffmpeg() {
 	change_dir "$ffmpeg_source_dir"
 
 	echo -e "INFO: Making Ffmpeg $(pwd)" | tee -a "$LOG_FILE"
-
+  
+  remove_path -rf "$ffmpeg_install_prefix"
 	create_dir "$ffmpeg_install_prefix"
 
 	do_make_and_make_install "" "" "$(get_build_type)"
@@ -2870,7 +2875,7 @@ install_ffmpeg() {
 	} >>"$LOG_FILE"
 
 	echo -e "INFO: Done installing ffmpeg" | tee -a "$LOG_FILE"
-
+  chmod -R u+rwx "$work_dir"
 	install_ffmpeg_pkg
 }
 
@@ -2932,7 +2937,7 @@ install_ffmpeg_pkg() {
 		overwrite_file "${ffmpeg_source_dir}"/compat/w32pthreads.h "${ffmpeg_install_prefix}"/include/libavutil/compat/w32pthreads.h
 		overwrite_file "${ffmpeg_source_dir}"/libavutil/wchar_filename.h "${ffmpeg_install_prefix}"/include/libavutil/wchar_filename.h
 	} >>"$LOG_FILE"
-
+  chmod -R u+rwx "$work_dir"
 	echo -e "INFO: Done installing ffmpeg pkg-config" | tee -a "$LOG_FILE"
 }
 
@@ -2940,10 +2945,12 @@ install_ffmpeg_kit() {
 	echo -e "INFO: Installing ffmpeg kit to ${ffmpeg_kit_install}" | tee -a "$LOG_FILE"
 
 	change_dir "${ffmpeg_kit_src_dir}"
-	do_make_and_make_install "" "" "$(get_build_type)" || exit_message 1 "unable to make ffmpeg-kit. see $LOG_FILE for details."
+  remove_path -rf "$ffmpeg_kit_install"
+  do_make "PREFIX=$ffmpeg_kit_install" "$(get_build_type)" || exit_message 1 "unable to make ffmpeg-kit. see $LOG_FILE for details."
+  do_make_install "PREFIX=$ffmpeg_kit_install" "" "$(get_build_type)" || exit_message 1 "unable to make install ffmpeg-kit. see $LOG_FILE for details."
 
 	create_ffmpegkit_package_config "$(get_ffmpeg_kit_version)" || return 1
-
+  chmod -R u+rwx "$work_dir"
 	echo -e "INFO: Done installing ffmpeg kit to ${ffmpeg_kit_install}" | tee -a "$LOG_FILE"
 }
 
@@ -2965,6 +2972,7 @@ install_pkg_config_file() {
 	# UPDATE PATHS
 	sed -i "s|${ffmpeg_kit_install}|${ffmpeg_kit_bundle}|g" "$DESTINATION" || return 1
 	sed -i "s|${ffmpeg_source_dir}|${ffmpeg_kit_bundle}|g" "$DESTINATION" || return 1
+  chmod -R u+rwx "$work_dir"
 }
 
 get_ffmpeg_kit_version() {
@@ -3033,6 +3041,7 @@ create_ffmpeg_kit_bundle() {
 		copy_path "${BASEDIR}"/tools/license/LICENSE.GPLv3 "${LICENSE_BASEDIR}"/license.txt
 		create_touch_file 0 "$touch_name"
 	fi
+  chmod -R u+rwx "$work_dir"
 	echo -e "INFO: Done creating bundle" | tee -a "$LOG_FILE"
 }
 uninstall_manifest() {

@@ -125,6 +125,7 @@ install_cross_compiler() {
 
 configure_ffmpeg_kit() {
 	echo -e "INFO: Configuring ffmpeg kit" | tee -a "$LOG_FILE"
+  build_libjsoncpp
 	local TYPE_POSTFIX="$(get_build_type)"
 	local FFMPEG_KIT_VERSION=$(get_ffmpeg_kit_version)
 
@@ -155,12 +156,13 @@ configure_ffmpeg_kit() {
 		local BUILD_DATE="-DFFMPEG_KIT_BUILD_DATE=$(date +%Y%m%d 2>>"${BASEDIR}"/build.log)"
 		export CFLAGS="${local_cflags} ${BUILD_DATE}"
 		export CXXFLAGS="${local_cxxfalgs} ${BUILD_DATE}"
+    export LDFLAGS="$LDFLAGS -lpthread"
 	fi
 
 	local config_options="--prefix=${ffmpeg_kit_install}"
 
 	config_options+=" --host=${host_target}"
-	if truthy "$build_ffmpeg_static"; then
+	if truthy "$build_static"; then
 		config_options+=" --enable-static"
 		config_options+=" --disable-shared"
 	else

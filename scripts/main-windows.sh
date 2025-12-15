@@ -7,7 +7,6 @@ source "${SCRIPTDIR}/run-$host_platform.sh"
 
 reset_cflags           # also overrides any "native" CFLAGS, which we may need if there are some 'linux only' settings in there
 reset_cppflags         # Ensure CPPFLAGS are cleared and set to what is configured
-check_cross_compiler
 
 if [[ -n $run_only ]]; then
   echo -e "INFO: --- Executing single function: $run_only ---\n" | tee -a "$LOG_FILE"
