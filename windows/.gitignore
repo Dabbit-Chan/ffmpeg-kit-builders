@@ -16,4 +16,4 @@
 /m4/l*
 Makefile.in
 aclocal.m4
-already_*
+*already_*
