@@ -2532,7 +2532,6 @@ configure_ffmpeg() {
 	init_options+=" --pkg-config-flags=--static"
 	init_options+=" --enable-version3"
 	init_options+=" --arch=$arch"
-	init_options+=" --cross-prefix=$cross_prefix"
 	init_options+=" --prefix=$ffmpeg_install_prefix"
 	init_options+=" --extra-cflags=-DLIBTWOLAME_STATIC"
 	init_options+=" --extra-cflags=-DMODPLUG_STATIC"
@@ -2542,7 +2541,10 @@ configure_ffmpeg() {
 	init_options+=" --enable-optimizations"
 	init_options+=" --enable-small"
 
-	[[ $host_platform != "linux" ]] && init_options+=" --enable-cross-compile"
+	if [[ $host_platform != "linux" ]]; then
+    init_options+=" --enable-cross-compile"
+    init_options+=" --cross-prefix=$cross_prefix"
+  fi
 
   if [[ $host_platform == "windows" ]]; then
     init_options+=" --extra-cflags=-DWIN32_LEAN_AND_MEAN"
