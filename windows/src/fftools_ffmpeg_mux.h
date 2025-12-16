@@ -48,7 +48,7 @@
 #include <stdatomic.h>
 #include <stdint.h>
 
-#include "ffmpeg_sched.h"
+#include "fftools_ffmpeg_sched.h"
 
 #include "libavformat/avformat.h"
 

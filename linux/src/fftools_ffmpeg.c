@@ -158,12 +158,8 @@
 
 #include "fftools_cmdutils.h"
 #include "fftools_ffmpeg.h"
-#include "ffmpeg_sched.h"
-#include "ffmpeg_utils.h"
-#include "graph/graphprint.h"
-
-const char program_name[] = "ffmpeg";
-const int program_birth_year = 2000;
+#include "fftools_ffmpeg_sched.h"
+#include "fftools_ffmpeg_utils.h"
 
 __thread FILE *vstats_file;
 
@@ -1155,6 +1151,9 @@ int ffmpeg_execute(int argc, char **argv)
 
     int ret;
     BenchmarkTimeStamps ti;
+
+    program_name = "ffmpeg";
+    program_birth_year = 2000;
 
     int savedCode = setjmp(ex_buf__);
     if (savedCode == 0) {

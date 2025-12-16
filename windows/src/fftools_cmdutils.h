@@ -520,7 +520,9 @@ int setup_find_stream_info_opts(AVFormatContext *s,
  */
 static inline void print_error(const char *filename, int err)
 {
-    av_log(NULL, AV_LOG_ERROR, "%s: %s\n", filename, av_err2str(err));
+    char errbuf[AV_ERROR_MAX_STRING_SIZE];
+    av_make_error_string(errbuf, AV_ERROR_MAX_STRING_SIZE, err);
+    av_log(NULL, AV_LOG_ERROR, "%s: %s\n", filename, errbuf);
 }
 
 /**

@@ -47,12 +47,10 @@
  */
 
 #include <stdint.h>
-#include <ffmpeg_sched.h>
-#include <ffmpeg.h>
+#include <fftools_ffmpeg_sched.h>
 
 #include "fftools_ffmpeg.h"
 #include "fftools_cmdutils.h"
-#include "graph/graphprint.h"
 
 #include "libavfilter/avfilter.h"
 #include "libavfilter/buffersink.h"
@@ -73,6 +71,8 @@
 
 // FIXME private header, used for mid_pred()
 #include "libavcodec/mathops.h"
+
+void print_filtergraph(FilterGraph *fg, AVFilterGraph *graph);
 
 typedef struct FilterGraphPriv {
     FilterGraph      fg;
@@ -2465,6 +2465,29 @@ finish:
     fps->dropped_keyframe |= fps->last_dropped && (frame->flags & AV_FRAME_FLAG_KEY);
 }
 
+static int clone_side_data(AVFrameSideData ***dst, int *nb_dst,
+                           const AVFrameSideData *const *src, int nb_src,
+                           int flags)
+{
+    for (int i = 0; i < nb_src; i++) {
+        const AVFrameSideData *sd_src = src[i];
+        AVFrameSideData *sd_dst;
+
+        if (flags & AV_FRAME_SIDE_DATA_FLAG_UNIQUE &&
+            av_frame_side_data_get(*dst, *nb_dst, sd_src->type))
+            continue;
+
+        sd_dst = av_frame_side_data_new(dst, nb_dst, sd_src->type,
+                                        sd_src->size, 0);
+        if (!sd_dst)
+            return AVERROR(ENOMEM);
+
+        memcpy(sd_dst->data, sd_src->data, sd_src->size);
+        av_dict_copy(&sd_dst->metadata, sd_src->metadata, 0);
+    }
+    return 0;
+}
+
 static int close_output(OutputFilterPriv *ofp, FilterGraphThread *fgt)
 {
     FilterGraphPriv *fgp = fgp_from_fg(ofp->ofilter.graph);
@@ -2491,7 +2514,8 @@ static int close_output(OutputFilterPriv *ofp, FilterGraphThread *fgt)
         }
         av_frame_side_data_free(&frame->side_data, &frame->nb_side_data);
         ret = clone_side_data(&frame->side_data, &frame->nb_side_data,
-                              ofp->side_data, ofp->nb_side_data, 0);
+                              (const AVFrameSideData * const *)ofp->side_data, 
+                              ofp->nb_side_data, 0);
         if (ret < 0)
             return ret;
 
@@ -2849,7 +2873,7 @@ static int send_eof(FilterGraphThread *fgt, InputFilter *ifilter,
 
             av_frame_side_data_free(&ifp->side_data, &ifp->nb_side_data);
             ret = clone_side_data(&ifp->side_data, &ifp->nb_side_data,
-                                  ifp->opts.fallback->side_data,
+                                  (const AVFrameSideData * const *)ifp->opts.fallback->side_data,
                                   ifp->opts.fallback->nb_side_data, 0);
             if (ret < 0)
                 return ret;

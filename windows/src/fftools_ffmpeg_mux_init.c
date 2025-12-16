@@ -44,7 +44,7 @@
 
 #include "fftools_cmdutils.h"
 #include "fftools_ffmpeg.h"
-#include "ffmpeg_sched.h"
+#include "fftools_ffmpeg_sched.h"
 #include "fftools_fopen_utf8.h"
 
 #include "libavformat/avformat.h"
@@ -1194,6 +1194,12 @@ static int set_encoder_id(OutputStream *ost, const AVCodec *codec)
                 AV_DICT_DONT_STRDUP_VAL | AV_DICT_DONT_OVERWRITE);
 
     return 0;
+}
+
+static void new_stream_attachment(Muxer *mux, const OptionsContext *o,
+                                  OutputStream *ost)
+{
+    ost->finished |= MUXER_FINISHED | ENCODER_FINISHED;
 }
 
 static int ost_add(Muxer *mux, const OptionsContext *o, enum AVMediaType type,

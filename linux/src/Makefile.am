@@ -29,10 +29,11 @@ libffmpegkit_la_SOURCES = \
     fftools_ffmpeg_mux_init.c \
     fftools_ffmpeg_opt.c \
     fftools_ffprobe.c \
-    fftools_objpool.c \
     fftools_opt_common.c \
     fftools_sync_queue.c \
-    fftools_thread_queue.c
+    fftools_thread_queue.c \
+    fftools_avtextformat.c \
+    fftools_ffmpeg_sched.c
 
 include_HEADERS = \
     AbstractSession.h \
@@ -66,10 +67,12 @@ include_HEADERS = \
     fftools_ffmpeg.h \
     fftools_ffmpeg_mux.h \
     fftools_fopen_utf8.h \
-    fftools_objpool.h \
     fftools_opt_common.h \
     fftools_sync_queue.h \
-    fftools_thread_queue.h
+    fftools_thread_queue.h \
+    fftools_ffmpeg_sched.h \
+    fftools_ffmpeg_utils.h \
+    fftools_avtextformat.h
 
 libffmpegkit_la_CFLAGS = $(CFLAGS)
 libffmpegkit_la_OBJCFLAGS = $(CFLAGS)

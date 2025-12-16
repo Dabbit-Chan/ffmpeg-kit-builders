@@ -103,7 +103,7 @@
 #include "libswresample/swresample.h"
 #include "libswresample/version.h"
 #include "libavfilter/version.h"
-#include "textformat/avtextformat.h"
+#include "fftools_avtextformat.h"
 #include "fftools_cmdutils.h"
 #include "fftools_opt_common.h"
 #include "ffmpegkit_exception.h"
@@ -209,7 +209,7 @@ typedef struct ReadInterval {
 static __thread ReadInterval *read_intervals;
 static __thread int read_intervals_nb = 0;
 
-static __thread int find_stream_info  = 1;
+__thread int find_stream_info  = 1;
 
 /* section structure definition */
 
@@ -3049,15 +3049,6 @@ DEFINE_OPT_SHOW_SECTION(streams,          STREAMS)
 DEFINE_OPT_SHOW_SECTION(programs,         PROGRAMS)
 DEFINE_OPT_SHOW_SECTION(stream_groups,    STREAM_GROUPS)
 
-#define HAS_ARG    OPT_TYPE_FUNC, OPT_FUNC_ARG
-#define OPT_BOOL   OPT_TYPE_BOOL, 0
-#define OPT_STRING OPT_TYPE_STRING, 0
-#define OPT_INT    OPT_TYPE_INT, 0
-#define OPT_FLOAT  OPT_TYPE_FLOAT, 0
-#define OPT_TIME   OPT_TYPE_TIME, 0
-#define OPT_DOUBLE OPT_TYPE_DOUBLE, 0
-#define OPT_INT64  OPT_TYPE_INT64, 0
-
 static inline int check_section_show_entries(int section_id)
 {
     struct AVTextFormatSection *section = &sections[section_id];
@@ -3147,9 +3138,8 @@ void ffprobe_var_cleanup() {
     // ffprobe_execute handles init.
 }
 
-static int avio_log_write(void *opaque, uint8_t *buf, int size)
+static int avio_log_write(void *opaque, const uint8_t *buf, int size)
 {
-    // Redirect writer output to av_log at STDERR level to be captured by callbacks
     av_log(NULL, AV_LOG_STDERR, "%.*s", size, buf);
     return size;
 }
@@ -3223,22 +3213,22 @@ int ffprobe_execute(int argc, char **argv)
               "use sexagesimal format HOURS:MM:SS.MICROSECONDS for time units" },
             { "pretty", 0, 0, {.func_arg = opt_pretty},
               "prettify the format of displayed values, make it more human readable" },
-            { "print_format", OPT_STRING | HAS_ARG, { &output_format },
+            { "print_format", OPT_TYPE_STRING, 0, { .dst_ptr = &output_format },
               "set the output printing format (available formats are: default, compact, csv, flat, ini, json, xml)", "format" },
-            { "output_format", OPT_STRING | HAS_ARG, { &output_format },
+            { "output_format", OPT_TYPE_STRING, 0, { .dst_ptr = &output_format },
               "alias for -print_format", "format" },
-            { "of", OPT_STRING | HAS_ARG, { &output_format }, "alias for -print_format", "format" },
-            { "select_streams", OPT_STRING | HAS_ARG, { &stream_specifier }, "select the specified streams", "stream_specifier" },
+            { "of", OPT_TYPE_STRING, 0, { .dst_ptr = &output_format }, "alias for -print_format", "format" },
+            { "select_streams", OPT_TYPE_STRING, 0, { .dst_ptr = &stream_specifier }, "select the specified streams", "stream_specifier" },
             { "sections", OPT_TYPE_FUNC, OPT_EXIT, {.func_arg = opt_sections}, "print sections structure and section information, and exit" },
             { "show_data",    OPT_BOOL, { &do_show_data }, "show packets data" },
-            { "show_data_hash", OPT_STRING | HAS_ARG, { &show_data_hash }, "show packets data hash" },
+            { "show_data_hash", OPT_TYPE_STRING, 0, { .dst_ptr = &show_data_hash }, "show packets data hash" },
             { "show_error",   OPT_TYPE_FUNC, 0, { .func_arg = &opt_show_error },  "show probing error" },
             { "show_format",  OPT_TYPE_FUNC, 0, { .func_arg = &opt_show_format }, "show format/container info" },
             { "show_frames",  OPT_TYPE_FUNC, 0, { .func_arg = &opt_show_frames }, "show frames info" },
             { "show_entries", HAS_ARG, {.func_arg = opt_show_entries},
               "show a set of specified entries", "entry_list" },
         #if HAVE_THREADS
-            { "show_log", OPT_INT|HAS_ARG, { &do_show_log }, "show log" },
+            { "show_log", OPT_TYPE_INT, 0, { .dst_ptr = &do_show_log }, "show log" },
         #endif
             { "show_packets", OPT_TYPE_FUNC, 0, { .func_arg = &opt_show_packets }, "show packets info" },
             { "show_programs", OPT_TYPE_FUNC, 0, { .func_arg = &opt_show_programs }, "show programs info" },
@@ -3256,7 +3246,7 @@ int ffprobe_execute(int argc, char **argv)
             { "private",           OPT_BOOL, { &show_private_data }, "same as show_private_data" },
             { "analyze_frames",        OPT_TYPE_BOOL,        0, { &do_analyze_frames }, "analyze frames to provide additional stream-level information" },
             { "bitexact", OPT_BOOL, {&do_bitexact}, "force bitexact output" },
-            { "read_intervals", HAS_ARG, {.func_arg = opt_read_intervals}, "set read intervals", "read_intervals" },
+            { "read_intervals", HAS_ARG, { .func_arg = opt_read_intervals }, "set read intervals", "read_intervals" },
             { "i", HAS_ARG, {.func_arg = opt_input_file_i}, "read specified file", "input_file"},
             { "o", HAS_ARG, {.func_arg = opt_output_file_o}, "write to specified output", "output_file"},
             { "print_filename", HAS_ARG, {.func_arg = opt_print_filename}, "override the printed input filename", "print_file"},
@@ -3357,7 +3347,6 @@ int ffprobe_execute(int argc, char **argv)
                 ret = AVERROR(ENOMEM);
                 goto end;
             }
-            // CHANGED: Added 3rd argument '1' (close_on_uninit)
             ret = avtextwriter_create_avio(&wctx, log_pb, 1);
         }
 

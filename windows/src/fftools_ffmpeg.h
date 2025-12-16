@@ -77,8 +77,9 @@
 #include <signal.h>
 
 #include "fftools_cmdutils.h"
-#include "ffmpeg_sched.h"
+#include "fftools_ffmpeg_sched.h"
 #include "fftools_sync_queue.h"
+#include "fftools_avtextformat.h"
 
 #include "libavformat/avformat.h"
 #include "libavformat/avio.h"
@@ -112,6 +113,9 @@
 #define FFMPEG_OPT_FILTER_SCRIPT 1
 
 #define FFMPEG_ERROR_RATE_EXCEEDED FFERRTAG('E', 'R', 'E', 'D')
+
+#define MUXER_FINISHED 1
+#define ENCODER_FINISHED 2
 
 enum VideoSyncMethod {
     VSYNC_AUTO = -1,
@@ -658,6 +662,7 @@ typedef struct OutputStream {
 
     enum AVMediaType type;
     AVDictionary *encoder_opts;
+    int finished;
     /* parent muxer */
     struct OutputFile *file;
 
@@ -841,6 +846,11 @@ int find_codec(void *logctx, const char *name,
 int parse_and_set_vsync(const char *arg, int *vsync_var, int file_idx, int st_idx, int is_global);
 
 int filtergraph_is_simple(const FilterGraph *fg);
+
+void print_filtergraphs(FilterGraph **graphs, int nb_graphs, 
+                        InputFile **ifiles, int nb_ifiles, 
+                        OutputFile **ofiles, int nb_ofiles);
+
 int fg_create_simple(FilterGraph **pfg,
                      InputStream *ist,
                      char *graph_desc,
@@ -982,6 +992,8 @@ InputStream *ist_iter(InputStream *prev);
 /* iterate over all output streams in all output files;
  * pass NULL to start iteration */
 OutputStream *ost_iter(OutputStream *prev);
+
+AVDictionary *strip_specifiers(const AVDictionary *dict);
 
 void update_benchmark(const char *fmt, ...);
 

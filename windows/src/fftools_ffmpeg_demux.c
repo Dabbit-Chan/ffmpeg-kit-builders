@@ -38,11 +38,10 @@
 
 #include <float.h>
 #include <stdint.h>
-#include <ffmpeg.h>
 
 #include "fftools_ffmpeg.h"
-#include "ffmpeg_sched.h"
-#include "ffmpeg_utils.h"
+#include "fftools_ffmpeg_sched.h"
+#include "fftools_ffmpeg_utils.h"
 
 #include "libavutil/avassert.h"
 #include "libavutil/avstring.h"
