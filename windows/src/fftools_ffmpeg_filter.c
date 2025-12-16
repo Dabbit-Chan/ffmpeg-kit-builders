@@ -26,7 +26,6 @@
  * We manually update it each time we depend on a new ffmpeg version. Below you can see the list of changes applied
  * by us to develop mobile-ffmpeg and later ffmpeg-kit libraries.
  *
- * ffmpeg-kit changes by ARTHENICA LTD
  *
  * 12.2025
  * --------------------------------------------------------
