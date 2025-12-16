@@ -13,6 +13,8 @@
   "customizations": {
     "vscode": {
       "extensions": [
+        "ms-vscode.cpptools-extension-pack",
+        "cschlosser.doxdocgen",
         "ms-vscode.cpptools", // Debugging and IntelliSense
         "ms-vscode.cmake-tools", // If you use CMake
         "mesonbuild.mesonbuild", // Since you asked about Meson earlier
