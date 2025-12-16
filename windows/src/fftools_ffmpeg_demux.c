@@ -1275,7 +1275,7 @@ static DemuxStream *demux_stream_alloc(Demuxer *d, AVStream *st)
     ds->ist.st         = st;
     ds->ist.file       = f;
     ds->ist.index      = st->index;
-    ds->ist.class      = &input_stream_class;
+    ds->ist.clazz      = &input_stream_class;
 
     snprintf(ds->log_name, sizeof(ds->log_name), "%cist#%d:%d/%s",
              type_str ? *type_str : '?', d->f.index, st->index,
@@ -1666,7 +1666,7 @@ static Demuxer *demux_alloc(void)
     if (!d)
         return NULL;
 
-    d->f.class = &input_file_class;
+    d->f.clazz = &input_file_class;
     d->f.index = nb_input_files - 1;
 
     snprintf(d->log_name, sizeof(d->log_name), "in#%d", d->f.index);
