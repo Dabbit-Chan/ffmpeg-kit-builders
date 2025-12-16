@@ -31,6 +31,9 @@
 #include "Signal.h"
 #include "StatisticsCallback.h"
 #include <map>
+#include <list>
+#include <string>
+#include <memory>
 
 namespace ffmpegkit {
 

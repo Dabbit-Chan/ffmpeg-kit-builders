@@ -32,6 +32,7 @@
 extern "C" {
     #include "libavutil/ffversion.h"
     #include "libavutil/bprint.h"
+    #include "libavutil/log.h"
     #include "fftools_cmdutils.h"
 }
 #include "ArchDetect.h"
@@ -391,7 +392,7 @@ static void logCallbackDataAdd(int level, AVBPrint *data) {
 /**
  * Adds statistics data to the end of callback data list.
  */
-static void statisticsCallbackDataAdd(int frameNumber, float fps, float quality, int64_t size, int time, double bitrate, double speed) {
+static void statisticsCallbackDataAdd(int frameNumber, float fps, float quality, int64_t size, double time, double bitrate, double speed) {
     std::unique_lock<std::recursive_mutex> lock(callbackDataMutex, std::defer_lock);
     CallbackData* callbackData = new CallbackData(globalSessionId, frameNumber, fps, quality, size, time, bitrate, speed);
 

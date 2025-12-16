@@ -31,6 +31,9 @@
 #include "Signal.h"
 #include "StatisticsCallback.h"
 #include <map>
+#include <list>
+#include <string>
+#include <memory>
 
 namespace ffmpegkit {
 
@@ -42,7 +45,7 @@ namespace ffmpegkit {
         public:
 
             /** Global library version */
-            static constexpr const char* FFmpegKitVersion = "6.0";
+            static constexpr const char* FFmpegKitVersion = "8.0";
 
             /**
              * Prefix of named pipes created by ffmpeg-kit.
