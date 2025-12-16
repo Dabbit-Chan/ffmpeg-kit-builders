@@ -21,7 +21,21 @@
  * manually update it each time we depend on a new ffmpeg version. Below you can see the list of changes applied
  * by us to develop the ffmpeg-kit library.
  *
+ * ffmpeg-kit changes by ARTHENICA LTD
+ *
+ * 12.2025
+ * --------------------------------------------------------
+ * - FFmpeg 8.0 changes migrated
+ *
+ * 07.2023
+ * --------------------------------------------------------
+ * - FFmpeg 6.0 changes migrated
+ *
  * ffmpeg-kit changes by Taner Sener
+ *
+ * 08.2018
+ * --------------------------------------------------------
+ * - fftools_ prefix added to the file name and include guards
  */
 
 #ifndef FFTOOLS_FOPEN_UTF8_H
@@ -35,6 +49,7 @@
  * CRT, and FILE* handles can't be shared across them.) */
 
 #ifdef _WIN32
+#include "libavutil/mem.h"
 #include "libavutil/wchar_filename.h"
 
 static inline FILE *fopen_utf8(const char *path_utf8, const char *mode)

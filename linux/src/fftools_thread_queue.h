@@ -25,6 +25,11 @@
  *
  * ffmpeg-kit changes by ARTHENICA LTD
  *
+ * 12.2025
+ * --------------------------------------------------------
+ * - FFmpeg 8.0 changes migrated
+ * - ObjPool dependency removed
+ *
  * 07.2023
  * --------------------------------------------------------
  * - FFmpeg 6.0 changes migrated
@@ -35,7 +40,10 @@
 
 #include <string.h>
 
-#include "fftools_objpool.h"
+enum ThreadQueueType {
+    THREAD_QUEUE_FRAMES,
+    THREAD_QUEUE_PACKETS,
+};
 
 typedef struct ThreadQueue ThreadQueue;
 
@@ -46,12 +54,9 @@ typedef struct ThreadQueue ThreadQueue;
  *                   maintained
  * @param queue_size number of items that can be stored in the queue without
  *                   blocking
- * @param obj_pool object pool that will be used to allocate items stored in the
- *                 queue; the pool becomes owned by the queue
- * @param callback that moves the contents between two data pointers
  */
 ThreadQueue *tq_alloc(unsigned int nb_streams, size_t queue_size,
-                      ObjPool *obj_pool, void (*obj_move)(void *dst, void *src));
+                      enum ThreadQueueType type);
 void         tq_free(ThreadQueue **tq);
 
 /**

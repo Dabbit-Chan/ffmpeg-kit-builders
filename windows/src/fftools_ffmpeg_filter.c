@@ -674,7 +674,7 @@ static OutputFilter *ofilter_alloc(FilterGraph *fg, enum AVMediaType type)
         return NULL;
 
     ofilter           = &ofp->ofilter;
-    ofilter->class    = &ofilter_class;
+    ofilter->clazz    = &ofilter_class;
     ofp->log_parent   = fg;
     ofilter->graph    = fg;
     ofilter->type     = type;
@@ -1118,7 +1118,7 @@ int fg_create(FilterGraph **pfg, char *graph_desc, Scheduler *sch)
         fg->index = nb_filtergraphs - 1;
     }
 
-    fg->class       = &fg_class;
+    fg->clazz       = &fg_class;
     fg->graph_desc  = graph_desc;
     fgp->disable_conversions = !auto_conversion_filters;
     fgp->nb_threads          = -1;
