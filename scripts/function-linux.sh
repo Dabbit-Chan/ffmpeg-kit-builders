@@ -216,11 +216,12 @@ configure_ffmpeg_kit() {
 
 create_ffmpegkit_package_config() {
   local FFMPEGKIT_VERSION="$1"
-
-  cat >"${install_pkgconfig_dir}/ffmpeg-kit.pc" <<EOF
-prefix=${ffmpeg_kit_install}
+  local location_prefix="$2"
+  create_dir "${location_prefix}/lib/pkgconfig"
+  cat >"${location_prefix}/lib/pkgconfig/ffmpeg-kit.pc" <<EOF
+prefix=${location_prefix}
 exec_prefix=\${prefix}
-libdir=\${exec_prefix}/lib
+libdir=\${prefix}/lib
 includedir=\${prefix}/include
 
 Name: ffmpeg-kit

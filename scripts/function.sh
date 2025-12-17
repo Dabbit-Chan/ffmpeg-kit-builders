@@ -2951,13 +2951,14 @@ install_ffmpeg_kit() {
   do_make "PREFIX=$ffmpeg_kit_install" "$(get_build_type)" || exit_message 1 "unable to make ffmpeg-kit. see $LOG_FILE for details."
   do_make_install "PREFIX=$ffmpeg_kit_install" "" "$(get_build_type)" || exit_message 1 "unable to make install ffmpeg-kit. see $LOG_FILE for details."
 
-	create_ffmpegkit_package_config "$(get_ffmpeg_kit_version)" || return 1
+	create_ffmpegkit_package_config "$(get_ffmpeg_kit_version)" "$ffmpeg_kit_install"  || return 1
   chmod -R u+rwx "$work_dir"
 	echo -e "INFO: Done installing ffmpeg kit to ${ffmpeg_kit_install}" | tee -a "$LOG_FILE"
 }
 
 install_pkg_config_file() {
 	local FILE_NAME="$1"
+  local location_prefix="$2"
 	local SOURCE="${install_pkgconfig_dir}/${FILE_NAME}"
 	local DESTINATION="${FFMPEG_KIT_BUNDLE_PKG_CONFIG_DIRECTORY}/${FILE_NAME}"
 
@@ -2972,8 +2973,14 @@ install_pkg_config_file() {
 	fi
 
 	# UPDATE PATHS
-	sed -i "s|${ffmpeg_kit_install}|${ffmpeg_kit_bundle}|g" "$DESTINATION" || return 1
-	sed -i "s|${ffmpeg_source_dir}|${ffmpeg_kit_bundle}|g" "$DESTINATION" || return 1
+	sed -i "s|${ffmpeg_kit_install}|${location_prefix}|g" "$DESTINATION" || return 1
+  sed -i "s|libdir=${ffmpeg_kit_install}|libdir=\${prefix}/lib|g" "$DESTINATION" || return 1
+  sed -i "s|includedir=${ffmpeg_kit_install}|includedir=\${prefix}/include|g" "$DESTINATION" || return 1
+
+	sed -i "s|${ffmpeg_source_dir}|${location_prefix}|g" "$DESTINATION" || return 1
+  sed -i "s|libdir=${ffmpeg_source_dir}|libdir=\${prefix}/lib|g" "$DESTINATION" || return 1
+  sed -i "s|includedir=${ffmpeg_source_dir}|includedir=\${prefix}/include|g" "$DESTINATION" || return 1
+
   chmod -R u+rwx "$work_dir"
 }
 
@@ -3001,35 +3008,31 @@ create_ffmpeg_kit_bundle() {
 		export FFMPEG_KIT_BUNDLE_INCLUDE_DIRECTORY="${ffmpeg_kit_bundle}/include"
 		export FFMPEG_KIT_BUNDLE_LIB_DIRECTORY="${ffmpeg_kit_bundle}/lib"
 		export FFMPEG_KIT_BUNDLE_BIN_DIRECTORY="${ffmpeg_kit_bundle}/bin"
-		export FFMPEG_KIT_BUNDLE_PKG_CONFIG_DIRECTORY="${ffmpeg_kit_bundle}/pkgconfig"
+		
 		remove_path "-rf" "${ffmpeg_kit_bundle}"
 		create_dir "${ffmpeg_kit_bundle}"
 		create_dir "${FFMPEG_KIT_BUNDLE_INCLUDE_DIRECTORY}"
 		create_dir "${FFMPEG_KIT_BUNDLE_LIB_DIRECTORY}"
 		create_dir "${FFMPEG_KIT_BUNDLE_BIN_DIRECTORY}"
-		create_dir "${FFMPEG_KIT_BUNDLE_PKG_CONFIG_DIRECTORY}"
+		
 		{
 			# COPY HEADERS
-			cp -rP "${ffmpeg_kit_install}/include/"* "${FFMPEG_KIT_BUNDLE_INCLUDE_DIRECTORY}"
-			cp -rP "${ffmpeg_install_prefix}/include/"* "${FFMPEG_KIT_BUNDLE_INCLUDE_DIRECTORY}"
+			[[ -d "${ffmpeg_kit_install}/include" ]] && cp -rP "${ffmpeg_kit_install}/include/"* "${FFMPEG_KIT_BUNDLE_INCLUDE_DIRECTORY}"
+			[[ -d "${ffmpeg_kit_install}/include" ]] && cp -rP "${ffmpeg_install_prefix}/include/"* "${FFMPEG_KIT_BUNDLE_INCLUDE_DIRECTORY}"
 
 			# COPY LIBS
-			cp -rP "${ffmpeg_kit_install}/lib/"* "${FFMPEG_KIT_BUNDLE_LIB_DIRECTORY}"
-			cp -rP "${ffmpeg_install_prefix}/lib/"* "${FFMPEG_KIT_BUNDLE_LIB_DIRECTORY}"
+			[[ -d "${ffmpeg_kit_install}/lib" ]] && cp -rP "${ffmpeg_kit_install}/lib/"* "${FFMPEG_KIT_BUNDLE_LIB_DIRECTORY}"
+			[[ -d "${ffmpeg_kit_install}/lib" ]] && cp -rP "${ffmpeg_install_prefix}/lib/"* "${FFMPEG_KIT_BUNDLE_LIB_DIRECTORY}"
 
 			# COPY BINARIES
-			cp -rP "${ffmpeg_kit_install}/bin/"* "${FFMPEG_KIT_BUNDLE_BIN_DIRECTORY}"
-			cp -rP "${ffmpeg_install_prefix}/bin/"* "${FFMPEG_KIT_BUNDLE_BIN_DIRECTORY}"
+			[[ -d "${ffmpeg_kit_install}/bin" ]] && cp -rP "${ffmpeg_kit_install}/bin/"* "${FFMPEG_KIT_BUNDLE_BIN_DIRECTORY}"
+			[[ -d "${ffmpeg_kit_install}/bin" ]] && cp -rP "${ffmpeg_install_prefix}/bin/"* "${FFMPEG_KIT_BUNDLE_BIN_DIRECTORY}"
 		} >>"$LOG_FILE"
 
-		install_pkg_config_file "libavformat.pc"
-		install_pkg_config_file "libswresample.pc"
-		install_pkg_config_file "libswscale.pc"
-		install_pkg_config_file "libavdevice.pc"
-		install_pkg_config_file "libavfilter.pc"
-		install_pkg_config_file "libavcodec.pc"
-		install_pkg_config_file "libavutil.pc"
-		install_pkg_config_file "ffmpeg-kit.pc"
+    sed -i "s|prefix=.*|prefix=${ffmpeg_kit_bundle}|g" "${ffmpeg_kit_bundle}/lib/pkgconfig/"*.pc || return 1
+    sed -i "s|exec_prefix=.*|exec_prefix=\${prefix}|g" "${ffmpeg_kit_bundle}/lib/pkgconfig/"*.pc || return 1
+    sed -i "s|libdir=.*|libdir=\${prefix}/lib|g" "${ffmpeg_kit_bundle}/lib/pkgconfig/"*.pc || return 1
+    sed -i "s|includedir=.*|includedir=\${prefix}/include|g" "${ffmpeg_kit_bundle}/lib/pkgconfig/"*.pc || return 1
 
 		local LICENSE_BASEDIR="${ffmpeg_kit_bundle}/licenses"
 
