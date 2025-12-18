@@ -64,9 +64,22 @@ RUN apt-get update && \
     libglib2.0-dev \
     libglib2.0-dev-bin \
     shellcheck \
-    mingw-w64 && \
-    # Install Rust
-    curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y && \
+    libgtkmm-3.0-dev \
+    libsdl2-dev
+
+# Install xPack MinGW-w64 GCC 15.2.0-2
+RUN wget https://github.com/xpack-dev-tools/mingw-w64-gcc-xpack/releases/download/v15.2.0-2/xpack-mingw-w64-gcc-15.2.0-2-linux-x64.tar.gz && \
+    mkdir -p tools && \
+    tar xf xpack-mingw-w64-gcc-15.2.0-2-linux-x64.tar.gz -C tools && \
+    rm xpack-mingw-w64-gcc-15.2.0-2-linux-x64.tar.gz && \
+    mv tools/xpack-mingw-w64-gcc-15.2.0-2 /usr/local/mingw-w64 && \
+    chown -R root:users /usr/local/mingw-w64 && \
+    chmod -R 775 /usr/local/mingw-w64
+
+ENV PATH="/usr/local/mingw-w64/bin:${PATH}"
+
+# Install Rust
+RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y && \
     # Source environment for the CURRENT session to keep running commands
     . "$HOME/.cargo/env" && \
     # Add Windows Target

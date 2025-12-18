@@ -2,13 +2,11 @@
 FROM mcr.microsoft.com/devcontainers/base:ubuntu-24.04
 
 # Avoid prompts from apt
-ENV DEBIAN_FRONTEND=noninteractive
+ARG DEBIAN_FRONTEND=noninteractive
 
 # Update and install all requested system packages
-# - build-essential covers: gcc, g++
-# - texinfo covers: makeinfo
-# - xz-utils covers: xz
-RUN sudo apt-get update && apt-get install -y --no-install-recommends \
+RUN apt-get update && \
+    apt-get install -qq --no-install-recommends \
     ragel \
     pkg-config \
     make \
@@ -48,32 +46,78 @@ RUN sudo apt-get update && apt-get install -y --no-install-recommends \
     python3-setuptools \
     ninja-build \
     autoconf-archive \
-    cargo \
     g++ \
     gcc \
     gettext \
     help2man \
     libtool \
-    meson \
     p7zip-full \
     python3-venv \
-    zlib1g-dev \
-    libglib2.0-dev \
-    libglib2.0-dev-bin \
-    sudo \
-    apt \
-    install \
     binutils \
     llvm \
     lld \
     xutils-dev \
     python3-numpy \
-    cython3
+    cython3 \
+    libssl-dev \
+    zlib1g-dev \
+    libglib2.0-dev \
+    libglib2.0-dev-bin \
+    shellcheck
+
+# Install xPack MinGW-w64 GCC 15.2.0-2
+RUN wget https://github.com/xpack-dev-tools/mingw-w64-gcc-xpack/releases/download/v15.2.0-2/xpack-mingw-w64-gcc-15.2.0-2-linux-x64.tar.gz && \
+    mkdir -p tools && \
+    tar xf xpack-mingw-w64-gcc-15.2.0-2-linux-x64.tar.gz -C tools && \
+    rm xpack-mingw-w64-gcc-15.2.0-2-linux-x64.tar.gz && \
+    mv tools/xpack-mingw-w64-gcc-15.2.0-2 /usr/local/mingw-w64 && \
+    chown -R root:users /usr/local/mingw-w64 && \
+    chmod -R 775 /usr/local/mingw-w64
+
+ENV PATH="/usr/local/mingw-w64/bin:${PATH}"
+
+# Install Rust
+RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y && \
+    # Source environment for the CURRENT session to keep running commands
+    . "$HOME/.cargo/env" && \
+    # Add Windows Target
+    rustup target add x86_64-pc-windows-gnu && \
+    # Verify Installation
+    rustc --version && \
+    cargo --version && \
+    # Install cargo-c (Standard compile from source)
+    cargo install cargo-c && \
+    #Install latest meson
+    pip3 install --user meson --break-system-packages && \
     # Cleanup to keep image small
-    && sudo apt-get clean -y && sudo rm -rf /var/lib/apt/lists/*
+    apt-get clean -y && \
+    rm -rf /var/lib/apt/lists/*
 
-# copy the entire git dir into the new docker container
-#COPY . ./ffmpeg-kit-builders
+# Persist the PATH for future sessions (e.g. when you log in)
+# Note: Since this is a devcontainer base, $HOME is usually /root for the build
+# but users might log in as 'vscode'. If you need Rust for the 'vscode' user,
+# you must switch USER or adjust permissions. Assuming root here:
+ENV PATH="/root/.cargo/bin:${PATH}"
 
-WORKDIR /ffmpeg-kit-builders
-#ENTRYPOINT [ "bash", "./docker/docker-entry.sh" ]
+# --- INSTALL FLUTTER ---
+# 1. Install dependencies (already covered by your apt-get, but curl/git/unzip are vital)
+# 2. Clone Flutter to a system directory
+RUN git clone https://github.com/flutter/flutter.git -b stable /usr/local/flutter
+
+# 3. Set permissions so 'vscode' user can use/upgrade it
+RUN chown -R root:users /usr/local/flutter && \
+    chmod -R 775 /usr/local/flutter
+# 4. Add to PATH permanently
+ENV PATH="/usr/local/flutter/bin:${PATH}"
+
+# 5. Mark directory as safe for Git (fixes "dubious ownership" error)
+RUN git config --system --add safe.directory /usr/local/flutter
+
+RUN dpkg --add-architecture i386
+
+RUN mkdir -pm755 /etc/apt/keyrings && \
+    wget -O /etc/apt/keyrings/winehq-archive.key https://dl.winehq.org/wine-builds/winehq.key && \
+    wget -NP /etc/apt/sources.list.d/ https://dl.winehq.org/wine-builds/ubuntu/dists/noble/winehq-noble.sources
+
+RUN apt-get update && \
+    apt-get install -y --install-recommends winehq-stable
