@@ -18,3 +18,5 @@
 aclocal.m4
 Makefile.in
 *already_*
+config.h*
+stamp-h1
