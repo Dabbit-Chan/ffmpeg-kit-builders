@@ -355,7 +355,11 @@ setup_build_environment() {
     export ffmpeg_install_prefix="${work_dir}/$(get_ffmpeg_directory)"
     export ffmpeg_kit_install="${work_dir}/$(get_ffmpeg_kit_directory)"
     export ffmpeg_kit_bundle="${work_dir}/$(get_bundle_directory)"
-    export ffmpeg_kit_src_dir="${BASEDIR}/$host_platform"
+    if [[ $host_platform == "windows" || $host_platform == "linux" ]]; then
+      export ffmpeg_kit_src_dir="${BASEDIR}/desktop"
+    else
+      export ffmpeg_kit_src_dir="${BASEDIR}/$host_platform"
+    fi
     
     case "$host_platform" in
         "windows") setup_windows_environment ;;
@@ -388,7 +392,7 @@ setup_windows_environment() {
     #export toolchain_bin_path="$(realpath "$toolchain_root_dir"/bin)"
     export PKG_CONFIG_PATH="$PKG_CONFIG_PATH:$dependency_install_prefix/lib/pkgconfig:$ffmpeg_install_prefix/lib/pkgconfig"
     export PATH="$toolchain_bin_path:$original_path:$ffmpeg_install_prefix"
-    export cross_prefix="/usr/bin/$host_target-"
+    export cross_prefix="/usr/local/mingw-w64/bin/$host_target-"
     #export cross_prefix="$toolchain_bin_path/$host_target-"
     
     # Common compiler flags for Windows
@@ -1568,6 +1572,7 @@ do_configure() {
 			  ./autogen.sh > >(redirect_output) 2>&1 # some need this to create ./configure :|
 		  fi
       autoheader > >(redirect_output) 2>&1
+      autoreconf --install
       automake --force-missing --add-missing > >(redirect_output) 2>&1
 			autoreconf_library # a handful of them require this to create ./configure :|
 		fi
@@ -2992,13 +2997,14 @@ get_ffmpeg_kit_version() {
 
 create_ffmpeg_kit_bundle() {
 	echo -e "INFO: Creating bundle" | tee -a "$LOG_FILE"
-	local touch_postfix="_$(get_build_type)_"
+	local touch_postfix="$(get_build_type)"
 	local FFMPEG_KIT_VERSION=$(get_ffmpeg_kit_version)
 
-	if [[ $build_force == "1" ]]; then
-		remove_path -rf "${ffmpeg_kit_src_dir}/already_bundled_${touch_postfix}"*
+	if truthy "$build_force"; then
+		remove_path -rf "${ffmpeg_kit_src_dir}/already_bundled_${touch_postfix}_"*
+    remove_path "-rf" "${ffmpeg_kit_bundle}"
 	fi
-  local touch_prefix="${host_name}${touch_postfix}already"
+  local touch_prefix="${host_name}_${touch_postfix}_already"
 	local touch_name=$(get_small_touchfile_name "${touch_prefix}_ninja_build" "ninja build $extra_make_options")
 	if truthy "$build_force"; then
 		remove_path -f "$cur_dir2/${touch_prefix}_"*
@@ -3009,7 +3015,6 @@ create_ffmpeg_kit_bundle() {
 		export FFMPEG_KIT_BUNDLE_LIB_DIRECTORY="${ffmpeg_kit_bundle}/lib"
 		export FFMPEG_KIT_BUNDLE_BIN_DIRECTORY="${ffmpeg_kit_bundle}/bin"
 		
-		remove_path "-rf" "${ffmpeg_kit_bundle}"
 		create_dir "${ffmpeg_kit_bundle}"
 		create_dir "${FFMPEG_KIT_BUNDLE_INCLUDE_DIRECTORY}"
 		create_dir "${FFMPEG_KIT_BUNDLE_LIB_DIRECTORY}"
@@ -3127,8 +3132,6 @@ EOF
             ;;
     esac
 }
-
-#!/bin/bash
 
 # Minimal zip folder function - supports only .zip format
 # Usage: zip_dir <input_folder> [output_name]

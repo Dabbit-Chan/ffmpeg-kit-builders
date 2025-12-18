@@ -126,8 +126,8 @@ install_cross_compiler() {
 configure_ffmpeg_kit() {
 	echo -e "INFO: Configuring ffmpeg kit" | tee -a "$LOG_FILE"
   build_libjsoncpp
-	local TYPE_POSTFIX="$(get_build_type)"
-	local FFMPEG_KIT_VERSION=$(get_ffmpeg_kit_version)
+	local type_postfix="$(get_build_type)"
+	local ffmpeg_kit_version=$(get_ffmpeg_kit_version)
 
 	if truthy "$build_force"; then
 		remove_path -rf "$ffmpeg_kit_src_dir"/already_configured_*
@@ -147,15 +147,15 @@ configure_ffmpeg_kit() {
 	change_dir "${ffmpeg_kit_src_dir}"
 	make distclean > >(redirect_output) 2>&1
 
-	local touch_name=$(get_small_touchfile_name "already_autoreconf_${TYPE_POSTFIX}" "$FFMPEG_KIT_VERSION $local_cflags $local_cxxfalgs")
+	local touch_name=$(get_small_touchfile_name "already_autoreconf_${type_postfix}" "$ffmpeg_kit_version $local_cflags $local_cxxfalgs")
 	if [ ! -f "$touch_name" ]; then
-		remove_path -f "${ffmpeg_kit_src_dir}/already_autoreconf_${TYPE_POSTFIX}"*
+		remove_path -f "${ffmpeg_kit_src_dir}/already_autoreconf_${type_postfix}"*
 		change_dir "${ffmpeg_kit_src_dir}"
 		autoreconf_library "ffmpeg-kit" || exit_message 1 "could not autoreconf ffmpeg-kit. See $LOG_FILE for details."
 		create_touch_file 0 "$touch_name"
 	fi
 
-	local config_options="--prefix=${ffmpeg_kit_install}"
+	local config_options="--prefix=${ffmpeg_kit_install} --with-ffmpeg-src=$ffmpeg_source_dir --with-ffmpeg-build=$ffmpeg_install_prefix"
 
 	config_options+=" --host=${host_target}"
 	if truthy "$build_static"; then
@@ -166,26 +166,27 @@ configure_ffmpeg_kit() {
 		config_options+=" --disable-static"
 	fi
 	change_dir "${ffmpeg_kit_src_dir}"
-  local BUILD_DATE="-DFFMPEG_KIT_BUILD_DATE=$(date +%Y%m%d 2>>"${BASEDIR}"/build.log)"
-  export CFLAGS="${local_cflags} ${BUILD_DATE}"
-  export CXXFLAGS="${local_cxxfalgs} ${BUILD_DATE}"
+  local build_date="-DFFMPEG_KIT_BUILD_DATE=$(date +%Y%m%d 2>>"${BASEDIR}"/build.log)"
+  export CFLAGS="${local_cflags} ${build_date}"
+  export CXXFLAGS="${local_cxxfalgs} ${build_date}"
   export LDFLAGS="$LDFLAGS -lpthread"
-	do_configure "${config_options}" "./configure" "${TYPE_POSTFIX}" || exit_message 1 "unable to configure ffmpeg-kit. see $LOG_FILE for details."
+	do_configure "${config_options}" "./configure" "${type_postfix}" || exit_message 1 "unable to configure ffmpeg-kit. see $LOG_FILE for details."
 
 	echo -e "INFO: Done configuring ffmpeg kit" | tee -a "$LOG_FILE"
 }
 
 create_ffmpegkit_package_config() {
-	local FFMPEGKIT_VERSION="$1"
-
-	cat >"${install_pkgconfig_dir}/ffmpeg-kit.pc" <<EOF
+	local kit_version="$1"
+  local location_prefix="$2"
+  create_dir "${location_prefix}/lib/pkgconfig"
+  cat >"${location_prefix}/lib/pkgconfig/ffmpeg-kit.pc" <<EOF
 prefix=${ffmpeg_kit_install}
 libdir=\${exec_prefix}/lib
 includedir=\${prefix}/include
 
 Name: ffmpeg-kit
 Description: FFmpeg for applications on Windows
-Version: ${FFMPEGKIT_VERSION}
+Version: ${kit_version}
 
 # Public dependencies that have their own .pc files
 Requires: libavfilter, libswscale, libavformat, libavcodec, libswresample, libavutil
