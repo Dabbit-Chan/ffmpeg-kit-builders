@@ -1,0 +1,132 @@
+diff --git a/src/ffmpeg.c b/src/ffmpeg.c
+index cbeefb7..028c7fe 100755
+--- a/src/ffmpeg.c
++++ b/src/ffmpeg.c
+@@ -83,8 +83,10 @@
+ #include "ffmpeg_utils.h"
+ #include "graph/graphprint.h"
+ 
+-const char program_name[] = "ffmpeg";
+-const int program_birth_year = 2000;
++//const char program_name[] = "ffmpeg";
++//const int program_birth_year = 2000;
++
++extern void (*report_callback)(int, float, float, int64_t, double, double, double);
+ 
+ FILE *vstats_file;
+ 
+@@ -141,7 +143,7 @@ static atomic_int transcode_init_done = 0;
+ static volatile int ffmpeg_exited = 0;
+ static int64_t copy_ts_first_pts = AV_NOPTS_VALUE;
+ 
+-static void
++void
+ sigterm_handler(int sig)
+ {
+     int ret;
+@@ -152,7 +154,7 @@ sigterm_handler(int sig)
+         ret = write(2/*STDERR_FILENO*/, "Received > 3 system signals, hard exiting\n",
+                     strlen("Received > 3 system signals, hard exiting\n"));
+         if (ret < 0) { /* Do nothing */ };
+-        exit(123);
++        (void)ret; //exit(123);
+     }
+ }
+ 
+@@ -711,6 +713,28 @@ static void print_report(int is_last_report, int64_t timer_start, int64_t cur_ti
+         }
+     }
+ 
++    if (report_callback) {
++        int frame_number = 0;
++        float fps = 0.0f;
++        float quality = 0.0f;
++        
++        for (OutputStream *ost = ost_iter(NULL); ost; ost = ost_iter(ost)) {
++            if (ost->type == AVMEDIA_TYPE_VIDEO) {
++                frame_number = atomic_load(&ost->packets_written);
++                fps = t > 1 ? frame_number / t : 0;
++                break; 
++            }
++        }
++
++        report_callback(frame_number, 
++                        (float)fps, 
++                        (float)quality, 
++                        total_size, 
++                        t,
++                        bitrate, 
++                        speed);
++    }
++
+     first_report = 0;
+ }
+ 
+@@ -961,7 +985,36 @@ static int64_t getmaxrss(void)
+ #endif
+ }
+ 
+-int main(int argc, char **argv)
++void ffmpeg_reset_internal_state(void)
++{
++    nb_input_files = 0;
++    nb_output_files = 0;
++    nb_filtergraphs = 0;
++    nb_decoders = 0;
++    nb_output_dumped = 0;
++    
++    // Free arrays if they exist (safety check)
++    av_freep(&input_files);
++    av_freep(&output_files);
++    av_freep(&filtergraphs);
++    av_freep(&decoders);
++    
++    // Reset flags
++    received_sigterm = 0;
++    received_nb_signals = 0;
++    atomic_store(&transcode_init_done, 0);
++    ffmpeg_exited = 0;
++    copy_ts_first_pts = AV_NOPTS_VALUE;
++    
++    // Reset stats
++    av_freep(&vstats_filename);
++    if (vstats_file) {
++        fclose(vstats_file);
++        vstats_file = NULL;
++    }
++}
++
++int ffmpeg_run_internal(int argc, char **argv)
+ {
+     Scheduler *sch = NULL;
+ 
+@@ -970,6 +1023,8 @@ int main(int argc, char **argv)
+ 
+     init_dynload();
+ 
++    ffmpeg_reset_internal_state();
++
+     setvbuf(stderr,NULL,_IONBF,0); /* win32 runtime needs this */
+ 
+     av_log_set_flags(AV_LOG_SKIP_REPEATED);
+@@ -995,8 +1050,7 @@ int main(int argc, char **argv)
+ 
+     if (nb_output_files <= 0 && nb_input_files == 0) {
+         show_usage();
+-        av_log(NULL, AV_LOG_WARNING, "Use -h to get full help or, even better, run 'man %s'\n", program_name);
+-        ret = 1;
++        ret = 0; // Return 0 instead of 1 for help
+         goto finish;
+     }
+ 
+@@ -1030,8 +1084,8 @@ finish:
+ 
+     sch_free(&sch);
+ 
+-    av_log(NULL, AV_LOG_VERBOSE, "\n");
+-    av_log(NULL, AV_LOG_VERBOSE, "Exiting with exit code %d\n", ret);
++    //av_log(NULL, AV_LOG_VERBOSE, "\n");
++    //av_log(NULL, AV_LOG_VERBOSE, "Exiting with exit code %d\n", ret);
+ 
+     return ret;
+ }

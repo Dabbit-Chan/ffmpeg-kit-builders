@@ -1,0 +1,169 @@
+diff --git a/src/ffprobe.c b/src/ffprobe.c
+index 7e2950a..2b028fb 100755
+--- a/src/ffprobe.c
++++ b/src/ffprobe.c
+@@ -88,8 +88,8 @@ typedef struct InputFile {
+     int       nb_streams;
+ } InputFile;
+ 
+-const char program_name[] = "ffprobe";
+-const int program_birth_year = 2007;
++//const char program_name[] = "ffprobe";
++//const int program_birth_year = 2007;
+ 
+ static int do_analyze_frames = 0;
+ static int do_bitexact = 0;
+@@ -2339,7 +2339,7 @@ static int open_input_file(InputFile *ifile, const char *filename,
+ 
+     ifile->streams = av_calloc(fmt_ctx->nb_streams, sizeof(*ifile->streams));
+     if (!ifile->streams)
+-        exit(1);
++        return AVERROR(ENOMEM); //exit(1);
+     ifile->nb_streams = fmt_ctx->nb_streams;
+ 
+     /* bind a decoder to each input stream */
+@@ -2370,15 +2370,15 @@ static int open_input_file(InputFile *ifile, const char *filename,
+             err = filter_codec_opts(codec_opts, stream->codecpar->codec_id,
+                                     fmt_ctx, stream, codec, &opts, NULL);
+             if (err < 0)
+-                exit(1);
++                return err; //exit(1);
+ 
+             ist->dec_ctx = avcodec_alloc_context3(codec);
+             if (!ist->dec_ctx)
+-                exit(1);
++                return AVERROR(ENOMEM); //exit(1);
+ 
+             err = avcodec_parameters_to_context(ist->dec_ctx, stream->codecpar);
+             if (err < 0)
+-                exit(1);
++                return AVERROR(ENOMEM); //exit(1);
+ 
+             if (do_show_log) {
+                 // For logging it is needed to disable at least frame threads as otherwise
+@@ -2394,7 +2394,7 @@ static int open_input_file(InputFile *ifile, const char *filename,
+             if (avcodec_open2(ist->dec_ctx, codec, &opts) < 0) {
+                 av_log(NULL, AV_LOG_WARNING, "Could not open codec for input stream %d\n",
+                        stream->index);
+-                exit(1);
++                return AVERROR(ENOMEM); //exit(1);
+             }
+ 
+             if ((t = av_dict_iterate(opts, NULL))) {
+@@ -2773,7 +2773,7 @@ static int opt_print_filename(void *optctx, const char *opt, const char *arg)
+     return print_input_filename ? 0 : AVERROR(ENOMEM);
+ }
+ 
+-void show_help_default(const char *opt, const char *arg)
++void ffprobe_show_help_default(const char *opt, const char *arg)
+ {
+     av_log_set_callback(log_callback_help);
+     show_usage();
+@@ -3058,18 +3058,57 @@ static inline int check_section_show_entries(int section_id)
+             do_show_##varname = 1;                                      \
+     } while (0)
+ 
+-int main(int argc, char **argv)
++static int write_buffer_packet(void *opaque, const uint8_t *buf, int buf_size)  {
++    AVBPrint *bp = (AVBPrint *)opaque;
++    av_bprint_append_data(bp, (const char *)buf, buf_size);
++    return buf_size;
++}
++
++void ffprobe_reset_internal_state(void)
++{
++    // Reset counters and flags
++    nb_streams = 0;
++    av_freep(&nb_streams_packets);
++    av_freep(&nb_streams_frames);
++    av_freep(&selected_streams);
++    av_freep(&streams_with_closed_captions);
++    av_freep(&streams_with_film_grain);
++    
++    // Clear log buffer
++    ff_mutex_lock(&log_mutex);
++    for (int i=0; i<log_buffer_size; i++) {
++        av_freep(&log_buffer[i].context_name);
++        av_freep(&log_buffer[i].parent_name);
++        av_freep(&log_buffer[i].log_message);
++    }
++    av_freep(&log_buffer);
++    log_buffer_size = 0;
++    ff_mutex_unlock(&log_mutex);
++
++    // Reset options constants if they were modified
++    do_analyze_frames = 0;
++    do_show_frames = 0;
++    do_show_packets = 0;
++}
++
++int ffprobe_run_internal(int argc, char **argv, AVBPrint *output_buf)
+ {
+     const AVTextFormatter *f;
+-    AVTextFormatContext *tctx;
+-    AVTextWriterContext *wctx;
++    AVTextFormatContext *tctx = NULL;
++    AVTextWriterContext *wctx = NULL;
+     char *buf;
+     char *f_name = NULL, *f_args = NULL;
++
++    // For custom AVIO
++    AVIOContext *avio_buf = NULL;
++    uint8_t *avio_ptr = NULL;
++
+     int ret, input_ret, i;
+ 
+     init_dynload();
+-
+-    setvbuf(stderr, NULL, _IONBF, 0); /* win32 runtime needs this */
++    
++    // Reset state for library usage
++    ffprobe_reset_internal_state();
+ 
+     av_log_set_flags(AV_LOG_SKIP_REPEATED);
+ 
+@@ -3150,7 +3189,28 @@ int main(int argc, char **argv)
+         goto end;
+     }
+ 
+-    if (output_filename) {
++    if (output_buf) {
++        // LIBRARY MODE: Write to memory buffer
++        const int avio_ctx_buffer_size = 4096;
++        avio_ptr = av_malloc(avio_ctx_buffer_size);
++        if (!avio_ptr) {
++            ret = AVERROR(ENOMEM);
++            goto end;
++        }
++        
++        // Create a custom AVIOContext that writes to our AVBPrint
++        avio_buf = avio_alloc_context(avio_ptr, avio_ctx_buffer_size, 1, 
++                                      output_buf, NULL, write_buffer_packet, NULL);
++        if (!avio_buf) {
++            av_free(avio_ptr);
++            ret = AVERROR(ENOMEM);
++            goto end;
++        }
++        
++        // Use avtextwriter_create_avio (Available in modern fftools)
++        ret = avtextwriter_create_avio(&wctx, avio_buf, 0);
++    } 
++    else if (output_filename) {
+         ret = avtextwriter_create_file(&wctx, output_filename);
+     } else
+         ret = avtextwriter_create_stdout(&wctx);
+@@ -3208,6 +3268,14 @@ int main(int argc, char **argv)
+     }
+ 
+ end:
++    // Cleanup custom AVIO
++    if (avio_buf) {
++        // avio_close calls close_buffer which we don't want, or frees buffer?
++        // avio_context_free handles the struct.
++        // We allocated avio_ptr with av_malloc, avio_context_free frees the internal buffer 
++        // if it allocated it? No, we passed it.
++        avio_context_free(&avio_buf);
++    }
+     av_freep(&output_format);
+     av_freep(&output_filename);
+     av_freep(&input_filename);

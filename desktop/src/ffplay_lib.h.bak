@@ -1,0 +1,46 @@
+// ffplay_lib.h  
+#ifndef FFPLAY_LIB_H  
+#define FFPLAY_LIB_H  
+  
+#include <stdint.h>  
+
+typedef struct FFplayContext FFplayContext;  
+  
+// Event callbacks for library integration  
+typedef struct FFplayCallbacks {  
+    void (*on_frame_displayed)(void *userdata, const uint8_t *data, int width, int height);  
+    void (*on_audio_samples)(void *userdata, const uint8_t *data, int size);  
+    void (*on_seek_complete)(void *userdata, double position);  
+    void (*on_error)(void *userdata, const char *error);  
+    void *userdata;  
+} FFplayCallbacks;  
+  
+// Initialize ffplay with command-line arguments as a string  
+// Returns NULL on error  
+FFplayContext* ffplay_init(const char* args_string, const FFplayCallbacks *cb);  
+  
+// Start playback (non-blocking)  
+int ffplay_start(FFplayContext* ctx);  
+  
+// Process events (call regularly from your event loop)  
+void ffplay_process_events(FFplayContext* ctx);  
+  
+// Control playback  
+int ffplay_seek(FFplayContext* ctx, double seconds);  
+int ffplay_pause(FFplayContext* ctx);  
+int ffplay_resume(FFplayContext* ctx);  
+int ffplay_stop(FFplayContext* ctx);  
+  
+// Get playback state  
+double ffplay_get_position(FFplayContext* ctx);  
+double ffplay_get_duration(FFplayContext* ctx);  
+int ffplay_is_playing(FFplayContext* ctx);  
+int ffplay_is_paused(FFplayContext* ctx);  
+  
+// Set volume (0.0 to 1.0)  
+void ffplay_set_volume(FFplayContext* ctx, float volume);  
+  
+// Clean up resources  
+void ffplay_free(FFplayContext* ctx);  
+  
+#endif

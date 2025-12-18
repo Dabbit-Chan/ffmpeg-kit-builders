@@ -1,0 +1,189 @@
+/*
+ * Copyright (c) 2025 Akash Patel
+ *
+ * This file is part of FFmpegKit.
+ *
+ * FFmpegKit is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU Lesser General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * FFmpegKit is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU Lesser General Public License for more details.
+ *
+ * You should have received a copy of the GNU Lesser General Public License
+ * along with FFmpegKit.  If not, see <http://www.gnu.org/licenses/>.
+ */
+
+#include "ffprobe_lib.h"
+#include "cmdutils.h"
+#include "libavutil/mem.h"
+#include "libavutil/avstring.h"
+#include "libavutil/bprint.h"
+#include "libavformat/avformat.h"
+#include <string.h>
+#include <stdlib.h>
+#include <pthread.h>
+
+// Assumption: You have modified ffprobe.h / ffprobe.c 
+// 1. To expose `probe_file` signature as: int probe_file(AVBPrint *buf, const char *filename, ...);
+// 2. To expose `ffprobe_cleanup` and `ffprobe_reset_internal_state`.
+#include "ffprobe.h" 
+
+// Global lock for ffprobe globals
+static pthread_mutex_t ffprobe_lock = PTHREAD_MUTEX_INITIALIZER;
+
+extern void ffprobe_reset_internal_state(void);
+extern void ffprobe_cleanup(int ret);
+// This declaration assumes you modified ffprobe.c
+extern int probe_file(AVBPrint *buf, const char *filename);
+
+struct FFprobeContext {
+    int ret;
+    int argc;
+    char **argv;
+    AVBPrint output;
+};
+
+static int split_args(const char* args, char*** argv_out) {
+    if (!args || !argv_out) return -1;
+    char* args_copy = av_strdup(args);
+    if (!args_copy) return -1;
+
+    int argc = 0;
+    char* p = args_copy;
+    int in_quotes = 0;
+
+    // Count
+    while (*p) {
+        while (*p && !in_quotes && (*p == ' ' || *p == '\t' || *p == '\n')) p++;
+        if (!*p) break;
+        argc++;
+        if (*p == '"') {
+            in_quotes = 1;
+            p++;
+            while (*p && *p != '"') p++;
+            if (*p) p++;
+            in_quotes = 0;
+        } else {
+            while (*p && *p != ' ' && *p != '\t' && *p != '\n') p++;
+        }
+    }
+
+    char** argv = av_mallocz(sizeof(char*) * (argc + 1));
+    if (!argv) {
+        av_free(args_copy);
+        return -1;
+    }
+
+    // Extract
+    strcpy(args_copy, args);
+    p = args_copy;
+    int idx = 0;
+    while (*p && idx < argc) {
+        while (*p && (*p == ' ' || *p == '\t' || *p == '\n')) p++;
+        if (!*p) break;
+        char* start = p;
+        if (*p == '"') {
+            p++;
+            start = p;
+            while (*p && *p != '"') p++;
+            if (*p) *p++ = '\0';
+        } else {
+            while (*p && *p != ' ' && *p != '\t' && *p != '\n') p++;
+            if (*p) *p++ = '\0';
+        }
+        argv[idx] = av_strdup(start);
+        if (!argv[idx]) {
+            for(int k=0; k<idx; k++) av_free(argv[k]);
+            av_free(argv);
+            av_free(args_copy);
+            return -1;
+        }
+        idx++;
+    }
+    av_free(args_copy);
+    *argv_out = argv;
+    return argc;
+}
+
+FFprobeContext* ffprobe_init(const char* args_string) {
+    if (!args_string) return NULL;
+    
+    FFprobeContext* ctx = av_mallocz(sizeof(FFprobeContext));
+    if (!ctx) return NULL;
+    
+    // Initialize buffer
+    av_bprint_init(&ctx->output, 0, AV_BPRINT_SIZE_UNLIMITED);
+    
+    ctx->argc = split_args(args_string, &ctx->argv);
+    if (ctx->argc < 0) {
+        av_bprint_finalize(&ctx->output, NULL);
+        av_free(ctx);
+        return NULL;
+    }
+    
+    return ctx;
+}
+
+int ffprobe_run(FFprobeContext* ctx) {
+    if (!ctx) return AVERROR(EINVAL);
+    if (ctx->argc < 2) return AVERROR(EINVAL); // argv[0] is prog name, argv[1] is input
+
+    pthread_mutex_lock(&ffprobe_lock);
+
+    // 1. Reset ffprobe globals
+    ffprobe_reset_internal_state();
+
+    // 2. Init network
+    avformat_network_init();
+
+    // 3. Run Probe
+    // Note: In standard ffprobe, arguments like -show_streams are parsed 
+    // and set global flags. You need to ensure parse_options is called here,
+    // or probe_file handles it.
+    // Assuming you modified probe_file to accept the buffer:
+    
+    // If your ffprobe structure requires parsing options first:
+    // parse_options(ctx->argc, ctx->argv); 
+    
+    // Using the input file provided in arguments (simplistic assumption: last arg is file)
+    // A robust implementation would parse options properly.
+    const char *input_file = ctx->argv[ctx->argc - 1]; 
+    
+    ctx->ret = probe_file(&ctx->output, input_file);
+
+    // 4. Cleanup
+    ffprobe_cleanup(ctx->ret);
+
+    pthread_mutex_unlock(&ffprobe_lock);
+    return ctx->ret;
+}
+
+char* ffprobe_get_output(FFprobeContext* ctx) {
+    if (!ctx || !ctx->output.len) return NULL;
+    if (!av_bprint_is_complete(&ctx->output)) return NULL;
+    return av_strdup(ctx->output.str);
+}
+
+size_t ffprobe_get_output_size(FFprobeContext* ctx) {
+    if (!ctx) return 0;
+    return ctx->output.len;
+}
+
+void ffprobe_free(FFprobeContext* ctx) {
+    if (!ctx) return;
+    
+    if (ctx->argv) {
+        for (int i = 0; i < ctx->argc; i++) {
+            av_free(ctx->argv[i]);
+        }
+        av_free(ctx->argv);
+    }
+    
+    av_bprint_finalize(&ctx->output, NULL);
+    avformat_network_deinit();
+    av_free(ctx);
+}
