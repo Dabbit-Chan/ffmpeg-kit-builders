@@ -195,7 +195,7 @@ Requires: libavfilter, libswscale, libavformat, libavcodec, libswresample, libav
 Libs: -L\${libdir} -lffmpegkit
 
 # Private dependencies needed for linking on Windows
-Libs.private: -lstdc++ -lws2_32 -lpsapi -lole32 -lshlwapi -lgdi32 -lbcrypt -luser32 -luuid
+Libs.private: -lstdc++ -lws2_32 -lpsapi -lole32 -lshlwapi -lgdi32 -lbcrypt -luser32 -luuid -ljsoncpp
 
 # Compiler flags for the ffmpeg-kit headers (includes jsoncpp headers if bundled)
 Cflags: -I\${includedir}

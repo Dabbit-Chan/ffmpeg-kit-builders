@@ -229,7 +229,7 @@ Name: ffmpeg-kit
 Description: FFmpeg for applications
 Version: ${kit_version}
 
-Libs: -L\${libdir} -lstdc++ -lffmpegkit -lavutil
+Libs: -L\${libdir} -lstdc++ -lffmpegkit -lavutil -ljsoncpp -lpthread -lm -lz
 Requires: libavfilter, libswscale, libavformat, libavcodec, libswresample, libavutil, libavdevice
 Cflags: -I\${includedir}
 EOF
