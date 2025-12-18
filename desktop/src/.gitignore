@@ -2,7 +2,12 @@
 /.deps/
 *.o
 *.lo
+*.Plo
+/**/*.Plo
+/**/*.lo
+/**/*.o
 /.libs/
 *.la
+/**/*.la
 aclocal.m4
 Makefile.in
