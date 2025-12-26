@@ -173,6 +173,7 @@ if test "x$enable_static" = "xyes"; then BUILD_STATIC=yes; else BUILD_STATIC=no;
 
 AC_SUBST([BUILD_SHARED])
 AC_SUBST([BUILD_STATIC])
+AM_CONDITIONAL([BUILD_STATIC_LIB], [test "x$BUILD_STATIC" = "xyes"])
 
 # Check for cross-compilation
 AC_MSG_CHECKING([whether we are cross compiling])
@@ -207,16 +208,21 @@ if test "x$target_os_clean" = "xwindows"; then
     else
         LIBRARY_EXT="a"; ARCHIVE_EXT="a"
     fi
-    
+
     WINDOWS_LDFLAGS="-Wl,--export-all-symbols -Wl,--enable-auto-import -Wl,--allow-multiple-definition"
-    CFLAGS="$CFLAGS -D_WIN32_WINNT=0x0600"
-    CXXFLAGS="$CXXFLAGS -D_WIN32_WINNT=0x0600"
 else
     if test "x$enable_shared" = "xyes"; then LIBRARY_EXT="so"; ARCHIVE_EXT="so";
     else LIBRARY_EXT="a"; ARCHIVE_EXT="a"; fi
     WINDOWS_LDFLAGS=""
 fi
 
+# Build Date
+if test -z "$FFMPEG_KIT_BUILD_DATE"; then
+    FFMPEG_KIT_BUILD_DATE=$(date +%Y%m%d)
+fi
+AC_DEFINE_UNQUOTED([FFMPEG_KIT_BUILD_DATE], ["$FFMPEG_KIT_BUILD_DATE"], [FFmpegKit build date])
+
+AC_SUBST([FFMPEG_KIT_BUILD_DATE])
 AC_SUBST([LIBRARY_EXT])
 AC_SUBST([ARCHIVE_EXT])
 AC_SUBST([WINDOWS_LDFLAGS])
@@ -240,68 +246,41 @@ AX_CXX_COMPILE_STDCXX(11, noext)
 LT_INIT
 PKG_PROG_PKG_CONFIG
 
-# Set FFmpeg library paths
+# ==============================================================================
+# FFmpeg Dependency Detection (Dynamic via pkg-config)
+# ==============================================================================
+
+if test -n "$ffmpeg_build_dir"; then
+    export PKG_CONFIG_PATH="$ffmpeg_build_dir/lib/pkgconfig:$PKG_CONFIG_PATH"
+    AC_MSG_NOTICE([Using PKG_CONFIG_PATH: $PKG_CONFIG_PATH])
+fi
+
+PKG_CHECK_MODULES([FFMPEG], 
+    [libavdevice libavfilter libavformat libavcodec libswresample libswscale libavutil jsoncpp], 
+    [
+        AC_MSG_NOTICE([FFmpeg and JsonCpp found.])
+        AC_MSG_NOTICE([FFMPEG_CFLAGS: $FFMPEG_CFLAGS])
+        CPPFLAGS="$CPPFLAGS $FFMPEG_CFLAGS"
+        AC_MSG_NOTICE([FFmpeg libraries found.])
+    ], 
+    [
+        AC_MSG_ERROR([FFmpeg libraries not found in $ffmpeg_build_dir. Check config.log.])
+    ]
+)
+
 if test "x$target_os_clean" = "xwindows"; then
-    FFMPEG_LIBS="-lavcodec -lavfilter -lavformat -lavutil -lswscale -lswresample -lavdevice -lpsapi -lws2_32 -lbcrypt -luser32 -lole32"
     WINDOWS_CFLAGS="-D_WIN32_WINNT=0x0600"
     WINDOWS_CXXFLAGS="-D_WIN32_WINNT=0x0600"
     CFLAGS="$CFLAGS $WINDOWS_CFLAGS"
     CXXFLAGS="$CXXFLAGS $WINDOWS_CXXFLAGS"
-else
-    FFMPEG_LIBS="-lavcodec -lavfilter -lavformat -lavutil -lswscale -lswresample -lavdevice -lpthread"
 fi
+
 AC_SUBST(FFMPEG_LIBS)
 AC_SUBST(WINDOWS_CFLAGS)
 AC_SUBST(WINDOWS_CXXFLAGS)
 
 VERSION_INFO="11:0:6"
 AC_SUBST(VERSION_INFO)
-
-# Checks for FFmpeg headers
-AC_MSG_CHECKING([for FFmpeg headers])
-if test -n "$PKG_CONFIG"; then
-    if $PKG_CONFIG --exists libavformat; then
-        AVFORMAT_CFLAGS=`$PKG_CONFIG --cflags libavformat`
-    fi
-fi
-
-saved_CPPFLAGS="$CPPFLAGS"
-if test -n "$AVFORMAT_CFLAGS"; then CPPFLAGS="$CPPFLAGS $AVFORMAT_CFLAGS"; fi
-AC_CHECK_HEADERS([libavformat/avformat.h], [has_avformat=yes], [has_avformat=no])
-AC_CHECK_HEADERS([libavutil/ffversion.h], [has_ffversion=yes], [has_ffversion=no])
-CPPFLAGS="$saved_CPPFLAGS"
-
-if test "$has_avformat" = no; then
-    AC_MSG_WARN([FFmpeg headers not found. Check PKG_CONFIG_PATH])
-fi
-
-# ==============================================================================
-# Check dependencies
-# ==============================================================================
-
-# JsonCpp check
-PKG_CHECK_MODULES([JSONCPP], [jsoncpp], [
-    CPPFLAGS="$CPPFLAGS $JSONCPP_CFLAGS"
-    LIBS="$LIBS $JSONCPP_LIBS"
-], [
-    AC_CHECK_HEADERS([json/json.h], [has_jsoncpp=yes], [has_jsoncpp=no])
-    if test "$has_jsoncpp" = yes; then JSONCPP_LIBS="-ljsoncpp"; else
-       AC_MSG_ERROR([JsonCpp not found.])
-    fi
-])
-AC_SUBST([JSONCPP_LIBS])
-
-# SDL check
-# PKG_CHECK_MODULES([SDL], [sdl], [
-#     CPPFLAGS="$CPPFLAGS $SDL_CFLAGS"
-#     LIBS="$LIBS $SDL_LIBS"
-# ], [
-#     AC_CHECK_HEADERS([SDL.h], [has_sdl=yes], [has_sdl=no])
-#     if test "$has_sdl" = yes; then SDL_LIBS="-lsdl"; else
-#        AC_MSG_ERROR([SDL not found.])
-#     fi
-# ])
-# AC_SUBST([SDL_LIBS])
 
 # Checks for typedefs, structures
 AC_C_BIGENDIAN
@@ -310,61 +289,6 @@ AC_TYPE_INT32_T
 AC_TYPE_INT64_T
 AC_TYPE_SIZE_T
 AC_TYPE_UINT8_T
-
-# Build Date
-if test -z "$FFMPEG_KIT_BUILD_DATE"; then
-    FFMPEG_KIT_BUILD_DATE=$(date +%Y%m%d)
-fi
-AC_DEFINE_UNQUOTED([FFMPEG_KIT_BUILD_DATE], ["$FFMPEG_KIT_BUILD_DATE"], [FFmpegKit build date])
-AC_SUBST([FFMPEG_KIT_BUILD_DATE])
-
-# ==============================================================================
-# Generate Resource Data File (graphprint_res.c)
-# ==============================================================================
-AC_MSG_NOTICE([Generating graph resource data file...])
-
-RES_DATA_FILE="src/graphprint_res.c"
-echo "/* Generated resource file */" > "$RES_DATA_FILE"
-echo "#include <stddef.h>" >> "$RES_DATA_FILE"
-
-# Function to dump file content as C array
-# NOTE: We use [[]] to escape brackets in configure.ac
-generate_hex_array() {
-    VAR_NAME=$1
-    FILE_PATH=$2
-    if test -f "$FILE_PATH"; then
-        echo "const unsigned char ${VAR_NAME}_data[[]] = {" >> "$RES_DATA_FILE"
-        
-        if command -v xxd >/dev/null 2>&1; then
-            # Best case: xxd
-            xxd -i < "$FILE_PATH" >> "$RES_DATA_FILE"
-        elif command -v hexdump >/dev/null 2>&1; then
-            # Common Linux alternative
-            hexdump -v -e '1/1 "0x%02x, "' "$FILE_PATH" >> "$RES_DATA_FILE"
-        else
-            # Robust od fallback:
-            # -An removes address offsets (fixing the 0000000 compilation error)
-            # -v prevents collapsing duplicates
-            # -t x1 prints 1-byte hex
-            # sed cleans up whitespace and formats as 0xNN,
-            od -v -An -t x1 "$FILE_PATH" | sed 's/[ \t]\+/ /g' | sed 's/ \([0-9a-fA-F]\{2\}\)/0x\1, /g' >> "$RES_DATA_FILE"
-        fi
-        
-        echo "0x00 };" >> "$RES_DATA_FILE"
-        LEN=$(wc -c < "$FILE_PATH")
-        echo "const unsigned int ${VAR_NAME}_len = $LEN;" >> "$RES_DATA_FILE"
-    else
-        AC_MSG_WARN([Resource file $FILE_PATH not found! Using empty stub.])
-        echo "const unsigned char ${VAR_NAME}_data[[]] = {0};" >> "$RES_DATA_FILE"
-        echo "const unsigned int ${VAR_NAME}_len = 0;" >> "$RES_DATA_FILE"
-    fi
-}
-
-# Ensure these paths are correct relative to where configure is run
-generate_hex_array "ff_graph_css" "src/resources/graph.css"
-generate_hex_array "ff_graph_html" "src/resources/graph.html"
-
-AC_MSG_RESULT([created $RES_DATA_FILE])
 
 # ==============================================================================
 # Dynamic Source Detection
@@ -384,17 +308,20 @@ STATIC_SOURCE="FFmpegKit.cpp"
 
 if test -d "src"; then
     # 1. Scan Sources
-    for f in $(find src -type f \( -name "*.c" -o -name "*.cpp" \)); do
+    for f in $(find src -type f \( -name "*.c" -o -name "*.cpp" \) | sort); do
+        # Strip 'src/' prefix
         rel_path=${f#src/}
+        # Skip the static anchor file
         if test "$rel_path" != "$STATIC_SOURCE"; then
-             # Create object name (e.g. graph/graphprint.lo)
+             # Change extension to .lo for Libtool objects
+             # Use sed to replace only the last occurrence
              objname=$(echo "$rel_path" | sed 's/\.cpp$/.lo/;s/\.c$/.lo/')
              FFMPEGKIT_OBJECTS_VAR="$FFMPEGKIT_OBJECTS_VAR $objname"
         fi
     done
 
     # 2. Scan Headers
-    for f in $(find src -type f -name "*.h"); do
+    for f in $(find src -type f -name "*.h" | sort); do
         rel_path=${f#src/}
         FFMPEGKIT_HEADERS_VAR="$FFMPEGKIT_HEADERS_VAR $rel_path"
     done
@@ -411,9 +338,11 @@ fi
 
 AC_MSG_RESULT([detected])
 
+AC_SUBST([ffmpeg_build_dir])
 AC_SUBST([FFMPEGKIT_HEADERS], [$FFMPEGKIT_HEADERS_VAR])
 AC_SUBST([FFMPEGKIT_OBJECTS], [$FFMPEGKIT_OBJECTS_VAR])
 # ==============================================================================
 
 AC_CONFIG_FILES([Makefile src/Makefile])
+AC_CONFIG_FILES([src/ffmpeg-kit.pc:src/ffmpeg-kit.pc.in])
 AC_OUTPUT
