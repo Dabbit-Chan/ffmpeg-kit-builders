@@ -63,7 +63,11 @@ RUN apt-get update && \
     zlib1g-dev \
     libglib2.0-dev \
     libglib2.0-dev-bin \
-    shellcheck
+    shellcheck \
+    libgtkmm-3.0-dev \
+    libsdl2-dev
+
+ENV PATH="/usr/local/mingw-w64/bin:${PATH}"
 
 # Install xPack MinGW-w64 GCC 15.2.0-2
 RUN wget https://github.com/xpack-dev-tools/mingw-w64-gcc-xpack/releases/download/v15.2.0-2/xpack-mingw-w64-gcc-15.2.0-2-linux-x64.tar.gz && \
@@ -74,30 +78,29 @@ RUN wget https://github.com/xpack-dev-tools/mingw-w64-gcc-xpack/releases/downloa
     chown -R root:users /usr/local/mingw-w64 && \
     chmod -R 775 /usr/local/mingw-w64
 
-ENV PATH="/usr/local/mingw-w64/bin:${PATH}"
+# 1. Force Rust to install globally (Best practice for Dev Containers)
+ENV RUSTUP_HOME=/usr/local/rustup \
+    CARGO_HOME=/usr/local/cargo \
+    PATH=/usr/local/cargo/bin:$PATH
 
-# Install Rust
-RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y && \
-    # Source environment for the CURRENT session to keep running commands
-    . "$HOME/.cargo/env" && \
-    # Add Windows Target
+# 2. Install Tools
+RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --no-modify-path && \
+    # Source the global env file (not ${HOME})
+    . /usr/local/cargo/env && \
     rustup target add x86_64-pc-windows-gnu && \
-    # Verify Installation
+    # Verify Rust
     rustc --version && \
     cargo --version && \
-    # Install cargo-c (Standard compile from source)
+    # Install cargo-c
     cargo install cargo-c && \
-    #Install latest meson
-    pip3 install --user meson --break-system-packages && \
-    # Cleanup to keep image small
+    # FIX: Remove '--user' so Meson installs to /usr/local/bin (Global)
+    pip3 install meson --break-system-packages && \
+    # Cleanup
     apt-get clean -y && \
     rm -rf /var/lib/apt/lists/*
 
-# Persist the PATH for future sessions (e.g. when you log in)
-# Note: Since this is a devcontainer base, $HOME is usually /root for the build
-# but users might log in as 'vscode'. If you need Rust for the 'vscode' user,
-# you must switch USER or adjust permissions. Assuming root here:
-ENV PATH="/root/.cargo/bin:${PATH}"
+# 3. CRITICAL: Allow 'vscode' user to use Cargo (install crates, update index, etc.)
+RUN chmod -R a+w /usr/local/cargo /usr/local/rustup
 
 # --- INSTALL FLUTTER ---
 # 1. Install dependencies (already covered by your apt-get, but curl/git/unzip are vital)
