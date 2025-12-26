@@ -20,3 +20,6 @@ Makefile.in
 *already_*
 config.h*
 stamp-h1
+*.in~
+*.a
+*.pc
