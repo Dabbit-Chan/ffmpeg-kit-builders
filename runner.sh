@@ -17,171 +17,6 @@ remove_path -f "$LOG_FILE"
 
 echo -e "INFO: Build options: $*\n" 1>>"$LOG_FILE" 2>&1
 
-display_help() {
-	echo -e "available option=default_value:
-General Options:
-	-h, --help                                                    display this help and exit
-  -v, --version                                                 display version and exit
-	-d, --debug                                                   build with debug information
-	-s, --speed                                                   optimize for speed instead of size
-	-f, --force                                                   ignore warnings
-Licensing options:
-	--enable-gpl=[n]                                              allow building GPL libraries, created libs will be 
-                                                                licensed under the GPLv3.0 [no]\n
-Build Options:
-  --host-platform=*|--host=*                                    where the compiled program will run [linux|windows]
-  --host-platform=*|--host=*                                    host cpu architecture [i686|x86_64] (32-bit or 64-bit)
-  --lto                                                         enable Linktime optimization
-  --lts                                                         enable long-term support build
-	--ffmpeg-git-checkout-version=[release/8.0]                   if you want to build a particular version of FFmpeg, 
-                                                                ex: n3.1.1 or a specific git hash
-	--ffmpeg-git-checkout=[https://github.com/FFmpeg/FFmpeg.git]  if you want to clone FFmpeg from other repositories
-	--ffmpeg-source-dir=[default empty]                           specifiy the directory of ffmpeg source code. When 
-                                                                specified, git will not be used.
-	--cflags=$original_cflags                                     [default works on any cpu, see README for options]
-	--git-get-latest=[y]                                          [do a git pull for latest code from repositories like 
-                                                                FFmpeg--can force a rebuild if changes are detected]
-	--prefer-stable=[y]                                           build a few libraries from releases instead of git master
-	--enable-gpl=[y]                                              set to n to do an lgpl build
-	--get-total-steps|--get-step-name=[*]                         get dependency steps and step name by index
-	--build-only={0..} OR step/library name from [get-all-steps]  [run get-total-steps|--get-step-name|get-all-steps for 
-                                                                more info] build only specific dependency
-	--build-from={0..} OR step/library name from [get-all-steps]  start building dependencies from given step
-	--build-dependencies=[y]                                      [builds the ffmpeg dependencies. Disable it when the 
-                                                                dependencies was built once and can greatly reduce build time. ]
-	--build-dependencies-only                                     Only build dependency binaries. Will not build app binaries.
-	--build-ffmpeg-only                                           build ffmpeg binaries only
-	--build-ffmpeg-kit-only                                       build ffmpeg-kit binaries and bundle only
-  --release                                                     create release zip files
-	--enable-static|--static[default]                             build static ffmpeg and ffmpeg-kit binaries
-	--enable-shared|--shared                                      build shared ffmpeg and ffmpeg-kit binaries
-  --enable-nonfree|--nonfree                                    buil binaries will be non-redistributable
-	--clean-builds                                                clean ffmpeg and ffmpeg-kit builds based on 
-                                                                [--enable-static|--enable-shared(default)] and exit
-  --list-libraries                                              lists ffmpeg configeration including extra libraries and exit
-	--enable-[library name]                                       enable extra ffmpeg libraries. Run --list-libraries 
-                                                                and see under \"External library support\" to get a list.
-  --ff-*                                                        pass additional ffmpeg parameters prefixed by ff-[*] to 
-                                                                pass them directly to ffmpeg configure build statement.
-                                                                Be careful when using this. No additional checks are done 
-                                                                to these flags and may conflict with other explicit flags
-"
-}
-
-intro() {
-	cat <<EOL
-     ##################### Welcome ######################
-  Welcome to the ffmpeg and ffmpeg-kit builder-helper script.
-  Downloads and builds will be installed to directories within $WORKDIR
-  If this is not ok, then exit now, and cd to the directory where you'd
-  like them installed, then run this script again from there.
-  Note that once you build your compilers, you can no longer rename/move
-  the $sandbox directory, since it will have some hard coded paths in there.
-  You can, of course, rebuild ffmpeg from within it, etc.
-EOL
-	echo -e "$(date)" | tee -a "$LOG_FILE" # for timestamping super long builds LOL
-	if [[ ! -d $WORKDIR ]]; then
-		echo -e
-		echo -e "Building in $WORKDIR, will use ~ 285GB space!" | tee -a "$LOG_FILE"
-		echo -e
-	fi
-	change_dir "$WORKDIR" 1 || exit 1
-	echo -e "sit back, this may take awhile..." | tee -a "$LOG_FILE"
-}
-
-pick_host_platform() {
-	if [[ -n $1 ]]; then
-		export host_platform=$1
-	fi
-	while [[ ! "${host_platform,,}" =~ ^([1-3]|linux|windows)$ ]]; do
-		# shellcheck disable=SC2199
-		if [[ -n "${unknown_opts[@]}" ]]; then
-			echo -e -n 'Unknown option(s)'
-			for unknown_opt in "${unknown_opts[@]}"; do
-				echo -e -n " '$unknown_opt'"
-			done
-			echo -e ', ignored.'
-			echo
-		fi
-		cat <<'EOF'
-Which host platform are you trying to build, update, or clean for?
-  1. Linux
-  2. Windows
-  3. Exit
-EOF
-		echo -e -n 'Input your choice [1-3]: '
-		read -r host_platform
-	done
-	case "${host_platform,,}" in
-	1|linux) export host_platform="linux"
-  echo "$host_platform"
-  return 0
-  ;;
-	2|windows) export host_platform="windows"
-  echo "$host_platform"
-  return 0
-  ;;
-	3|exit)
-		echo -e "exiting"
-		exit 0
-		;;
-	*)
-		echo -e 'Your choice was not valid, please try again.'
-		echo
-		;;
-	esac
-}
-
-pick_host_arch() {
-	if [[ -n $1 ]]; then
-		export host_arch=$1
-	fi
-	while [[ ! "${host_arch,,}" =~ ^([1-3]|i686|x86_64|x86|x64|x32)$ ]]; do
-		# shellcheck disable=SC2199
-		if [[ -n "${unknown_opts[@]}" ]]; then
-			echo -e -n 'Unknown option(s)'
-			for unknown_opt in "${unknown_opts[@]}"; do
-				echo -e -n " '$unknown_opt'"
-			done
-			echo -e ', ignored.'
-			echo
-		fi
-		cat <<'EOF'
-Which host platform are you trying to build, update, or clean for?
-  1. x86_64 (64-bit)
-  2. i686 (32-bit)
-  3. Exit
-EOF
-		echo -e -n 'Input your choice [1-3]: '
-		read -r host_arch
-	done
-	case "${host_arch,,}" in
-	1|x86_64|x64) export host_arch="x86_64"
-  echo "$host_arch"
-  return 0
-  ;;
-	2|i686|x86|x32) export host_arch="i686"
-  echo "$host_arch"
-  return 0
-  ;;
-	3|exit)
-		echo -e "exiting"
-		exit 0
-		;;
-	*)
-		echo -e 'Your choice was not valid, please try again.'
-		echo
-		;;
-	esac
-}
-
-print_build_steps() {
-	echo -e "Avaliable build steps: ${#BUILD_STEPS[@]}"
-	for i in "${!BUILD_STEPS[@]}"; do
-		echo "Index $i: ${BUILD_STEPS[i]}"
-	done
-}
-
 # If --get-all-steps is passed, just print the array and exit.
 for arg in "$@"; do
 	if [[ "$arg" == "--get-all-steps" ]]; then
@@ -210,6 +45,89 @@ done
 ff_flags_raw=()    # Original arguments: --ff-something
 ff_flags_values=() # Extracted values: something
 
+display_help() {
+	echo -e "available option=value - [default_value] or (optional):
+General Options:
+	-h, --help                                                    display this help and exit
+	-v, --version                                                 display version and exit
+	-d, --debug                                                   build with debug information
+	-f, --force                                                   force build
+  -y                                                            accept all defaults and disables interactive prompts
+
+Licensing options:
+	[--enable-gpl|--gpl]                                          allow building GPL libraries, created libs will be 
+	                                                              licensed under the GPLv3.0 [no]
+	--enable-nonfree|--nonfree                                    build binaries will be non-redistributable
+
+Feature Presets:
+  --enable-full                                                 enable all available extra libraries (based on gpl/non-gpl selection)
+  --enable-small                                                exclude certain libraries from presets to reduce size (see --list-excluded)
+  --enable-https                                                enable https libraries
+  --enable-audio                                                enable all audio processing libraries
+  --enable-video                                                enable all video processing libraries
+  --enable-video-streaming                                      enable all video streaming libraries
+  --enable-video-ai-cpu                                         enable all video ai libraries
+  --enable-video-ai-gpu                                         enable all video ai libraries
+  --enable-hardware                                             enable all hardware accel libraries
+  --enable-ssh                                                  enable SSH/SFTP support
+  --enable-smb                                                  enable SMB (SAMBA) file sharing protocol support
+  --enable-mq                                                   enable distributed systems support
+
+Package Presets (pre-defined collections of libraries):
+  --audio-bundle                                                contains https + audio only libraries in the final bundle
+  --video-bundle                                                contains https + audio + video libraries in the final bundle
+  --video-ai-cpu-bundle                                         contains https + audio + video + ai (cpu) libraries in the final bundle
+  --video-ai-gpu-bundle                                         contains https + audio + video + ai (gpu) libraries in the final bundle
+  --video-hw-bundle                                             contains https + audio + video + hardware libraries in the final bundle
+  --video-ai-cpu-hw-bundle                                      contains https + audio + video + hardware + ai (cpu) libraries in the final bundle
+  --video-ai-gpu-hw-bundle                                      contains https + audio + video + hardware + ai (gpu) libraries in the final bundle
+  --streaming-bundle                                            contains https + audio + video + streaming libraries in the final bundle
+  --full-bundle                                                 contains https + audio + video + hardware + ai + streaming + ssh + smb + mq libraries in the final bundle
+
+Build Options:
+	--host-platform=*|--host=*                                    where the compiled program will run [linux|windows]
+	--host-arch=*|--arch=*                                        host cpu architecture [i686|x86_64] (32-bit or 64-bit)
+	--lto                                                         enable Linktime optimization
+	--ffmpeg-git-checkout-version=[release/8.0]                   if you want to build a particular version of FFmpeg, 
+	                                                              ex: n3.1.1 or a specific git hash
+                                                                WARNING: This will most likely break ffmpeg-kit libraries
+                                                                if the fftools version it too old.
+	--ffmpeg-git-checkout=[https://github.com/FFmpeg/FFmpeg.git]  if you want to clone FFmpeg from other repositories
+	--ffmpeg-source-dir=[default empty]                           specify the directory of ffmpeg source code. When 
+	                                                              specified, git will not be used.
+	--cflags=$original_cflags                                     [default works on any cpu, see README for options]
+	--git-get-latest=[y]                                          [do a git pull for latest code from repositories like 
+	                                                              FFmpeg--can force a rebuild if changes are detected]
+	--prefer-stable=[y]                                           build a few libraries from releases instead of git master
+  --release                                                     create release zip of the bundled binaries to be distributed
+	--enable-static|--static[default]                             build static ffmpeg and ffmpeg-kit binaries
+	--enable-shared|--shared                                      build shared ffmpeg and ffmpeg-kit binaries
+	--clean-builds                                                clean ffmpeg and ffmpeg-kit builds based on 
+	                                                              [--enable-static|--enable-shared(default)] and exit
+
+Advanced Dependency Control:
+	--get-total-steps|--get-step-name=[*]                         get dependency steps and step name by index
+	--build-only={0..} OR [library_name]                          build only specific dependency (e.g. --build-only=libx264)
+	--build-from={0..} OR [library_name]                          start building dependencies from given step
+	--build-dependencies=[y]                                      builds the ffmpeg dependencies. Disable when dependencies
+	                                                              are already built to reduce time.
+	--build-dependencies-only                                     Only build dependency binaries. Will not build ffmpeg or 
+                                                                ffmpeg-kit binaries.
+	--build-ffmpeg-only                                           build ffmpeg binaries only. Does not (re)build ext-library
+                                                                dependencies. Missing dependencies will cause a failure
+	--build-ffmpeg-kit-only                                       build ffmpeg-kit binaries and bundle only Does not (re)build 
+                                                                ext-library dependencies. Missing dependencies will cause a failure
+	--list-libraries                                              lists available ext-libraries that can be included
+  --list-excluded                                               list excluded libraries from small build
+
+Dynamic Library Control:
+	--enable-[library name]                                       enable specific library (e.g. --enable-libx264)
+	--disable-[library name]                                      disable specific library (e.g. --disable-libxcb)
+	--ff-*                                                        pass additional ffmpeg parameters directly to configure.
+	                                                              Example: --ff-disable-network passed as --disable-network
+"
+}
+
 # parse command line parameters, if any
 while [ $# -gt 0 ]; do
 	case $1 in
@@ -218,29 +136,24 @@ while [ $# -gt 0 ]; do
 		shift
 		;;
 	-v | --version) 
-  display_version
-  shift
-  exit 0
-  break
-  ;;
+    display_version
+    shift
+    exit 0
+    break
+    ;;
 	-d | --debug)
     export do_debug_build=y
 		set -x
 		shift
 		;;
-	-s | --speed)
-		export FFMPEG_KIT_OPTIMIZED_FOR_SPEED=1
-		shift
-		;;
-	-l | --lts)
-		export FFMPEG_KIT_LTS_BUILD="1"
-    export LTS_BUILD_FLAG="-DFFMPEG_KIT_LTS"
+	-f | --force)
+    export build_force=1
     shift
 		;;
-	-f | --force)
-		export build_force="1"
-		shift
-		;;
+  -y)
+    export accept_defaults=1
+    shift
+    ;;
   --lto)
     export enable_lto="1"
     shift
@@ -282,8 +195,12 @@ while [ $# -gt 0 ]; do
 		export prefer_stable="${1#*=}"
 		shift
 		;;
-	--enable-gpl=*)
-		export enable_gpl="${1#*=}"
+	--enable-gpl | --gpl)
+		export enable_gpl=1
+		shift
+		;;
+  --enable-nonfree | --nonfree)
+		export enable_nonfree=1
 		shift
 		;;
 	--build-dependencies=*)
@@ -298,7 +215,7 @@ while [ $# -gt 0 ]; do
 		export build_from="${1#*=}"
 		shift
 		;;
-	--build-dependencies-only)
+	--build-dependencies-only | --build-deps-only)
 		export build_dependencies_only=1
 		shift
 		;;
@@ -322,10 +239,6 @@ while [ $# -gt 0 ]; do
 		export build_static=n
 		shift
 		;;
-  --enable-nonfree | --nonfree)
-		export enable_nonfree=" --enable-nonfree"
-		shift
-		;;
 	--get-total-steps | --get-all-steps | --get-step-name=*) exit 0 ;; # Handled above, just consume and ignore here
 	--clean-builds)
 		export clean_builds=y
@@ -339,16 +252,101 @@ while [ $# -gt 0 ]; do
     export run_only="${1#*=}"
     shift
     ;;
+	--enable-full)
+    export enable_full=1
+    shift
+    ;;
+  --enable-small)
+    export enable_small=1
+    shift
+    ;;
+  --enable-https)
+    export enable_https=1
+    pick_ssl_type
+    shift
+    ;;
+  --enable-audio)
+    export enable_audio=1
+    shift
+    ;;
+  --enable-video)
+    export enable_video=1
+    shift
+    ;;
+  --enable-streaming)
+    export enable_streaming=1
+    pick_ssl_type
+    pick_cryto_lib
+    shift
+    ;;
+  --enable-video-ai-cpu)
+    export enable_video_ai=1
+    export gpu_support=0
+    shift
+    ;;
+  --enable-video-ai-gpu)
+    export enable_video_ai=1
+    export gpu_support=1
+    shift
+    ;;
+  --enable-hardware)
+    export enable_hardware=1
+    shift
+    ;;
+  --enable-ssh)
+    export enable_ssh=1
+    shift
+    ;;
+  --enable-smb)
+    export enable_smb=1
+    shift
+    ;;
+  --enable-mq)
+    pick_mq_lib
+    shift
+    ;;
+  --audio-bundle)
+    export audio_bundle=1
+    shift
+    ;;
+  --video-bundle)
+    export video_bundle=1
+    shift
+    ;;
+  --video-ai-cpu-bundle)
+    export video_ai_bundle=1
+    export gpu_support=0
+    shift
+    ;;
+  --video-ai-gpu-bundle)
+    export video_ai_bundle=1
+    export gpu_support=1
+    shift
+    ;;
+  --video-hw-bundle)
+    export video_hw_bundle=1
+    shift
+    ;;
+  --video-ai-cpu-hw-bundle)
+    export video_ai_hw_bundle=1
+    export gpu_support=0
+    shift
+    ;;
+  --video-ai-gpu-hw-bundle)
+    export video_ai_hw_bundle=1
+    export gpu_support=1
+    shift
+    ;;
+  --streaming-bundle)
+    export streaming_bundle=1
+    shift
+    ;;
 	--enable-*)
-		LIBRARY_NAME="${1#--enable-}"
-    VAR_NAME="enable_${LIBRARY_NAME//-/_}"
-    declare "$VAR_NAME=1"
+    enable_library "${1#--enable-}"
     shift
     ;;
   --disable-*)
-		LIBRARY_NAME="${1#--disable-}"
-    VAR_NAME="disable_${LIBRARY_NAME//-/_}"
-    declare "$VAR_NAME=1"
+    disable_library "${1#--disable-}"
     shift
     ;;
   --ff-*)
@@ -387,7 +385,8 @@ fi
 
 set_box_memory_size_bytes
 if [[ $box_memory_size_bytes -lt 600000000 ]]; then
-	echo -e "your box only has $box_memory_size_bytes, 512MB (only) boxes crash when building cross compiler gcc, please add some swap" | tee -a "$LOG_FILE" # 1G worked OK however...
+	echo -e "your box only has $box_memory_size_bytes, 512MB (only) 
+  boxes crash when building cross compiler gcc, please add some swap" | tee -a "$LOG_FILE" # 1G worked OK however...
 	exit 1
 fi
 
@@ -407,5 +406,200 @@ done
 echo -e "$(date)" | tee -a "$LOG_FILE"
 
 setup_build_environment
+
+# Setup config variables
+
+# disable libraries autodetected by default to prevent inadvertent bundling
+disable_library "alsa"
+disable_library "libdc1394"
+disable_library "libdrm"
+disable_library "libxcb-shape"
+disable_library "libxcb-shm"
+disable_library "libxcb-xfixes"
+disable_library "cuda-llvm"
+disable_library "v4l2-m2m"
+disable_library "libxcb"
+disable_library "vaapi"
+disable_library "xlib"
+disable_library "amf"
+disable_library "vulkan"
+disable_library "bzlib"
+disable_library "iconv"
+disable_library "lzma"
+disable_library "sdl2"
+disable_library "sndio"
+disable_library "zlib"
+disable_library "cuvid"
+disable_library "ffnvcodec"
+disable_library "nvdec"
+disable_library "nvenc"
+disable_library "vdpau"
+disable_library "d3d11va"
+disable_library "d3d12va"
+disable_library "dxva2"
+disable_library "schannel"
+disable_library "mediafoundation"
+disable_library "avfoundation"
+disable_library "appkit"
+disable_library "audiotoolbox"
+disable_library "coreimage"
+disable_library "metal"
+disable_library "securetransport"
+disable_library "videotoolbox"
+
+apply_preset "$CONFIG_GENERAL"
+
+if truthy "$audio_bundle"; then
+  enable_audio=1
+  enable_https=1
+fi
+if truthy "$video_bundle"; then
+  enable_audio=1
+  enable_video=1
+  enable_https=1
+fi
+if truthy "$video_ai_bundle"; then
+  enable_audio=1
+  enable_video=1
+  enable_video_ai=1
+  enable_https=1
+fi
+if truthy "$video_hw_bundle"; then
+  enable_audio=1
+  enable_video=1
+  enable_hardware=1
+  enable_https=1
+fi
+if truthy "$video_ai_hw_bundle"; then
+  enable_audio=1
+  enable_video=1
+  enable_video_ai=1
+  enable_hardware=1
+  enable_https=1
+fi
+if truthy "$streaming_bundle"; then
+  enable_audio=1
+  enable_video=1
+  enable_streaming=1
+  enable_https=1
+fi
+
+if truthy "$enable_nonfree"; then
+  echo "WARNING: Non-free licensing selected. Binaries will be 
+  non-redistributable without proper licensing. You are responsible 
+  for making sure you have the appropriate licensing to distribute 
+  the binaries!" | tee -a "$LOG_FILE"
+
+  truthy "$enable_audio" || truthy "$enable_full" && apply_preset "$CONFIG_AUDIO_NON_GPL"
+  truthy "$enable_video" || truthy "$enable_full" && apply_preset "$CONFIG_VIDEO_NON_GPL"
+  truthy "$enable_streaming" || truthy "$enable_full" && apply_preset "$CONFIG_STREAMING_NON_GPL"
+  truthy "$enable_hardware" || truthy "$enable_full" && apply_preset "$CONFIG_HARDWARE_NON_GPL"
+  truthy "$enable_video_ai" || truthy "$enable_full" && apply_preset "$CONFIG_VIDEO_AI_NON_GPL"
+  truthy "$enable_ssh" || truthy "$enable_full" && apply_preset "$CONFIG_SSH_NON_GPL"
+
+  if [[ "${host_platform,,}" != "windows" ]]; then
+    truthy "$enable_smb" || truthy "$enable_full" && apply_preset "$CONFIG_SMB_NON_GPL"
+  fi
+
+  case "${host_platform,,}" in
+    linux)
+    truthy "$enable_full" && apply_preset "$CONFIG_LINUX_NON_GPL"
+    ;;
+    windows)
+    truthy "$enable_full" && apply_preset "$CONFIG_WINDOWS_NON_GPL"
+    ;;
+    android)
+    truthy "$enable_full" && apply_preset "$CONFIG_ANDROID_NON_GPL"
+    ;;
+    apple)
+    truthy "$enable_full" && apply_preset "$CONFIG_APPLE_NON_GPL"
+    ;;
+    rpi)
+    truthy "$enable_full" && apply_preset "$CONFIG_RPI_NON_GPL"
+    ;;
+    oh|openharmony|open-harmony|open_harmony)
+    truthy "$enable_full" && apply_preset "$CONFIG_OH_NON_GPL"
+    ;;
+    *)
+    ;;
+  esac
+fi
+
+truthy "$enable_audio" || truthy "$enable_full" && apply_preset "$CONFIG_AUDIO"
+truthy "$enable_video" || truthy "$enable_full" && apply_preset "$CONFIG_VIDEO"
+truthy "$enable_streaming" || truthy "$enable_full" && apply_preset "$CONFIG_STREAMING"
+truthy "$enable_hardware" || truthy "$enable_full" && apply_preset "$CONFIG_HARDWARE"
+truthy "$enable_video_ai" || truthy "$enable_full" && apply_preset "$CONFIG_VIDEO_AI"
+truthy "$enable_ssh" || truthy "$enable_full" && apply_preset "$CONFIG_SSH"
+
+if [[ "${host_platform,,}" != "windows" ]]; then
+  truthy "$enable_smb" || truthy "$enable_full" && apply_preset "$CONFIG_SMB"
+fi
+
+case "${host_platform,,}" in
+  linux)
+    truthy "$enable_full" && apply_preset "$CONFIG_LINUX"
+    ;;
+    windows)
+    truthy "$enable_full" && apply_preset "$CONFIG_WINDOWS"
+    ;;
+    android)
+    truthy "$enable_full" && apply_preset "$CONFIG_ANDROID"
+    ;;
+    apple)
+    truthy "$enable_full" && apply_preset "$CONFIG_APPLE"
+    ;;
+    rpi)
+    truthy "$enable_full" && apply_preset "$CONFIG_RPI"
+    ;;
+    oh|openharmony|open-harmony|open_harmony)
+    truthy "$enable_full" && apply_preset "$CONFIG_OH"
+    ;;
+    *)
+  ;;
+esac
+
+if ! truthy "$enable_small"; then
+  truthy "$enable_audio" || truthy "$enable_full" && apply_preset "$CONFIG_AUDIO_EXTRA"
+  truthy "$enable_video" || truthy "$enable_full" && apply_preset "$CONFIG_VIDEO_EXTRA"
+fi
+
+if truthy "$enable_https"; then
+  if [[ -z "$ssl_type" ]]; then
+    pick_ssl_type
+    case "${ssl_type,,}" in
+      openssl)
+        disable_library "gnutls"
+        disable_library "mbedtls"
+        disable_library "libtls"
+        ;;
+      gnutls)
+        disable_library "mbedtls"
+        disable_library "libtls"
+        disable_library "openssl"
+        ;;
+      mbedtls)
+        disable_library "gnutls"
+        disable_library "libtls"
+        disable_library "openssl"
+        ;;
+      libtls)
+        disable_library "gnutls"
+        disable_library "mbedtls"
+        disable_library "openssl"
+        ;;
+    esac
+  fi
+fi
+
+if truthy "$enable_streaming"; then
+  if ! truthy "$enable_openssl" && truthy "$disable_openssl" && ! truthy "$enable_librtmp" && truthy "$disable_librtmp"; then
+    if [[ -z "$crypto_type" ]]; then
+      pick_cryto_lib
+    fi
+  fi
+fi
+
+resolve_collisions
 
 source "${SCRIPTDIR}/main-$host_platform.sh"

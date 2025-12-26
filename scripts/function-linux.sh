@@ -118,8 +118,7 @@ get_cflags() {
   fi
   local COMMON_INCLUDES=$LLVM_CONFIG_INCLUDEDIR
 
-  local BUILD_DATE="-DFFMPEG_KIT_BUILD_DATE=$(date +%Y%m%d 2>>"${BASEDIR}"/build.log)"
-  echo "${ARCH_FLAGS} ${APP_FLAGS} ${COMMON_FLAGS} ${OPTIMIZATION_FLAGS} ${COMMON_INCLUDES} ${BUILD_DATE} -DFFMPEG_DATADIR=${ffmpeg_install_prefix}/\$(datadir)/ffmpeg"
+  echo "${ARCH_FLAGS} ${APP_FLAGS} ${COMMON_FLAGS} ${OPTIMIZATION_FLAGS} ${COMMON_INCLUDES} -DFFMPEG_DATADIR=${ffmpeg_install_prefix}/\$(datadir)/ffmpeg"
 }
 
 get_cxxflags() {
@@ -136,8 +135,7 @@ get_cxxflags() {
     local OPTIMIZATION_FLAGS="-Os -ffunction-sections -fdata-sections"
   fi
 
-  local BUILD_DATE="-DFFMPEG_KIT_BUILD_DATE=$(date +%Y%m%d 2>>"${BASEDIR}"/build.log)"
-  local COMMON_FLAGS="$(get_common_cxxflags) ${OPTIMIZATION_FLAGS} ${BUILD_DATE} $ARCH_FLAGS "
+  local COMMON_FLAGS="$(get_common_cxxflags) ${OPTIMIZATION_FLAGS} $ARCH_FLAGS "
 
   case $1 in
   ffmpeg)
@@ -215,26 +213,6 @@ configure_ffmpeg_kit() {
 	echo -e "INFO: Done configuring ffmpeg kit" | tee -a "$LOG_FILE"
 }
 
-create_ffmpegkit_package_config() {
-  local kit_version="$1"
-  local location_prefix="$2"
-  create_dir "${location_prefix}/lib/pkgconfig"
-  cat >"${location_prefix}/lib/pkgconfig/ffmpeg-kit.pc" <<EOF
-prefix=${location_prefix}
-exec_prefix=\${prefix}
-libdir=\${prefix}/lib
-includedir=\${prefix}/include
-
-Name: ffmpeg-kit
-Description: FFmpeg for applications
-Version: ${kit_version}
-
-Libs: -L\${libdir} -lstdc++ -lffmpegkit -lavutil -ljsoncpp -lpthread -lm -lz
-Requires: libavfilter, libswscale, libavformat, libavcodec, libswresample, libavutil, libavdevice
-Cflags: -I\${includedir}
-EOF
-}
-
 detect_clang_version() {
   # shellcheck disable=2046,2005
   echo $(clang -v 2>&1 | grep -oP 'Ubuntu clang version \K\d+\.\d+\.\d+' | cut -d. -f1)
@@ -265,5 +243,5 @@ set_toolchain_paths() {
   export NM=$(command -v "llvm-nm$CLANG_POSTFIX")
   export CFLAGS="$CFLAGS -I${ffmpeg_install_prefix}/include -I/usr/include -I/usr/local/include -I${dependency_install_prefix}/include -I${ffmpeg_source_dir} -I${ffmpeg_source_dir}/compat"
   export CXXFLAGS="$(get_cxxflags ffmpeg-kit) $CXXFLAGS -I/usr/include -I/usr/local/include -I${ffmpeg_install_prefix}/include -I${dependency_install_prefix}/include -I${ffmpeg_source_dir} -I${ffmpeg_source_dir}/compat"
-  export LDFLAGS="$LDFLAGS -L${ffmpeg_install_prefix}/lib -L${dependency_install_prefix}/lib -L${dependency_install_prefix}/lib/$host_target"
+  export LDFLAGS="$LDFLAGS -ljsoncpp -L${ffmpeg_install_prefix}/lib -L${dependency_install_prefix}/lib -L${dependency_install_prefix}/lib/$host_target"
 }

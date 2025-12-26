@@ -14,7 +14,7 @@ platform_deps() {
   # build_dlfcn
   # build_libvvdec
   # build_svt_hevc
-  # build_svt_hevc
+  # build_svt_vp9
   # build_unistring
   # build_libidn2
   # build_vamp_plugin
@@ -194,7 +194,8 @@ build_lzma() {
 }
 # build_iconv             # config_options+= --disable-iconv              # disable iconv [autodetect]
 build_iconv() {
-  if [[ $disable_iconv != 1 && $enable_iconv == 1 ]]; then
+  if [[ $disable_iconv != 1 && $enable_iconv == 1 ]] || [[ -n "$1" ]]; then
+  build_gettext
 	local lib="libiconv"
   local repo="https://ftp.gnu.org/gnu/libiconv/libiconv-1.18.tar.gz"
   local repo_ver="v1.18"
@@ -649,23 +650,26 @@ build_libopus() {
 	change_dir "$src_dir"
 	fi
 }
-
-build_libspeexdsp() {
-  local lib="libspeexdsp"
-  local repo="https://github.com/xiph/speexdsp"
-  local repo_ver="SpeexDSP-1.2.1"
-  change_dir "$src_dir"
-  do_git_checkout "$repo" "$lib"
-  change_dir "$src_dir/$lib"
-	generic_configure "--disable-examples"
-	do_make_and_make_install
-	change_dir "$src_dir"
-}
 # build_libspeex          # config_options+= --enable-libspeex            # enable Speex de/encoding via libspeex [no]
 build_libspeex() {
   if [[ $disable_libspeex != 1 && $enable_libspeex == 1 ]]; then
-  build_libspeexdsp
-	local lib="libspeex"
+  local lib="libspeex"
+  local repo="https://github.com/xiph/speex"
+  local repo_ver="Speex-1.2.1" 
+  activate_meson
+  change_dir "$src_dir"
+  do_git_checkout "$repo" "$lib" "$repo_ver"
+	change_dir "$src_dir/$lib"
+  generic_configure "--disable-binaries --disable-examples"
+	do_make_and_make_install
+	change_dir "$src_dir"
+  fi
+}
+
+build_libspeexdsp() {
+  if [[ $disable_libspeex != 1 && $enable_libspeex == 1 ]]; then
+  build_libspeex
+	local lib="libspeexdsp"
   local repo="https://github.com/xiph/speexdsp"
   local repo_ver="SpeexDSP-1.2.1" 
   change_dir "$src_dir"
@@ -673,7 +677,7 @@ build_libspeex() {
 	change_dir "$src_dir/$lib"
 	export SPEEXDSP_CFLAGS="-I$dependency_install_prefix/include"
 	export SPEEXDSP_LIBS="-L$dependency_install_prefix/lib -lspeexdsp" # 'configure' somehow can't find SpeexDSP with 'pkg-config'.
-	generic_configure "--disable-binaries"                           # If you do want the libraries, then 'speexdec.exe' needs 'LDFLAGS=-lwinmm'.
+	generic_configure "--disable-binaries --disable-examples"                           # If you do want the libraries, then 'speexdec.exe' needs 'LDFLAGS=-lwinmm'.
 	do_make_and_make_install
 	unset SPEEXDSP_CFLAGS
 	unset SPEEXDSP_LIBS
@@ -1199,7 +1203,7 @@ build_libaribcaption() {
     local repo="https://github.com/xqq/libaribcaption"
     change_dir "$src_dir"
     do_git_checkout "$repo" "$lib" "$repo_ver"
-    change_dir "$src_dir/$lib"
+    change_dir "$src_dir/$lib/build" 1
 		do_cmake_from_build_dir "$src_dir/libaribcaption" "-DCMAKE_BUILD_TYPE=Release"
 		do_make_and_make_install
 		change_dir "$src_dir"
@@ -1256,7 +1260,7 @@ build_liblensfun() {
 	do_make_and_make_install
 	sed -i.bak 's/-llensfun/-llensfun -lstdc++/' "$PKG_CONFIG_PATH/lensfun.pc"
 	reset_cppflags
-	unset CXXFLAGS
+  reset_cxxflags
 	change_dir "$src_dir"
 	fi
 }
@@ -1288,11 +1292,11 @@ build_libtensorflow() {
   convert_msvc_to_mingw -t="$src_dir/$lib_dir/$subdir" -c="$cross_prefix" -o="tensorflow" -i="mingw-bundle" > >(redirect_output) 2>&1
 	change_dir "$src_dir/$lib_dir/$subdir/mingw-bundle/"
   echo > "$manifest" && chmod -R u+rwx "$manifest"
-  [[ -d "3rdparty" ]] && (cp -rfv "$src_dir/$lib_dir/$subdir/mingw-bundle/3rdparty"* "$dependency_install_prefix/"  2>&1 | sed -n "s/.*' -> '\(.*\)'/\1/p" >> "$manifest"; true)
-  [[ -d "bin" ]] && (cp -rfv "$src_dir/$lib_dir/$subdir/mingw-bundle/bin"* "$dependency_install_prefix/"  2>&1 | sed -n "s/.*' -> '\(.*\)'/\1/p" >> "$manifest"; true)
-  [[ -d "include" ]] && (cp -rfv "$src_dir/$lib_dir/$subdir/mingw-bundle/include"* "$dependency_install_prefix/"  2>&1 | sed -n "s/.*' -> '\(.*\)'/\1/p" >> "$manifest"; true)
-  [[ -d "lib" ]] && (cp -rfv "$src_dir/$lib_dir/$subdir/mingw-bundle/lib"* "$dependency_install_prefix/"  2>&1 | sed -n "s/.*' -> '\(.*\)'/\1/p" >> "$manifest"; true)
-  [[ -d "share" ]] && (cp -rfv "$src_dir/$lib_dir/$subdir/mingw-bundle/share"* "$dependency_install_prefix/"  2>&1 | sed -n "s/.*' -> '\(.*\)'/\1/p" >> "$manifest"; true)
+  [[ -d "3rdparty" ]] && { ( set -o pipefail; cp -rfv "$src_dir/$lib_dir/$subdir/mingw-bundle/3rdparty"* "$dependency_install_prefix/" 2>&1 | sed -n "s/.*' -> '\(.*\)'/\1/p" ) >> "$manifest" || exit_message 1 "could not install $lib 3rdparty"; }
+  [[ -d "bin" ]]      && { ( set -o pipefail; cp -rfv "$src_dir/$lib_dir/$subdir/mingw-bundle/bin"* "$dependency_install_prefix/" 2>&1 | sed -n "s/.*' -> '\(.*\)'/\1/p" ) >> "$manifest" || exit_message 1 "could not install $lib bin"; }
+  [[ -d "include" ]]  && { ( set -o pipefail; cp -rfv "$src_dir/$lib_dir/$subdir/mingw-bundle/include"* "$dependency_install_prefix/" 2>&1 | sed -n "s/.*' -> '\(.*\)'/\1/p" ) >> "$manifest" || exit_message 1 "could not install $lib include"; }
+  [[ -d "lib" ]]      && { ( set -o pipefail; cp -rfv "$src_dir/$lib_dir/$subdir/mingw-bundle/lib"* "$dependency_install_prefix/" 2>&1 | sed -n "s/.*' -> '\(.*\)'/\1/p" ) >> "$manifest" || exit_message 1 "could not install $lib lib"; }
+  [[ -d "share" ]]    && { ( set -o pipefail; cp -rfv "$src_dir/$lib_dir/$subdir/mingw-bundle/share"* "$dependency_install_prefix/" 2>&1 | sed -n "s/.*' -> '\(.*\)'/\1/p" ) >> "$manifest" || exit_message 1 "could not install $lib share"; }
   cat >> "$dependency_install_prefix/lib/pkgconfig/tensorflow.pc" << EOF
 prefix=${dependency_install_prefix}
 exec_prefix=\${prefix}
@@ -1565,7 +1569,7 @@ build_libx264() {
   if [[ $disable_libx264 != 1 && $enable_libx264 == 1 ]]; then
 	change_dir "$src_dir"
 	local checkout_dir="x264"
-	if [[ $build_x264_with_libav == "y" ]]; then
+	if truthy "$build_x264_with_libav"; then
 		# TODO: Allow shared library build
 		build_ffmpeg static --disable-libx264 ffmpeg_git_pre_x264 # installs libav locally so we can use it within x264.exe FWIW...
 		checkout_dir="${checkout_dir}_with_libav"
@@ -1727,6 +1731,8 @@ build_librav1e() {
   export AR_x86_64_pc_windows_gnu="${cross_prefix}ar"
   confirm_libgcc_eh "$toolchain_root_dir/lib/gcc"
 	cargo_build_and_install "--no-default-features --features=asm,binaries --profile release-no-lto" "--no-default-features --library-type=staticlib --features=asm,binaries"
+  reset_cflags
+  reset_cxxflags
 	change_dir "$src_dir"
 	fi
 }
@@ -1940,11 +1946,16 @@ build_libjack() {
     do_python '--prefix="$dependency_install_prefix" --platform="win32" --db="no" --check-c-compiler=gcc --check-cxx-compiler=g++'
     do_python "" "./waf build -v"
     do_python "" "./waf install -v"
+    reset_cflags
+    reset_cxxflags
+    change_dir "$src_dir"
 	fi
 }
 # build_libpulse          # config_options+= --enable-libpulse            # enable Pulseaudio input via libpulse [no]
 build_libpulse() {
   if [[ $disable_libpulse != 1 && $enable_libpulse == 1 ]]; then
+    build_iconv 1
+    build_libsndfile
     activate_meson
 		# https://github.com/pulseaudio/pulseaudio
     local lib="libpulse"
@@ -1985,6 +1996,8 @@ build_libpulse() {
       git apply --ignore-space-change --ignore-whitespace --verbose "$PATCHDIR/pulseaudio.diff" > >(redirect_output) 2>&1 || exit_message 1 "unable to patch makefile"
     fi
     do_ninja_and_ninja_install
+    reset_cflags
+    reset_cxxflags
     change_dir "$src_dir"
 	fi
 }
@@ -2040,7 +2053,7 @@ build_pocketsphinx() {
   local repo_ver="v5.0.4"
 	change_dir "$src_dir"
   do_git_checkout "$repo" "$lib" "$repo_ver"
-	change_dir "$src_dir/$lib"
+	change_dir "$src_dir/$lib/build" 1
 	local cmake_params=" -DCMAKE_TOOLCHAIN_FILE=$(get_generic_cmake_toolchain) -DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=OFF"
 	local target_proc=AMD64
 	if [ "$bits_target" = "32" ]; then
@@ -2101,6 +2114,9 @@ build_gcrypt() {
   export CXXFLAGS="-static -O3 -I$dependency_install_prefix/include -L$dependency_install_prefix/lib"
   export LDFLAGS="-I$dependency_install_prefix/include -L$dependency_install_prefix/lib"
   generic_configure_make_install "--disable-doc --disable-tests --disable-amd64-as-feature-detection"
+  reset_cflags
+  reset_cxxflags
+  reset_ldflags
   change_dir "$src_dir"
 	fi
 }
@@ -2186,6 +2202,7 @@ build_librabbitmq() {
 -DBUILD_API_DOCS=OFF \
 -DENABLE_SSL_SUPPORT=OFF \
 -DCMAKE_INSTALL_PREFIX=${dependency_install_prefix}"
+  change_dir "$src_dir/$lib/build" 1
   do_cmake_from_build_dir "$src_dir/$lib" "$cmake_params"
   do_make_and_make_install
   change_dir "$src_dir"
@@ -2279,6 +2296,9 @@ build_libzmq() {
 --disable-werror \
 --disable-curve-keygen \
 --disable-curve"' LIBS="-lpthread -lws2_32"'
+reset_cflags
+reset_cxxflags
+reset_ldflags
   change_dir "$src_dir"
 	fi
 }
@@ -2429,11 +2449,11 @@ build_libopenvino() {
       convert_msvc_to_mingw -t="$src_dir/$lib_dir/runtime" -c="$cross_prefix" -o="openvino" -i="mingw-bundle" > >(redirect_output) 2>&1
       change_dir "$src_dir/$lib_dir/mingw-bundle/"
       sed -i "s|^prefix=.*|prefix=${dependency_install_prefix}|g" "$src_dir/$lib_dir/mingw-bundle/lib/pkgconfig/openvino.pc"
-      [[ -d "3rdparty" ]] && (cp -rfv "$src_dir/$lib_dir/mingw-bundle/3rdparty"* "$dependency_install_prefix/"  2>&1 | sed -n "s/.*' -> '\(.*\)'/\1/p" >> "$manifest"; true)
-      [[ -d "bin" ]] && (cp -rfv "$src_dir/$lib_dir/mingw-bundle/bin"* "$dependency_install_prefix/"  2>&1 | sed -n "s/.*' -> '\(.*\)'/\1/p" >> "$manifest"; true)
-      [[ -d "include" ]] && (cp -rfv "$src_dir/$lib_dir/mingw-bundle/include"* "$dependency_install_prefix/"  2>&1 | sed -n "s/.*' -> '\(.*\)'/\1/p" >> "$manifest"; true)
-      [[ -d "lib" ]] && (cp -rfv "$src_dir/$lib_dir/mingw-bundle/lib"* "$dependency_install_prefix/"  2>&1 | sed -n "s/.*' -> '\(.*\)'/\1/p" >> "$manifest"; true)
-      [[ -d "share" ]] && (cp -rfv "$src_dir/$lib_dir/mingw-bundle/share"* "$dependency_install_prefix/"  2>&1 | sed -n "s/.*' -> '\(.*\)'/\1/p" >> "$manifest"; true)
+      [[ -d "3rdparty" ]] && { ( set -o pipefail; cp -rfv "$src_dir/$lib_dir/mingw-bundle/3rdparty"* "$dependency_install_prefix/" 2>&1 | sed -n "s/.*' -> '\(.*\)'/\1/p" ) >> "$manifest" || exit_message 1 "could not install $lib 3rdparty"; }
+      [[ -d "bin" ]]      && { ( set -o pipefail; cp -rfv "$src_dir/$lib_dir/mingw-bundle/bin"* "$dependency_install_prefix/" 2>&1 | sed -n "s/.*' -> '\(.*\)'/\1/p" ) >> "$manifest" || exit_message 1 "could not install $lib bin"; }
+      [[ -d "include" ]]  && { ( set -o pipefail; cp -rfv "$src_dir/$lib_dir/mingw-bundle/include"* "$dependency_install_prefix/" 2>&1 | sed -n "s/.*' -> '\(.*\)'/\1/p" ) >> "$manifest" || exit_message 1 "could not install $lib include"; }
+      [[ -d "lib" ]]      && { ( set -o pipefail; cp -rfv "$src_dir/$lib_dir/mingw-bundle/lib"* "$dependency_install_prefix/" 2>&1 | sed -n "s/.*' -> '\(.*\)'/\1/p" ) >> "$manifest" || exit_message 1 "could not install $lib lib"; }
+      [[ -d "share" ]]    && { ( set -o pipefail; cp -rfv "$src_dir/$lib_dir/mingw-bundle/share"* "$dependency_install_prefix/" 2>&1 | sed -n "s/.*' -> '\(.*\)'/\1/p" ) >> "$manifest" || exit_message 1 "could not install $lib share"; }
       echo "$dependency_install_prefix/lib/pkgconfig/openvino.pc" >> "$manifest"
     fi
     change_dir "$src_dir"
@@ -2487,6 +2507,7 @@ build_libglslang() {
 -DCMAKE_BUILD_TYPE=Release \
 -DBUILD_SHARED_LIBS=OFF \
 -DSPIRV_HEADERS_SKIP_EXAMPLES=ON"
+  change_dir "$src_dir/$parent_lib/$lib/build" 1
   do_cmake_from_build_dir "$src_dir/$parent_lib/$lib" "$cmake_params"
   do_make_and_make_install
   # https://github.com/KhronosGroup/SPIRV-Tools
@@ -2504,6 +2525,7 @@ build_libglslang() {
 -DSPIRV_WERROR=OFF \
 -DSPIRV_SKIP_EXECUTABLES=ON \
 -DSPIRV-Headers_SOURCE_DIR=${dependency_install_prefix}"
+  change_dir "$src_dir/$parent_lib/$lib/build" 1
   do_cmake_from_build_dir "$src_dir/$parent_lib/$lib" "$cmake_params"
   do_make_and_make_install
 	# https://github.com/KhronosGroup/glslang
@@ -2524,6 +2546,7 @@ build_libglslang() {
 -DGLSLANG_TESTS=OFF \
 -DALLOW_EXTERNAL_SPIRV_TOOLS=ON \
 -DCMAKE_PREFIX_PATH=${dependency_install_prefix}"
+  change_dir "$src_dir/$parent_lib/$lib/build" 1
   do_cmake_from_build_dir "$src_dir/$parent_lib/$lib" "$cmake_params"
   do_make_and_make_install
 cat > "${dependency_install_prefix}/lib/pkgconfig/glslang.pc" <<EOF
@@ -2579,6 +2602,9 @@ Libs: -L\${libdir} -lklvanc
 Libs.private: -lz
 Cflags: -I\${includedir}
 EOF
+reset_cflags
+reset_cxxflags
+reset_ldflags
   change_dir "$src_dir"
 	fi
 }
@@ -2811,7 +2837,7 @@ build_metal() {
   fi
 }
 # build_sndio             # config_options+= --disable-sndio              # disable sndio support [autodetect]
-build_sndio () {
+build_sndio() {
   if [[ $disable_sndio != 1 && $enable_sndio == 1 ]]; then
     echo "WARNING: Library does not have MinGW/windows support. Unable to enable on Windows currently."
     # https://github.com/ratchov/sndio
@@ -2819,41 +2845,41 @@ build_sndio () {
   fi
 }
 # build_schannel          # config_options+= --disable-schannel           # disable SChannel SSP, needed for TLS support on Windows if openssl and gnutls are not used [autodetect]
-build_schannel () {
+build_schannel() {
   if [[ $disable_schannel != 1 && $enable_schannel == 1 ]]; then
     echo "WARNING: Including this library will make the binaries non-redistributable"
     echo "Only available on Windows build"
   fi
 }
 # build_securetransport   # config_options+= --disable-securetransport    # disable Secure Transport, needed for TLS support on OSX if openssl and gnutls are not used [autodetect]
-build_securetransport () {
+build_securetransport() {
   if [[ $disable_securetransport != 1 && $enable_securetransport == 1 ]]; then
     echo "WARNING: Including this library will make the binaries non-redistributable"
     echo "Only available on Apple build"
   fi
 }
 # build_xlib              # config_options+= --disable-xlib               # disable xlib [autodetect]
-build_xlib () {
+build_xlib() {
   if [[ $disable_xlib != 1 && $enable_xlib == 1 ]]; then
     echo "Only available on Linux build"
     # https://github.com/mirror/libX11
   fi
 }
 # build_v4l2_m2m          # config_options+= --disable-v4l2-m2m           # disable V4L2 mem2mem code [autodetect]
-build_v4l2_m2m () {
+build_v4l2_m2m() {
   if [[ $disable_v4l2_m2m != 1 && $enable_v4l2_m2m == 1 ]]; then
     echo "Only available on Linux build"
   fi
 }
 # build_vaapi             # config_options+= --disable-vaapi              # disable Video Acceleration API (mainly Unix/Intel) code [autodetect]
-build_vaapi () {
+build_vaapi() {
   if [[ $disable_vaapi != 1 && $enable_vaapi == 1 ]]; then
     echo "Only available on Linux build"
     # https://github.com/intel/libva
   fi
 }
 # build_vdpau             # config_options+= --disable-vdpau              # disable Nvidia Video Decode and Presentation API for Unix code [autodetect]
-build_vdpau () {
+build_vdpau() {
   if [[ $disable_vdpau != 1 && $enable_vdpau == 1 ]]; then
     echo "WARNING: Including this library will make the binaries non-redistributable"
     echo "Only available on Linux build"
@@ -2861,7 +2887,7 @@ build_vdpau () {
   fi
 }
 # build_videotoolbox      # config_options+= --disable-videotoolbox       # disable VideoToolbox code [autodetect]
-build_videotoolbox () {
+build_videotoolbox() {
   if [[ $disable_videotoolbox != 1 && $enable_videotoolbox == 1 ]]; then
     echo "WARNING: Including this library will make the binaries non-redistributable"
     echo "Only available on Apple build"
@@ -2930,11 +2956,11 @@ build_cuda_nvcc() {
       convert_msvc_to_mingw -t="$src_dir/$lib_dir" -c="$cross_prefix" -o="$lib" -i="mingw-bundle" > >(redirect_output) 2>&1
       change_dir "$src_dir/$lib_dir/mingw-bundle/"
       sed -i "s|^prefix=.*|prefix=${dependency_install_prefix}|g" "$src_dir/$lib_dir/mingw-bundle/lib/pkgconfig/$lib.pc"
-      [[ -d "3rdparty" ]] && (cp -rfv "$src_dir/$lib_dir/mingw-bundle/3rdparty"* "$dependency_install_prefix/"  2>&1 | sed -n "s/.*' -> '\(.*\)'/\1/p" >> "$manifest"; true)
-      [[ -d "bin" ]] && (cp -rfv "$src_dir/$lib_dir/mingw-bundle/bin"* "$dependency_install_prefix/" 2>/dev/null | sed -n "s/.*' -> '\(.*\)'/\1/p" >> "$manifest"; true)
-      [[ -d "include" ]] && (cp -rfv "$src_dir/$lib_dir/mingw-bundle/include"* "$dependency_install_prefix/" 2>/dev/null | sed -n "s/.*' -> '\(.*\)'/\1/p" >> "$manifest"; true)
-      [[ -d "lib" ]] && (cp -rfv "$src_dir/$lib_dir/mingw-bundle/lib"* "$dependency_install_prefix/" 2>/dev/null | sed -n "s/.*' -> '\(.*\)'/\1/p" >> "$manifest"; true)
-      [[ -d "share" ]] && (cp -rfv "$src_dir/$lib_dir/mingw-bundle/share"* "$dependency_install_prefix/" 2>/dev/null | sed -n "s/.*' -> '\(.*\)'/\1/p" >> "$manifest"; true)
+      [[ -d "3rdparty" ]] && { ( set -o pipefail; cp -rfv "$src_dir/$lib_dir/mingw-bundle/3rdparty"* "$dependency_install_prefix/" 2>&1 | sed -n "s/.*' -> '\(.*\)'/\1/p" ) >> "$manifest" || exit_message 1 "could not install $lib 3rdparty"; }
+      [[ -d "bin" ]]      && { ( set -o pipefail; cp -rfv "$src_dir/$lib_dir/mingw-bundle/bin"* "$dependency_install_prefix/" 2>&1 | sed -n "s/.*' -> '\(.*\)'/\1/p" ) >> "$manifest" || exit_message 1 "could not install $lib bin"; }
+      [[ -d "include" ]]  && { ( set -o pipefail; cp -rfv "$src_dir/$lib_dir/mingw-bundle/include"* "$dependency_install_prefix/" 2>&1 | sed -n "s/.*' -> '\(.*\)'/\1/p" ) >> "$manifest" || exit_message 1 "could not install $lib include"; }
+      [[ -d "lib" ]]      && { ( set -o pipefail; cp -rfv "$src_dir/$lib_dir/mingw-bundle/lib"* "$dependency_install_prefix/" 2>&1 | sed -n "s/.*' -> '\(.*\)'/\1/p" ) >> "$manifest" || exit_message 1 "could not install $lib lib"; }
+      [[ -d "share" ]]    && { ( set -o pipefail; cp -rfv "$src_dir/$lib_dir/mingw-bundle/share"* "$dependency_install_prefix/" 2>&1 | sed -n "s/.*' -> '\(.*\)'/\1/p" ) >> "$manifest" || exit_message 1 "could not install $lib share"; }
       echo "$dependency_install_prefix/lib/pkgconfig/$lib.pc" >> "$manifest"
     fi
     change_dir "$src_dir"
@@ -3017,11 +3043,11 @@ build_libnpp() {
       convert_msvc_to_mingw -t="$src_dir/$lib_dir" -c="$cross_prefix" -o="npp" -i="mingw-bundle" > >(redirect_output) 2>&1
       change_dir "$src_dir/$lib_dir/mingw-bundle/"
       sed -i "s|^prefix=.*|prefix=${dependency_install_prefix}|g" "$src_dir/$lib_dir/mingw-bundle/lib/pkgconfig/npp.pc"
-      [[ -d "3rdparty" ]] && (cp -rfv "$src_dir/$lib_dir/mingw-bundle/3rdparty"* "$dependency_install_prefix/"  2>&1 | sed -n "s/.*' -> '\(.*\)'/\1/p" >> "$manifest"; true)
-      [[ -d "bin" ]] && (cp -rv "$src_dir/$lib_dir/mingw-bundle/bin"* "$dependency_install_prefix/" > >(redirect_output) 2>&1 || exit_message 1 "could not install $lib bin")
-      [[ -d "include" ]] && (cp -rv "$src_dir/$lib_dir/mingw-bundle/include"* "$dependency_install_prefix/" > >(redirect_output) 2>&1 || exit_message 1 "could not install $lib include")
-      [[ -d "lib" ]] && (cp -rv "$src_dir/$lib_dir/mingw-bundle/lib"* "$dependency_install_prefix/" > >(redirect_output) 2>&1 || exit_message 1 "could not install $lib lib")
-      [[ -d "share" ]] && (cp -rv "$src_dir/$lib_dir/mingw-bundle/share"* "$dependency_install_prefix/" > >(redirect_output) 2>&1 || exit_message 1 "could not install $lib share")
+      [[ -d "3rdparty" ]] && { ( set -o pipefail; cp -rfv "$src_dir/$lib_dir/mingw-bundle/3rdparty"* "$dependency_install_prefix/" 2>&1 | sed -n "s/.*' -> '\(.*\)'/\1/p" ) >> "$manifest" || exit_message 1 "could not install $lib 3rdparty"; }
+      [[ -d "bin" ]]      && { ( set -o pipefail; cp -rfv "$src_dir/$lib_dir/mingw-bundle/bin"* "$dependency_install_prefix/" 2>&1 | sed -n "s/.*' -> '\(.*\)'/\1/p" ) >> "$manifest" || exit_message 1 "could not install $lib bin"; }
+      [[ -d "include" ]]  && { ( set -o pipefail; cp -rfv "$src_dir/$lib_dir/mingw-bundle/include"* "$dependency_install_prefix/" 2>&1 | sed -n "s/.*' -> '\(.*\)'/\1/p" ) >> "$manifest" || exit_message 1 "could not install $lib include"; }
+      [[ -d "lib" ]]      && { ( set -o pipefail; cp -rfv "$src_dir/$lib_dir/mingw-bundle/lib"* "$dependency_install_prefix/" 2>&1 | sed -n "s/.*' -> '\(.*\)'/\1/p" ) >> "$manifest" || exit_message 1 "could not install $lib lib"; }
+      [[ -d "share" ]]    && { ( set -o pipefail; cp -rfv "$src_dir/$lib_dir/mingw-bundle/share"* "$dependency_install_prefix/" 2>&1 | sed -n "s/.*' -> '\(.*\)'/\1/p" ) >> "$manifest" || exit_message 1 "could not install $lib share"; }
       echo "$dependency_install_prefix/lib/pkgconfig/npp.pc" >> "$manifest"
     fi
     change_dir "$src_dir"
@@ -3305,7 +3331,7 @@ build_libtiff() {
 }
 
 build_gettext() {
-	local lib="liblc3"
+	local lib="gettext"
   local repo="https://ftp.gnu.org/pub/gnu/gettext/gettext-0.26.tar.gz"
 	change_dir "$src_dir"
 	generic_download_and_make_and_install "$repo" "$lib"

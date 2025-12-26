@@ -2,6 +2,38 @@
 
 # shellcheck disable=SC2317,SC2129,SC1091,SC2120,SC2035,SC2016
 
+enable_library() {
+  LIBRARY_NAME="$1"
+  VAR_NAME="enable_${LIBRARY_NAME//-/_}"
+  export "$VAR_NAME"=1
+  VAR_NAME="disable_${LIBRARY_NAME//-/_}"
+  export "$VAR_NAME"=0
+  echo "  [CONFIG] Enabling: $LIBRARY_NAME" >>"$LOG_FILE"
+}
+
+disable_library() {
+  LIBRARY_NAME="$1"
+  VAR_NAME="enable_${LIBRARY_NAME//-/_}"
+  export "$VAR_NAME"=0
+  VAR_NAME="disable_${LIBRARY_NAME//-/_}"
+  export "$VAR_NAME"=1
+  echo "  [CONFIG] Disabling: $LIBRARY_NAME" >>"$LOG_FILE"
+}
+
+is_library_enabled() {
+  local LIBRARY_NAME="$1"
+  local CLEAN_NAME="${LIBRARY_NAME//-/_}"
+  
+  local VAR_ENABLE="enable_${CLEAN_NAME}"
+  local VAR_DISABLE="disable_${CLEAN_NAME}"
+  
+  if [[ "${!VAR_ENABLE}" == "1" && "${!VAR_DISABLE}" != "1" ]]; then
+    return 0  # Library is Enabled
+  else
+    return 1  # Library is Disabled (or not set)
+  fi
+}
+
 # 1. exit code
 # 2. message
 # shellcheck disable=SC2244
@@ -10,7 +42,7 @@ exit_message() {
 	shift 1
 	local msg="$*"
 	
-	if [[ $code == 1 ]]; then
+	if truthy "$code"; then
 		if [ "$msg" ]; then
 			echo -e "\nERROR: $msg" | tee -a "$LOG_FILE"
 		else
@@ -112,7 +144,7 @@ remove_path() {
 
     # Process each path
     for path in "${paths[@]}"; do
-        echo -e "DEBUG: processing path: '$path'" >>"$LOG_FILE"
+        echo -e "DEBUG: removing path: '$path'" >>"$LOG_FILE"
 
         if [[ -e "$path" ]]; then
             # For directories, ensure recursive flag is set
@@ -391,7 +423,7 @@ setup_windows_environment() {
     export toolchain_bin_path="/usr/bin/"
     #export toolchain_bin_path="$(realpath "$toolchain_root_dir"/bin)"
     export PKG_CONFIG_PATH="$PKG_CONFIG_PATH:$dependency_install_prefix/lib/pkgconfig:$ffmpeg_install_prefix/lib/pkgconfig"
-    export PATH="$toolchain_bin_path:$original_path:$ffmpeg_install_prefix"
+    export PATH="$toolchain_bin_path:$ffmpeg_install_prefix/bin:$original_path"
     export cross_prefix="/usr/local/mingw-w64/bin/$host_target-"
     #export cross_prefix="$toolchain_bin_path/$host_target-"
     
@@ -415,8 +447,11 @@ CXX=${cross_prefix}g++"
 --cxx=${cross_prefix}g++)"
     
     export windows_cflags='-mtune=generic -O3 -pipe'
+    export CFLAGS="$windows_cflags"
     export windows_cppflags='-U_FORTIFY_SOURCE -D_FORTIFY_SOURCE=3'
-    export windows_ldflags=""
+    export CPPFLAGS="$windows_cppflags"
+    export windows_ldflags="-L${dependency_install_prefix}/lib"
+    export LDFLAGS="$windows_ldflags"
 }
 
 setup_linux_environment() {
@@ -425,14 +460,15 @@ setup_linux_environment() {
     export rust_target="$host_arch-unknown-linux-gnu"
     export dependency_install_prefix="$work_dir/libraries"
     export PKG_CONFIG_PATH="$PKG_CONFIG_PATH:/usr/lib/$host_target/pkgconfig:/usr/lib/pkgconfig:$dependency_install_prefix/share/pkgconfig:$dependency_install_prefix/lib/pkgconfig:$dependency_install_prefix/lib/$host_target/pkgconfig:$work_dir/pkgconfig:$ffmpeg_install_prefix/lib/pkgconfig"
-    export PATH="$ffmpeg_install_prefix:$dependency_install_prefix:$original_path:$ffmpeg_install_prefix"
-    export linux_cflags="-fstrict-aliasing -fPIC -DLINUX -I${dependency_install_prefix}/include"
+    export PATH="$ffmpeg_install_prefix/bin:$dependency_install_prefix/bin:$original_path"
+    export linux_cflags="-fstrict-aliasing -fPIC -I${dependency_install_prefix}/include"
     export CFLAGS="$linux_cflags"
-    export linux_cppflags=''
+    export linux_cppflags="-I${dependency_install_prefix}/include -DLINUX"
+    export CPPFLAGS="$linux_cppflags"
     export linux_cxxflags="-I${dependency_install_prefix}/include"
-    export CXXFLAGS=$linux_cxxflags
-    export linux_ldflags="-L${dependency_install_prefix}/lib -L${dependency_install_prefix}/lib/${host_target}"
-    export LDFLAGS=$linux_ldflags
+    export CXXFLAGS="$linux_cxxflags"
+    export linux_ldflags="-L${dependency_install_prefix}/lib"
+    export LDFLAGS="$linux_ldflags"
 }
 
 reset_cflags() {
@@ -485,16 +521,24 @@ reset_ldflags() {
 
 get_ffmpeg_directory() {
 	local build_type=$1
-  local dir_name="ffmpeg-${host_name}"
+  local dir_name="${host_name}"
 	if [[ -z $build_type ]]; then
-		dir_name+="_$(get_build_type)"
+		dir_name+="-$(get_build_type)"
   else
-		dir_name+="_$build_type"
+		dir_name+="-$build_type"
 	fi
   if truthy "$do_debug_build"; then
-    dir_name+="_debug"
+    dir_name+="-debug"
   fi
-  echo "$dir_name"
+  local is_small=""
+  if truthy "$enable_small"; then
+    is_small="-small"
+  fi
+  local bundle_type=""
+  if [[ -n $(get_bundle_type) ]]; then
+    bundle_type="$(get_bundle_type)-"
+  fi
+  echo "ffmpeg-$bundle_type$dir_name$is_small"
 }
 
 get_build_type() {
@@ -506,19 +550,51 @@ get_build_type() {
 }
 
 get_ffmpeg_kit_directory() {
-  local dir_name="ffmpeg-kit-${host_name}_$(get_build_type)"
-  if truthy "$FFMPEG_KIT_LTS_BUILD"; then
-		dir_name+="-lts"
+  local dir_name="${host_name}-$(get_build_type)"
+  if truthy "$do_debug_build"; then
+    dir_name+="-debug"
 	fi
-	echo "$dir_name"
+  local is_small=""
+  if truthy "$enable_small"; then
+    is_small="-small"
+  fi
+  local bundle_type=""
+  if [[ -n $(get_bundle_type) ]]; then
+    bundle_type="$(get_bundle_type)-"
+  fi
+	echo "ffmpeg-kit-$bundle_type$dir_name$is_small"
 }
 
 get_bundle_directory() {
-  local dir_name="bundle-${host_name}_$(get_build_type)"
-  if truthy "$FFMPEG_KIT_LTS_BUILD"; then
-		dir_name+="-lts"
+  local dir_name="${host_name}-$(get_build_type)"
+  if truthy "$do_debug_build"; then
+    dir_name+="-debug"
 	fi
-	echo "$dir_name"
+  local is_small=""
+  if truthy "$enable_small"; then
+    is_small="-small"
+  fi
+  local bundle_type=""
+  if [[ -n $(get_bundle_type) ]]; then
+    bundle_type="$(get_bundle_type)-"
+  fi
+	echo "bundle-$bundle_type$dir_name$is_small"
+}
+
+get_bundle_type() {
+  if truthy "$audio_bundle"; then
+    echo "audio"
+  elif truthy "$video_bundle"; then
+    echo "video"
+  elif truthy "$video_ai_bundle"; then
+    echo "video_ai"
+  elif truthy "$video_hw_bundle"; then
+    echo "hardware"
+  elif truthy "$video_ai_hw_bundle"; then
+    echo "hardware_ai"
+  elif truthy "$streaming_bundle"; then
+    echo "streaming"
+  fi
 }
 
 get_cpu_count() {
@@ -1155,7 +1231,7 @@ get_valid_remote() {
   
   # Get all refs at once
   local all_refs
-  if ! all_refs=$(git ls-remote "$repo_url") > >(redirect_output) 2>&1; then
+  if ! all_refs=$(git ls-remote "$repo_url" 2>/dev/null); then
     echo -e "DEBUG: Cannot access repository: $repo_url" >>"$LOG_FILE"
     return 1
   fi
@@ -1252,6 +1328,66 @@ is_empty_dir() {
     fi
 }
 
+# Get the current branch name (e.g., "main" or "feature/login")
+get_git_branch() {
+  git rev-parse --abbrev-ref HEAD 2>/dev/null
+}
+
+# Get the most recent tag (e.g., "v1.0.4")
+get_git_tag() {
+  git describe --tags --abbrev=0 2>/dev/null
+}
+
+# Get the "release" (The tag + how many commits ahead of it you are)
+get_git_release() {
+  git describe --tags 2>/dev/null
+}
+
+# Get the short hash (e.g., "a1b2c3d")
+get_git_commit() {
+  git rev-parse HEAD 2>/dev/null
+}
+
+# Get the short commit hash (e.g., "a1b2c3d")
+get_git_commit_short() {
+  git rev-parse --short HEAD 2>/dev/null
+}
+
+is_current_git_ref() {
+    local input="$1"
+    [ -z "$input" ] && return 1
+
+    # 1. Check against current Branch name
+    local current_branch=$(get_git_branch)
+    local all_refs=$(git ls-remote "$repo_url" 2>/dev/null)
+    if echo "$all_refs" | grep -q "refs/heads/$current_branch"; then
+      return 0
+    fi
+
+    # 2. Check against current exact Tag
+    # (Checking if HEAD is exactly at this tag)
+    local current_tag=$(git describe --tags --exact-match 2>/dev/null)
+    if echo "$all_refs" | grep -q "refs/tags/$current_tag"; then
+      return 0
+    fi
+
+    # 3. Check against current Release string 
+    # (e.g., v1.0.4-5-g7f2)
+    local current_release=$(get_git_release)
+    [[ "$input" == "$current_release" ]] && return 0
+
+    # 4. Check against current Commit (Long and Short)
+    local long_commit=$(get_git_commit)
+    local short_commit=$(get_git_commit_short)
+    if echo "$all_refs" | grep -q "^$long_commit"; then
+      return 0
+    elif echo "$all_refs" | grep -q "^$short_commit"; then
+      return 0
+    fi
+
+    return 1
+}
+
 # 1. repo_url
 # 2. to_dir
 # 3. desired_branch
@@ -1270,7 +1406,19 @@ do_git_checkout() {
 	if [ -d "$to_dir" ] && is_valid_git_dir "$to_dir"; then
     echo -e "INFO: Directory already exists $to_dir." >>"$LOG_FILE"
 		change_dir "$to_dir"
-    if truthy "$build_force"; then
+    if ! is_current_git_ref "$desired_branch"; then
+      git_hard_reset "$(pwd)"
+      eval "git fetch --unshallow" >>"$LOG_FILE" 2>/dev/null
+      eval "git config remote.origin.fetch \"+refs/heads/*:refs/remotes/origin/*\"" >>"$LOG_FILE" 2>/dev/null
+      eval "git fetch --all --tags" >>"$LOG_FILE" 2>/dev/null
+      eval "git checkout $desired_branch" >>"$LOG_FILE" || {
+        if [[ ${desired_branch,,} =~ ^(master|main)$ ]]; then
+          do_git_checkout "$repo_url" "$to_dir" "$desired_branch"
+        else
+          exit_message 1 "could not checkout $repo_url to $desired_branch or master/main";
+        fi
+      }
+    elif truthy "$build_force"; then
       echo -e "INFO: Force requested, resetting repository" >>"$LOG_FILE"
       git_hard_reset "$(pwd)"
 		elif truthy "$git_get_latest"; then
@@ -1285,7 +1433,13 @@ do_git_checkout() {
       remove_path -rf "$to_dir"
     fi
 		echo -e "INFO: Downloading $repo_url $desired_branch into $to_dir" >>"$LOG_FILE"
-		retry_git_or_die "$repo_url" "$to_dir" "$desired_branch"
+		retry_git_or_die "$repo_url" "$to_dir" "$desired_branch" || {
+        if [[ ${desired_branch,,} =~ ^(master|main)$ ]]; then
+          do_git_checkout "$repo_url" "$to_dir" "$desired_branch"
+        else
+          exit_message 1 "could not checkout $repo_url to $desired_branch or master/main";
+        fi
+      }
     mv "$to_dir.tmp" "$to_dir" 2>>"$LOG_FILE"
 		chmod -R u+rwx "$to_dir" 2>>"$LOG_FILE"
     change_dir "$to_dir"
@@ -1378,7 +1532,7 @@ create_touch_file() {
 	local exit_code="$1"
   local file_name="$2"
   echo -e "INFO: creating touch file $file_name" >>"$LOG_FILE"
-	if [[ $exit_code == 1 ]]; then
+	if truthy "$exit_code"; then
 		touch "$file_name" >>"$LOG_FILE" || exit_message 1 "unable to create touch file $file_name"
 	else
 		touch "$file_name" >>"$LOG_FILE" || echo -e "DEBUG: unable to create touch file $file_name" | tee -a "$LOG_FILE"
@@ -1388,7 +1542,7 @@ create_touch_file() {
 get_small_touchfile_name() { # have to call with assignment like a=$(get_small...)
 	local beginning="$1"
 	local extra_stuff="$2"
-	local touch_name="${beginning}_$(echo -e -- "$extra_stuff" "$(get_build_type)" "$LDFLAGS" "$CFLAGS" "$CXXFLAGS" | /usr/bin/env md5sum)" # md5sum to make it smaller, cflags to force rebuild if changes
+	local touch_name="${beginning}_$(echo -e -- "$extra_stuff" "$(get_build_type)" | /usr/bin/env md5sum)" # md5sum to make it smaller, cflags to force rebuild if changes
 	touch_name=$(echo -e "$touch_name" | sed "s/ //g")                                                      # md5sum introduces spaces, remove them
 	echo -e "$touch_name"                                                                                   # bash cruddy return system LOL
 }
@@ -1445,12 +1599,12 @@ do_python() {
     remove_path -rf .waf3*
     remove_path -rf __pycache__
     [[ -d "waflib" ]] && remove_path -rf waflib
-    echo -e "DEBUG: updating waf to latest version..."
+    echo -e "DEBUG: updating waf to latest version..." >>"$LOG_FILE"
     wget https://waf.io/waf-2.1.9 -O waf > >(redirect_output) 2>&1
     chmod +x waf
   fi
   # shellcheck disable=SC2206,SC2128
-  configure_command=(python ${configure_name[*]})
+  configure_command=(python3 ${configure_name[*]})
 	local cur_dir2=$(pwd)
 	local english_name=$(basename "$cur_dir2")
   local touch_prefix="${host_name}${touch_postfix}already"
@@ -1540,7 +1694,11 @@ do_configure() {
 	local touch_postfix=""
 	[[ -n $3 ]] && touch_postfix="_${3}_" || touch_postfix="_"
 	if [[ "$configure_name" = "" ]]; then
-		configure_name="./configure"
+    if [[ -f configure ]]; then
+		  configure_name="./configure"
+    elif [[ -f Configure ]]; then
+      configure_name="./Configure"
+    fi
 	fi
 	local cur_dir2=$(pwd)
 	local english_name=$(basename "$cur_dir2")
@@ -1553,7 +1711,7 @@ do_configure() {
     remove_path -f "${touch_prefix}_configure"* # reset
 		# make uninstall # does weird things when run under ffmpeg src so disabled for now...
 		echo -e "INFO: configuring $english_name ($PWD) $configure_name $configure_options" >>"$LOG_FILE" # say it now in case bootstrap fails etc.
-		echo -e "INFO: all touch files" "already_configured$touch_postfix*" touchname= "$touch_name" >>"$LOG_FILE"
+		echo -e "INFO: all touch files ${touch_prefix}_configure* touchname= $touch_name" >>"$LOG_FILE"
 		echo -e "INFO: config options $configure_name $configure_options" >>"$LOG_FILE"
     if [ -f bootstrap ]; then
 			./bootstrap > >(redirect_output) 2>&1 # some need this to create ./configure :|
@@ -1561,6 +1719,9 @@ do_configure() {
 		if [[ ! -f $configure_name && -f bootstrap.sh ]]; then # fftw wants to only run this if no configure :|
 			./bootstrap.sh > >(redirect_output) 2>&1
 		fi
+    #autoheader > >(redirect_output) 2>&1
+    #autoreconf --install --force > >(redirect_output) 2>&1
+    #automake --force-missing --add-missing > >(redirect_output) 2>&1
 		if [[ ! -f $configure_name ]]; then
 			echo -e "INFO: running autoheader, automake --force-missing --add-missing, and autoreconf to generate configure file for us..." >>"$LOG_FILE"
       if [[ -f gitsub.sh ]]; then
@@ -1571,9 +1732,6 @@ do_configure() {
         echo "INFO: autogen.sh found. Running autogen.sh..."
 			  ./autogen.sh > >(redirect_output) 2>&1 # some need this to create ./configure :|
 		  fi
-      autoheader > >(redirect_output) 2>&1
-      autoreconf --install
-      automake --force-missing --add-missing > >(redirect_output) 2>&1
 			autoreconf_library # a handful of them require this to create ./configure :|
 		fi
 		chmod -R u+rwx "$configure_name" # In non-windows environments, with devcontainers, the configuration file doesn't have execution permissions
@@ -1583,9 +1741,9 @@ do_configure() {
 			exit_message 1 "failed configure $english_name \n see $(find "$(pwd)" -name "config.log" -print)"
 		} # less nicey than make (since single thread, and what if you're running another ffmpeg nice build elsewhere?)
 		create_touch_file 0 "$touch_name"
-		echo -e "INFO: doing preventative make clean" >>"$LOG_FILE"
-		echo -e "INFO: do_configure() nice running: \"make clean -j $(get_concurrent_proc)\"" >>"$LOG_FILE"
-		nice make clean -j "$(get_concurrent_proc)" > >(redirect_output) 2>&1 # sometimes useful when files change, etc.
+		# echo -e "INFO: doing preventative make clean" >>"$LOG_FILE"
+		# echo -e "INFO: do_configure() nice running: \"make clean -j $(get_concurrent_proc)\"" >>"$LOG_FILE"
+		# nice make clean -j "$(get_concurrent_proc)" > >(redirect_output) 2>&1 # sometimes useful when files change, etc.
 	else
 	 echo -e "DEBUG: already configured $(basename "$cur_dir2")" >>"$LOG_FILE"
 	fi
@@ -1791,9 +1949,6 @@ do_cmake_from_build_dir() { # some sources don't allow it, weird XXX combine wit
 	source_dir="$1"
 	extra_args="$2"
 	touch_postfix="$3"
-  if [[ "$(basename "$(pwd)")" != "build" ]]; then
-    change_dir "build" 1
-  fi
 	do_cmake "$extra_args" "$source_dir" "$touch_postfix"
 }
 # 1. extra_args
@@ -1815,13 +1970,11 @@ activate_meson() {
 	fi
 	change_dir "$src_dir/meson"
 	export local_meson="$src_dir/meson/meson.py"
-	if [[ ! -e tutorial_env ]]; then
+	if [ ! -e tutorial_env ] && [ -f "$src_dir/meson/tutorial_env/bin/activate" ]; then
 		python3 -m venv tutorial_env
 		# shellcheck disable=SC1090
 		source "$src_dir/meson/tutorial_env/bin/activate"
 		python3 -m pip install meson
-	else
-		source "$src_dir/meson/tutorial_env/bin/activate"
 	fi
 	change_dir "$src_dir"
 }
@@ -1884,7 +2037,7 @@ generic_meson() {
 	local touch_postfix="$2"
 	#create_dir "$(pwd)/build"
 	# TODO: Allow shared library build
-	do_meson "--prefix=${dependency_install_prefix} --libdir=${dependency_install_prefix}/lib --buildtype=release --default-library=static $extra_configure_options" "setup build" "$touch_postfix" # --cross-file=$(get_meson_cross_file)
+	do_meson "-Dprefix=${dependency_install_prefix} -Dlibdir=${dependency_install_prefix}/lib -Dbuildtype=release --default-library=static $extra_configure_options" "setup build" "$touch_postfix" # --cross-file=$(get_meson_cross_file)
 }
 # 1. extra_args
 # 2. touch_postfix
@@ -2488,10 +2641,10 @@ build_ffmpeg_dependency_only() {
 	if [[ -n "$step" ]]; then
 		change_dir "$src_dir"
 		if declare -F "$step" >/dev/null; then
-			echo -e "INFO: --- Executing step: $step ---" | tee -a "$LOG_FILE"
+			echo -e "INFO: --- Executing step: $step ---" >>"$LOG_FILE"
 			"$step" # Execute the function
       echo | tee -a "$LOG_FILE"
-			echo -e "INFO: --- Finished executing step: $step ---" | tee -a "$LOG_FILE"
+			echo -e "INFO: --- Finished executing step: $step ---" >>"$LOG_FILE"
 		else
       echo | tee -a "$LOG_FILE"
 			echo -e "ERROR: Function '$step' not found." | tee -a "$LOG_FILE"
@@ -2538,13 +2691,12 @@ configure_ffmpeg() {
 	init_options+=" --enable-version3"
 	init_options+=" --arch=$arch"
 	init_options+=" --prefix=$ffmpeg_install_prefix"
-	init_options+=" --extra-cflags=-DLIBTWOLAME_STATIC"
-	init_options+=" --extra-cflags=-DMODPLUG_STATIC"
-	init_options+=" --extra-cflags=-DCACA_STATIC"
+  init_options+=" --extra-ldflags=\"-Wl,--allow-multiple-definition\""
 	init_options+=" --enable-pic"
 	init_options+=" --enable-swscale"
-	init_options+=" --enable-optimizations"
-	init_options+=" --enable-small"
+  init_options+=" --extra-libs=\"-lm -lstdc++\""
+	truthy "$enable_lto" && init_options+=" --enable-optimizations"
+	truthy "$enable_small" && init_options+=" --enable-small"
 
 	if [[ $host_platform != "linux" ]]; then
     init_options+=" --enable-cross-compile"
@@ -2577,11 +2729,9 @@ configure_ffmpeg() {
   config_options+=" --disable-manpages"
   config_options+=" --disable-podpages"
   config_options+=" --disable-txtpages"
-	config_options+=" --disable-schannel"
-	config_options+=" --disable-openssl"
 	config_options+=" --disable-outdev=fbdev"
   config_options+=" --disable-indev=fbdev"
-  config_options+="$enable_nonfree"
+
   #------------------------------------------------------------------------------     
   # ----------------------------- android features ------------------------------     
   #------------------------------------------------------------------------------      
@@ -2592,30 +2742,34 @@ configure_ffmpeg() {
   truthy "$enable_libsmbclient" && config_options+=" --enable-libsmbclient"           # enable Samba protocol via libsmbclient [no]
   fi
   #------------------------------------------------------------------------------    
-  # ----------------------------- harmony features ------------------------------     
+  # --------------------------- OpenHarmony features ----------------------------     
   #------------------------------------------------------------------------------    
   if [[ $host_platform == "harmony" ]]; then
   truthy "$enable_ohcodec" && config_options+=" --enable-ohcodec"                     # enable OpenHarmony Codec support [no]
-  truthy "$enable_libsmbclient" && config_options+=" --enable-libsmbclient"           # enable Samba protocol via libsmbclient [no]
   fi
   #------------------------------------------------------------------------------    
   # --------------------------- linux/unix features -----------------------------     
   #------------------------------------------------------------------------------    
   if [[ $host_platform == "linux" ]]; then
   truthy "$disable_alsa" && config_options+=" --disable-alsa"                         # disable ALSA support [autodetect]
-  truthy "$enable_libdc1394" && config_options+=" --enable-libdc1394"                 # enable IIDC-1394 grabbing using libdc1394 and libraw1394 [no]
+  truthy "$enable_libdc1394" && config_options+=" --enable-libdc1394 \
+  --extra-libs=\"-lusb-1.0\""                                                         # enable IIDC-1394 grabbing using libdc1394 and libraw1394 [no]
   truthy "$disable_libdrm" && config_options+=" --disable-libdrm"                     # disable DRM code (Linux) [autodetect]
-  truthy "$enable_libiec61883" && config_options+=" --enable-libiec61883"             # enable iec61883 via libiec61883 [no]
-  truthy "$enable_libv4l2" && config_options+=" --enable-libv4l2"                     # enable libv4l2/v4l-utils [no]
-  truthy "$enable_libxcb_shape" && config_options+=" --enable-libxcb-shape"           # enable X11 grabbing shape rendering [autodetect]
-  truthy "$enable_libxcb_shm" && config_options+=" --enable-libxcb-shm"               # enable X11 grabbing shm communication [autodetect]
-  truthy "$enable_libxcb_xfixes" && config_options+=" --enable-libxcb-xfixes"         # enable X11 grabbing mouse rendering [autodetect]
-  truthy "$enable_libxcb" && config_options+=" --enable-libxcb"                       # enable X11 grabbing using XCB [autodetect]
-  truthy "$disable_rkmpp" && config_options+=" --enable-rkmpp"                        # enable Rockchip Media Process Platform code [no]
+  truthy "$enable_libiec61883" && config_options+=" --enable-libiec61883 \
+  --extra-libs=\"-liec61883 -lavc1394 -lrom1394 -lraw1394\""                          # enable iec61883 via libiec61883 [no]
+  truthy "$disable_libv4l2" && config_options+=" --disable-libv4l2"                   # enable libv4l2/v4l-utils [no]
+  truthy "$disable_libxcb_shape" && config_options+=" --disable-libxcb-shape"         # enable X11 grabbing shape rendering [autodetect]
+  truthy "$disable_libxcb_shm" && config_options+=" --disable-libxcb-shm"             # enable X11 grabbing shm communication [autodetect]
+  truthy "$disable_libxcb_xfixes" && config_options+=" --disable-libxcb-xfixes"       # enable X11 grabbing mouse rendering [autodetect]
+  truthy "$disable_libxcb" && config_options+=" --disable-libxcb"                     # enable X11 grabbing using XCB [autodetect]
+  truthy "$enable_rkmpp" && config_options+=" --enable-rkmpp"                         # enable Rockchip Media Process Platform code [no]
   truthy "$disable_v4l2_m2m" && config_options+=" --disable-v4l2-m2m"                 # disable V4L2 mem2mem code [autodetect]
   truthy "$disable_vaapi" && config_options+=" --disable-vaapi"                       # disable Video Acceleration API (mainly Unix/Intel) code [autodetect]
   truthy "$disable_xlib" && config_options+=" --disable-xlib"                         # disable xlib [autodetect]
-  truthy "$enable_libsmbclient" && config_options+=" --enable-libsmbclient"           # enable Samba protocol via libsmbclient [no]
+                                                                                      # XXX --disable-sndio MinGW/Windows not supported 
+  truthy "$disable_sndio" && config_options+=" --disable-sndio"                       # disable sndio support [autodetect]
+                                                                                      # XXX --enable-libtorch ABI mismatch on windows
+  truthy "$enable_libtorch" && config_options+=" --enable-libtorch"                   # enable Torch as one DNN backend [no]
   fi
   #------------------------------------------------------------------------------
   # ----------------------------- hardware features ----------------------------- 
@@ -2624,7 +2778,6 @@ configure_ffmpeg() {
   truthy "$disable_vulkan" && config_options+=" --disable-vulkan"                     # disable Vulkan code [autodetect]
   truthy "$enable_libmfx" && config_options+=" --enable-libmfx"                       # enable Intel MediaSDK (AKA Quick Sync Video) code via libmfx [no]
   truthy "$enable_libvpl" && config_options+=" --enable-libvpl"                       # enable Intel oneVPL code via libvpl if libmfx is not used [no]
-  truthy "$enable_omx" && config_options+=" --enable-omx"                             # enable OpenMAX IL code [no]
   truthy "$enable_vulkan_static" && config_options+=" --enable-vulkan-static"         # enable statically link to libvulkan [no]
   #------------------------------------------------------------------------------
   # ----------------------------- windows features ------------------------------ 
@@ -2635,10 +2788,9 @@ configure_ffmpeg() {
   #------------------------------------------------------------------------------
   # -------------------------- cross-platform features --------------------------
   #------------------------------------------------------------------------------ 
-# XXX --disable-sndio MinGW/Windows not supported 
-# truthy "$disable_sndio" && config_options+=" --disable-sndio"                       # disable sndio support [autodetect]
-# XXX --enable-libtorch ABI mismatch
-# truthy "$enable_libtorch" && config_options+=" --enable-libtorch"                   # enable Torch as one DNN backend [no]
+  if [[ $host_platform != "windows" ]]; then
+  truthy "$enable_libsmbclient" && config_options+=" --enable-libsmbclient"           # enable Samba protocol via libsmbclient [no]
+  fi
   truthy "$disable_bzlib" && config_options+=" --disable-bzlib"                       # disable bzlib [autodetect]
   truthy "$disable_iconv" && config_options+=" --disable-iconv"                       # disable iconv [autodetect]
   truthy "$disable_lzma" && config_options+=" --disable-lzma"                         # disable lzma [autodetect]
@@ -2648,7 +2800,8 @@ configure_ffmpeg() {
   truthy "$enable_libopencore_amrnb" && config_options+=" --enable-libopencore-amrnb" # enable AMR-NB de/encoding via libopencore-amrnb [no]
   truthy "$enable_libopencore_amrwb" && config_options+=" --enable-libopencore-amrwb" # enable AMR-WB decoding via libopencore-amrwb [no]
   truthy "$enable_liblcevc_dec" && config_options+=" --enable-liblcevc-dec"           # enable LCEVC decoding via liblcevc-dec [no]
-  truthy "$enable_chromaprint" && config_options+=" --enable-chromaprint"             # enable audio fingerprinting with chromaprint [no]
+  truthy "$enable_chromaprint" && config_options+=" --enable-chromaprint \
+  --extra-libs=\"-lfftw3\""                                                           # enable audio fingerprinting with chromaprint [no]
   truthy "$enable_frei0r" && config_options+=" --enable-frei0r"                       # enable frei0r video filtering [no]
   truthy "$enable_gcrypt" && config_options+=" --enable-gcrypt"                       # enable gcrypt, needed for rtmp(t)e support if openssl, librtmp or gmp is not used [no]
   truthy "$enable_gmp" && config_options+=" --enable-gmp"                             # enable gmp, needed for rtmp(t)e support if openssl or librtmp is not used [no]
@@ -2662,14 +2815,17 @@ configure_ffmpeg() {
   truthy "$enable_libbs2b" && config_options+=" --enable-libbs2b"                     # enable bs2b DSP library [no]
   truthy "$enable_libcaca" && config_options+=" --enable-libcaca"                     # enable textual display using libcaca [no]
   truthy "$enable_libcdio" && config_options+=" --enable-libcdio"                     # enable audio CD grabbing with libcdio [no]
-  truthy "$enable_libcelt" && config_options+=" --enable-libcelt"                     # enable CELT decoding via libcelt [no]
+  # libcelt depercated - use libopus instead
+  truthy "$enable_libcelt" && config_options+=" --enable-libopus"                     # enable CELT decoding via libcelt [no]
   truthy "$enable_libcodec2" && config_options+=" --enable-libcodec2"                 # enable codec2 en/decoding using libcodec2 [no]
   truthy "$enable_libdav1d" && config_options+=" --enable-libdav1d"                   # enable AV1 decoding via libdav1d [no]
   truthy "$enable_libdavs2" && config_options+=" --enable-libdavs2"                   # enable AVS2 decoding via libdavs2 [no]
   truthy "$enable_libdvdnav" && config_options+=" --enable-libdvdnav"                 # enable libdvdnav, needed for DVD demuxing [no]
   truthy "$enable_libdvdread" && config_options+=" --enable-libdvdread"               # enable libdvdread, needed for DVD demuxing [no]
-  truthy "$enable_libflite" && config_options+=" --enable-libflite"                   # enable flite (voice synthesis) support via libflite [no]
-  truthy "$enable_libfontconfig" && config_options+=" --enable-libfontconfig"         # enable libfontconfig, useful for drawtext filter [no]
+  truthy "$enable_libflite" && config_options+=" --enable-libflite \
+  --extra-libs=\"-lasound\""                                                          # enable flite (voice synthesis) support via libflite [no]
+  truthy "$enable_libfontconfig" && config_options+=" --enable-libfontconfig\
+  --extra-libs=\"-lxml2 -liconv\""                                                    # enable libfontconfig, useful for drawtext filter [no]
   truthy "$enable_libfreetype" && config_options+=" --enable-libfreetype"             # enable libfreetype, needed for drawtext filter [no]
   truthy "$enable_libfribidi" && config_options+=" --enable-libfribidi"               # enable libfribidi, improves drawtext filter [no]
   truthy "$enable_libglslang" && config_options+=" --enable-libglslang"               # enable GLSL->SPIRV compilation via libglslang [no]
@@ -2677,7 +2833,8 @@ configure_ffmpeg() {
   truthy "$enable_libgsm" && config_options+=" --enable-libgsm"                       # enable GSM de/encoding via libgsm [no]
   truthy "$enable_libharfbuzz" && config_options+=" --enable-libharfbuzz"             # enable libharfbuzz, needed for drawtext filter [no]
   truthy "$enable_libilbc" && config_options+=" --enable-libilbc"                     # enable iLBC de/encoding via libilbc [no]
-  truthy "$enable_libjack" && config_options+=" --enable-libjack"                     # enable JACK audio sound server [no]
+  truthy "$enable_libjack" && config_options+=" --enable-libjack \
+  --extra-libs=\"-lxcb -liconv\""                                                     # enable JACK audio sound server [no]
   truthy "$enable_libjxl" && config_options+=" --enable-libjxl"                       # enable JPEG XL de/encoding via libjxl [no]
   truthy "$enable_libklvanc" && config_options+=" --enable-libklvanc"                 # enable Kernel Labs VANC processing [no]
   truthy "$enable_libkvazaar" && config_options+=" --enable-libkvazaar"               # enable HEVC encoding via libkvazaar [no]
@@ -2687,14 +2844,16 @@ configure_ffmpeg() {
   truthy "$enable_libmp3lame" && config_options+=" --enable-libmp3lame"               # enable MP3 encoding via libmp3lame [no]
   truthy "$enable_libmysofa" && config_options+=" --enable-libmysofa"                 # enable libmysofa, needed for sofalizer filter [no]
   truthy "$enable_liboapv" && config_options+=" --enable-liboapv"                     # enable APV encoding via liboapv [no]
-  truthy "$enable_libopencv" && config_options+=" --enable-libopencv"                 # enable video filtering via libopencv [no]
+  truthy "$enable_libopencv" && config_options+=" --enable-libopencv\
+  --extra-libs=\"-lsharpyuv\""                                                        # enable video filtering via libopencv [no]
   truthy "$enable_libopenh264" && config_options+=" --enable-libopenh264"             # enable H.264 encoding via OpenH264 [no]
   truthy "$enable_libopenjpeg" && config_options+=" --enable-libopenjpeg"             # enable JPEG 2000 encoding via OpenJPEG [no]
   truthy "$enable_libopenmpt" && config_options+=" --enable-libopenmpt"               # enable decoding tracked files via libopenmpt [no]
   truthy "$enable_libopenvino" && config_options+=" --enable-libopenvino"             # enable OpenVINO as a DNN module backend for DNN based filters like dnn_processing [no]
   truthy "$enable_libopus" && config_options+=" --enable-libopus"                     # enable Opus de/encoding via libopus [no]
   truthy "$enable_libplacebo" && config_options+=" --enable-libplacebo"               # enable libplacebo library [no]
-  truthy "$enable_libpulse" && config_options+=" --enable-libpulse"                   # enable Pulseaudio input via libpulse [no]
+  truthy "$enable_libpulse" && config_options+=" --enable-libpulse\
+  --extra-libs=\"-lxcb -lXau -lX11 -liconv -lXdmcp\""                                 # enable Pulseaudio input via libpulse [no]
   truthy "$enable_libqrencode" && config_options+=" --enable-libqrencode"             # enable QR encode generation via libqrencode [no]
   truthy "$enable_libquirc" && config_options+=" --enable-libquirc"                   # enable QR decoding via libquirc [no]
   truthy "$enable_librabbitmq" && config_options+=" --enable-librabbitmq"             # enable RabbitMQ library [no]
@@ -2724,7 +2883,8 @@ configure_ffmpeg() {
   truthy "$enable_libvvenc" && config_options+=" --enable-libvvenc"                   # enable H.266/VVC encoding via vvenc [no]
   truthy "$enable_libwebp" && config_options+=" --enable-libwebp"                     # enable WebP encoding via libwebp [no]
   truthy "$enable_libx264" && config_options+=" --enable-libx264"                     # enable H.264 encoding via x264 [no]
-  truthy "$enable_libx265" && config_options+=" --enable-libx265"                     # enable HEVC encoding via x265 [no]
+  truthy "$enable_libx265" && config_options+=" --enable-libx265\
+  --extra-libs=\"-lstdc++ -lrt -ldl -lpthread\""                                      # enable HEVC encoding via x265 [no]
   truthy "$enable_libxavs" && config_options+=" --enable-libxavs"                     # enable AVS encoding via xavs [no]
   truthy "$enable_libxavs2" && config_options+=" --enable-libxavs2"                   # enable AVS2 encoding via xavs2 [no]
   truthy "$enable_libxevd" && config_options+=" --enable-libxevd"                     # enable EVC decoding via libxevd [no]
@@ -2753,6 +2913,7 @@ configure_ffmpeg() {
 	if truthy "$enable_gpl"; then
 		config_options+=" --enable-gpl"
   elif [[ -n $enable_nonfree ]]; then 
+    config_options+=" --enable-nonfree"
     #------------------------------------------------------------------------------
     # ------------------------ non-free non-gpl libraries -------------------------
     #------------------------------------------------------------------------------ 
@@ -2768,8 +2929,9 @@ configure_ffmpeg() {
     truthy "$enable_cuda_nvcc" && config_options+=" --enable-cuda-nvcc"                 # enable Nvidia CUDA compiler [no]
     truthy "$enable_libnpp" && config_options+=" --enable-libnpp"                       # enable Nvidia Performance Primitives-based code [no]
     # --------------------------- linux/unix features -----------------------------    
-    if [[ $host_platform == "linux" ]]; then
+    if [[ $host_platform == "rpi" ]]; then
     truthy "$enable_mmal" && config_options+=" --enable-mmal"                           # enable Broadcom Multi-Media Abstraction Layer (Raspberry Pi) via MMAL [no]
+    truthy "$enable_omx" && config_options+=" --enable-omx"                             # enable OpenMAX IL code [no]
     truthy "$enable_omx_rpi" && config_options+=" --enable-omx-rpi"                     # enable OpenMAX IL code for Raspberry Pi [no]
     fi
     # ----------------------------- windows features ------------------------------ 
@@ -2797,8 +2959,6 @@ configure_ffmpeg() {
 	else
 		postpend_configure_opts+=" --disable-debug"
 	fi
-	export PKG_CONFIG_PATH="$dependency_install_prefix/lib/pkgconfig"
-	[[ $host_platform == "windows" ]] && export PATH="$toolchain_bin_path:$original_path"
 
 	do_configure "$init_options$config_options$postpend_configure_opts" "./configure" "$(get_build_type)" || exit_message 1 "unable to configure ffmpeg. see $LOG_FILE for details."
 
@@ -2955,8 +3115,7 @@ install_ffmpeg_kit() {
   remove_path -rf "$ffmpeg_kit_install"
   do_make "PREFIX=$ffmpeg_kit_install" "$(get_build_type)" || exit_message 1 "unable to make ffmpeg-kit. see $LOG_FILE for details."
   do_make_install "PREFIX=$ffmpeg_kit_install" "" "$(get_build_type)" || exit_message 1 "unable to make install ffmpeg-kit. see $LOG_FILE for details."
-
-	create_ffmpegkit_package_config "$(get_ffmpeg_kit_version)" "$ffmpeg_kit_install"  || return 1
+	
   chmod -R u+rwx "$work_dir"
 	echo -e "INFO: Done installing ffmpeg kit to ${ffmpeg_kit_install}" | tee -a "$LOG_FILE"
 }
@@ -3023,15 +3182,15 @@ create_ffmpeg_kit_bundle() {
 		{
 			# COPY HEADERS
 			[[ -d "${ffmpeg_kit_install}/include" ]] && cp -rP "${ffmpeg_kit_install}/include/"* "${FFMPEG_KIT_BUNDLE_INCLUDE_DIRECTORY}"
-			[[ -d "${ffmpeg_kit_install}/include" ]] && cp -rP "${ffmpeg_install_prefix}/include/"* "${FFMPEG_KIT_BUNDLE_INCLUDE_DIRECTORY}"
+			# [[ -d "${ffmpeg_kit_install}/include" ]] && cp -rP "${ffmpeg_install_prefix}/include/"* "${FFMPEG_KIT_BUNDLE_INCLUDE_DIRECTORY}"
 
 			# COPY LIBS
 			[[ -d "${ffmpeg_kit_install}/lib" ]] && cp -rP "${ffmpeg_kit_install}/lib/"* "${FFMPEG_KIT_BUNDLE_LIB_DIRECTORY}"
-			[[ -d "${ffmpeg_kit_install}/lib" ]] && cp -rP "${ffmpeg_install_prefix}/lib/"* "${FFMPEG_KIT_BUNDLE_LIB_DIRECTORY}"
+			# [[ -d "${ffmpeg_kit_install}/lib" ]] && cp -rP "${ffmpeg_install_prefix}/lib/"* "${FFMPEG_KIT_BUNDLE_LIB_DIRECTORY}"
 
 			# COPY BINARIES
 			[[ -d "${ffmpeg_kit_install}/bin" ]] && cp -rP "${ffmpeg_kit_install}/bin/"* "${FFMPEG_KIT_BUNDLE_BIN_DIRECTORY}"
-			[[ -d "${ffmpeg_kit_install}/bin" ]] && cp -rP "${ffmpeg_install_prefix}/bin/"* "${FFMPEG_KIT_BUNDLE_BIN_DIRECTORY}"
+			# [[ -d "${ffmpeg_kit_install}/bin" ]] && cp -rP "${ffmpeg_install_prefix}/bin/"* "${FFMPEG_KIT_BUNDLE_BIN_DIRECTORY}"
 		} >>"$LOG_FILE"
 
     sed -i "s|prefix=.*|prefix=${ffmpeg_kit_bundle}|g" "${ffmpeg_kit_bundle}/lib/pkgconfig/"*.pc || return 1
@@ -3044,7 +3203,8 @@ create_ffmpeg_kit_bundle() {
 		create_dir "${LICENSE_BASEDIR}"
 
 		echo -e "INFO: Copying licenses..." | tee -a "$LOG_FILE"
-		bash "${SCRIPTDIR}/extract_licenses.sh" "${src_dir}" "${LICENSE_BASEDIR}" > >(redirect_output) 2>&1
+		# TODO: fix license fetch for relevant libraries only
+    # bash "${SCRIPTDIR}/extract_licenses.sh" "${src_dir}" "${LICENSE_BASEDIR}" > >(redirect_output) 2>&1
 		echo -e "INFO: Done copying licenses" | tee -a "$LOG_FILE"
 
 		copy_path "${BASEDIR}"/tools/source/SOURCE "${LICENSE_BASEDIR}/source.txt"
@@ -3079,10 +3239,12 @@ uninstall_manifest() {
   fi
 }
 pick_gpu_support() {
-    if [[ -n $1 ]]; then
-        export gpu_support=$1
+    if truthy "$accept_defaults"; then
+      export gpu_support=0
+      return 0
     fi
-    while [[ ! "${gpu_support,,}" =~ ^([1-2]|yes|y|no|n)$ ]]; do
+    export gpu_support=${1:-gpu_support}
+    while [[ ! "${gpu_support,,}" =~ ^([0-1]|yes|y|no|n)$ ]]; do
         # shellcheck disable=SC2199
         if [[ -n "${unknown_opts[@]}" ]]; then
             echo -e -n 'Unknown option(s)'
@@ -3099,31 +3261,31 @@ Do you want to enable GPU support for TensorFlow?
 EOF
         local timeout=10
         export gpu_support=""
-        echo -ne 'Input your choice [1-2] (defaulting to "no" in 10 seconds): '
+        echo -ne 'Input your choice [0-1] (defaulting to "no" in 10 seconds): '
         for ((i=timeout; i>0; i--)); do
             if read -r -t 1 gpu_support; then
                 break
             fi
             if (( i > 1 )); then
-                echo -ne "\rInput your choice [1-2] (defaulting to \"no\" in $((i-1)) seconds): "
+                echo -ne "\rInput your choice [0-1] (defaulting to \"no\" in $((i-1)) seconds): "
             else
-                echo -ne "\rInput your choice [1-2] (defaulting to \"no\" in 0 seconds): "
+                echo -ne "\rInput your choice [0-1] (defaulting to \"no\" in 0 seconds): "
             fi
         done
         
         # Check if timeout occurred
-        if [[ -z "$gpu_support" ]] && (( i == 0 )); then
+        if [[ -z "$gpu_support" ]] && { (( i == 0 )) || truthy "$accept_defaults"; }; then
             echo "No input received within 10 seconds. Defaulting to 'no'."
-            export gpu_support="no"
+            export gpu_support=0
         fi
     done
     case "${gpu_support,,}" in
         1|yes|y) 
-            export gpu_support="yes"
+            export gpu_support=1
             return 0
             ;;
-        2|no|n|"") 
-            export gpu_support="no"
+        0|no|n|"") 
+            export gpu_support=0
             return 1
             ;;
         *)
@@ -3170,15 +3332,457 @@ zip_dir() {
         output_name="${output_name}.zip"
     fi
     
+    if [[ -f $output_name ]]; then
+      echo "INFO: '$output_name' already exists. Deleting it first..."
+      remove_path -f "$output_name"
+    fi
+    
     # Create the zip archive
-    echo "Creating '$output_name' from '$input_folder'..."
-    if (zip -rq "$output_name" "$input_folder"); then
-        echo "Success: Created '$output_name'"
+    echo "INFO: Creating '$output_name' from '$input_folder'..."
+    cd "$(realpath "$input_folder")" || exit_message 1 "could not find $input_folder"
+    local input_name=$(basename "$input_folder")
+    cd ..
+    if (zip -rq "$output_name" "$input_name"); then
+        echo "INFO: [Success] Created '$output_name'"
         return 0
     else
-        echo "Error: Failed to create zip archive" | tee -a "$LOG_FILE"
+        echo "DEBUG: [Error] Failed to create zip archive" | tee -a "$LOG_FILE"
         # Clean up partial output if created
         [[ -f "$output_name" ]] && rm -f "$output_name"
         return 1
+    fi
+}
+
+intro() {
+	cat <<EOL
+     ##################### Welcome ######################
+  Welcome to the ffmpeg and ffmpeg-kit builder-helper script.
+  Downloads and builds will be installed to directories within $WORKDIR
+  If this is not ok, then exit now, and cd to the directory where you'd
+  like them installed, then run this script again from there.
+  Note that once you build your compilers, you can no longer rename/move
+  the $sandbox directory, since it will have some hard coded paths in there.
+  You can, of course, rebuild ffmpeg from within it, etc.
+EOL
+	echo -e "$(date)" | tee -a "$LOG_FILE" # for timestamping super long builds LOL
+	if [[ ! -d $WORKDIR ]]; then
+		echo -e
+		echo -e "Building in $WORKDIR, will use ~ 285GB space!" | tee -a "$LOG_FILE"
+		echo -e
+	fi
+	change_dir "$WORKDIR" 1 || exit 1
+	echo -e "sit back, this may take awhile..." | tee -a "$LOG_FILE"
+}
+
+apply_preset() {
+    local PRESET_STRING="$1"
+    # Split string by space into array
+    # This handles multiline strings correctly if they are unquoted or space-separated
+    if [[ -n "$PRESET_STRING" ]]; then
+      for FLAG in $PRESET_STRING; do
+          if [[ "$FLAG" == --enable-* ]]; then
+              enable_library "${FLAG#--enable-}"
+          elif [[ "$FLAG" == --disable-* ]]; then
+              disable_library "${FLAG#--disable-}"
+          fi
+      done
+    fi
+}
+
+pick_host_platform() {
+	if truthy "$accept_defaults"; then
+    export host_platform="linux"
+    echo "$host_platform"
+    return 0
+  fi
+  export host_platform=${1:-host_platform}
+	while [[ ! "${host_platform,,}" =~ ^([1-3]|linux|windows)$ ]]; do
+		# shellcheck disable=SC2199
+		if [[ -n "${unknown_opts[@]}" ]]; then
+			echo -e -n 'Unknown option(s)'
+			for unknown_opt in "${unknown_opts[@]}"; do
+				echo -e -n " '$unknown_opt'"
+			done
+			echo -e ', ignored.'
+			echo
+		fi
+		cat <<'EOF'
+Which host platform are you trying to build, update, or clean for?
+  1. Linux [default]
+  2. Windows
+  3. Exit
+EOF
+		echo -e -n 'Input your choice [1-3]: '
+		read -r host_platform
+	done
+  if [[ -z "$host_platform" ]] && truthy "$accept_defaults"; then
+      echo "Defaulting to 'linux'."
+      export host_platform="linux"
+  fi
+	case "${host_platform,,}" in
+	1|linux) export host_platform="linux"
+  apply_preset "$CONFIG_LINUX"
+  echo "$host_platform"
+  return 0
+  ;;
+	2|windows) export host_platform="windows"
+  apply_preset "$CONFIG_WINDOWS"
+  echo "$host_platform"
+  return 0
+  ;;
+	3|exit)
+		echo -e "exiting"
+		exit 0
+		;;
+	*)
+		echo -e 'Your choice was not valid, please try again.'
+		echo
+		;;
+	esac
+}
+
+pick_host_arch() {
+	if truthy "$accept_defaults"; then
+    export host_arch="x86_64"
+    echo "$host_arch"
+    return 0
+  fi
+  export host_arch=${1:-host_arch}
+	while [[ ! "${host_arch,,}" =~ ^([1-3]|i686|x86_64|x86|x64|x32)$ ]]; do
+		# shellcheck disable=SC2199
+		if [[ -n "${unknown_opts[@]}" ]]; then
+			echo -e -n 'Unknown option(s)'
+			for unknown_opt in "${unknown_opts[@]}"; do
+				echo -e -n " '$unknown_opt'"
+			done
+			echo -e ', ignored.'
+			echo
+		fi
+		cat <<'EOF'
+Which host platform are you trying to build, update, or clean for?
+  1. x86_64 (64-bit) [default]
+  2. i686 (32-bit)
+  3. Exit
+EOF
+		echo -e -n 'Input your choice [1-3]: '
+		read -r host_arch
+	done
+  if [[ -z "$host_arch" ]] && truthy "$accept_defaults"; then
+      echo "Defaulting to 'x86_64'."
+      export host_arch="x86_64"
+  fi
+	case "${host_arch,,}" in
+	1|x86_64|x64) export host_arch="x86_64"
+  echo "$host_arch"
+  return 0
+  ;;
+	2|i386|i686|x86|x32) export host_arch="i686"
+  echo "$host_arch"
+  return 0
+  ;;
+	3|exit)
+		echo -e "exiting"
+		exit 0
+		;;
+	*)
+		echo -e 'Your choice was not valid, please try again.'
+		echo
+		;;
+	esac
+}
+
+pick_gpu_type() {
+    if truthy "$accept_defaults"; then
+      export gpu_type="cuda"
+      return 0
+    fi
+    export gpu_type=${1:-gpu_type}
+    while [[ ! "${gpu_type,,}" =~ ^([1-2]|cuda|nvdia|rocm|amd)$ ]]; do
+        # shellcheck disable=SC2199
+        if [[ -n "${unknown_opts[@]}" ]]; then
+            echo -e -n 'Unknown option(s)'
+            for unknown_opt in "${unknown_opts[@]}"; do
+                echo -e -n " '$unknown_opt'"
+            done
+            echo -e ', ignored.'
+            echo
+        fi
+        cat <<'EOF'
+Which GPU compute platform?
+  1. CUDA (Nvidia) [default]
+  2. ROCm (AMD)
+EOF
+        local timeout=10
+        export gpu_type=""
+        echo -ne 'Input your choice [1-2] (defaulting to "CUDA (Nvidia)" in 10 seconds): '
+        for ((i=timeout; i>0; i--)); do
+            if read -r -t 1 gpu_type; then
+                break
+            fi
+            if (( i > 1 )); then
+                echo -ne "\rInput your choice [1-2] (defaulting to \"CUDA (Nvidia)\" in $((i-1)) seconds): "
+            else
+                echo -ne "\rInput your choice [1-2] (defaulting to \"CUDA (Nvidia)\" in 0 seconds): "
+            fi
+        done
+        
+        # Check if timeout occurred
+        if [[ -z "$gpu_type" ]] && { (( i == 0 )) || truthy "$accept_defaults"; }; then
+            echo "No input received within 10 seconds. Defaulting to 'CUDA (Nvidia)'."
+            export gpu_type="cuda"
+        fi
+    done
+    case "${gpu_type,,}" in
+        1|cuda|nvidia|"") 
+            export gpu_type="cuda"
+            return 0
+            ;;
+        2|rocm|amd) 
+            export gpu_type="rocm"
+            return 1
+            ;;
+        *)
+            echo -e 'Your choice was not valid, please try again.'
+            echo
+            ;;
+    esac
+}
+
+pick_ssl_type() {
+  if truthy "$accept_defaults"; then
+    export ssl_type="openssl"
+    enable_library "openssl"
+    disable_library "gnutls"
+    disable_library "libtls"
+    disable_library "mbedtls"
+    return 0
+  fi
+  export ssl_type=${1:-ssl_type}
+    while [[ ! "${ssl_type,,}" =~ ^([1-4]|openssl|gnutls|libtls|mbedtls)$ ]]; do
+        # shellcheck disable=SC2199
+        if [[ -n "${unknown_opts[@]}" ]]; then
+            echo -e -n 'Unknown option(s)'
+            for unknown_opt in "${unknown_opts[@]}"; do
+                echo -e -n " '$unknown_opt'"
+            done
+            echo -e ', ignored.'
+            echo
+        fi
+        cat <<'EOF'
+Which TLS/SSL library needed for https do you want to include?
+  1. openssl [default]
+  2. gnutls
+  3. libtls
+  4. mbedtls
+EOF
+        local timeout=10
+        export ssl_type=""
+        echo -ne 'Input your choice [1-4] (defaulting to "OpenSSL" in 10 seconds): '
+        for ((i=timeout; i>0; i--)); do
+            if read -r -t 1 ssl_type; then
+                break
+            fi
+            if (( i > 1 )); then
+                echo -ne "\rInput your choice [1-2] (defaulting to \"OpenSSL\" in $((i-1)) seconds): "
+            else
+                echo -ne "\rInput your choice [1-2] (defaulting to \"OpenSSL\" in 0 seconds): "
+            fi
+        done
+        
+        # Check if timeout occurred
+        if [[ -z "$ssl_type" ]] && { (( i == 0 )) || truthy "$accept_defaults"; }; then
+            echo "No input received within 10 seconds. Defaulting to 'OpenSSL'."
+            enable_library "openssl"
+            disable_library "gnutls"
+            disable_library "libtls"
+            disable_library "mbedtls"
+        fi
+    done
+    case "${ssl_type,,}" in
+        1|openssl|"") 
+            enable_library "openssl"
+            ;;
+        2|gnutls) 
+            enable_library "gnutls"
+            ;;
+        3|libtls) 
+            enable_library "libtls"
+            ;;
+        4|mbedtls) 
+            enable_library "mbedtls"
+            ;;
+        *)
+            echo -e 'Your choice was not valid, please try again.'
+            echo
+            ;;
+    esac
+}
+
+pick_cryto_lib() {
+    if truthy "$accept_defaults"; then
+      export crypto_type="gcrypt"
+      enable_library "gcrypt"
+      disable_library "gmp"
+      return 0
+    fi
+    export crypto_type=${1:-crypto_type}
+    while [[ ! "${crypto_type,,}" =~ ^([1-2]|gcrypt|gmp)$ ]]; do
+        # shellcheck disable=SC2199
+        if [[ -n "${unknown_opts[@]}" ]]; then
+            echo -e -n 'Unknown option(s)'
+            for unknown_opt in "${unknown_opts[@]}"; do
+                echo -e -n " '$unknown_opt'"
+            done
+            echo -e ', ignored.'
+            echo
+        fi
+        cat <<'EOF'
+Which cryptography library needed for secure streaming do you want to include?
+  1. gcrypt [default]
+  2. gmp
+EOF
+        local timeout=10
+        export crypto_type=""
+        echo -ne 'Input your choice [1-2] (defaulting to "gcrypt" in 10 seconds): '
+        for ((i=timeout; i>0; i--)); do
+            if read -r -t 1 crypto_type; then
+                break
+            fi
+            if (( i > 1 )); then
+                echo -ne "\rInput your choice [1-2] (defaulting to \"gcrypt\" in $((i-1)) seconds): "
+            else
+                echo -ne "\rInput your choice [1-2] (defaulting to \"gcrypt\" in 0 seconds): "
+            fi
+        done
+        
+        # Check if timeout occurred
+        if [[ -z "$crypto_type" ]] && { (( i == 0 )) || truthy "$accept_defaults"; }; then
+            echo "No input received within 10 seconds. Defaulting to 'gcrypt'."
+            enable_library "gcrypt"
+            disable_library "gmp"
+        fi
+    done
+    case "${crypto_type,,}" in
+        1|gcrypt|"") 
+            enable_library "gcrypt"
+            disable_library "gmp"
+            ;;
+        2|gmp) 
+            enable_library "gmp"
+            disable_library "gcrypt"
+            ;;
+        *)
+            echo -e 'Your choice was not valid, please try again.'
+            echo
+            ;;
+    esac
+}
+
+pick_mq_lib() {
+    if truthy "$accept_defaults"; then
+      export mq_type="both"
+      enable_library "librabbitmq"
+      enable_library "libzmq"
+      return 0
+    fi
+    export mq_type=${1:-mq_type}
+    while [[ ! "${mq_type,,}" =~ ^([1-3]|rabbitmq|zeromq|librabbitmq|libzmq)$ ]]; do
+        # shellcheck disable=SC2199
+        if [[ -n "${unknown_opts[@]}" ]]; then
+            echo -e -n 'Unknown option(s)'
+            for unknown_opt in "${unknown_opts[@]}"; do
+                echo -e -n " '$unknown_opt'"
+            done
+            echo -e ', ignored.'
+            echo
+        fi
+        cat <<'EOF'
+Which MQ library do you want to include?
+  1. RabbitMQ 
+  2. ZeroMQ
+  3. Both [default]
+EOF
+        local timeout=10
+        export mq_type=""
+        echo -ne 'Input your choice [1-2] (defaulting to "Both" in 10 seconds): '
+        for ((i=timeout; i>0; i--)); do
+            if read -r -t 1 mq_type; then
+                break
+            fi
+            if (( i > 1 )); then
+                echo -ne "\rInput your choice [1-2] (defaulting to \"Both\" in $((i-1)) seconds): "
+            else
+                echo -ne "\rInput your choice [1-2] (defaulting to \"Both\" in 0 seconds): "
+            fi
+        done
+        
+        # Check if timeout occurred
+        if [[ -z "$mq_type" ]] && { (( i == 0 )) || truthy "$accept_defaults"; }; then
+            echo "No input received within 10 seconds. Defaulting to 'gcrypt'."
+            enable_library "librabbitmq"
+            enable_library "libzmq"
+        fi
+    done
+    case "${crypto_type,,}" in
+        1|librabbitmq|rabbitmq) 
+            enable_library "librabbitmq"
+            disable_library "libzmq"
+            ;;
+        2|libzmq|zeromq|zmq) 
+            enable_library "libzmq"
+            disable_library "librabbitmq"
+            ;;
+        3|both|"")
+            enable_library "librabbitmq"
+            enable_library "libzmq"
+            ;;
+        *)
+            echo -e 'Your choice was not valid, please try again.'
+            echo
+            ;;
+    esac
+}
+
+print_build_steps() {
+	echo -e "Avaliable build steps: ${#BUILD_STEPS[@]}"
+	for i in "${!BUILD_STEPS[@]}"; do
+		echo "Index $i: ${BUILD_STEPS[i]}"
+	done
+}
+
+check_and_resolve() {
+    local PREF="$1"
+    local REDUNDANT="$2"
+    
+    local VAR_PREF="enable_${PREF//-/_}"
+    local VAR_REDUNDANT="enable_${REDUNDANT//-/_}"
+
+    # If both are marked as enabled (1)
+    if truthy "${!VAR_PREF}" && truthy "${!VAR_REDUNDANT}"; then
+        echo "  [RESOLVE] Collision detected between $PREF and $REDUNDANT. Preferring $PREF." >> "$LOG_FILE"
+        disable_library "$REDUNDANT"
+    fi
+}
+
+resolve_collisions() {
+    echo "[CONFIG] Resolving library collisions and preferences..." >> "$LOG_FILE"
+
+    check_and_resolve "libspeex" "libcodec2"
+    check_and_resolve "libopenmpt" "libmodplug"
+    check_and_resolve "libmp3lame" "libshine"
+    check_and_resolve "libvpl" "libmfx"
+    check_and_resolve "libaribcaption" "libaribb24"
+    check_and_resolve "libshaderc" "libglslang"
+    check_and_resolve "libsvtav1" "libaom"
+    check_and_resolve "libdav1d" "libaom"
+    check_and_resolve "libsvtav1" "librav1e"
+
+    if is_library_enabled "openssl"; then
+        is_library_enabled "gnutls" && disable_library "gnutls"
+        is_library_enabled "mbedtls" && disable_library "mbedtls"
+        is_library_enabled "libtls" && disable_library "libtls"
+    elif is_library_enabled "gnutls"; then
+        is_library_enabled "mbedtls" && disable_library "mbedtls"
+        is_library_enabled "libtls" && disable_library "libtls"
     fi
 }

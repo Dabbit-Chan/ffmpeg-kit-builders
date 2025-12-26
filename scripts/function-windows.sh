@@ -166,9 +166,8 @@ configure_ffmpeg_kit() {
 		config_options+=" --disable-static"
 	fi
 	change_dir "${ffmpeg_kit_src_dir}"
-  local build_date="-DFFMPEG_KIT_BUILD_DATE=$(date +%Y%m%d 2>>"${BASEDIR}"/build.log)"
-  export CFLAGS="${local_cflags} ${build_date}"
-  export CXXFLAGS="${local_cxxfalgs} ${build_date}"
+  export CFLAGS="${local_cflags}"
+  export CXXFLAGS="${local_cxxfalgs}"
   export LDFLAGS="$LDFLAGS -lpthread"
 	do_configure "${config_options}" "./configure" "${type_postfix}" || exit_message 1 "unable to configure ffmpeg-kit. see $LOG_FILE for details."
 
