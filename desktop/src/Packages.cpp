@@ -75,16 +75,16 @@ std::string ffmpegkit::Packages::getPackageName() {
             contains_ext_lib("gnutls") &&
             contains_ext_lib("kvazaar") &&
             contains_ext_lib("mp3lame") &&
-            contains_ext_lib("libass") &&
+            contains_ext_lib("ass") &&
             contains_ext_lib("iconv") &&
-            contains_ext_lib("libilbc") &&
-            contains_ext_lib("libtheora") &&
-            contains_ext_lib("libvidstab") &&
-            contains_ext_lib("libvorbis") &&
-            contains_ext_lib("libvpx") &&
-            contains_ext_lib("libwebp") &&
-            contains_ext_lib("libxml2") &&
-            contains_ext_lib("opencore-amr") &&
+            contains_ext_lib("ilbc") &&
+            contains_ext_lib("theora") &&
+            contains_ext_lib("vidstab") &&
+            contains_ext_lib("vorbis") &&
+            contains_ext_lib("vpx") &&
+            contains_ext_lib("webp") &&
+            contains_ext_lib("xml2") &&
+            (contains_ext_lib("opencore-amrnb") || contains_ext_lib("opencore-amrwb")) &&
             contains_ext_lib("opus") &&
             contains_ext_lib("shine") &&
             contains_ext_lib("snappy") &&
@@ -109,15 +109,15 @@ std::string ffmpegkit::Packages::getPackageName() {
             contains_ext_lib("gnutls") &&
             contains_ext_lib("kvazaar") &&
             contains_ext_lib("mp3lame") &&
-            contains_ext_lib("libass") &&
+            contains_ext_lib("ass") &&
             contains_ext_lib("iconv") &&
-            contains_ext_lib("libilbc") &&
-            contains_ext_lib("libtheora") &&
-            contains_ext_lib("libvorbis") &&
-            contains_ext_lib("libvpx") &&
-            contains_ext_lib("libwebp") &&
-            contains_ext_lib("libxml2") &&
-            contains_ext_lib("opencore-amr") &&
+            contains_ext_lib("ilbc") &&
+            contains_ext_lib("theora") &&
+            contains_ext_lib("vorbis") &&
+            contains_ext_lib("vpx") &&
+            contains_ext_lib("webp") &&
+            contains_ext_lib("xml2") &&
+            (contains_ext_lib("opencore-amrnb") || contains_ext_lib("opencore-amrwb")) &&
             contains_ext_lib("opus") &&
             contains_ext_lib("shine") &&
             contains_ext_lib("snappy") &&
@@ -136,11 +136,11 @@ std::string ffmpegkit::Packages::getPackageName() {
             contains_ext_lib("freetype") &&
             contains_ext_lib("fribidi") &&
             contains_ext_lib("kvazaar") &&
-            contains_ext_lib("libass") &&
+            contains_ext_lib("ass") &&
             contains_ext_lib("iconv") &&
-            contains_ext_lib("libtheora") &&
-            contains_ext_lib("libvpx") &&
-            contains_ext_lib("libwebp") &&
+            contains_ext_lib("theora") &&
+            contains_ext_lib("vpx") &&
+            contains_ext_lib("webp") &&
             contains_ext_lib("snappy")) {
             return "video";
         } else {
@@ -150,9 +150,9 @@ std::string ffmpegkit::Packages::getPackageName() {
 
     if (audio) {
         if (contains_ext_lib("mp3lame") &&
-            contains_ext_lib("libilbc") &&
-            contains_ext_lib("libvorbis") &&
-            contains_ext_lib("opencore-amr") &&
+            contains_ext_lib("ilbc") &&
+            contains_ext_lib("vorbis") &&
+            (contains_ext_lib("opencore-amrnb") || contains_ext_lib("opencore-amrwb")) &&
             contains_ext_lib("opus") &&
             contains_ext_lib("shine") &&
             contains_ext_lib("soxr") &&
@@ -167,7 +167,7 @@ std::string ffmpegkit::Packages::getPackageName() {
     if (httpsGpl) {
         if (contains_ext_lib("gmp") &&
             contains_ext_lib("gnutls") &&
-            contains_ext_lib("libvidstab") &&
+            contains_ext_lib("vidstab") &&
             contains_ext_lib("x264") &&
             contains_ext_lib("x265") &&
             contains_ext_lib("xvid")) {
@@ -187,7 +187,7 @@ std::string ffmpegkit::Packages::getPackageName() {
     }
 
     if (minGpl) {
-        if (contains_ext_lib("libvidstab") &&
+        if (contains_ext_lib("vidstab") &&
             contains_ext_lib("x264") &&
             contains_ext_lib("x265") &&
             contains_ext_lib("xvid")) {
@@ -202,38 +202,159 @@ std::string ffmpegkit::Packages::getPackageName() {
 
 std::shared_ptr<std::set<std::string>> ffmpegkit::Packages::getExternalLibraries() {
     const std::set<const char*> supportedExternalLibraries{
+        "alsa",
+        "amf",
+        "aom",
+        "appkit",
+        "aribb24",
+        "aribcaption",
+        "ass",
+        "audiotoolbox",
+        "avfoundation",
+        "avisynth",
+        "bluray",
+        "bs2b",
+        "caca",
+        "cdio",
+        "celt",
+        "chromaprint",
+        "codec2",
+        "coreimage",
+        "cuda-llvm",
+        "cuda-nvcc",
+        "cuvid",
+        "d3d11va",
+        "d3d12va",
         "dav1d",
+        "davs2",
+        "dc1394",
+        "decklink",
+        "drm",
+        "dvdnav",
+        "dvdread",
+        "dxva2",
+        "fdk-aac",
+        "ffnvcodec",
+        "flite",
         "fontconfig",
+        "frei0r",
         "freetype",
         "fribidi",
+        "gcrypt",
+        "glslang",
+        "gme",
         "gmp",
         "gnutls",
-        "kvazaar",
-        "mp3lame",
-        "libaom",
-        "libass",
+        "gsm",
+        "harfbuzz",
         "iconv",
-        "libilbc",
-        "libtheora",
-        "libvidstab",
-        "libvorbis",
-        "libvpx",
-        "libwebp",
-        "libxml2",
-        "opencore-amr",
+        "iec61883",
+        "ilbc",
+        "jack",
+        "jni",
+        "jxl",
+        "klvanc",
+        "kvazaar",
+        "ladspa",
+        "lc3",
+        "lcevc-dec",
+        "lcms2",
+        "lensfun",
+        "lv2",
+        "mbedtls",
+        "mediacodec",
+        "mediafoundation",
+        "metal",
+        "mfx",
+        "mmal",
+        "modplug",
+        "mp3lame",
+        "mysofa",
+        "npp",
+        "nvdec",
+        "nvenc",
+        "oapv",
+        "ohcodec",
+        "omx",
+        "omx-rpi",
+        "openal",
+        "opencl",
+        "opencv",
+        "opencore-amrnb",
+        "opencore-amrwb",
+        "opengl",
         "openh264",
+        "openjpeg",
+        "openmpt",
+        "openssl",
+        "openvino",
         "opus",
+        "placebo",
+        "pocketsphinx",
+        "pulse",
+        "qrencode",
+        "quirc",
+        "rabbitmq",
+        "rav1e",
+        "rist",
+        "rkmpp",
+        "rsvg",
+        "rtmp",
         "rubberband",
+        "schannel",
         "sdl2",
+        "securetransport",
+        "shaderc",
         "shine",
+        "smbclient",
         "snappy",
+        "sndio",
         "soxr",
         "speex",
+        "srt",
+        "ssh",
+        "svtav1",
+        "tensorflow",
         "tesseract",
+        "theora",
+        "tls",
+        "torch",
         "twolame",
+        "uavs3d",
+        "v4l2",
+        "v4l2-m2m",
+        "vaapi",
+        "vapoursynth",
+        "vdpau",
+        "videotoolbox",
+        "vidstab",
+        "vmaf",
+        "vo-amrwbenc",
+        "vorbis",
+        "vpl",
+        "vpx",
+        "vulkan",
+        "vvenc",
+        "webp",
+        "whisper",
         "x264",
         "x265",
-        "xvid"};
+        "xavs",
+        "xavs2",
+        "xcb",
+        "xcb-shape",
+        "xcb-shm",
+        "xcb-xfixes",
+        "xevd",
+        "xeve",
+        "xlib",
+        "xml2",
+        "xvid",
+        "zimg",
+        "zmq",
+        "zvbi"
+    };
+
     std::string buildConfiguration(avutil_configuration());
     char libraryName1[50];
     char libraryName2[50];
