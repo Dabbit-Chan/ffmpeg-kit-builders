@@ -103,20 +103,25 @@ RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --no
 RUN chmod -R a+w /usr/local/cargo /usr/local/rustup
 
 # --- INSTALL FLUTTER ---
-# 1. Install dependencies (already covered by your apt-get, but curl/git/unzip are vital)
-# 2. Clone Flutter to a system directory
+# 1. Clone Flutter to a system directory
 RUN git clone https://github.com/flutter/flutter.git -b stable /usr/local/flutter
 
-# 3. Set permissions so 'vscode' user can use/upgrade it
-RUN chown -R root:users /usr/local/flutter && \
-    chmod -R 775 /usr/local/flutter
-# 4. Add to PATH permanently
+# 2. Set permissions: Give 'vscode' ownership so it can write cache/locks
+#    (Assuming 'vscode' user exists; if using a standard devcontainer base, it does)
+RUN chown -R vscode:vscode /usr/local/flutter
+
+# 3. Add to PATH permanently
 ENV PATH="/usr/local/flutter/bin:${PATH}"
 
-# 5. Mark directory as safe for Git (fixes "dubious ownership" error)
+# 4. Mark directory as safe for Git to suppress "dubious ownership" warnings
 RUN git config --system --add safe.directory /usr/local/flutter
 
-RUN dpkg --add-architecture i686
+# 5. Pre-download development binaries (run as vscode to ensure permissions stay correct)
+USER vscode
+RUN flutter config --no-analytics && flutter precache
+USER root
+
+RUN dpkg --add-architecture i386
 
 RUN mkdir -pm755 /etc/apt/keyrings && \
     wget -O /etc/apt/keyrings/winehq-archive.key https://dl.winehq.org/wine-builds/winehq.key && \
@@ -124,3 +129,30 @@ RUN mkdir -pm755 /etc/apt/keyrings && \
 
 RUN apt-get update && \
     apt-get install -y --install-recommends winehq-stable
+
+# --- INSTALL ANDROID SDK ---
+# 1. Install OpenJDK 17 (Required for Android SDK)
+RUN apt-get update && apt-get install -y openjdk-17-jdk unzip
+
+# 2. Set Environment Variables
+ENV ANDROID_HOME=/usr/local/android-sdk
+ENV PATH="${PATH}:${ANDROID_HOME}/cmdline-tools/latest/bin:${ANDROID_HOME}/platform-tools"
+
+# 3. Download Android Command Line Tools
+#    (Note: The tool requires a specific folder structure: cmdline-tools/latest/bin)
+RUN mkdir -p ${ANDROID_HOME}/cmdline-tools && \
+    curl -o /tmp/cmdline-tools.zip -L https://dl.google.com/android/repository/commandlinetools-linux-13114758_latest.zip && \
+    unzip -q /tmp/cmdline-tools.zip -d ${ANDROID_HOME}/cmdline-tools && \
+    mv ${ANDROID_HOME}/cmdline-tools/cmdline-tools ${ANDROID_HOME}/cmdline-tools/latest && \
+    rm /tmp/cmdline-tools.zip
+
+# 4. Fix Permissions: Give 'vscode' ownership so it can write updates/licenses
+RUN chown -R vscode:vscode ${ANDROID_HOME}
+
+# 5. Accept Licenses & Install Basics (Run as vscode to keep permissions correct)
+USER vscode
+RUN yes | sdkmanager --licenses && \
+    sdkmanager "platform-tools" "platforms;android-34" "build-tools;34.0.0"
+USER root
+
+RUN git config --global --add safe.directory '*'

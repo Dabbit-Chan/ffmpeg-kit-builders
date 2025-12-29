@@ -1,3 +1,4 @@
+
 # FFmpeg-Kit Builders
 
 Cross-platform build system for FFmpeg and FFmpegKit supporting Linux and Windows platforms.
@@ -8,104 +9,137 @@ This repository provides a comprehensive build system for FFmpeg and FFmpegKit t
 
 ## Platform Support
 
-- **Linux**: Native builds for x86_64 and i686 architecture with shared libraries (.so) and static libraries (.a)
-- **Windows**: Cross-compilation from Linux hosts using MinGW-w64 toolchain with shared libraries (.dll) and static mingw libraries (.a). Note that MSVC ABI is not supported.
+- **Linux**: Native builds for x86_64 and i686 architecture with shared libraries (.so) and static libraries (.a).
+- **Windows**: Cross-compilation from Linux hosts using MinGW-w64 toolchain with shared libraries (.dll) and static mingw libraries (.a). 
+  - *Note: MSVC ABI is not supported.*
 
 ## Quick Start
 
 ### Prerequisites
 
-- Linux host or WSL (Ubuntu/Debian recommended)
-- Minimum 600MB RAM, 2GB+ recommended for parallel builds
-- 285GB available disk space for full build with all dependencies 
-- Basic build tools: git, make, cmake, ninja, meson, pkg-config
+- **OS**: Linux host or WSL2 (Ubuntu 22.04+/Debian recommended).
+- **RAM**: Minimum 600MB (Hard limit check in script), **4GB+ recommended** for linking static binaries.
+- **Disk Space**: ~285GB available disk space for a full build with all dependencies and intermediate object files.
+- **Tools**: `git`, `make`, `cmake`, `ninja`, `meson`, `pkg-config`, `curl`, `tar`, `unzip`, `sudo`.
 
 ### Using the Unified Entry Point
 
-The `runner.sh` script is the unified entry point for all builds. It can be used interactively or with explicit command-line options.
-
-Additional preset scripts can be found under `scripts/builds`
+The `runner.sh` script is the unified entry point for all builds. It can be used interactively or with explicit command-line options. Note that the script requires `sudo` privileges to install system packages and configure the build environment.
 
 ### Common Build Scenarios
+
 ```bash
 # Interactive mode - prompts for platform and architecture
-./runner.sh
+sudo ./runner.sh
 
-# Non-interactive mode with explicit options to enable gpl build with audio libraries
-./runner.sh --host=linux --arch=x86_64 -y --enable-gpl --enable-audio
+# Non-interactive mode: Build GPL version with audio libraries for Linux x86_64
+sudo ./runner.sh --host=linux --arch=x86_64 -y --enable-gpl --enable-audio
 
-# Build for Windows 64-bit with shared libraries and include all video bundle libraries
-./runner.sh --host=linux --arch=x86_64 --enable-gpl --enable-shared --video-bundle
+# Cross-compile for Windows 64-bit (Shared Libs + Video Bundle)
+sudo ./runner.sh --host=windows --arch=x86_64 --enable-gpl --enable-shared --video-bundle
 
 # Build static libraries for Linux
-./runner.sh --host=linux --arch=x86_64 --enable-static
+sudo ./runner.sh --host=linux --arch=x86_64 --enable-static
 
 # Build for Linux with specific additional libraries
-./runner.sh --host=linux --arch=x86_64 --enable-fontconfig
+sudo ./runner.sh --host=linux --arch=x86_64 --enable-fontconfig --enable-freetype
 
-# Force re-build for Linux all libraries, ffmpeg and ffmpeg-kit with video hardware bundle
-./runner.sh --host=linux --arch=x86_64 -f --video-hw-bundle
+# Force re-build for Linux (all libraries + FFmpegKit) with hardware acceleration
+sudo ./runner.sh --host=linux --arch=x86_64 -f --video-hw-bundle
+
+# Create a redistributable release zip
+sudo ./runner.sh --host=linux --arch=x86_64 --full-bundle --release
 ```
 
 ## Architecture
 
-This repository implements a three-tier build architecture with platform abstraction.
+The build system implements a modular architecture:
 
-The architecture consists of:
-1. **Unified Entry Point** - `runner.sh` script that handles platform selection and argument parsing 
-2. **Build Orchestration** - `scripts/main-linux.sh`, `scripts/main-windows.sh` that coordinate build phases
-3. **Execution Primitives** - `scripts/function.sh` and platform-specific extensions that implement common build functions
-4. **Build Execution** - `scripts/run-linux.sh`, `scripts/run-windows.sh` that executes individual library builders
+1. **Unified Entry Point**: `runner.sh` handles platform selection, argument parsing, and environment checks.
+2. **Orchestration**: `scripts/main-linux.sh` and `scripts/main-windows.sh` coordinate the dependency tree.
+3. **Execution Primitives**: `scripts/function.sh` contains the core logic for downloading, configuring, and compiling generic C/C++ projects.
+4. **Library Recipes**: `scripts/run-linux.sh` and `scripts/run-windows.sh` contain specific build instructions for 100+ libraries.
 
-## Repository Structure
+## Output Bundle Structure
 
-- `README.md` - This overview document
-- `runner.sh` - Unified build entry point for all platforms
-- `scripts/` - Shared build orchestration and functions
-  - `main-linux.sh`, `main-windows.sh` - Platform orchestrators
-  - `function.sh` - Cross-platform build primitives
-  - `function-linux.sh`, `function-windows.sh` - Platform-specific extensions
-  - `variable.sh` - Build configuration and targets
-  - `run-linux.sh`, `run-windows.sh` - Individual library builders
+Artifacts are generated in the `prebuilt/` directory.
+
+```text
+prebuilt/
+├── {platform}-{arch}/                                # e.g., linux-x86_64
+│   ├── bundle-{platform}-{arch}-{type}/              # Unpacked Bundle
+│   │   └── ffmpeg-kit/
+│   │       ├── include/                              # Headers
+│   │       ├── lib/                                  # .so/.dll/.a files
+│   │       ├── bin/                                  # ffmpeg/ffprobe executables
+│   │       ├── pkgconfig/                            # .pc files for linkage
+│   │       └── licenses/                             # Extracted licenses
+│   └── releases/
+│       └── bundle-{platform}-{arch}-{type}.zip       # Redistributable ZIP (if --release used)
+```
 
 ## Build Phases
 
-The build system implements a six-phase build pipeline:
+1. **Setup**: Initialize paths, environment variables (`CFLAGS`, `LDFLAGS`), and architecture settings.
+2. **Toolchain**: Build or verify MinGW-w64 GCC 15+ toolchain (Windows targets only).
+3. **Dependencies**: Compile enabled external libraries (e.g., x264, openssl, freetype) sequentially.
+4. **FFmpeg**: Configure and build FFmpeg linking against the built dependencies.
+5. **FFmpegKit**: Build the C++ wrapper library (`libffmpegkit`).
+6. **Bundle**: Aggregate artifacts, fix paths in `pkg-config`, and collect licenses.
 
-| Phase | Function | Purpose |
-|-------|----------|---------|
-| 1 | `setup_build_environment`                    | Initialize paths, environment variables, architecture settings |
-| 2 | `install_cross_compiler`                     | Build or verify MinGW-w64 GCC 14 toolchain (Windows only) |
-| 3 | `build_all_ffmpeg_dependencies`              | Compile 100+ external libraries sequentially |
-| 4 | `configure_ffmpeg`, `install_ffmpeg`         | Configure and build FFmpeg with detected libraries |
-| 5 | `configure_ffmpeg_kit`, `install_ffmpeg_kit` | Build FFmpegKit wrapper library |
-| 6 | `create_<platform>_bundle`                            | Aggregate artifacts into relocatable bundle |
+## Compiler Toolchain
+
+### Windows (Cross-Compile)
+Windows builds use the MinGW-w64 GCC 15.x toolchain. If running on a native Linux host (not a pre-configured Docker container), you **must** install the toolchain manually:
+
+```bash
+# Run as root/sudo
+apt update && apt install binutils
+
+# Download MinGW-w64 GCC 15
+wget https://github.com/xpack-dev-tools/mingw-w64-gcc-xpack/releases/download/v15.2.0-2/xpack-mingw-w64-gcc-15.2.0-2-linux-x64.tar.gz
+mkdir -p tools
+tar xf xpack-mingw-w64-gcc-15.2.0-2-linux-x64.tar.gz -C tools
+rm xpack-mingw-w64-gcc-15.2.0-2-linux-x64.tar.gz
+
+# Install to /usr/local
+mv tools/xpack-mingw-w64-gcc-15.2.0-2 /usr/local/mingw-w64
+chown -R root:users /usr/local/mingw-w64
+chmod -R 775 /usr/local/mingw-w64
+```
+
+### Rust Toolchain
+Many modern multimedia libraries (rav1e, dovi_tool) require Rust.
+
+```bash
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --no-modify-path
+source $HOME/.cargo/env
+
+# Add Windows target for cross-compilation
+rustup target add x86_64-pc-windows-gnu
+# rustup target add i686-pc-windows-gnu # Uncomment for 32-bit builds
+
+cargo install cargo-c
+```
 
 ## Command-Line Options
 
-### General Options
+### General & Platform
+| Option | Description |
+|--------|-------------|
+| `-h, --help` | Display help |
+| `-d, --debug` | Build with debug symbols (`-g`) and no optimization |
+| `-f, --force` | Force rebuild of all dependencies (cleans `already_built` flags) |
+| `-y` | Non-interactive mode (accept defaults) |
+| `--release` | Create a ZIP archive of the final bundle |
+| `--host=*` | Target platform: `linux` or `windows` |
+| `--arch=*` | Target architecture: `x86_64` or `i686` |
 
-| Option | Default | Description |
-|--------|---------|-------------|
-| `-h, --help`    | - | Display this help and exit |
-| `-d, --debug`   | - | Build with debug information |
-| `-v, --version` | - | Display version and exit |
-| `-f, --force`   | - | Force rebuild of all dependencies |
-| `-y`            | - | Disable interactive execution, accept all default options |
-
-### Platform Selection Options
-
-| Option | Default | Description |
-|--------|---------|-------------|
-| `--host-platform=*\|--host=*` | - | Target platform [linux|windows] |
-| `--host-arch=*\|--arch=*`     | - | Host CPU architecture [i686|x86_64] (32-bit or 64-bit) |
-
-### Licensing Options
-
-| Option | Default | Description |
-|--------|---------|-------------|
-| `--enable-gpl`                | - | Allow building GPL libraries, created libs will be licensed under the GPLv3.0 |
-| `--enable-nonfree\|--nonfree` | - | Build binaries will be non-redistributable |
+### Licensing
+| Option | Description |
+|--------|-------------|
+| `--enable-gpl` | Enables GPL libraries (x264, xvid, etc.). Resulting binary is **GPLv3**. |
+| `--enable-nonfree` | Enables non-free libraries (fdk-aac, decklink). Resulting binary is **Non-Redistributable**. |
 
 ### Feature presets
 | Option | Description |
@@ -160,63 +194,6 @@ The build system implements a six-phase build pipeline:
 | `--list-libraries`                    |   | Lists ffmpeg configuration including extra libraries and exit |
 | `--enable-[library name]`             |   | Enable extra ffmpeg libraries. Run --list-libraries and see under "External library support" |
 | `--ff-*`                              |   | Pass additional ffmpeg parameters prefixed by ff-* to ffmpeg configure. No additional checks done |
-
-## Compiler Toolchain
-
-For Windows builds, the system uses MinGW-w64 GCC toolchain with the following configuration:
-
-- GCC
-- MinGW-w64 15.x
-- Binutils
-
-### Toolchain installation:
-
-Note: building has only been tested with Ubuntu 24.x. If you are running any other distro you are on your own!
-
-- If running on Docker/Devcontainer the toolchain is installed as part of container build
-- If running on native linux you mist install the latest MinGW toolchain using below command (Do not use pkg manager! it does not have the latest MinGW release)
-
-```bash
-# be sure to run with sudo!
-apt update
-apt install binutils
-wget https://github.com/xpack-dev-tools/mingw-w64-gcc-xpack/releases/download/v15.2.0-2/xpack-mingw-w64-gcc-15.2.0-2-linux-x64.tar.gz
-mkdir -p tools
-tar xf xpack-mingw-w64-gcc-15.2.0-2-linux-x64.tar.gz -C tools
-rm xpack-mingw-w64-gcc-15.2.0-2-linux-x64.tar.gz
-mv tools/xpack-mingw-w64-gcc-15.2.0-2 /usr/local/mingw-w64
-chown -R root:users /usr/local/mingw-w64
-chmod -R 775 /usr/local/mingw-w64
-```
-- You also need latest version of rust toolchain which is not available through pkg manager. Run below commands:
-
-```bash
-# be sure to run with sudo!
-curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --no-modify-path
-. /usr/local/cargo/env
-rustup target add x86_64-pc-windows-gnu
-# rustup target add i686-pc-windows-gnu # uncomment if you plan on building 32-bit
-cargo install cargo-c
-# you may also have to modify your env paths which you will 
-# have to figure out on your own depending on your setup
-```
-- If you plan on running the Windows builds on Linux for testing, etc. you will need wine.
-
-## Output Bundle Structure
-
-The final bundle contains a complete, relocatable distribution:
-
-```
-prebuilt/
-├── {platform}-{arch}
-│     └──bundle-{platform}-{arch}-{build-type}/
-│         └──ffmpeg-kit/
-│            ├── include/                           # FFmpeg and FFmpegKit headers
-│            ├── lib/                               # Shared libraries (.so) or (.a) and import libraries
-│            ├── bin/                               # Executables (ffmpeg, ffprobe) or (ffmpeg.exe, ffprobe.exe)
-│            ├── pkgconfig/                         # Pkg-config files with bundle-relative paths
-│            └── licenses/                          # All dependency licenses
-```
 
 ## Bundle Matrix
 
@@ -409,12 +386,42 @@ xlib|X Window System protocol client library written in the C programming langua
 
 ## Troubleshooting
 
-### Common Issues
+1.  **WSL Issues**:
+    *   If using WSL, **WSL 2** is strongly recommended for build performance.
+    *   If cross-compiling, you may need to disable binfmt interop:
+        ```bash
+        sudo bash -c 'echo 0 > /proc/sys/fs/binfmt_misc/WSLInterop'
+        ```
+2.  **Insufficient Memory**:
+    *   Linking static `libtensorflow` or `libtorch` requires significant RAM. If the build crashes during the final link step, increase swap space or allocated RAM to at least 8GB.
+3.  **Missing "Configure"**:
+    *   If a library fails because it cannot find `./configure`, ensure `autoconf`, `automake`, and `libtool` are installed. The script attempts to generate them via `autoreconf -fiv` if missing.
 
-1. **Insufficient Memory**: Build requires minimum 600MB RAM
-2. **Toolchain Build Fails**: Ensure 30+ minutes available for GCC compilation (Windows builds)
-3. **Missing Dependencies**: Install required build tools on host system
+## License
 
-### Build Logs
+The build scripts in this repository are licensed under the MIT License or Apache 2.0 (refer to `LICENSE` file). 
 
-All build operations are logged to `build.log` in the repository root.
+**Important**: The **binaries** you build will be subject to the licenses of the enabled libraries. 
+*   Enabling `--enable-gpl` makes the resulting FFmpeg binary **GPLv3**.
+*   Enabling `--enable-nonfree` makes the resulting binary **unredistributable** in many jurisdictions.
+*   Check the `prebuilt/.../licenses` folder in your output bundle for details on dependencies used.## Troubleshooting
+
+1.  **WSL Issues**:
+    *   If using WSL, **WSL 2** is strongly recommended for build performance.
+    *   If cross-compiling, you may need to disable binfmt interop:
+        ```bash
+        sudo bash -c 'echo 0 > /proc/sys/fs/binfmt_misc/WSLInterop'
+        ```
+2.  **Insufficient Memory**:
+    *   Linking static `libtensorflow` or `libtorch` requires significant RAM. If the build crashes during the final link step, increase swap space or allocated RAM to at least 8GB.
+3.  **Missing "Configure"**:
+    *   If a library fails because it cannot find `./configure`, ensure `autoconf`, `automake`, and `libtool` are installed. The script attempts to generate them via `autoreconf -fiv` if missing.
+
+## License
+
+The build scripts in this repository are licensed under the MIT License or Apache 2.0 (refer to `LICENSE` file). 
+
+**Important**: The **binaries** you build will be subject to the licenses of the enabled libraries. 
+*   Enabling `--enable-gpl` makes the resulting FFmpeg binary **GPLv3**.
+*   Enabling `--enable-nonfree` makes the resulting binary **unredistributable** in many jurisdictions.
+*   Check the `prebuilt/.../licenses` folder in your output bundle for details on dependencies used.

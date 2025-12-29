@@ -24,8 +24,8 @@
 
 static NSString *const PLATFORM_NAME = @"ios";
 
-static NSString *const METHOD_CHANNEL = @"flutter.arthenica.com/ffmpeg_kit";
-static NSString *const EVENT_CHANNEL = @"flutter.arthenica.com/ffmpeg_kit_event";
+static NSString *const METHOD_CHANNEL = @"flutter.akashskypatel.com/ffmpeg_kit";
+static NSString *const EVENT_CHANNEL = @"flutter.akashskypatel.com/ffmpeg_kit_event";
 
 // LOG CLASS
 static NSString *const KEY_LOG_SESSION_ID = @"sessionId";

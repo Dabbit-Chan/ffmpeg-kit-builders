@@ -153,6 +153,20 @@ if test -d "patches"; then
 fi
 
 # ==============================================================================
+# Optimization Flags (Size & Stripping)
+# ==============================================================================
+AC_MSG_NOTICE([Applying size optimizations...])
+
+SIZE_FLAGS="-Os -ffunction-sections -fdata-sections"
+CFLAGS="$CFLAGS $SIZE_FLAGS"
+CXXFLAGS="$CXXFLAGS $SIZE_FLAGS"
+
+if test "x$target_os_clean" != "xwindows"; then
+    CFLAGS="$CFLAGS -fvisibility=hidden"
+    CXXFLAGS="$CXXFLAGS -fvisibility=hidden"
+fi
+
+# ==============================================================================
 # Set compiler flags
 # ==============================================================================
 
@@ -209,7 +223,8 @@ if test "x$target_os_clean" = "xwindows"; then
         LIBRARY_EXT="a"; ARCHIVE_EXT="a"
     fi
 
-    WINDOWS_LDFLAGS="-Wl,--export-all-symbols -Wl,--enable-auto-import -Wl,--allow-multiple-definition"
+    # WINDOWS_LDFLAGS="-Wl,--export-all-symbols -Wl,--enable-auto-import -Wl,--allow-multiple-definition"
+    WINDOWS_LDFLAGS="-Wl,--enable-auto-import -Wl,--allow-multiple-definition"
 else
     if test "x$enable_shared" = "xyes"; then LIBRARY_EXT="so"; ARCHIVE_EXT="so";
     else LIBRARY_EXT="a"; ARCHIVE_EXT="a"; fi

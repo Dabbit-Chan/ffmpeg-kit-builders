@@ -55,7 +55,7 @@ General Options:
   -y                                                            accept all defaults and disables interactive prompts
 
 Licensing options:
-	[--enable-gpl|--gpl]                                          allow building GPL libraries, created libs will be 
+	--enable-gpl|--gpl                                            allow building GPL libraries, created libs will be 
 	                                                              licensed under the GPLv3.0 [no]
 	--enable-nonfree|--nonfree                                    build binaries will be non-redistributable
 
@@ -87,8 +87,8 @@ Bundle Presets (pre-defined collections of libraries to include in ffmpeg-kit bu
   --full-bundle                                                 contains https + audio + video + hardware + ai + streaming + ssh + smb + mq libraries in the final bundle
 
 Build Options:
-	--host-platform=*|--host=*                                    where the compiled program will run [linux|windows]
-	--host-arch=*|--arch=*                                        host cpu architecture [i686|x86_64] (32-bit or 64-bit)
+	--host-platform=|--host=(linux|windows)                       where the compiled program will run
+	--host-arch=|--arch=(i686|x86_64)                             host cpu architecture (32-bit or 64-bit)
 	--lto                                                         enable Linktime optimization
 	--ffmpeg-git-checkout-version=[release/8.0]                   if you want to build a particular version of FFmpeg, 
 	                                                              ex: n3.1.1 or a specific git hash
@@ -120,7 +120,6 @@ Advanced Dependency Control:
 	--build-ffmpeg-kit-only                                       build ffmpeg-kit binaries and bundle only Does not (re)build 
                                                                 ext-library dependencies. Missing dependencies will cause a failure
 	--list-libraries                                              lists available ext-libraries that can be included
-  --list-excluded                                               list excluded libraries from small build
 
 Dynamic Library Control:
 	--enable-[library name]                                       enable specific library (e.g. --enable-libx264)
@@ -514,36 +513,36 @@ if truthy "$enable_nonfree"; then
   for making sure you have the appropriate licensing to distribute 
   the binaries!" | tee -a "$LOG_FILE"
 
-  truthy "$enable_audio" || truthy "$enable_full" && apply_preset "$CONFIG_AUDIO_NON_GPL"
-  truthy "$enable_video" || truthy "$enable_full" && apply_preset "$CONFIG_VIDEO_NON_GPL"
-  truthy "$enable_streaming" || truthy "$enable_full" && apply_preset "$CONFIG_STREAMING_NON_GPL"
-  truthy "$enable_hardware" || truthy "$enable_full" && apply_preset "$CONFIG_HARDWARE_NON_GPL"
-  truthy "$enable_audio_ai" || truthy "$enable_full" && apply_preset "$CONFIG_VIDEO_AI_NON_GPL"
-  truthy "$enable_video_ai" || truthy "$enable_full" && apply_preset "$CONFIG_VIDEO_AI_NON_GPL"
-  truthy "$enable_ssh" || truthy "$enable_full" && apply_preset "$CONFIG_SSH_NON_GPL"
+  truthy "$enable_audio" || truthy "$enable_full" && apply_preset "$CONFIG_AUDIO_NON_FREE"
+  truthy "$enable_video" || truthy "$enable_full" && apply_preset "$CONFIG_VIDEO_NON_FREE"
+  truthy "$enable_streaming" || truthy "$enable_full" && apply_preset "$CONFIG_STREAMING_NON_FREE"
+  truthy "$enable_hardware" || truthy "$enable_full" && apply_preset "$CONFIG_HARDWARE_NON_FREE"
+  truthy "$enable_audio_ai" || truthy "$enable_full" && apply_preset "$CONFIG_VIDEO_AI_NON_FREE"
+  truthy "$enable_video_ai" || truthy "$enable_full" && apply_preset "$CONFIG_VIDEO_AI_NON_FREE"
+  truthy "$enable_ssh" || truthy "$enable_full" && apply_preset "$CONFIG_SSH_NON_FREE"
 
   if [[ "${host_platform,,}" != "windows" ]]; then
-    truthy "$enable_smb" || truthy "$enable_full" && apply_preset "$CONFIG_SMB_NON_GPL"
+    truthy "$enable_smb" || truthy "$enable_full" && apply_preset "$CONFIG_SMB_NON_FREE"
   fi
 
   case "${host_platform,,}" in
     linux)
-    truthy "$enable_full" && apply_preset "$CONFIG_LINUX_NON_GPL"
+    truthy "$enable_full" && apply_preset "$CONFIG_LINUX_NON_FREE"
     ;;
     windows)
-    truthy "$enable_full" && apply_preset "$CONFIG_WINDOWS_NON_GPL"
+    truthy "$enable_full" && apply_preset "$CONFIG_WINDOWS_NON_FREE"
     ;;
     android)
-    truthy "$enable_full" && apply_preset "$CONFIG_ANDROID_NON_GPL"
+    truthy "$enable_full" && apply_preset "$CONFIG_ANDROID_NON_FREE"
     ;;
     apple)
-    truthy "$enable_full" && apply_preset "$CONFIG_APPLE_NON_GPL"
+    truthy "$enable_full" && apply_preset "$CONFIG_APPLE_NON_FREE"
     ;;
     rpi)
-    truthy "$enable_full" && apply_preset "$CONFIG_RPI_NON_GPL"
+    truthy "$enable_full" && apply_preset "$CONFIG_RPI_NON_FREE"
     ;;
     oh|openharmony|open-harmony|open_harmony)
-    truthy "$enable_full" && apply_preset "$CONFIG_OH_NON_GPL"
+    truthy "$enable_full" && apply_preset "$CONFIG_OH_NON_FREE"
     ;;
     *)
     ;;
@@ -624,6 +623,48 @@ if truthy "$enable_streaming"; then
       pick_cryto_lib
     fi
   fi
+fi
+
+# disable strict gpl lobraries
+if ! truthy "$enable_gpl"; then
+  disable_library "libx264"
+  disable_library "libx265"
+  disable_library "libxvid"
+  disable_library "frei0r"
+  disable_library "libdvdread"
+  disable_library "v4l2-m2m"
+  disable_library "avisynth"
+  disable_library "libjack"
+  disable_library "libbs2b"
+  disable_library "libcdio"
+  disable_library "libdvdnav"
+  disable_library "librubberband"
+  disable_library "libsmbclient"
+  disable_library "libvidstab"
+fi
+# disable libraries that have restrictive lincenses
+if ! truthy "$enable_nonfree"; then
+  disable_library "appkit"
+  disable_library "avfoundation"
+  disable_library "coreimage"
+  disable_library "metal"
+  disable_library "audiotoolbox"
+  disable_library "videotoolbox"
+  disable_library "securetransport"
+  disable_library "mmal"
+  disable_library "omx-rpi"
+  disable_library "d3d11va"
+  disable_library "d3d12va"
+  disable_library "dxva2"
+  disable_library "mediafoundation"
+  disable_library "schannel"
+  disable_library "cuda-nvcc"
+  disable_library "cuvid"
+  disable_library "ffnvcodec"
+  disable_library "libnpp"
+  disable_library "nvdec"
+  disable_library "nvenc"
+  disable_library "cuda-llvm"
 fi
 
 resolve_collisions

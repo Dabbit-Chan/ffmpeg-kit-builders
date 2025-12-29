@@ -29,6 +29,7 @@ rm -rf \
   *_already_* \
   already_autoreconf_* \
   src/.deps \
-  src/.libs
+  src/.libs \
+  src/*.d
 
 autoreconf --install --force

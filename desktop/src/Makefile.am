@@ -36,10 +36,13 @@ AM_CPPFLAGS = $(CPPFLAGS) -DFFMPEG_KIT_BUILD_DATE=@FFMPEG_KIT_BUILD_DATE@
 endif
 
 # Linker Flags
+# libffmpegkit_la_LDFLAGS = -no-undefined -avoid-version \
+#                           -Wl,--export-all-symbols -Wl,--enable-auto-import \
+#                           -Wl,--allow-multiple-definition
 libffmpegkit_la_LDFLAGS = -no-undefined -avoid-version \
-                          -Wl,--export-all-symbols -Wl,--enable-auto-import \
-                          -Wl,--allow-multiple-definition
-
+                          -Wl,--gc-sections \
+                          @WINDOWS_LDFLAGS@
+                          
 # ==============================================================================
 # Header Installation
 # ==============================================================================
@@ -134,9 +137,19 @@ $(MONOLITH_LIB_NAME): libffmpegkit.la
 	    -l*) \
 	      name=$${flag#-l}; \
 	      case "$$name" in \
-	        m|c|pthread|dl|rt|stdc++|gcc|gcc_s|mingw*|moldname|kernel32|user32|gdi32|winmm|ws2_32|iphlpapi|advapi32|shell32|ole32|uuid|bcrypt|psapi|atomic|blkid|util|mount|selinux|sepol) \
+	        # --- Category A: Standard C/C++ & Math Runtimes (Do Not Bundle) --- \
+	        m|c|pthread|dl|rt|stdc++|gcc|gcc_s|atomic) \
 	          raw_libs_to_keep="$$raw_libs_to_keep -l$$name"; \
 	          ;; \
+	        # --- Category B: Windows System Libraries (Do Not Bundle) --- \
+	        mingw*|moldname|kernel32|user32|gdi32|winmm|ws2_32|iphlpapi|advapi32|shell32|ole32|uuid|bcrypt|psapi|shlwapi|crypt32|secur32) \
+	          raw_libs_to_keep="$$raw_libs_to_keep -l$$name"; \
+	          ;; \
+	        # --- Category C: Linux/System Utilities (Do Not Bundle) --- \
+	        blkid|util|mount|selinux|sepol|resolv) \
+	          raw_libs_to_keep="$$raw_libs_to_keep -l$$name"; \
+	          ;; \
+	        # --- Category D: Bundled Libraries (FFmpeg, x264, ssl, etc.) --- \
 	        *) \
 	          found=no; \
 	          for dir in $$search_paths; do \

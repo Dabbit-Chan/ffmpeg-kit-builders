@@ -44,7 +44,7 @@ import 'ffmpeg_kit_factory.dart';
 class FFmpegKitInitializer {
   static FFmpegKitPlatform _platform = FFmpegKitPlatform.instance;
   static const EventChannel _eventChannel = const EventChannel(
-    'flutter.arthenica.com/ffmpeg_kit_event',
+    'flutter.akashskypatel.com/ffmpeg_kit_event',
   );
 
   static FFmpegKitInitializer _instance = new FFmpegKitInitializer();
@@ -303,7 +303,7 @@ class FFmpegKitInitializer {
   Future<int?> _getLogLevel() async {
     try {
       // const MethodChannel _channel =
-      // const MethodChannel('flutter.arthenica.com/ffmpeg_kit');
+      // const MethodChannel('flutter.akashskypatel.com/ffmpeg_kit');
       // return await _channel.invokeMethod<int>('getLogLevel');
 
       return _platform.ffmpegKitFlutterInitializerGetLogLevel();

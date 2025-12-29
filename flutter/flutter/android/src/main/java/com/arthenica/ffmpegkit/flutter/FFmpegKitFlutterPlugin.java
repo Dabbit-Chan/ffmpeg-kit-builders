@@ -18,7 +18,7 @@
  * along with FFmpegKit.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-package com.arthenica.ffmpegkit.flutter;
+package com.akashskypatel.ffmpegkit.flutter;
 
 import android.app.Activity;
 import android.content.Context;
@@ -30,24 +30,24 @@ import android.util.Log;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
-import com.arthenica.ffmpegkit.AbiDetect;
-import com.arthenica.ffmpegkit.AbstractSession;
-import com.arthenica.ffmpegkit.FFmpegKit;
-import com.arthenica.ffmpegkit.FFmpegKitConfig;
-import com.arthenica.ffmpegkit.FFmpegSession;
-import com.arthenica.ffmpegkit.FFprobeKit;
-import com.arthenica.ffmpegkit.FFprobeSession;
-import com.arthenica.ffmpegkit.Level;
-import com.arthenica.ffmpegkit.LogRedirectionStrategy;
-import com.arthenica.ffmpegkit.MediaInformation;
-import com.arthenica.ffmpegkit.MediaInformationJsonParser;
-import com.arthenica.ffmpegkit.MediaInformationSession;
-import com.arthenica.ffmpegkit.Packages;
-import com.arthenica.ffmpegkit.ReturnCode;
-import com.arthenica.ffmpegkit.Session;
-import com.arthenica.ffmpegkit.SessionState;
-import com.arthenica.ffmpegkit.Signal;
-import com.arthenica.ffmpegkit.Statistics;
+import com.akashskypatel.ffmpegkit.AbiDetect;
+import com.akashskypatel.ffmpegkit.AbstractSession;
+import com.akashskypatel.ffmpegkit.FFmpegKit;
+import com.akashskypatel.ffmpegkit.FFmpegKitConfig;
+import com.akashskypatel.ffmpegkit.FFmpegSession;
+import com.akashskypatel.ffmpegkit.FFprobeKit;
+import com.akashskypatel.ffmpegkit.FFprobeSession;
+import com.akashskypatel.ffmpegkit.Level;
+import com.akashskypatel.ffmpegkit.LogRedirectionStrategy;
+import com.akashskypatel.ffmpegkit.MediaInformation;
+import com.akashskypatel.ffmpegkit.MediaInformationJsonParser;
+import com.akashskypatel.ffmpegkit.MediaInformationSession;
+import com.akashskypatel.ffmpegkit.Packages;
+import com.akashskypatel.ffmpegkit.ReturnCode;
+import com.akashskypatel.ffmpegkit.Session;
+import com.akashskypatel.ffmpegkit.SessionState;
+import com.akashskypatel.ffmpegkit.Signal;
+import com.akashskypatel.ffmpegkit.Statistics;
 
 import org.json.JSONArray;
 import org.json.JSONException;
@@ -81,8 +81,8 @@ public class FFmpegKitFlutterPlugin implements FlutterPlugin, ActivityAware, Met
     public static final String LIBRARY_NAME = "ffmpeg-kit-flutter";
     public static final String PLATFORM_NAME = "android";
 
-    private static final String METHOD_CHANNEL = "flutter.arthenica.com/ffmpeg_kit";
-    private static final String EVENT_CHANNEL = "flutter.arthenica.com/ffmpeg_kit_event";
+    private static final String METHOD_CHANNEL = "flutter.akashskypatel.com/ffmpeg_kit";
+    private static final String EVENT_CHANNEL = "flutter.akashskypatel.com/ffmpeg_kit_event";
 
     // LOG CLASS
     public static final String KEY_LOG_SESSION_ID = "sessionId";
@@ -751,7 +751,7 @@ public class FFmpegKitFlutterPlugin implements FlutterPlugin, ActivityAware, Met
             } else {
                 timeout = AbstractSession.DEFAULT_TIMEOUT_FOR_ASYNCHRONOUS_MESSAGES_IN_TRANSMIT;
             }
-            final List<com.arthenica.ffmpegkit.Log> allLogs = session.getAllLogs(timeout);
+            final List<com.akashskypatel.ffmpegkit.Log> allLogs = session.getAllLogs(timeout);
             resultHandler.successAsync(result, toLogMapList(allLogs));
         }
     }
@@ -761,7 +761,7 @@ public class FFmpegKitFlutterPlugin implements FlutterPlugin, ActivityAware, Met
         if (session == null) {
             resultHandler.errorAsync(result, "SESSION_NOT_FOUND", "Session not found.");
         } else {
-            final List<com.arthenica.ffmpegkit.Log> allLogs = session.getLogs();
+            final List<com.akashskypatel.ffmpegkit.Log> allLogs = session.getLogs();
             resultHandler.successAsync(result, toLogMapList(allLogs));
         }
     }
@@ -1425,7 +1425,7 @@ public class FFmpegKitFlutterPlugin implements FlutterPlugin, ActivityAware, Met
         }
     }
 
-    protected static Map<String, Object> toMap(final com.arthenica.ffmpegkit.Log log) {
+    protected static Map<String, Object> toMap(final com.akashskypatel.ffmpegkit.Log log) {
         final HashMap<String, Object> logMap = new HashMap<>();
 
         logMap.put(KEY_LOG_SESSION_ID, log.getSessionId());
@@ -1519,7 +1519,7 @@ public class FFmpegKitFlutterPlugin implements FlutterPlugin, ActivityAware, Met
         return list;
     }
 
-    protected static List<Map<String, Object>> toLogMapList(final List<com.arthenica.ffmpegkit.Log> logList) {
+    protected static List<Map<String, Object>> toLogMapList(final List<com.akashskypatel.ffmpegkit.Log> logList) {
         final List<Map<String, Object>> list = new ArrayList<>();
 
         for (int i = 0; i < logList.size(); i++) {
@@ -1529,7 +1529,7 @@ public class FFmpegKitFlutterPlugin implements FlutterPlugin, ActivityAware, Met
         return list;
     }
 
-    protected static List<Map<String, Object>> toStatisticsMapList(final List<com.arthenica.ffmpegkit.Statistics> statisticsList) {
+    protected static List<Map<String, Object>> toStatisticsMapList(final List<com.akashskypatel.ffmpegkit.Statistics> statisticsList) {
         final List<Map<String, Object>> list = new ArrayList<>();
 
         for (int i = 0; i < statisticsList.size(); i++) {
@@ -1543,7 +1543,7 @@ public class FFmpegKitFlutterPlugin implements FlutterPlugin, ActivityAware, Met
         return (value != null) && (value >= 0);
     }
 
-    protected void emitLog(final com.arthenica.ffmpegkit.Log log) {
+    protected void emitLog(final com.akashskypatel.ffmpegkit.Log log) {
         final HashMap<String, Object> logMap = new HashMap<>();
         logMap.put(EVENT_LOG_CALLBACK_EVENT, toMap(log));
         resultHandler.successAsync(eventSink, logMap);
