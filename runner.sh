@@ -60,21 +60,23 @@ Licensing options:
 	--enable-nonfree|--nonfree                                    build binaries will be non-redistributable
 
 Feature Presets:
-  --enable-full                                                 enable all available extra libraries (based on gpl/non-gpl selection)
-  --enable-small                                                exclude certain libraries from presets to reduce size (see --list-excluded)
+  --enable-full                                                 enable all available external libraries (based on gpl/non-gpl selection)
+  --enable-small                                                exclude certain extra libraries from presets to reduce size (see --list-excluded)
   --enable-https                                                enable https libraries
   --enable-audio                                                enable all audio processing libraries
+  --enable-audio-ai                                             enable all audio processing ai libraries
   --enable-video                                                enable all video processing libraries
   --enable-video-streaming                                      enable all video streaming libraries
-  --enable-video-ai-cpu                                         enable all video ai libraries
-  --enable-video-ai-gpu                                         enable all video ai libraries
+  --enable-video-ai-cpu                                         enable all video ai cpu based libraries
+  --enable-video-ai-gpu                                         enable all video ai gpu based libraries
   --enable-hardware                                             enable all hardware accel libraries
   --enable-ssh                                                  enable SSH/SFTP support
   --enable-smb                                                  enable SMB (SAMBA) file sharing protocol support
   --enable-mq                                                   enable distributed systems support
 
-Package Presets (pre-defined collections of libraries):
+Bundle Presets (pre-defined collections of libraries to include in ffmpeg-kit bundle):
   --audio-bundle                                                contains https + audio only libraries in the final bundle
+  --audio-ai-bundle                                             contains https + audio + audio only ai libraries in the final bundle
   --video-bundle                                                contains https + audio + video libraries in the final bundle
   --video-ai-cpu-bundle                                         contains https + audio + video + ai (cpu) libraries in the final bundle
   --video-ai-gpu-bundle                                         contains https + audio + video + ai (gpu) libraries in the final bundle
@@ -152,6 +154,7 @@ while [ $# -gt 0 ]; do
 		;;
   -y)
     export accept_defaults=1
+    echo "Skipping interactive. Accepting defuly selections."
     shift
     ;;
   --lto)
@@ -163,11 +166,13 @@ while [ $# -gt 0 ]; do
     shift
     ;;
   --host-platform=*|--host=*)
-    pick_host_platform "${1#*=}"
+    export host_platform="${1#*=}"
+    pick_host_platform "$host_platform"
     shift
     ;;
   --host-arch=*|--arch=*)
-    pick_host_arch "${1#*=}"
+    export host_arch="${1#*=}"
+    pick_host_arch "$host_arch"
     shift
     ;;
 	--ffmpeg-git-checkout-version=*)
@@ -279,14 +284,21 @@ while [ $# -gt 0 ]; do
     pick_cryto_lib
     shift
     ;;
+  --enable-audio-ai)
+    export enable_audio_ai=1
+    shift
+    ;;
   --enable-video-ai-cpu)
     export enable_video_ai=1
+    export enable_audio_ai=1
     export gpu_support=0
     shift
     ;;
   --enable-video-ai-gpu)
     export enable_video_ai=1
+    export enable_audio_ai=1
     export gpu_support=1
+    pick_gpu_type
     shift
     ;;
   --enable-hardware)
@@ -313,14 +325,21 @@ while [ $# -gt 0 ]; do
     export video_bundle=1
     shift
     ;;
+  --audio-ai-bundle)
+    export audio_ai_bundle=1
+    shift
+    ;;
   --video-ai-cpu-bundle)
     export video_ai_bundle=1
+    export enable_audio_ai=1
     export gpu_support=0
     shift
     ;;
   --video-ai-gpu-bundle)
     export video_ai_bundle=1
+    export enable_audio_ai=1
     export gpu_support=1
+    pick_gpu_type
     shift
     ;;
   --video-hw-bundle)
@@ -453,6 +472,11 @@ if truthy "$audio_bundle"; then
   enable_audio=1
   enable_https=1
 fi
+if truthy "$audio_ai_bundle"; then
+  enable_audio=1
+  enable_audio_ai=1
+  enable_https=1
+fi
 if truthy "$video_bundle"; then
   enable_audio=1
   enable_video=1
@@ -494,6 +518,7 @@ if truthy "$enable_nonfree"; then
   truthy "$enable_video" || truthy "$enable_full" && apply_preset "$CONFIG_VIDEO_NON_GPL"
   truthy "$enable_streaming" || truthy "$enable_full" && apply_preset "$CONFIG_STREAMING_NON_GPL"
   truthy "$enable_hardware" || truthy "$enable_full" && apply_preset "$CONFIG_HARDWARE_NON_GPL"
+  truthy "$enable_audio_ai" || truthy "$enable_full" && apply_preset "$CONFIG_VIDEO_AI_NON_GPL"
   truthy "$enable_video_ai" || truthy "$enable_full" && apply_preset "$CONFIG_VIDEO_AI_NON_GPL"
   truthy "$enable_ssh" || truthy "$enable_full" && apply_preset "$CONFIG_SSH_NON_GPL"
 
@@ -529,6 +554,7 @@ truthy "$enable_audio" || truthy "$enable_full" && apply_preset "$CONFIG_AUDIO"
 truthy "$enable_video" || truthy "$enable_full" && apply_preset "$CONFIG_VIDEO"
 truthy "$enable_streaming" || truthy "$enable_full" && apply_preset "$CONFIG_STREAMING"
 truthy "$enable_hardware" || truthy "$enable_full" && apply_preset "$CONFIG_HARDWARE"
+truthy "$enable_audio_ai" || truthy "$enable_full" && apply_preset "$CONFIG_VIDEO_AI"
 truthy "$enable_video_ai" || truthy "$enable_full" && apply_preset "$CONFIG_VIDEO_AI"
 truthy "$enable_ssh" || truthy "$enable_full" && apply_preset "$CONFIG_SSH"
 

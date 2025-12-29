@@ -89,7 +89,7 @@ create_dir() {
 
 	if [[ ! -e "$path" ]]; then
 		execute "INFO: creating path: '$path'" "ERROR: unable to create directory '$path'" "true" \
-			sudo mkdir -pv "$path"
+			mkdir -pv "$path"
 	else
 		echo -e "DEBUG: directory already exists, skipping creation." >>"$LOG_FILE"
 	fi
@@ -446,8 +446,10 @@ CXX=${cross_prefix}g++"
 --strip=${cross_prefix}strip) \
 --cxx=${cross_prefix}g++)"
     
-    export windows_cflags='-mtune=generic -O3 -pipe'
+    export windows_cflags='-mtune=generic -O3 -pipe -ffunction-sections -fdata-sections'
     export CFLAGS="$windows_cflags"
+    export windows_cxxflags='-ffunction-sections -fdata-sections'
+    export CXXFLAGS="$windows_cxxflags"
     export windows_cppflags='-U_FORTIFY_SOURCE -D_FORTIFY_SOURCE=3'
     export CPPFLAGS="$windows_cppflags"
     export windows_ldflags="-L${dependency_install_prefix}/lib"
@@ -461,59 +463,59 @@ setup_linux_environment() {
     export dependency_install_prefix="$work_dir/libraries"
     export PKG_CONFIG_PATH="$PKG_CONFIG_PATH:/usr/lib/$host_target/pkgconfig:/usr/lib/pkgconfig:$dependency_install_prefix/share/pkgconfig:$dependency_install_prefix/lib/pkgconfig:$dependency_install_prefix/lib/$host_target/pkgconfig:$work_dir/pkgconfig:$ffmpeg_install_prefix/lib/pkgconfig"
     export PATH="$ffmpeg_install_prefix/bin:$dependency_install_prefix/bin:$original_path"
-    export linux_cflags="-fstrict-aliasing -fPIC -I${dependency_install_prefix}/include"
+    export linux_cflags="-ffunction-sections -fdata-sections -fstrict-aliasing -fPIC -I${dependency_install_prefix}/include"
     export CFLAGS="$linux_cflags"
     export linux_cppflags="-I${dependency_install_prefix}/include -DLINUX"
     export CPPFLAGS="$linux_cppflags"
-    export linux_cxxflags="-I${dependency_install_prefix}/include"
+    export linux_cxxflags="-ffunction-sections -fdata-sections -I${dependency_install_prefix}/include"
     export CXXFLAGS="$linux_cxxflags"
     export linux_ldflags="-L${dependency_install_prefix}/lib"
     export LDFLAGS="$linux_ldflags"
 }
 
 reset_cflags() {
-  if [[ $host_platform == "windows" ]]; then
-    export CFLAGS=$windows_cflags
-  elif [[ $host_platform == "linux" ]]; then
-    export CFLAGS=$linux_cflags
-  elif [[ -n $original_cflags ]]; then
-    export CFLAGS=$original_cflags
+  if [[ "$host_platform" == "windows" ]]; then
+    export CFLAGS="$windows_cflags"
+  elif [[ "$host_platform" == "linux" ]]; then
+    export CFLAGS="$linux_cflags"
+  elif [[ -n "$original_cflags" ]]; then
+    export CFLAGS="$original_cflags"
   else
     unset CFLAGS
   fi
 }
 
 reset_cxxflags() {
-	if [[ $host_platform == "windows" ]]; then
-    export CXXFLAGS=$windows_cxxflags
-  elif [[ $host_platform == "linux" ]]; then
-    export CXXFLAGS=$linux_cxxflags
-  elif [[ -n $original_cxxflags ]]; then
-    export CXXFLAGS=$original_cxxflags
+	if [[ "$host_platform" == "windows" ]]; then
+    export CXXFLAGS="$windows_cxxflags"
+  elif [[ "$host_platform" == "linux" ]]; then
+    export CXXFLAGS="$linux_cxxflags"
+  elif [[ -n "$original_cxxflags" ]]; then
+    export CXXFLAGS="$original_cxxflags"
   else
     unset CXXFLAGS
   fi
 }
 
 reset_cppflags() {
-	if [[ $host_platform == "windows" ]]; then
-    export CPPFLAGS=$windows_cppflags
-  elif [[ $host_platform == "linux" ]]; then
-    export CPPFLAGS=$linux_cppflags
-  elif [[ -n $original_cppflags ]]; then
-    export CPPFLAGS=$original_cppflags
+	if [[ "$host_platform" == "windows" ]]; then
+    export CPPFLAGS="$windows_cppflags"
+  elif [[ "$host_platform" == "linux" ]]; then
+    export CPPFLAGS="$linux_cppflags"
+  elif [[ -n "$original_cppflags" ]]; then
+    export CPPFLAGS="$original_cppflags"
   else
     unset CPPFLAGS
   fi
 }
 
 reset_ldflags() {
-	if [[ $host_platform == "windows" ]]; then
-    export LDFLAGS=$windows_ldflags
-  elif [[ $host_platform == "linux" ]]; then
-    export LDFLAGS=$linux_ldflags
-  elif [[ -n $original_ldflags ]]; then
-    export LDFLAGS=$original_ldflags
+	if [[ "$host_platform" == "windows" ]]; then
+    export LDFLAGS="$windows_ldflags"
+  elif [[ "$host_platform" == "linux" ]]; then
+    export LDFLAGS="$linux_ldflags"
+  elif [[ -n "$original_ldflags" ]]; then
+    export LDFLAGS="$original_ldflags"
   else
     unset LDFLAGS
   fi
@@ -2142,7 +2144,7 @@ download_and_unpack_file() {
             exit_message 1 "unable to download $url"
         }
         echo "INFO: Unzipping $filename inside $dest_folder ..." >>"$LOG_FILE"
-        if [[ "$filename" == *.zip ]]; then
+        if [[ "${filename,,}" =~ \.(zip|whl)$ ]]; then
             extract_zip "$filename" "$dest_folder" > >(redirect_output) 2>&1
             #unzip -o "$filename" > >(redirect_output) 2>&1 || exit_message 1 "unzip failed"
         else
@@ -2694,13 +2696,14 @@ configure_ffmpeg() {
   init_options+=" --extra-ldflags=\"-Wl,--allow-multiple-definition\""
 	init_options+=" --enable-pic"
 	init_options+=" --enable-swscale"
-  init_options+=" --extra-libs=\"-lm -lstdc++\""
+  init_options+=" --extra-libs=\"-lm -lstdc++ -lrt -ldl\""
 	truthy "$enable_lto" && init_options+=" --enable-optimizations"
 	truthy "$enable_small" && init_options+=" --enable-small"
 
 	if [[ $host_platform != "linux" ]]; then
     init_options+=" --enable-cross-compile"
     init_options+=" --cross-prefix=$cross_prefix"
+    init_options+=" --extra-libs=\"-lpthread\""
   fi
 
   if [[ $host_platform == "windows" ]]; then
@@ -2714,6 +2717,8 @@ configure_ffmpeg() {
 	  init_options+=" --extra-cflags=-mtune=generic"
 	  init_options+=" --extra-cflags=-O3"
 	  init_options+=" --extra-cflags=-pipe"
+    init_options+=" --extra-cflags=-ffunction-sections -fdata-sections"
+    init_options+=" --extra-cxxflags=-ffunction-sections -fdata-sections"
   fi
 
 	# can't mix and match --enable-static --enable-shared unfortunately, or the final executable seems to just use shared if the're both present
@@ -2769,7 +2774,13 @@ configure_ffmpeg() {
                                                                                       # XXX --disable-sndio MinGW/Windows not supported 
   truthy "$disable_sndio" && config_options+=" --disable-sndio"                       # disable sndio support [autodetect]
                                                                                       # XXX --enable-libtorch ABI mismatch on windows
-  truthy "$enable_libtorch" && config_options+=" --enable-libtorch"                   # enable Torch as one DNN backend [no]
+  truthy "$enable_libtorch" && config_options+=" --enable-libtorch \
+  --extra-cflags=\"-I${dependency_install_prefix}/torch/include/torch/csrc/api/include \
+  -I${dependency_install_prefix}/torch/include\" \
+  --extra-cxxflags=\"-I${dependency_install_prefix}/torch/include/torch/csrc/api/include \
+  -I${dependency_install_prefix}/torch/include\" \
+  --extra-ldflags=\"-L${dependency_install_prefix}/torch/lib\""
+                                                                                      # enable Torch as one DNN backend [no]
   fi
   #------------------------------------------------------------------------------
   # ----------------------------- hardware features ----------------------------- 
@@ -2871,7 +2882,11 @@ configure_ffmpeg() {
   truthy "$enable_libssh" && config_options+=" --enable-libssh"                       # enable SFTP protocol via libssh [no]
   truthy "$enable_libsvtav1" && config_options+=" --enable-libsvtav1"                 # enable AV1 encoding via SVT [no]
   truthy "$enable_libtensorflow" && config_options+=" --enable-libtensorflow"         # enable TensorFlow as a DNN module backend for DNN based filters like sr [no]
-  truthy "$enable_libtesseract" && config_options+=" --enable-libtesseract"           # enable Tesseract, needed for ocr filter [no]
+  truthy "$enable_libtesseract" && config_options+=" --enable-libtesseract \
+  --extra-libs=\"-Wl,--start-group -ltesseract -lleptonica -ltiff -lpng16 -ljpeg \
+  -lopenjp2 -ljbig -lLerc -ldeflate -lzstd -llzma -lwebpmux -lwebp -lgif -lcurl \
+  -lnghttp2 -lssl -lcrypto -lpsl -lbrotlidec -lbrotlicommon -larchive -lbz2 -lz \
+  -lexpat -liconv -Wl,--end-group\""                                                    # enable Tesseract, needed for ocr filter [no]
   truthy "$enable_libtheora" && config_options+=" --enable-libtheora"                 # enable Theora encoding via libtheora [no]
   truthy "$enable_libtls" && config_options+=" --enable-libtls"                       # enable LibreSSL (via libtls), needed for https support if openssl, gnutls or mbedtls is not used [no]
   truthy "$enable_libtwolame" && config_options+=" --enable-libtwolame"               # enable MP2 encoding via libtwolame [no]
@@ -2883,8 +2898,7 @@ configure_ffmpeg() {
   truthy "$enable_libvvenc" && config_options+=" --enable-libvvenc"                   # enable H.266/VVC encoding via vvenc [no]
   truthy "$enable_libwebp" && config_options+=" --enable-libwebp"                     # enable WebP encoding via libwebp [no]
   truthy "$enable_libx264" && config_options+=" --enable-libx264"                     # enable H.264 encoding via x264 [no]
-  truthy "$enable_libx265" && config_options+=" --enable-libx265\
-  --extra-libs=\"-lstdc++ -lrt -ldl -lpthread\""                                      # enable HEVC encoding via x265 [no]
+  truthy "$enable_libx265" && config_options+=" --enable-libx265"                     # enable HEVC encoding via x265 [no]
   truthy "$enable_libxavs" && config_options+=" --enable-libxavs"                     # enable AVS encoding via xavs [no]
   truthy "$enable_libxavs2" && config_options+=" --enable-libxavs2"                   # enable AVS2 encoding via xavs2 [no]
   truthy "$enable_libxevd" && config_options+=" --enable-libxevd"                     # enable EVC decoding via libxevd [no]
@@ -2902,7 +2916,8 @@ configure_ffmpeg() {
   truthy "$enable_openssl" && config_options+=" --enable-openssl"                     # enable openssl, needed for https support if gnutls, libtls or mbedtls is not used [no]
   truthy "$enable_pocketsphinx" && config_options+=" --enable-pocketsphinx"           # enable PocketSphinx, needed for asr filter [no]
   truthy "$enable_vapoursynth" && config_options+=" --enable-vapoursynth"             # enable VapourSynth demuxer [no]
-  truthy "$enable_whisper" && config_options+=" --enable-whisper"                     # enable whisper filter [no]
+  truthy "$enable_whisper" && config_options+=" --enable-whisper \
+  --extra-libs=\"-lwhisper -lggml -lggml-cpu -lggml-base -lgomp\""                           # enable whisper filter [no]
 
   # add any additional ff prefixed flags 
   if [[ -n $ff_flags_values ]]; then
@@ -3785,4 +3800,37 @@ resolve_collisions() {
         is_library_enabled "mbedtls" && disable_library "mbedtls"
         is_library_enabled "libtls" && disable_library "libtls"
     fi
+}
+
+get_pip_download_link() {
+  local package="$1"
+  local result
+  
+  # 1. Capture the output
+  result=$(python3 -m pip install "$package" --dry-run --no-deps --ignore-installed --report - -q 2>/dev/null)
+  
+  # 2. Check if pip actually succeeded before trying to parse
+  if [ $? -ne 0 ] || [ -z "$result" ]; then
+      echo "Error: Could not find package '$package'" >&2
+      return 1
+  fi
+
+  # 3. Parse and print URL
+  echo "$result" | python3 -c "import sys, json; print(json.load(sys.stdin)['install'][0]['download_info']['url'])"
+}
+
+unversion_library() {
+TARGET_DIR="$1"
+  find "$TARGET_DIR" -maxdepth 1 -name "*.so.*" | sort -Vr | while read -r full_path; do
+    filename=$(basename "$full_path")
+    # shellcheck disable=2001
+    base_name=$(echo "$filename" | sed 's/\.so\..*/.so/')
+    dest_path="$TARGET_DIR/$base_name"
+    if [ -e "$dest_path" ]; then
+        echo "Skipping $filename -> Target $base_name already exists." >>"$LOG_FILE"
+    else
+        echo "Renaming $filename -> $base_name" >>"$LOG_FILE"
+        mv "$full_path" "$dest_path"
+    fi
+  done
 }

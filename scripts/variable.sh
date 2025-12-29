@@ -204,7 +204,10 @@ CONFIG_VIDEO_AI="\
 --enable-libquirc \
 --enable-libtensorflow \
 --enable-libtesseract \
---enable-libtorch \
+--enable-libtorch"
+
+# AI Audio Focused
+CONFIG_AUDIO_AI="\
 --enable-pocketsphinx \
 --enable-whisper"
 
@@ -214,8 +217,7 @@ CONFIG_ANDROID_NON_GPL="--enable-jni"
 # Apple general NON-GPL
 CONFIG_APPLE_NON_GPL="\
 --enable-appkit \
---enable-avfoundation \
---enable-coreimage"
+--enable-avfoundation"
 
 # General libraries
 CONFIG_GENERAL="\
@@ -359,38 +361,37 @@ CONFIG_HARDWARE="\
 --enable-libplacebo \
 --enable-libshaderc \
 --enable-libvpl \
---enable-opencl \
---enable-vulkan \
---enable-vulkan-static \
 --enable-ohcodec \
+--enable-opencl \
 --enable-opengl \
---enable-mediacodec"
+--enable-vulkan \
+--enable-vulkan-static"
 
 # Hardware Accel Video Focused NON-GPL
 CONFIG_HARDWARE_NON_GPL="\
---enable-mediacodec \
 --enable-coreimage \
---enable-metal \
---enable-videotoolbox \
 --enable-cuda-llvm \
 --enable-cuda-nvcc \
 --enable-cuvid \
+--enable-d3d11va \
+--enable-d3d12va \
+--enable-dxva2 \
 --enable-ffnvcodec \
 --enable-libdrm \
 --enable-libnpp \
+--enable-mediacodec \
+--enable-mediafoundation \
+--enable-metal \
+--enable-mmal \
 --enable-nvdec \
 --enable-nvenc \
+--enable-omx \
+--enable-omx-rpi \
 --enable-rkmpp \
 --enable-v4l2-m2m \
 --enable-vaapi \
 --enable-vdpau \
---enable-d3d11va \
---enable-d3d12va \
---enable-dxva2 \
---enable-mediafoundation \
---enable-mmal \
---enable-omx \
---enable-omx-rpi"
+--enable-videotoolbox"
 
 # other advanced config options
 CONFIG_MQ="\

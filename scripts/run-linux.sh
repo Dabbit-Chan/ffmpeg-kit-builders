@@ -1350,8 +1350,8 @@ build_libjack() {
   change_dir "$src_dir"
   do_git_checkout "$repo" "$lib" "$repo_ver"
   change_dir "$src_dir/$lib"
-  export CFLAGS="-static -O3 -I$dependency_install_prefix/include -L$dependency_install_prefix/lib"
-  export CXXFLAGS="-static -O3 -I$dependency_install_prefix/include -L$dependency_install_prefix/lib"
+  export CFLAGS="-ffunction-sections -fdata-sections -static -O3 -I$dependency_install_prefix/include -L$dependency_install_prefix/lib"
+  export CXXFLAGS="-ffunction-sections -fdata-sections -static -O3 -I$dependency_install_prefix/include -L$dependency_install_prefix/lib"
   sed -i "/opt.load('xcode6')/d" wscript
   sed -i "/conf.load('xcode6')/d" wscript
   do_python '--prefix="$dependency_install_prefix" --platform="$host_name" --db="no" --check-c-compiler=gcc --check-cxx-compiler=g++ --static'
@@ -1491,7 +1491,7 @@ build_liblensfun() {
   do_git_checkout "$repo" "$lib" "$repo_ver"
   change_dir "$src_dir/$lib"
   export CPPFLAGS="$CPPFLAGS -DGLIB_STATIC_COMPILATION"
-	export CXXFLAGS="$CFLAGS -DGLIB_STATIC_COMPILATION"
+	export CXXFLAGS="$CXXLAGS -DGLIB_STATIC_COMPILATION"
   do_cmake "-DCMAKE_BUILD_TYPE=Release -DBUILD_STATIC=on -DCMAKE_INSTALL_DATAROOTDIR=$dependency_install_prefix -DBUILD_TESTS=off -DBUILD_DOC=off -DINSTALL_HELPER_SCRIPTS=off -DINSTALL_PYTHON_MODULE=OFF"
 	do_make_and_make_install
 	sed -i.bak 's/-llensfun/-llensfun -lstdc++/' "$dependency_install_prefix/lib/pkgconfig/lensfun.pc"
@@ -2261,48 +2261,60 @@ build_libsvtav1() {
 }
 # build_libopenvino       # config_options+= --enable-libopenvino         # enable OpenVINO as a DNN module backend for DNN based filters like dnn_processing [no]
 build_libopenvino() {
-  if [[ $disable_libopenvino != 1 && $enable_libopenvino == 1 ]]; then
+  if [[ $disable_libopenvino != 1 && $enable_libopenvino == 1 && $bits_target == 64 ]]; then
   local lib="libopenvino"
-  # TODO: select based on linux distro
-  local repo="https://storage.openvinotoolkit.org/repositories/openvino/packages/2025.4.1/linux/openvino_toolkit_ubuntu24_2025.4.1.20426.82bbf0292c5_x86_64.tgz"
+  local repo
+  repo=$(get_pip_download_link openvino) || exit_message 1 "could not find a download link for $lib"
   local repo_ver="2025.4.1"
   local touch_prefix="${host_name}_already"
   local touch_name=$(get_small_touchfile_name "${touch_prefix}_installed" "$repo")
+  change_dir "$src_dir"
   if truthy "$build_force"; then
-		remove_path -f "$cur_dir2/${touch_prefix}_*"
+		remove_path -f "$src_dir/$lib"
 	fi
-	if [ ! -f "$touch_name" ]; then
-    remove_path -f "${touch_prefix}_installed*" # reset
-    change_dir "$src_dir"
-    # ln -s openvino_2025.4.1 openvino_2025 > >(redirect_output) 2>&1
+	if [ ! -f "$src_dir/$lib/$touch_name" ]; then
+    remove_path -f "$src_dir/$lib/${touch_prefix}_installed"* # reset
     local manifest="$install_pkgconfig_dir/${lib}_manifest"
     uninstall_manifest "$manifest" > >(redirect_output) 2>&1
     download_and_unpack_file "$repo" "$src_dir/$lib"
     change_dir "$src_dir/$lib"
-    ./install_dependencies/install_openvino_dependencies.sh > >(redirect_output) 2>&1
     echo > "$manifest" && chmod -R u+rwx "$manifest"
     
-    ( set -o pipefail; cp -rfv "$src_dir/$lib/runtime/lib/intel64/pkgconfig"* "$dependency_install_prefix/lib" 2>&1 | sed -n "s/.*' -> '\(.*\)'/\1/p" ) >> "$manifest" || exit_message 1 "could not install $lib pkgconfig"
-    ( set -o pipefail; cp -rfv "$src_dir/$lib/runtime/3rdparty/tbb/lib/pkgconfig"* "$dependency_install_prefix/lib" 2>&1 | sed -n "s/.*' -> '\(.*\)'/\1/p" ) >> "$manifest" || exit_message 1 "could not install $lib pkgconfig"
-    
-    [[ -d "$src_dir/$lib/runtime/lib" ]] && { ( set -o pipefail; cp -rfv "$src_dir/$lib/runtime/lib"* "$dependency_install_prefix" 2>&1 | sed -n "s/.*' -> '\(.*\)'/\1/p" ) >> "$manifest" || exit_message 1 "could not install $lib bins"; }
-    [[ -d "$src_dir/$lib/runtime/include" ]] && { ( set -o pipefail; cp -rfv "$src_dir/$lib/runtime/include"* "$dependency_install_prefix" 2>&1 | sed -n "s/.*' -> '\(.*\)'/\1/p" ) >> "$manifest" || exit_message 1 "could not install $lib bins"; }
-    
-    [[ -d "$src_dir/$lib/runtime/3rdparty/tbb/lib" ]] && { ( set -o pipefail; cp -rfv "$src_dir/$lib/runtime/3rdparty/tbb/lib"* "$dependency_install_prefix" 2>&1 | sed -n "s/.*' -> '\(.*\)'/\1/p" ) >> "$manifest" || exit_message 1 "could not install $lib bins"; }
-    [[ -d "$src_dir/$lib/runtime/3rdparty/tbb/include" ]] && { ( set -o pipefail; cp -rfv "$src_dir/$lib/runtime/3rdparty/tbb/include"* "$dependency_install_prefix" 2>&1 | sed -n "s/.*' -> '\(.*\)'/\1/p" ) >> "$manifest" || exit_message 1 "could not install $lib bins"; }
-    
-    sed -i "s/^pc_path=.*//" "$dependency_install_prefix/lib/pkgconfig/openvino.pc"
-    sed -i "s/^include_prefix=.*//" "$dependency_install_prefix/lib/pkgconfig/openvino.pc"
-    sed -i "s|^exec_prefix=.*|exec_prefix=\${prefix}|" "$dependency_install_prefix/lib/pkgconfig/openvino.pc"
-    sed -i "s|^includedir=.*|includedir=\${prefix}/include|" "$dependency_install_prefix/lib/pkgconfig/openvino.pc"
-    sed -i "s|^libdir=.*|libdir=\${prefix}/lib/intel64|" "$dependency_install_prefix/lib/pkgconfig/openvino.pc"
-    sed -i "s|-L\${prefix}/runtime/3rdparty/tbb -ltbb|-ltbb|" "$dependency_install_prefix/lib/pkgconfig/openvino.pc"
-    sed -i "s|-lopenvino_jax_frontend ||" "$dependency_install_prefix/lib/pkgconfig/openvino.pc"
-    sed -i "s|^prefix=.*|prefix=${dependency_install_prefix}|" "$dependency_install_prefix/lib/pkgconfig/openvino.pc"
+    cat > "$src_dir/$lib/openvino/libs/openvino.pc" << EOF
+# Copyright (C) 2018-2025 Intel Corporation
+# SPDX-License-Identifier: Apache-2.0
+#
 
-    sed -i "s|^prefix=/usr/local|prefix=${dependency_install_prefix}|" "$dependency_install_prefix/lib/pkgconfig/tbb.pc"
-    sed -i "s|^libdir=.*|libdir=\${prefix}/lib|" "$dependency_install_prefix/lib/pkgconfig/tbb.pc"
+prefix=${dependency_install_prefix}/openvino
+exec_prefix=\${prefix}
+libdir=\${prefix}/libs
+includedir=\${prefix}/include
+
+Name: OpenVINO
+Description: OpenVINO™ Toolkit
+URL: https://docs.openvino.ai/latest/index.html
+Version: 2025.4.1
+Conflicts: openvino < 2025.4.1
+Cflags: -I\${includedir}  -D_GLIBCXX_USE_CXX11_ABI=1 -DOV_THREAD=OV_THREAD_TBB
+Libs: -L\${libdir} -lopenvino_jax_frontend -lopenvino_onnx_frontend -lopenvino_paddle_frontend -lopenvino_pytorch_frontend -lopenvino_tensorflow_frontend -lopenvino_tensorflow_lite_frontend -lopenvino_c -lopenvino -ltbb
+Libs.private: -ldl -lm -lpthread -lrt
+EOF
+    create_dir "$dependency_install_prefix/openvino/{libs,include}"
+
+    [[ -d "$src_dir/$lib/openvino/libs" ]] && { ( set -o pipefail; cp -rfv "$src_dir/$lib/openvino/libs"* "$dependency_install_prefix/openvino" 2>&1 | sed -n "s/.*' -> '\(.*\)'/\1/p" ) >> "$manifest" || exit_message 1 "could not install $lib bins"; }
+    [[ -d "$src_dir/$lib/openvino/include" ]] && { ( set -o pipefail; cp -rfv "$src_dir/$lib/openvino/include"* "$dependency_install_prefix/openvino" 2>&1 | sed -n "s/.*' -> '\(.*\)'/\1/p" ) >> "$manifest" || exit_message 1 "could not install $lib bins"; }
+    [[ -d "$src_dir/$lib/openvino/cmake" ]] && { ( set -o pipefail; cp -rfv "$src_dir/$lib/openvino/cmake"* "$dependency_install_prefix/openvino/libs" 2>&1 | sed -n "s/.*' -> '\(.*\)'/\1/p" ) >> "$manifest" || exit_message 1 "could not install $lib bins"; }
+
+    ( set -o pipefail; cp -rfv "$src_dir/$lib/openvino/libs/tbb.pc" "$dependency_install_prefix/lib/pkgconfig/" 2>&1 | sed -n "s/.*' -> '\(.*\)'/\1/p" ) >> "$manifest" || exit_message 1 "could not install $lib pkgconfig"
+    ( set -o pipefail; cp -rfv "$src_dir/$lib/openvino/libs/openvino.pc" "$dependency_install_prefix/lib/pkgconfig/" 2>&1 | sed -n "s/.*' -> '\(.*\)'/\1/p" ) >> "$manifest" || exit_message 1 "could not install $lib pkgconfig"
+
+    sed -i "s|^prefix=/usr/local|prefix=${dependency_install_prefix}/openvino|" "$dependency_install_prefix/lib/pkgconfig/tbb.pc"
+    sed -i "s|^libdir=.*|libdir=\${prefix}/libs|" "$dependency_install_prefix/lib/pkgconfig/tbb.pc"
     sed -i "s|^includedir=.*|includedir=\${prefix}/include|" "$dependency_install_prefix/lib/pkgconfig/tbb.pc"
+
+    unversion_library "${dependency_install_prefix}/openvino/libs"
+
+    create_touch_file 0 "$touch_name"
 
     change_dir "$src_dir"
   fi
@@ -2311,27 +2323,27 @@ build_libopenvino() {
 
 # build_libtorch          # config_options+= --enable-libtorch            # enable Torch as one DNN backend [no]
 build_libtorch() {
-  echo -e "enable Torch as one DNN backend [no]"
-  if [[ $disable_libtorch != 1 && $enable_libtorch == 1 ]]; then
+  if [[ $disable_libtorch != 1 && $enable_libtorch == 1 && $bits_target == 64 ]]; then
   local lib="libtorch"
   local subdir=""
+  local repo_ver="v2.5.1" # last version compatible with 8.0
   pick_gpu_support
   if truthy "$gpu_support"; then
       pick_gpu_type
       subdir=$gpu_type
       if [[ $subdir == "rocm" ]]; then
-        local repo="https://download.pytorch.org/libtorch/rocm6.4/libtorch-shared-with-deps-2.9.1%2Brocm6.4.zip"
+        local repo="https://download.pytorch.org/libtorch/rocm6.2/libtorch-cxx11-abi-shared-with-deps-2.5.1%2Brocm6.2.zip"
         echo "WARNING: uninstalling cpu and cuda libtorch if installed." >> "$LOG_FILE"
         uninstall_manifest "$install_pkgconfig_dir/${lib}_cpu_manifest" > >(redirect_output) 2>&1
         uninstall_manifest "$install_pkgconfig_dir/${lib}_cuda_manifest" > >(redirect_output) 2>&1
       else
-        local repo="https://download.pytorch.org/libtorch/cu130/libtorch-shared-with-deps-2.9.1%2Bcu130.zip"
+        local repo="https://download.pytorch.org/libtorch/cu124/libtorch-cxx11-abi-shared-with-deps-2.5.1%2Bcu124.zip"
         echo "WARNING: uninstalling cpu and rocm libtorch if installed." >> "$LOG_FILE"
         uninstall_manifest "$install_pkgconfig_dir/${lib}_cpu_manifest" > >(redirect_output) 2>&1
         uninstall_manifest "$install_pkgconfig_dir/${lib}_rocm_manifest" > >(redirect_output) 2>&1
       fi
   else
-      local repo="https://download.pytorch.org/libtorch/cpu/libtorch-cxx11-abi-shared-with-deps-2.7.1%2Bcpu.zip"
+      local repo="https://download.pytorch.org/libtorch/cpu/libtorch-cxx11-abi-shared-with-deps-2.5.1%2Bcpu.zip"
       local subdir="cpu"
       echo "WARNING: uninstalling cuda and rocm libtorch if installed." >> "$LOG_FILE"
       uninstall_manifest "$install_pkgconfig_dir/${lib}_cuda_manifest" > >(redirect_output) 2>&1
@@ -2340,7 +2352,8 @@ build_libtorch() {
   local touch_prefix="${host_name}_already"
   local touch_name=$(get_small_touchfile_name "${touch_prefix}_installed" "$repo")
   if truthy "$build_force"; then
-		remove_path -f "$cur_dir2/${touch_prefix}_*"
+		remove_path -f "$$src_dir/$lib/$subdir/${touch_prefix}_*"
+    remove_path -f "$src_dir/$lib/$subdir"
 	fi
 	if [ ! -f "$touch_name" ]; then
     remove_path -f "${touch_prefix}_installed*" # reset
@@ -2352,20 +2365,21 @@ build_libtorch() {
     download_and_unpack_file "$repo" "$src_dir/$lib/$subdir"
     change_dir "$src_dir/$lib/$subdir"
     echo > "$manifest" && chmod -R u+rwx "$manifest"
-    [[ -d "bin" ]] && { ( set -o pipefail; cp -rfv "$src_dir/$lib/$subdir/bin"* "$dependency_install_prefix" 2>&1 | sed -n "s/.*' -> '\(.*\)'/\1/p" ) >> "$manifest" || exit_message 1 "could not install $lib bins"; }
-    [[ -d "lib" ]] && { ( set -o pipefail; cp -rfv "$src_dir/$lib/$subdir/lib"* "$dependency_install_prefix" 2>&1 | sed -n "s/.*' -> '\(.*\)'/\1/p" ) >> "$manifest" || exit_message 1 "could not install $lib libs"; }
-    [[ -d "include" ]] && { ( set -o pipefail; cp -rfv "$src_dir/$lib/$subdir/include"* "$dependency_install_prefix" 2>&1 | sed -n "s/.*' -> '\(.*\)'/\1/p" ) >> "$manifest" || exit_message 1 "could not install $lib includes"; }
-    [[ -d "share" ]] && { ( set -o pipefail; cp -rfv "$src_dir/$lib/$subdir/share"* "$dependency_install_prefix" 2>&1 | sed -n "s/.*' -> '\(.*\)'/\1/p" ) >> "$manifest" || exit_message 1 "could not install $lib share files"; }
+    create_dir "$dependency_install_prefix/torch/{bin,lib,include,share}"
+    [[ -d "bin" ]] && { ( set -o pipefail; cp -rfv "$src_dir/$lib/$subdir/bin"* "$dependency_install_prefix/torch" 2>&1 | sed -n "s/.*' -> '\(.*\)'/\1/p" ) >> "$manifest" || exit_message 1 "could not install $lib bins"; }
+    [[ -d "lib" ]] && { ( set -o pipefail; cp -rfv "$src_dir/$lib/$subdir/lib"* "$dependency_install_prefix/torch" 2>&1 | sed -n "s/.*' -> '\(.*\)'/\1/p" ) >> "$manifest" || exit_message 1 "could not install $lib libs"; }
+    [[ -d "include" ]] && { ( set -o pipefail; cp -rfv "$src_dir/$lib/$subdir/include"* "$dependency_install_prefix/torch" 2>&1 | sed -n "s/.*' -> '\(.*\)'/\1/p" ) >> "$manifest" || exit_message 1 "could not install $lib includes"; }
+    [[ -d "share" ]] && { ( set -o pipefail; cp -rfv "$src_dir/$lib/$subdir/share"* "$dependency_install_prefix/torch" 2>&1 | sed -n "s/.*' -> '\(.*\)'/\1/p" ) >> "$manifest" || exit_message 1 "could not install $lib share files"; }
     local VERSION="unknown"
     if [ -f "$src_dir/$lib/$subdir/build-version" ]; then
         VERSION=$(cat "$src_dir/$lib/$subdir/build-version")
     elif [ -f "$src_dir/$lib/$subdir/version.txt" ]; then
         VERSION=$(cat "$src_dir/$lib/$subdir/version.txt")
     else
-        VERSION="2.0.0" 
+        VERSION="2.5.1+$subdir"
     fi
     cat >> "$dependency_install_prefix/lib/pkgconfig/libtorch.pc" << EOF
-prefix=${dependency_install_prefix}
+prefix=${dependency_install_prefix}/torch
 exec_prefix=\${prefix}
 libdir=\${exec_prefix}/lib
 includedir=\${prefix}/include
@@ -2373,17 +2387,17 @@ includedir=\${prefix}/include
 Name: libtorch
 Description: The PyTorch C++ library
 Version: $VERSION
-Libs: -L\${libdir} -ltorch -lc10 -ltorch_cpu -Wl,-rpath,\${libdir}
-Cflags: -I\${includedir} -I\${includedir}/torch/csrc/api/include -D_GLIBCXX_USE_CXX11_ABI=1
+Libs: -L\${libdir} -Wl,-rpath,\${libdir} -ltorch -lc10 -ltorch_cpu -lstdc++
+Cflags: -I\${includedir} -I\${includedir}/torch/csrc/api/include
 EOF
     echo "$dependency_install_prefix/lib/pkgconfig/libtorch.pc" >> "$manifest"
     change_dir "$src_dir"
-    fi
+  fi
   fi
 }
 # build_libtensorflow     # config_options+= --enable-libtensorflow       # enable TensorFlow as a DNN module backend for DNN based filters like sr [no]
 build_libtensorflow() {
-  if [[ $disable_libtensorflow != 1 && $enable_libtensorflow == 1 ]]; then
+  if [[ $disable_libtensorflow != 1 && $enable_libtensorflow == 1 && $bits_target == 64 ]]; then
   # https://github.com/tensorflow/tensorflow
   # https://www.tensorflow.org/install/lang_c
   local lib="libtensorflow"
@@ -2398,7 +2412,7 @@ build_libtensorflow() {
         echo "WARNING: uninstalling cpu or cuda libtensorflow if installed." >> "$LOG_FILE"
         uninstall_manifest "$install_pkgconfig_dir/${lib}_cpu_manifest" > >(redirect_output) 2>&1
         uninstall_manifest "$install_pkgconfig_dir/${lib}_cuda_manifest" > >(redirect_output) 2>&1
-        echo -e "WARNING: ROCm libtensorflow is currently not supported by this build script. Please deploy your own build if you need this library." | tee -a "$LOG_FILE"
+        echo -e "WARNING: ROCm libtensorflow is currently not supported by this build script. Please deploy your own build with tensorflow ROCm C API if you need this library." | tee -a "$LOG_FILE"
         return
       else
         local repo="https://storage.googleapis.com/tensorflow/versions/2.18.0/libtensorflow-gpu-linux-x86_64.tar.gz"
@@ -2483,12 +2497,24 @@ Cflags: -I\${includedir}
 EOF
 	change_dir "$src_dir"
 }
+build_lerc() {
+  local lib="lerc"
+  local repo="https://github.com/Esri/lerc"
+  local repo_ver="v4.0.0"
+	change_dir "$src_dir"
+	do_git_checkout "$repo" "$lib" "$repo_ver"
+	change_dir "$src_dir/$lib"
+	local cmake_params="-DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=OFF -DCMAKE_INSTALL_PREFIX=$dependency_install_prefix -DENABLE_SHARED=0"
+	do_cmake_and_install "$cmake_params"
+	change_dir "$src_dir"
+}
 build_libtiff() {
   build_libjpeg_turbo # auto uses it?
   build_lzma 1
   build_zstd
   build_jbig
   build_libdeflate
+  build_lerc
   local lib="libtiff"
   local repo="https://download.osgeo.org/libtiff/tiff-4.7.1rc1.tar.gz" # "https://gitlab.com/libtiff/libtiff"
   local repo_ver="v4.7.1"
@@ -2699,11 +2725,9 @@ build_libtesseract() {
 LIBLEPT_HEADERSDIR=$dependency_install_prefix/include \
 --datadir=$dependency_install_prefix/bin"
   do_make_and_make_install
-	#sed -i.bak 's/Requires.private.*/& lept libarchive liblzma libtiff-4 libcurl/' "$dependency_install_prefix/lib/pkgconfig/tesseract.pc"
-	sed -i 's/-ltesseract.*$/-ltesseract -lstdc++ -larchive -llzma -lexpat -lbz2 -lz -liconv -lcurl -lzstd -lnghttp2 -lssl -lpthread/' "$dependency_install_prefix/lib/pkgconfig/tesseract.pc"
-	if [[ ! -f $dependency_install_prefix/bin/tessdata/tessdata/eng.traineddata ]]; then
+  if [[ ! -f $dependency_install_prefix/bin/tessdata/tessdata/eng.traineddata ]]; then
 		create_dir "$dependency_install_prefix/bin/tessdata"
-		cp -f /usr/share/tesseract-ocr/**/tessdata/eng.traineddata "$dependency_install_prefix/bin/tessdata/"
+		cp -fv /usr/share/tesseract-ocr/**/tessdata/eng.traineddata "$dependency_install_prefix/bin/tessdata/" >>"$LOG_FILE" 2>&1
 	fi
   change_dir "$src_dir"
   reset_cppflags
@@ -3333,27 +3357,75 @@ build_openssl() {
   # https://github.com/openssl/openssl 
   local repo="https://github.com/openssl/openssl"
   local repo_ver="openssl-3.6.0"
+  change_dir "$src_dir"
   do_git_checkout "$repo" "$lib" "$repo_ver"
 	change_dir "$src_dir/$lib"
-	generic_configure_make_install "--enable-static --disable-shared --release --prefix=$dependency_install_prefix --openssldir=$dependency_install_prefix/ssl --libdir=lib no-shared no-tests no-docs no-demos no-legacy"
+	do_configure "$host_name --release --prefix=$dependency_install_prefix --openssldir=$dependency_install_prefix/ssl --libdir=lib no-shared no-tests no-docs no-demos no-legacy"
+  do_make_and_make_install
 	change_dir "$src_dir"
   fi
 }
 # build_pocketsphinx      # config_options+= --enable-pocketsphinx        # enable PocketSphinx, needed for asr filter [no]
 build_pocketsphinx() {
   if [[ $disable_pocketsphinx != 1 && $enable_pocketsphinx == 1 ]]; then
-  local lib="pocketsphinx"
-  local repo="https://github.com/cmusphinx/pocketsphinx"
-  local repo_ver="v5.0.4"
+  local parent="pocketsphinx"
+  local lib="swig"
+  local repo="https://github.com/swig/swig"
+  local repo_ver="v2.0.12"
 	change_dir "$src_dir"
-  do_git_checkout "$repo" "$lib" "$repo_ver"
-	change_dir "$src_dir/$lib/build" 1
-  local cmake_params="-DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=OFF"
-	do_cmake_from_build_dir "$src_dir/$lib" "$cmake_params"
-	do_make_and_make_install
+  do_git_checkout "$repo" "$src_dir/$parent/$lib"
+	change_dir "$src_dir/$parent/$lib/build" 1
+	local cmake_params="-DCMAKE_INSTALL_PREFIX=${dependency_install_prefix} \
+-DCMAKE_BUILD_TYPE=Release \
+-DBUILD_SHARED_LIBS=OFF"
+  do_cmake_from_build_dir "$src_dir/$parent/$lib" "$cmake_params"
+  do_make_and_make_install
+  change_dir "$src_dir"
+  local lib="sphinxbase"
+  local repo="https://github.com/cmusphinx/sphinxbase"
+	change_dir "$src_dir"
+  do_git_checkout "$repo" "$src_dir/$parent/$lib"
+	change_dir "$src_dir/$parent/$lib"
+	generic_configure_make_install "--enable-static --disable-shared"
+  change_dir "$src_dir"
+  activate_meson
+  local lib="gstreamer"
+  local repo="https://gitlab.freedesktop.org/gstreamer/gstreamer"
+  local repo_ver="1.26.10"
+	change_dir "$src_dir"
+  do_git_checkout "$repo" "$src_dir/$parent/$lib"
+  export LDFLAGS="$LDFLAGS -L${dependency_install_prefix}/lib -llzma"
+  local meson_options="-Ddoc=disabled -Dexamples=disabled -Dtests=disabled -Dtools=disabled"
+  generic_meson "$meson_options"
+  do_ninja_and_ninja_install
+  reset_ldflags
+  change_dir "$src_dir"
+  local lib="pocketsphinx"
+  local repo="https://sourceforge.net/code-snapshots/svn/c/cm/cmusphinx/code/cmusphinx-code-r13291-trunk-pocketsphinx.zip"
+  local repo_ver="0.8"
+	change_dir "$src_dir"
+  download_and_unpack_file "$repo" "$src_dir/$parent/$lib"
+	change_dir "$src_dir/$parent/$lib"
+	generic_configure_make_install "--enable-static --disable-shared"
   change_dir "$src_dir"
   fi
 }
+# new version is not compatible yet
+# build_pocketsphinx() {
+#   if [[ $disable_pocketsphinx != 1 && $enable_pocketsphinx == 1 ]]; then
+#   local lib="pocketsphinx"
+#   local repo="https://github.com/cmusphinx/pocketsphinx"
+#   local repo_ver="v5.0.4"
+# 	change_dir "$src_dir"
+#   do_git_checkout "$repo" "$lib" "$repo_ver"
+# 	change_dir "$src_dir/$lib/build" 1
+#   local cmake_params="-DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=OFF"
+# 	do_cmake_from_build_dir "$src_dir/$lib" "$cmake_params"
+# 	do_make_and_make_install
+#   ln -s "$dependency_install_prefix/include/pocketsphinx.h" "$dependency_install_prefix/include/pocketsphinx/pocketsphinx.h"
+#   change_dir "$src_dir"
+#   fi
+# }
 # build_vapoursynth       # config_options+= --enable-vapoursynth         # enable VapourSynth demuxer [no]
 build_vapoursynth() {
   if [[ $disable_vapoursynth != 1 && $enable_vapoursynth == 1 ]]; then
@@ -3374,6 +3446,18 @@ build_vapoursynth() {
   do_ninja_and_ninja_install
 	change_dir "$src_dir"
   fi
+}
+build_ggml() {
+  local lib="ggml"
+  local repo="https://github.com/ggml-org/ggml"
+  local repo_ver="v0.9.4"
+	change_dir "$src_dir"
+  do_git_checkout "$repo" "$lib" "$repo_ver"
+	change_dir "$src_dir/$lib/build" 1
+  local cmake_params="-DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=OFF"
+	do_cmake_from_build_dir "$src_dir/$lib" "$cmake_params"
+	do_make_and_make_install
+  change_dir "$src_dir"
 }
 # build_whisper           # config_options+= --enable-whisper             # enable whisper filter [no]
 build_whisper() {
