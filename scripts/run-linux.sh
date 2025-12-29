@@ -2924,16 +2924,17 @@ build_libx265() {
   ln -sf "$src_dir/$lib/12bit/libx265.a" libx265_main12.a
   do_cmake_from_build_dir "$src_dir/$lib/source" "-DEXTRA_LIB=\"x265_main10.a;x265_main12.a\" -DEXTRA_LINK_FLAGS=-L. -DLINKED_10BIT=ON -DLINKED_12BIT=ON"
   change_dir "$src_dir/$lib/8bit"
-  mv libx265.a libx265_main.a
+  do_make
+  mv -f "libx265.a" "libx265_main.a"
   ar -M <<EOF
-CREATE ibx265.a
-ADDLIB ibx265_main.a
+CREATE libx265.a
+ADDLIB libx265_main.a
 ADDLIB libx265_main10.a
 ADDLIB libx265_main12.a
 SAVE
 END
 EOF
-  do_make_and_make_install
+  do_make_install
   change_dir "$src_dir"
   fi
 }
