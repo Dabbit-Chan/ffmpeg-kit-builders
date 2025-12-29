@@ -2927,7 +2927,8 @@ configure_ffmpeg() {
 
 	if truthy "$enable_gpl"; then
 		config_options+=" --enable-gpl"
-  elif [[ -n $enable_nonfree ]]; then 
+  fi
+  if [[ -n $enable_nonfree ]]; then 
     config_options+=" --enable-nonfree"
     #------------------------------------------------------------------------------
     # ------------------------ non-free non-gpl libraries -------------------------
@@ -3833,4 +3834,78 @@ TARGET_DIR="$1"
         mv "$full_path" "$dest_path"
     fi
   done
+}
+
+check_gpl_libraries() {
+  if truthy "$enable_gpl"; then
+    enable_library "libx264"
+    enable_library "libx265"
+    enable_library "libxvid"
+    enable_library "frei0r"
+    enable_library "libdvdread"
+    enable_library "v4l2-m2m"
+    enable_library "avisynth"
+    enable_library "libjack"
+    enable_library "libbs2b"
+    enable_library "libcdio"
+    enable_library "libdvdnav"
+    enable_library "librubberband"
+    enable_library "libsmbclient"
+    enable_library "libvidstab"
+  else
+    disable_library "libx264"
+    disable_library "libx265"
+    disable_library "libxvid"
+    disable_library "frei0r"
+    disable_library "libdvdread"
+    disable_library "v4l2-m2m"
+    disable_library "avisynth"
+    disable_library "libjack"
+    disable_library "libbs2b"
+    disable_library "libcdio"
+    disable_library "libdvdnav"
+    disable_library "librubberband"
+    disable_library "libsmbclient"
+    disable_library "libvidstab"
+  fi
+}
+
+# disable libraries autodetected by default to prevent inadvertent bundling
+disable_autodetected() {
+  disable_library "alsa"
+  disable_library "libdc1394"
+  disable_library "libdrm"
+  disable_library "libxcb-shape"
+  disable_library "libxcb-shm"
+  disable_library "libxcb-xfixes"
+  disable_library "cuda-llvm"
+  disable_library "v4l2-m2m"
+  disable_library "libxcb"
+  disable_library "vaapi"
+  disable_library "xlib"
+  disable_library "amf"
+  disable_library "vulkan"
+  disable_library "bzlib"
+  disable_library "iconv"
+  disable_library "lzma"
+  disable_library "sdl2"
+  disable_library "sndio"
+  disable_library "zlib"
+  disable_library "cuvid"
+  disable_library "ffnvcodec"
+  disable_library "nvdec"
+  disable_library "nvenc"
+  disable_library "vdpau"
+  disable_library "d3d11va"
+  disable_library "d3d12va"
+  disable_library "dxva2"
+  disable_library "schannel"
+  disable_library "mediafoundation"
+  disable_library "avfoundation"
+  disable_library "appkit"
+  disable_library "audiotoolbox"
+  disable_library "coreimage"
+  disable_library "metal"
+  disable_library "securetransport"
+  disable_library "videotoolbox"
 }

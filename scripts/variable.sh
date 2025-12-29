@@ -30,7 +30,8 @@ export prefer_stable=y # Only for x264 and x265.
 export build_amd_amf=y
 export ffmpeg_git_checkout_version="release/8.0"
 export build_ismindex=n
-export enable_gpl=1
+export enable_gpl=0
+export enable_nonfree=0
 export original_cflags="$CFLAGS"
 export build_x264_with_libav=n # To build x264 with Libavformat.
 export ffmpeg_git_checkout="https://github.com/FFmpeg/FFmpeg.git"
@@ -211,11 +212,11 @@ CONFIG_AUDIO_AI="\
 --enable-pocketsphinx \
 --enable-whisper"
 
-# Android general NON-GPL
-CONFIG_ANDROID_NON_GPL="--enable-jni"
+# Android general NON-FREE
+CONFIG_ANDROID="--enable-jni"
 
-# Apple general NON-GPL
-CONFIG_APPLE_NON_GPL="\
+# Apple general NON-FREE
+CONFIG_APPLE_NON_FREE="\
 --enable-appkit \
 --enable-avfoundation"
 
@@ -283,8 +284,8 @@ CONFIG_AUDIO_EXTRA="\
 --enable-lv2 \
 --enable-sndio"
 
-# Cross-Platform Audio Focused NON-GPL
-CONFIG_AUDIO_NON_GPL="\
+# Cross-Platform Audio Focused NON-FREE
+CONFIG_AUDIO_NON_FREE="\
 --enable-libfdk-aac \
 --enable-audiotoolbox"
 
@@ -350,8 +351,8 @@ CONFIG_VIDEO_EXTRA="\
 --enable-vapoursynth \
 --enable-xlib"
 
-# Cross-platform Video Focused NON-GPL
-CONFIG_VIDEO_EXTRA_NON_GPL="--enable-decklink"
+# Cross-platform Video Focused NON-FREE
+CONFIG_VIDEO_EXTRA_NON_FREE="--enable-decklink"
 
 # Hardware Accel Video Focused
 CONFIG_HARDWARE="\
@@ -367,8 +368,8 @@ CONFIG_HARDWARE="\
 --enable-vulkan \
 --enable-vulkan-static"
 
-# Hardware Accel Video Focused NON-GPL
-CONFIG_HARDWARE_NON_GPL="\
+# Hardware Accel Video Focused NON-FREE
+CONFIG_HARDWARE_NON_FREE="\
 --enable-coreimage \
 --enable-cuda-llvm \
 --enable-cuda-nvcc \
@@ -552,7 +553,7 @@ CONFIG_SSH="--enable-libssh"
 # build_vapoursynth       # config_options+= --enable-vapoursynth         # Video  # enable VapourSynth demuxer [no]
 # build_whisper           # config_options+= --enable-whisper             # Audio  # enable whisper filter [no]
 #------------------------------------------------------------------------------
-# ------------------------------ non-gpl features -----------------------------
+# ------------------------------ NON-FREE features -----------------------------
 #------------------------------------------------------------------------------ 
 # build_decklink          # config_options+= --enable-decklink            # Video  # enable Blackmagic DeckLink I/O support [no]
 # build_libfdk_aac        # config_options+= --enable-libfdk-aac          # Audio  # enable AAC de/encoding via libfdk-aac [no]

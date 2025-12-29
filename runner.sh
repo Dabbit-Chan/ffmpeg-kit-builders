@@ -428,42 +428,7 @@ setup_build_environment
 # Setup config variables
 
 # disable libraries autodetected by default to prevent inadvertent bundling
-disable_library "alsa"
-disable_library "libdc1394"
-disable_library "libdrm"
-disable_library "libxcb-shape"
-disable_library "libxcb-shm"
-disable_library "libxcb-xfixes"
-disable_library "cuda-llvm"
-disable_library "v4l2-m2m"
-disable_library "libxcb"
-disable_library "vaapi"
-disable_library "xlib"
-disable_library "amf"
-disable_library "vulkan"
-disable_library "bzlib"
-disable_library "iconv"
-disable_library "lzma"
-disable_library "sdl2"
-disable_library "sndio"
-disable_library "zlib"
-disable_library "cuvid"
-disable_library "ffnvcodec"
-disable_library "nvdec"
-disable_library "nvenc"
-disable_library "vdpau"
-disable_library "d3d11va"
-disable_library "d3d12va"
-disable_library "dxva2"
-disable_library "schannel"
-disable_library "mediafoundation"
-disable_library "avfoundation"
-disable_library "appkit"
-disable_library "audiotoolbox"
-disable_library "coreimage"
-disable_library "metal"
-disable_library "securetransport"
-disable_library "videotoolbox"
+disable_autodetected
 
 apply_preset "$CONFIG_GENERAL"
 
@@ -496,6 +461,7 @@ fi
 if truthy "$video_ai_hw_bundle"; then
   enable_audio=1
   enable_video=1
+  enable_audio_ai=1
   enable_video_ai=1
   enable_hardware=1
   enable_https=1
@@ -517,7 +483,7 @@ if truthy "$enable_nonfree"; then
   truthy "$enable_video" || truthy "$enable_full" && apply_preset "$CONFIG_VIDEO_NON_FREE"
   truthy "$enable_streaming" || truthy "$enable_full" && apply_preset "$CONFIG_STREAMING_NON_FREE"
   truthy "$enable_hardware" || truthy "$enable_full" && apply_preset "$CONFIG_HARDWARE_NON_FREE"
-  truthy "$enable_audio_ai" || truthy "$enable_full" && apply_preset "$CONFIG_VIDEO_AI_NON_FREE"
+  truthy "$enable_audio_ai" || truthy "$enable_full" && apply_preset "$CONFIG_AUDIO_AI_NON_FREE"
   truthy "$enable_video_ai" || truthy "$enable_full" && apply_preset "$CONFIG_VIDEO_AI_NON_FREE"
   truthy "$enable_ssh" || truthy "$enable_full" && apply_preset "$CONFIG_SSH_NON_FREE"
 
@@ -553,7 +519,7 @@ truthy "$enable_audio" || truthy "$enable_full" && apply_preset "$CONFIG_AUDIO"
 truthy "$enable_video" || truthy "$enable_full" && apply_preset "$CONFIG_VIDEO"
 truthy "$enable_streaming" || truthy "$enable_full" && apply_preset "$CONFIG_STREAMING"
 truthy "$enable_hardware" || truthy "$enable_full" && apply_preset "$CONFIG_HARDWARE"
-truthy "$enable_audio_ai" || truthy "$enable_full" && apply_preset "$CONFIG_VIDEO_AI"
+truthy "$enable_audio_ai" || truthy "$enable_full" && apply_preset "$CONFIG_AUDIO_AI"
 truthy "$enable_video_ai" || truthy "$enable_full" && apply_preset "$CONFIG_VIDEO_AI"
 truthy "$enable_ssh" || truthy "$enable_full" && apply_preset "$CONFIG_SSH"
 
@@ -625,47 +591,8 @@ if truthy "$enable_streaming"; then
   fi
 fi
 
-# disable strict gpl lobraries
-if ! truthy "$enable_gpl"; then
-  disable_library "libx264"
-  disable_library "libx265"
-  disable_library "libxvid"
-  disable_library "frei0r"
-  disable_library "libdvdread"
-  disable_library "v4l2-m2m"
-  disable_library "avisynth"
-  disable_library "libjack"
-  disable_library "libbs2b"
-  disable_library "libcdio"
-  disable_library "libdvdnav"
-  disable_library "librubberband"
-  disable_library "libsmbclient"
-  disable_library "libvidstab"
-fi
-# disable libraries that have restrictive lincenses
-if ! truthy "$enable_nonfree"; then
-  disable_library "appkit"
-  disable_library "avfoundation"
-  disable_library "coreimage"
-  disable_library "metal"
-  disable_library "audiotoolbox"
-  disable_library "videotoolbox"
-  disable_library "securetransport"
-  disable_library "mmal"
-  disable_library "omx-rpi"
-  disable_library "d3d11va"
-  disable_library "d3d12va"
-  disable_library "dxva2"
-  disable_library "mediafoundation"
-  disable_library "schannel"
-  disable_library "cuda-nvcc"
-  disable_library "cuvid"
-  disable_library "ffnvcodec"
-  disable_library "libnpp"
-  disable_library "nvdec"
-  disable_library "nvenc"
-  disable_library "cuda-llvm"
-fi
+# strict gpl libraries
+check_gpl_libraries
 
 resolve_collisions
 
