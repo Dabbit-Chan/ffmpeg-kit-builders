@@ -12,6 +12,10 @@ This repository provides a comprehensive build system for FFmpeg and FFmpegKit t
 - **Linux**: Native builds for x86_64 and i686 architecture with shared libraries (.so) and static libraries (.a).
 - **Windows**: Cross-compilation from Linux hosts using MinGW-w64 toolchain with shared libraries (.dll) and static mingw libraries (.a). 
   - *Note: MSVC ABI is not supported.*
+- **Android**: Currently not support - WIP
+- **Apple**: Apple platforms are not currently planned as I dont have one of those to develop and test. The framework is there so you are welcome to contribute!
+  - **MacOS**: Not planned 
+  - **iOS**: Not planned
 
 ## Quick Start
 
