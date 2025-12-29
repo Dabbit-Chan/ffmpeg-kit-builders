@@ -213,164 +213,163 @@ cargo install cargo-c
 ## Supported External Libraries
 
 You can also get the full list of supported external libraries by running `--list-libraries`
-
-|Library           |Description |Platform<sup>[1](#platform-info)</sup>|Extra<sup>[2](#extra-info)</sup>|Audio   |Video   |Streaming|Audio+AI|Video+AI|Video+AI+Hardware|
-|------------------|------------|------------------------|-----|--------|--------|-------- |--------|--------|-----------------|
-jni<sup>[8](#install-info)</sup>|JNI support|Android||x|x|x|x|x|x
-appkit<sup>[8](#install-info)</sup>|Apple AppKit framework|Apple||x|x|x|x|x|x
-avfoundation<sup>[8](#install-info)</sup>|Apple AVFoundation framework|Apple||x|x|x|x|x|x
-pocketsphinx|PocketSphinx, needed for asr filter||||||x|x|x
-whisper|whisper filter||||||x|x|x
-audiotoolbox<sup>[8](#install-info)</sup>|Apple AudioToolbox code|Apple||x|x|x|x|x|x
-alsa|ALSA support|Linux||x|x|x|x|x|x
-chromaprint|audio fingerprinting with chromaprint||x|x|x|x|x|x|x
-ladspa|LADSPA audio filtering||x|x|x|x|x|x|x
-libbs2b|bs2b DSP library|||x|x|x|x|x|x
-libcdio|audio CD grabbing with libcdio||x|x|x|x|x|x|x
-libcelt|CELT decoding via libcelt|||x|x|x|x|x|x
-libcodec2|codec2 en/decoding using libcodec2|||x|x|x|x|x|x
-libfdk-aac|AAC de/encoding via libfdk-aac|||x|x|x|x|x|x
-libflite|flite (voice synthesis) support via libflite||x|x|x|x|x|x|x
-libgme|Game Music Emu via libgme||x|x|x|x|x|x|x
-libgsm|GSM de/encoding via libgsm|||x|x|x|x|x|x
-libilbc|iLBC de/encoding via libilbc|||x|x|x|x|x|x
-libjack<sup>[8](#install-info)</sup>|JACK audio sound server||x|x|x|x|x|x|x
-liblc3|LC3 de/encoding via liblc3|||x|x|x|x|x|x
-libmodplug|ModPlug via libmodplug|||x|x|x|x|x|x
-libmp3lame|MP3 encoding via libmp3lame|||x|x|x|x|x|x
-libmysofa|libmysofa, needed for sofalizer filter||x|x|x|x|x|x|x
-libopencore-amrnb|AMR-NB de/encoding via libopencore-amrnb|||x|x|x|x|x|x
-libopencore-amrwb|AMR-WB decoding via libopencore-amrwb|||x|x|x|x|x|x
-libopenmpt|decoding tracked files via libopenmpt|||x|x|x|x|x|x
-libopus|Opus de/encoding via libopus|||x|x|x|x|x|x
-libpulse<sup>[8](#install-info)</sup>|Pulseaudio input via libpulse|Linux|x|x|x|x|x|x|x
-librubberband|rubberband needed for rubberband filter||x|x|x|x|x|x|x
-libshine|fixed-point MP3 encoding via libshine||x|x|x|x|x|x|x
-libsoxr|Include libsoxr resampling|||x|x|x|x|x|x
-libspeex|Speex de/encoding via libspeex|||x|x|x|x|x|x
-libtwolame|MP2 encoding via libtwolame|||x|x|x|x|x|x
-libvo-amrwbenc|AMR-WB encoding via libvo-amrwbenc|||x|x|x|x|x|x
-libvorbis|Vorbis en/decoding via libvorbis, native implementation exists|||x|x|x|x|x|x
-lv2|LV2 audio filtering||x|x|x|x|x|x|x
-openal|OpenAL 1.1 capture support|||x|x|x|x|x|x
-sndio|software layer of the OpenBSD operating system that manages sound cards and MIDI ports||x|x|x|x|x|x|x
-gcrypt|gcrypt, needed for rtmp(t)e support if openssl, librtmp or gmp is not used|[3](#rtmpte-info)
-gmp|gmp, needed for rtmp(t)e support if openssl or librtmp is not used|[3](#rtmpte-info)
-bzlib|For compressing and decompressing streams of data||x|x|x|x|x|x|x
-iconv|Convert a string from one character encoding to another||x|x|x|x|x|x|x
-libxml2|XML parsing using the C library libxml2, needed for dash and imf demuxing support||x|x|x|x|x|x|x
-lzma|Lossless data compression algorithm||x|x|x|x|x|x|x
-zlib|General-purpose lossless data-compression library||x|x|x|x|x|x|x
-mediacodec<sup>[8](#install-info)</sup>|Android MediaCodec support|Android|||||||x
-coreimage<sup>[8](#install-info)</sup>|Apple CoreImage framework|Apple|||||||x
-metal<sup>[8](#install-info)</sup>|Apple Metal framework|Apple|||||||x
-videotoolbox<sup>[8](#install-info)</sup>|VideoToolbox code|Apple|||||||x
-amf|AMF video encoding code||||||||x
-cuda-llvm<sup>[8](#install-info)</sup>|CUDA compilation using clang|Nvidia|||||||x
-cuda-nvcc<sup>[8](#install-info)</sup>|Nvidia CUDA compiler|Nvidia|||||||x
-cuvid<sup>[8](#install-info)</sup>|Nvidia CUVID support|Nvidia|||||||x
-ffnvcodec|dynamically linked Nvidia code|Nvidia|||||||x
-libdrm|DRM code (Linux)|Linux|||||||x
-libglslang|GLSL->SPIRV compilation via libglslang||||||||x
-libmfx|Intel MediaSDK (AKA Quick Sync Video) code via libmfx||||||||x
-libnpp<sup>[8](#install-info)</sup>|Nvidia Performance Primitives-based code|Nvidia|||||||x
-libplacebo|libplacebo library||||||||x
-libshaderc|GLSL->SPIRV compilation via libshaderc||||||||x
-libvpl|Intel oneVPL code via libvpl if libmfx is not used||||||||x
-nvdec<sup>[8](#install-info)</sup>|Nvidia video decoding acceleration (via hwaccel)|Nvidia|||||||x
-nvenc<sup>[8](#install-info)</sup>|Nvidia video encoding code|Nvidia|||||||x
-opencl|OpenCL processing||||||||x
-rkmpp|Rockchip Media Process Platform code|Linux|||||||x
-v4l2-m2m|V4L2 mem2mem code|Linux|||||||x
-vaapi|Video Acceleration API (mainly Unix/Intel) code|Linux|||||||x
-vdpau<sup>[8](#install-info)</sup>|Nvidia Video Decode and Presentation API for Unix code|Nvidia|||||||x
-vulkan|Vulkan code||||||||x
-vulkan-static|statically link to libvulkan||||||||x
-opengl|OpenGL rendering||||||||x
-d3d11va<sup>[8](#install-info)</sup>|Microsoft Direct3D 11 video acceleration code|Windows|||||||x
-d3d12va<sup>[8](#install-info)</sup>|Microsoft Direct3D 12 video acceleration code|Windows|||||||x
-dxva2<sup>[8](#install-info)</sup>|Microsoft DirectX 9 video acceleration code|Windows|||||||x
-mediafoundation<sup>[8](#install-info)</sup>|encoding via MediaFoundation|Windows|||||||x
-ohcodec<sup>[8](#install-info)</sup>|OpenHarmony Codec support|HarmonyOS|||||||x
-mmal|Broadcom Multi-Media Abstraction Layer (Raspberry Pi) via MMAL|Raspberry Pi|||||||x
-omx|OpenMAX IL code|Raspberry Pi|||||||x
-omx-rpi|OpenMAX IL code for Raspberry Pi|Raspberry Pi|||||||x
-securetransport<sup>[8](#install-info)</sup>|Secure Transport, needed for TLS support on OSX if openssl and gnutls are not used|Apple||[4](#https-info)|[4](#https-info)|[4](#https-info)|[4](#https-info)|[4](#https-info)|[4](#https-info)|[4](#https-info)|
-gnutls|gnutls, needed for https support if openssl, libtls or mbedtls is not used|||[4](#https-info)|[4](#https-info)|[4](#https-info)|[4](#https-info)|[4](#https-info)|[4](#https-info)|[4](#https-info)|
-libtls|LibreSSL (via libtls), needed for https support if openssl, gnutls or mbedtls is not used|||[4](#https-info)|[4](#https-info)|[4](#https-info)|[4](#https-info)|[4](#https-info)|[4](#https-info)|[4](#https-info)|
-mbedtls|mbedTLS, needed for https support if openssl, gnutls or libtls is not used|||[4](#https-info)|[4](#https-info)|[4](#https-info)|[4](#https-info)|[4](#https-info)|[4](#https-info)|[4](#https-info)|
-openssl|openssl, needed for https support if gnutls, libtls or mbedtls is not used|||[4](#https-info)|[4](#https-info)|[4](#https-info)|[4](#https-info)|[4](#https-info)|[4](#https-info)|[4](#https-info)|
-schannel<sup>[8](#install-info)</sup>|SChannel SSP, needed for TLS support on Windows if openssl and gnutls are not used|Windows||[4](#https-info)|[4](#https-info)|[4](#https-info)|[4](#https-info)|[4](#https-info)|[4](#https-info)|[4](#https-info)|
-librabbitmq|RabbitMQ library||[5](#mq-info)
-libzmq|message passing via libzmq||[5](#mq-info)
-libsmbclient|Samba protocol via libsmbclient||[6](#smb-info)
-libssh|SFTP protocol via libssh||[7](#ssh-info)
-librist|RIST via librist|||||x
-librtmp|RTMP[E] support via librtmp|||||x
-libsrt|Haivision SRT protocol via libsrt|||||x
-libopencv|video filtering via libopencv|||||||x|x
-libopenvino<sup>[8](#install-info)</sup>|OpenVINO as a DNN module backend for DNN based filters like dnn_processing|||||||x|x
-libquirc|QR decoding via libquirc|||||||x|x
-libtensorflow<sup>[8](#install-info)</sup>|TensorFlow as a DNN module backend for DNN based filters like sr|||||||x|x
-libtesseract|Tesseract, needed for ocr filter|||||||x|x
-libtorch<sup>[8](#install-info)</sup>|Torch as one DNN backend|||||||x|x
-sdl2|sdl2||||x|x||x|x
-avisynth|reading of AviSynth script files||x||x|x||x|x
-decklink|Blackmagic DeckLink I/O support||x||x|x||x|x
-frei0r|frei0r video filtering||x||x|x||x|x
-lcms2|ICC profile support via LittleCMS 2||||x|x||x|x
-libaom|AV1 video encoding/decoding via libaom||||x|x||x|x
-libaribb24|ARIB text and caption decoding via libaribb24||||x|x||x|x
-libaribcaption|ARIB text and caption decoding via libaribcaption||||x|x||x|x
-libass|libass subtitles rendering, needed for subtitles and ass filter||||x|x||x|x
-libbluray|BluRay reading using libbluray||||x|x||x|x
-libcaca|textual display using libcaca||||x|x||x|x
-libdav1d|AV1 decoding via libdav1d||||x|x||x|x
-libdavs2|AVS2 decoding via libdavs2||||x|x||x|x
-libdc1394|IIDC-1394 grabbing using libdc1394 and libraw1394||||x|x||x|x
-libdvdnav|libdvdnav, needed for DVD demuxing||||x|x||x|x
-libdvdread|libdvdread, needed for DVD demuxing||||x|x||x|x
-libfontconfig|libfontconfig, useful for drawtext filter||||x|x||x|x
-libfreetype|libfreetype, needed for drawtext filter||||x|x||x|x
-libfribidi|libfribidi, improves drawtext filter||||x|x||x|x
-libharfbuzz|libharfbuzz, needed for drawtext filter||||x|x||x|x
-libiec61883|iec61883 via libiec61883|Linux|||x|x||x|x
-libjxl|JPEG XL de/encoding via libjxl||||x|x||x|x
-libklvanc|Kernel Labs VANC processing||x||x|x||x|x
-libkvazaar|HEVC encoding via libkvazaar||||x|x||x|x
-liblcevc-dec|LCEVC decoding via liblcevc-dec||||x|x||x|x
-liblensfun|lensfun lens correction||x||x|x||x|x
-liboapv|APV encoding via liboapv||||x|x||x|x
-libopenh264|H.264 encoding via OpenH264||||x|x||x|x
-libopenjpeg|JPEG 2000 encoding via OpenJPEG||||x|x||x|x
-libqrencode|QR encode generation via libqrencode||x||x|x||x|x
-librav1e|AV1 encoding via rav1e||||x|x||x|x
-librsvg|SVG rasterization via librsvg||||x|x||x|x
-libsnappy|Snappy compression, needed for hap encoding||||x|x||x|x
-libsvtav1|AV1 encoding via SVT||||x|x||x|x
-libtheora|Theora encoding via libtheora||||x|x||x|x
-libuavs3d|AVS3 decoding via libuavs3d||||x|x||x|x
-libv4l2|libv4l2/v4l-utils|Linux|x||x|x||x|x
-libvidstab|video stabilization using vid.stab||x||x|x||x|x
-libvmaf|vmaf filter via libvmaf||x||x|x||x|x
-libvpx|VP8 and VP9 de/encoding via libvpx||||x|x||x|x
-libvvenc|H.266/VVC encoding via vvenc||||x|x||x|x
-libwebp|WebP encoding via libwebp||||x|x||x|x
-libx264|H.264 encoding via x264||||x|x||x|x
-libx265|HEVC encoding via x265||||x|x||x|x
-libxavs|AVS encoding via xavs||||x|x||x|x
-libxavs2|AVS2 encoding via xavs2||||x|x||x|x
-libxcb|X11 grabbing using XCB|Linux|x||x|x||x|x
-libxcb-shape|X11 grabbing shape rendering|Linux|x||x|x||x|x
-libxcb-shm|X11 grabbing shm communication|Linux|x||x|x||x|x
-libxcb-xfixes|X11 grabbing mouse rendering|Linux|x||x|x||x|x
-libxevd|EVC decoding via libxevd||||x|x||x|x
-libxeve|EVC encoding via libxeve||||x|x||x|x
-libxvid|Xvid encoding via xvidcore, native MPEG-4/Xvid encoder exists||||x|x||x|x
-libzimg|z.lib, needed for zscale filter||||x|x||x|x
-libzvbi|teletext support via libzvbi||||x|x||x|x
-vapoursynth|VapourSynth demuxer||x||x|x||x|x
-xlib|X Window System protocol client library written in the C programming language|Linux|x||x|x||x|x
+| Library            | Description | Platform<sup>[1](https://www.google.com/search?q=%23platform-info)</sup> | Extra<sup>[2](https://www.google.com/search?q=%23extra-info)</sup> | Audio    | Video    | Streaming | Audio+AI | Video+AI | Video+AI+Hardware |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| jni<sup>[8](https://www.google.com/search?q=%23install-info)</sup> | Enables Java Native Interface interactions on Android | Android |  | x | x | x | x | x | x |
+| appkit<sup>[8](https://www.google.com/search?q=%23install-info)</sup> | Accesses AppKit for screen and window capture | Apple |  | x | x | x | x | x | x |
+| avfoundation<sup>[8](https://www.google.com/search?q=%23install-info)</sup> | Captures input from AVFoundation devices (cameras/mics) | Apple |  | x | x | x | x | x | x |
+| pocketsphinx | Performs offline speech-to-text conversion |  |  |  |  |  | x | x | x |
+| whisper | Integrates OpenAI Whisper for speech recognition |  |  |  |  |  | x | x | x |
+| audiotoolbox<sup>[8](https://www.google.com/search?q=%23install-info)</sup> | Accesses AudioToolbox for native codec support | Apple |  | x | x | x | x | x | x |
+| alsa | Accesses ALSA for audio input and output | Linux |  | x | x | x | x | x | x |
+| chromaprint | Calculates audio fingerprints for identification |  | x | x | x | x | x | x | x |
+| ladspa | Loads LADSPA plugins for audio filtering |  | x | x | x | x | x | x | x |
+| libbs2b | Simulates binaural audio via DSP |  |  | x | x | x | x | x | x |
+| libcdio | Reads and extracts audio from CDs |  | x | x | x | x | x | x | x |
+| libcelt | Decodes CELT audio streams |  |  | x | x | x | x | x | x |
+| libcodec2 | Encodes and decodes Codec2 speech format |  |  | x | x | x | x | x | x |
+| libfdk-aac | Encodes and decodes high-quality AAC audio |  |  | x | x | x | x | x | x |
+| libflite | Synthesizes speech from text (TTS) filter |  | x | x | x | x | x | x | x |
+| libgme | Emulates and plays video game music formats |  | x | x | x | x | x | x | x |
+| libgsm | Encodes and decodes GSM audio |  |  | x | x | x | x | x | x |
+| libilbc | Encodes and decodes iLBC audio |  |  | x | x | x | x | x | x |
+| libjack<sup>[8](https://www.google.com/search?q=%23install-info)</sup> | Connects to the JACK audio connection kit |  | x | x | x | x | x | x | x |
+| liblc3 | Encodes and decodes LC3 (Bluetooth LE) audio |  |  | x | x | x | x | x | x |
+| libmodplug | Decodes module music formats (MOD, etc.) |  |  | x | x | x | x | x | x |
+| libmp3lame | Encodes MP3 audio |  |  | x | x | x | x | x | x |
+| libmysofa | Reads HRTF files for the sofalizer filter |  | x | x | x | x | x | x | x |
+| libopencore-amrnb | Encodes and decodes AMR-NB audio |  |  | x | x | x | x | x | x |
+| libopencore-amrwb | Decodes AMR-WB audio |  |  | x | x | x | x | x | x |
+| libopenmpt | Decodes tracked music files (OpenMPT based) |  |  | x | x | x | x | x | x |
+| libopus | Encodes and decodes Opus audio |  |  | x | x | x | x | x | x |
+| libpulse<sup>[8](https://www.google.com/search?q=%23install-info)</sup> | Captures audio via PulseAudio server | Linux | x | x | x | x | x | x | x |
+| librubberband | Performs high-quality time stretching/pitch shifting |  | x | x | x | x | x | x | x |
+| libshine | Encodes MP3 using fixed-point math |  | x | x | x | x | x | x | x |
+| libsoxr | Resamples audio using the SoX library |  |  | x | x | x | x | x | x |
+| libspeex | Encodes and decodes Speex audio |  |  | x | x | x | x | x | x |
+| libtwolame | Encodes MP2 audio |  |  | x | x | x | x | x | x |
+| libvo-amrwbenc | Encodes AMR-WB audio |  |  | x | x | x | x | x | x |
+| libvorbis | Encodes and decodes Vorbis audio |  |  | x | x | x | x | x | x |
+| lv2 | Loads LV2 plugins for audio filtering |  | x | x | x | x | x | x | x |
+| openal | Captures audio via OpenAL 1.1 |  |  | x | x | x | x | x | x |
+| sndio | Accesses sndio for audio I/O on OpenBSD |  | x | x | x | x | x | x | x |
+| gcrypt | Provides crypto functions for RTMP/RTMPE | [3](https://www.google.com/search?q=%23rtmpte-info) |  |  |  |  |  |  |  |
+| gmp | Provides math functions for crypto contexts | [3](https://www.google.com/search?q=%23rtmpte-info) |  |  |  |  |  |  |  |
+| bzlib | Compresses and decompresses bzip2 streams |  | x | x | x | x | x | x | x |
+| iconv | Converts character encodings for text/subtitles |  | x | x | x | x | x | x | x |
+| libxml2 | Parses XML for DASH, IMF, and other formats |  | x | x | x | x | x | x | x |
+| lzma | Provides LZMA lossless data compression |  | x | x | x | x | x | x | x |
+| zlib | Provides Deflate/zlib lossless data compression |  | x | x | x | x | x | x | x |
+| mediacodec<sup>[8](https://www.google.com/search?q=%23install-info)</sup> | Accesses Android MediaCodec hardware acceleration | Android |  |  |  |  |  |  | x |
+| coreimage<sup>[8](https://www.google.com/search?q=%23install-info)</sup> | Applies video filters via Apple CoreImage | Apple |  |  |  |  |  |  | x |
+| metal<sup>[8](https://www.google.com/search?q=%23install-info)</sup> | Utilizes Apple Metal for GPU acceleration | Apple |  |  |  |  |  |  | x |
+| videotoolbox<sup>[8](https://www.google.com/search?q=%23install-info)</sup> | Accesses VideoToolbox for hardware encoding/decoding | Apple |  |  |  |  |  |  | x |
+| amf | Accesses AMD Advanced Media Framework (GPU encoding) |  |  |  |  |  |  |  |  |
+| cuda-llvm<sup>[8](https://www.google.com/search?q=%23install-info)</sup> | Compiles CUDA kernels at runtime using Clang | Nvidia |  |  |  |  |  |  | x |
+| cuda-nvcc<sup>[8](https://www.google.com/search?q=%23install-info)</sup> | Compiles CUDA kernels using NVCC | Nvidia |  |  |  |  |  |  | x |
+| cuvid<sup>[8](https://www.google.com/search?q=%23install-info)</sup> | Accesses Nvidia CUVID for decoding (Legacy) | Nvidia |  |  |  |  |  |  | x |
+| ffnvcodec | Provides headers for Nvidia codec API integration | Nvidia |  |  |  |  |  |  | x |
+| libdrm | Accesses Direct Rendering Manager for Linux GPU buffer | Linux |  |  |  |  |  |  | x |
+| libglslang | Compiles GLSL shaders to SPIR-V for Vulkan filters |  |  |  |  |  |  |  |  |
+| libmfx | Accesses Intel Quick Sync Video (QSV) via MediaSDK |  |  |  |  |  |  |  |  |
+| libnpp<sup>[8](https://www.google.com/search?q=%23install-info)</sup> | Uses Nvidia Performance Primitives for image processing | Nvidia |  |  |  |  |  |  | x |
+| libplacebo | Applies high-quality GPU video processing filters |  |  |  |  |  |  |  |  |
+| libshaderc | Compiles GLSL shaders to SPIR-V (Google implementation) |  |  |  |  |  |  |  |  |
+| libvpl | Accesses Intel oneVPL video processing library |  |  |  |  |  |  |  |  |
+| nvdec<sup>[8](https://www.google.com/search?q=%23install-info)</sup> | Accesses Nvidia NVDEC for hardware decoding | Nvidia |  |  |  |  |  |  | x |
+| nvenc<sup>[8](https://www.google.com/search?q=%23install-info)</sup> | Accesses Nvidia NVENC for hardware encoding | Nvidia |  |  |  |  |  |  | x |
+| opencl | Enables OpenCL-based video filtering |  |  |  |  |  |  |  |  |
+| rkmpp | Accesses Rockchip Media Process Platform for HW codecs | Linux |  |  |  |  |  |  | x |
+| v4l2-m2m | Accesses V4L2 Memory-to-Memory hardware codecs | Linux |  |  |  |  |  |  | x |
+| vaapi | Accesses Video Acceleration API for HW codecs | Linux |  |  |  |  |  |  | x |
+| vdpau<sup>[8](https://www.google.com/search?q=%23install-info)</sup> | Accesses VDPAU for hardware decoding on Unix | Nvidia |  |  |  |  |  |  | x |
+| vulkan | Enables Vulkan-based filtering and rendering |  |  |  |  |  |  |  |  |
+| vulkan-static | Links libvulkan statically |  |  |  |  |  |  |  |  |
+| opengl | Enables OpenGL-based rendering and filtering |  |  |  |  |  |  |  |  |
+| d3d11va<sup>[8](https://www.google.com/search?q=%23install-info)</sup> | Accesses Direct3D 11 for video acceleration | Windows |  |  |  |  |  |  | x |
+| d3d12va<sup>[8](https://www.google.com/search?q=%23install-info)</sup> | Accesses Direct3D 12 for video acceleration | Windows |  |  |  |  |  |  | x |
+| dxva2<sup>[8](https://www.google.com/search?q=%23install-info)</sup> | Accesses DirectX 9 for video acceleration | Windows |  |  |  |  |  |  | x |
+| mediafoundation<sup>[8](https://www.google.com/search?q=%23install-info)</sup> | Accesses Windows Media Foundation for encoding | Windows |  |  |  |  |  |  | x |
+| ohcodec<sup>[8](https://www.google.com/search?q=%23install-info)</sup> | Accesses OpenHarmony multimedia codec capabilities | HarmonyOS |  |  |  |  |  |  | x |
+| mmal | Accesses Broadcom MMAL for Raspberry Pi multimedia | Raspberry Pi |  |  |  |  |  |  | x |
+| omx | Accesses OpenMAX IL for hardware acceleration | Raspberry Pi |  |  |  |  |  |  | x |
+| omx-rpi | Accesses OpenMAX IL implementation for Raspberry Pi | Raspberry Pi |  |  |  |  |  |  | x |
+| securetransport<sup>[8](https://www.google.com/search?q=%23install-info)</sup> | Provides TLS/SSL support via Apple Secure Transport | Apple |  | [4](https://www.google.com/search?q=%23https-info) | [4](https://www.google.com/search?q=%23https-info) | [4](https://www.google.com/search?q=%23https-info) | [4](https://www.google.com/search?q=%23https-info) | [4](https://www.google.com/search?q=%23https-info) | [4](https://www.google.com/search?q=%23https-info) |
+| gnutls | Provides TLS/SSL support via GnuTLS |  |  | [4](https://www.google.com/search?q=%23https-info) | [4](https://www.google.com/search?q=%23https-info) | [4](https://www.google.com/search?q=%23https-info) | [4](https://www.google.com/search?q=%23https-info) | [4](https://www.google.com/search?q=%23https-info) | [4](https://www.google.com/search?q=%23https-info) |
+| libtls | Provides TLS/SSL support via LibreSSL |  |  | [4](https://www.google.com/search?q=%23https-info) | [4](https://www.google.com/search?q=%23https-info) | [4](https://www.google.com/search?q=%23https-info) | [4](https://www.google.com/search?q=%23https-info) | [4](https://www.google.com/search?q=%23https-info) | [4](https://www.google.com/search?q=%23https-info) |
+| mbedtls | Provides TLS/SSL support via mbedTLS |  |  | [4](https://www.google.com/search?q=%23https-info) | [4](https://www.google.com/search?q=%23https-info) | [4](https://www.google.com/search?q=%23https-info) | [4](https://www.google.com/search?q=%23https-info) | [4](https://www.google.com/search?q=%23https-info) | [4](https://www.google.com/search?q=%23https-info) |
+| openssl | Provides TLS/SSL support via OpenSSL |  |  | [4](https://www.google.com/search?q=%23https-info) | [4](https://www.google.com/search?q=%23https-info) | [4](https://www.google.com/search?q=%23https-info) | [4](https://www.google.com/search?q=%23https-info) | [4](https://www.google.com/search?q=%23https-info) | [4](https://www.google.com/search?q=%23https-info) |
+| schannel<sup>[8](https://www.google.com/search?q=%23install-info)</sup> | Provides TLS/SSL support via Windows SChannel | Windows |  | [4](https://www.google.com/search?q=%23https-info) | [4](https://www.google.com/search?q=%23https-info) | [4](https://www.google.com/search?q=%23https-info) | [4](https://www.google.com/search?q=%23https-info) | [4](https://www.google.com/search?q=%23https-info) | [4](https://www.google.com/search?q=%23https-info) |
+| librabbitmq | Enables AMQP protocol support (RabbitMQ) |  | [5](https://www.google.com/search?q=%23mq-info) |  |  |  |  |  |  |
+| libzmq | Enables ZeroMQ message passing protocol |  | [5](https://www.google.com/search?q=%23mq-info) |  |  |  |  |  |  |
+| libsmbclient | Enables SMB/CIFS protocol support |  | [6](https://www.google.com/search?q=%23smb-info) |  |  |  |  |  |  |
+| libssh | Enables SFTP protocol support |  | [7](https://www.google.com/search?q=%23ssh-info) |  |  |  |  |  |  |
+| librist | Enables Reliable Internet Stream Transport (RIST) |  |  |  |  | x |  |  |  |
+| librtmp | Enables RTMP and RTMPE stream support |  |  |  |  | x |  |  |  |
+| libsrt | Enables Secure Reliable Transport (SRT) protocol |  |  |  |  | x |  |  |  |
+| libopencv | Applies computer vision filters via OpenCV |  |  |  |  |  |  | x | x |
+| libopenvino<sup>[8](https://www.google.com/search?q=%23install-info)</sup> | Runs DNN-based filters using Intel OpenVINO backend |  |  |  |  |  |  | x | x |
+| libquirc | Decodes QR codes from video streams |  |  |  |  |  |  | x | x |
+| libtensorflow<sup>[8](https://www.google.com/search?q=%23install-info)</sup> | Runs DNN-based filters using TensorFlow backend |  |  |  |  |  |  | x | x |
+| libtesseract | Performs Optical Character Recognition (OCR) |  |  |  |  |  |  | x | x |
+| libtorch<sup>[8](https://www.google.com/search?q=%23install-info)</sup> | Runs DNN-based filters using PyTorch backend |  |  |  |  |  |  | x | x |
+| sdl2 | Outputs audio/video to window using SDL2 |  |  |  | x | x |  | x | x |
+| avisynth | Reads and demuxes AviSynth script files |  | x |  | x | x |  | x | x |
+| decklink | Captures/Outputs via Blackmagic DeckLink devices |  | x |  | x | x |  | x | x |
+| frei0r | Loads Frei0r plugins for video filtering |  | x |  | x | x |  | x | x |
+| lcms2 | Applies ICC color profiles using LittleCMS 2 |  |  |  | x | x |  | x | x |
+| libaom | Encodes and decodes AV1 video |  |  |  | x | x |  | x | x |
+| libaribb24 | Decodes ARIB STD-B24 captions |  |  |  | x | x |  | x | x |
+| libaribcaption | Decodes ARIB captions (alternative library) |  |  |  | x | x |  | x | x |
+| libass | Renders ASS/SSA subtitles |  |  |  | x | x |  | x | x |
+| libbluray | Reads Blu-ray playlists and protocols |  |  |  | x | x |  | x | x |
+| libcaca | Renders video as ASCII characters |  |  |  | x | x |  | x | x |
+| libdav1d | Decodes AV1 video (high performance) |  |  |  | x | x |  | x | x |
+| libdavs2 | Decodes AVS2 video |  |  |  | x | x |  | x | x |
+| libdc1394 | Captures video from FireWire cameras |  |  |  | x | x |  | x | x |
+| libdvdnav | Navigates and demuxes DVD menus/content |  |  |  | x | x |  | x | x |
+| libdvdread | Reads DVD filesystem structures |  |  |  | x | x |  | x | x |
+| libfontconfig | Configures and locates fonts for text rendering |  |  |  | x | x |  | x | x |
+| libfreetype | Renders fonts for text overlays |  |  |  | x | x |  | x | x |
+| libfribidi | Handles bi-directional text logic |  |  |  | x | x |  | x | x |
+| libharfbuzz | Shapes complex text for subtitles |  |  |  | x | x |  | x | x |
+| libiec61883 | Captures DV/HDV via FireWire | Linux |  |  | x | x |  | x | x |
+| libjxl | Encodes and decodes JPEG XL images |  |  |  | x | x |  | x | x |
+| libklvanc | Processes Vertical Ancillary Data (VANC) |  | x |  | x | x |  | x | x |
+| libkvazaar | Encodes HEVC video |  |  |  | x | x |  | x | x |
+| liblcevc-dec | Decodes LCEVC video enhancement layers |  |  |  | x | x |  | x | x |
+| liblensfun | Corrects lens distortion using Lensfun |  | x |  | x | x |  | x | x |
+| liboapv | Encodes OAPV (Open Advanced Photos/Video) |  |  |  | x | x |  | x | x |
+| libopenh264 | Encodes H.264 video (Cisco implementation) |  |  |  | x | x |  | x | x |
+| libopenjpeg | Encodes and decodes JPEG 2000 images |  |  |  | x | x |  | x | x |
+| libqrencode | Generates QR codes as video sources |  | x |  | x | x |  | x | x |
+| librav1e | Encodes AV1 video (Rust implementation) |  |  |  | x | x |  | x | x |
+| librsvg | Renders SVG files for overlays |  |  |  | x | x |  | x | x |
+| libsnappy | Compresses data for the Hap codec |  |  |  | x | x |  | x | x |
+| libsvtav1 | Encodes AV1 video (SVT implementation) |  |  |  | x | x |  | x | x |
+| libtheora | Encodes Theora video |  |  |  | x | x |  | x | x |
+| libuavs3d | Decodes AVS3 video |  |  |  | x | x |  | x | x |
+| libv4l2 | Accesses V4L2 devices and utilities | Linux | x |  | x | x |  | x | x |
+| libvidstab | Stabilizes video using motion analysis |  | x |  | x | x |  | x | x |
+| libvmaf | Calculates VMAF video quality scores |  | x |  | x | x |  | x | x |
+| libvpx | Encodes and decodes VP8 and VP9 video |  |  |  | x | x |  | x | x |
+| libvvenc | Encodes H.266/VVC video |  |  |  | x | x |  | x | x |
+| libwebp | Encodes WebP images |  |  |  | x | x |  | x | x |
+| libx264 | Encodes H.264/AVC video |  |  |  | x | x |  | x | x |
+| libx265 | Encodes HEVC/H.265 video |  |  |  | x | x |  | x | x |
+| libxavs | Encodes AVS video |  |  |  | x | x |  | x | x |
+| libxavs2 | Encodes AVS2 video |  |  |  | x | x |  | x | x |
+| libxcb | Captures screen content via XCB | Linux | x |  | x | x |  | x | x |
+| libxcb-shape | Handles X11 shapes during capture | Linux | x |  | x | x |  | x | x |
+| libxcb-shm | Uses shared memory for X11 capture | Linux | x |  | x | x |  | x | x |
+| libxcb-xfixes | Fixes cursor rendering in X11 capture | Linux | x |  | x | x |  | x | x |
+| libxevd | Decodes EVC video |  |  |  | x | x |  | x | x |
+| libxeve | Encodes EVC video |  |  |  | x | x |  | x | x |
+| libxvid | Encodes MPEG-4 video (Xvid) |  |  |  | x | x |  | x | x |
+| libzimg | Performs scaling and color conversion (zscale) |  |  |  | x | x |  | x | x |
+| libzvbi | Decodes VBI teletext data |  |  |  | x | x |  | x | x |
+| vapoursynth | Demuxes VapourSynth script frames |  | x |  | x | x |  | x | x |
+| xlib | Captures screen content via Xlib | Linux | x |  | x | x |  | x | x |
 
 <sup>1</sup> Platform specific libraries are enabled by default for target platform and bundle.<a id="platform-info"></a>
 
