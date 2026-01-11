@@ -5,18 +5,18 @@
 enable_library() {
   LIBRARY_NAME="$1"
   VAR_NAME="enable_${LIBRARY_NAME//-/_}"
-  export "$VAR_NAME"=1
+  export "$VAR_NAME"=y
   VAR_NAME="disable_${LIBRARY_NAME//-/_}"
-  export "$VAR_NAME"=0
+  export "$VAR_NAME"=n
   echo "  [CONFIG] Enabling: $LIBRARY_NAME" >>"$LOG_FILE"
 }
 
 disable_library() {
   LIBRARY_NAME="$1"
   VAR_NAME="enable_${LIBRARY_NAME//-/_}"
-  export "$VAR_NAME"=0
+  export "$VAR_NAME"=n
   VAR_NAME="disable_${LIBRARY_NAME//-/_}"
-  export "$VAR_NAME"=1
+  export "$VAR_NAME"=y
   echo "  [CONFIG] Disabling: $LIBRARY_NAME" >>"$LOG_FILE"
 }
 
@@ -87,7 +87,7 @@ create_dir() {
 		exit_message 1 "ERROR: path argument is required"
 	fi
 
-	if [[ ! -e "$path" ]]; then
+	if [[ ! -d "$path" ]]; then
 		execute "INFO: creating path: '$path'" "ERROR: unable to create directory '$path'" "true" \
 			mkdir -pv "$path"
 	else
@@ -316,8 +316,7 @@ array_index_of() {
 			return 0
 		fi
 	done
-	exit_message 1 "ERROR: $search_string could not be found in build steps.\n $(print_build_steps)" | tee -a "$LOG_FILE"
-	exit 1 # Not found
+	exit_message 0 "ERROR: $search_string could not be found in array.\n $(print_build_steps)" | tee -a "$LOG_FILE"
 	return 1
 }
 
@@ -373,7 +372,7 @@ prepare_inline_sed() {
 setup_build_environment() {
     [[ -z $host_platform ]] && pick_host_platform
     [[ -z $host_arch ]] && pick_host_arch
-    
+    determine_distro
     export host_name="$host_platform-$host_arch"
     echo -e "\n************** Setting up environment for $host_name build... **************" | tee -a "$LOG_FILE"
     
@@ -446,13 +445,13 @@ CXX=${cross_prefix}g++"
 --strip=${cross_prefix}strip) \
 --cxx=${cross_prefix}g++)"
     
-    export windows_cflags='-mtune=generic -O3 -pipe -ffunction-sections -fdata-sections'
+    export windows_cflags="$original_cfflags -mtune=generic -O3 -pipe"
     export CFLAGS="$windows_cflags"
-    export windows_cxxflags='-ffunction-sections -fdata-sections'
+    export windows_cxxflags="$original_cxxflags"
     export CXXFLAGS="$windows_cxxflags"
-    export windows_cppflags='-U_FORTIFY_SOURCE -D_FORTIFY_SOURCE=3'
+    export windows_cppflags="$original_cppflags -U_FORTIFY_SOURCE -D_FORTIFY_SOURCE=3"
     export CPPFLAGS="$windows_cppflags"
-    export windows_ldflags="-L${dependency_install_prefix}/lib"
+    export windows_ldflags="$original_ldflags -L${dependency_install_prefix}/lib"
     export LDFLAGS="$windows_ldflags"
 }
 
@@ -461,16 +460,17 @@ setup_linux_environment() {
     export host_target="$host_arch-$host_platform-gnu"
     export rust_target="$host_arch-unknown-linux-gnu"
     export dependency_install_prefix="$work_dir/libraries"
-    export PKG_CONFIG_PATH="$PKG_CONFIG_PATH:/usr/lib/$host_target/pkgconfig:/usr/lib/pkgconfig:$dependency_install_prefix/share/pkgconfig:$dependency_install_prefix/lib/pkgconfig:$dependency_install_prefix/lib/$host_target/pkgconfig:$work_dir/pkgconfig:$ffmpeg_install_prefix/lib/pkgconfig"
+    export PKG_CONFIG_PATH="$PKG_CONFIG_PATH:$dependency_install_prefix/share/pkgconfig:$dependency_install_prefix/lib/pkgconfig:$dependency_install_prefix/lib/$host_target/pkgconfig:$work_dir/pkgconfig:$ffmpeg_install_prefix/lib/pkgconfig:/usr/lib/$host_target/pkgconfig:/usr/lib/pkgconfig"
     export PATH="$ffmpeg_install_prefix/bin:$dependency_install_prefix/bin:$original_path"
-    export linux_cflags="-ffunction-sections -fdata-sections -fstrict-aliasing -fPIC -I${dependency_install_prefix}/include"
+    export linux_cflags="$original_cflags -I${dependency_install_prefix}/include"
     export CFLAGS="$linux_cflags"
-    export linux_cppflags="-I${dependency_install_prefix}/include -DLINUX"
+    export linux_cppflags="$original_cppflags -I${dependency_install_prefix}/include -DLINUX"
     export CPPFLAGS="$linux_cppflags"
-    export linux_cxxflags="-ffunction-sections -fdata-sections -I${dependency_install_prefix}/include"
+    export linux_cxxflags="$original_cxxflags -I${dependency_install_prefix}/include"
     export CXXFLAGS="$linux_cxxflags"
-    export linux_ldflags="-L${dependency_install_prefix}/lib"
+    export linux_ldflags="$original_ldflags -L${dependency_install_prefix}/lib -Wl,-rpath,${dependency_install_prefix}/lib"
     export LDFLAGS="$linux_ldflags"
+    export LD_LIBRARY_PATH="${dependency_install_prefix}/lib:$LD_LIBRARY_PATH"
 }
 
 reset_cflags() {
@@ -525,7 +525,7 @@ get_ffmpeg_directory() {
 	local build_type=$1
   local dir_name="${host_name}"
 	if [[ -z $build_type ]]; then
-		dir_name+="-$(get_build_type)"
+		dir_name+="-$build_ffmpeg_type"
   else
 		dir_name+="-$build_type"
 	fi
@@ -533,54 +533,70 @@ get_ffmpeg_directory() {
     dir_name+="-debug"
   fi
   local is_small=""
-  if truthy "$enable_small"; then
+  if truthy "$build_small"; then
     is_small="-small"
   fi
   local bundle_type=""
   if [[ -n $(get_bundle_type) ]]; then
     bundle_type="$(get_bundle_type)-"
   fi
-  echo "ffmpeg-$bundle_type$dir_name$is_small"
-}
-
-get_build_type() {
-	if truthy "$build_static"; then
-		echo "static"
-	else
-		echo "shared"
-	fi
+  local is_gpl=""
+  if truthy "$build_gpl"; then
+    is_gpl="-gpl"
+  fi
+  local is_nonfree=""
+  if truthy "$build_nonfree"; then
+    is_nonfree="-nonfree"
+  fi
+  echo "ffmpeg-$bundle_type$dir_name$is_small$is_gpl$is_nonfree"
 }
 
 get_ffmpeg_kit_directory() {
-  local dir_name="${host_name}-$(get_build_type)"
+  local dir_name="${host_name}-$build_ffmpeg_kit_type"
   if truthy "$do_debug_build"; then
     dir_name+="-debug"
 	fi
   local is_small=""
-  if truthy "$enable_small"; then
+  if truthy "$build_small"; then
     is_small="-small"
   fi
   local bundle_type=""
   if [[ -n $(get_bundle_type) ]]; then
     bundle_type="$(get_bundle_type)-"
   fi
-	echo "ffmpeg-kit-$bundle_type$dir_name$is_small"
+  local is_gpl=""
+  if truthy "$build_gpl"; then
+    is_gpl="-gpl"
+  fi
+  local is_nonfree=""
+  if truthy "$build_nonfree"; then
+    is_nonfree="-nonfree"
+  fi
+	echo "ffmpeg-kit-$bundle_type$dir_name$is_small$is_gpl$is_nonfree"
 }
 
 get_bundle_directory() {
-  local dir_name="${host_name}-$(get_build_type)"
+  local dir_name="${host_name}-$build_ffmpeg_kit_type"
   if truthy "$do_debug_build"; then
     dir_name+="-debug"
 	fi
   local is_small=""
-  if truthy "$enable_small"; then
+  if truthy "$build_small"; then
     is_small="-small"
   fi
   local bundle_type=""
   if [[ -n $(get_bundle_type) ]]; then
     bundle_type="$(get_bundle_type)-"
   fi
-	echo "bundle-$bundle_type$dir_name$is_small"
+  local is_gpl=""
+  if truthy "$build_gpl"; then
+    is_gpl="-gpl"
+  fi
+  local is_nonfree=""
+  if truthy "$build_nonfree"; then
+    is_nonfree="-nonfree"
+  fi
+	echo "bundle-$bundle_type$dir_name$is_small$is_gpl$is_nonfree"
 }
 
 get_bundle_type() {
@@ -588,14 +604,28 @@ get_bundle_type() {
     echo "audio"
   elif truthy "$video_bundle"; then
     echo "video"
+  elif truthy "$audio_ai_bundle"; then
+    echo "audio_ai"
   elif truthy "$video_ai_bundle"; then
-    echo "video_ai"
+    if truthy "$gpu_support"; then
+      echo "video_ai_gpu_$gpu_type"
+    else
+      echo "video_ai_cpu"
+    fi
   elif truthy "$video_hw_bundle"; then
-    echo "hardware"
+    echo "video_hw"
   elif truthy "$video_ai_hw_bundle"; then
-    echo "hardware_ai"
+    if truthy "$gpu_support"; then
+      echo "video_hw_ai_gpu_$gpu_type"
+    else
+      echo "video_hw_ai_cpu"
+    fi
   elif truthy "$streaming_bundle"; then
     echo "streaming"
+  elif truthy "$enable_full"; then
+    echo "full"
+  else
+    echo "custom"
   fi
 }
 
@@ -849,61 +879,22 @@ autoreconf_library() {
 	fi
 }
 
-pick_clean_type() {
-	while [[ ! "$clean_type" =~ ^([1-5]|all|ffmpeg|ffmpeg-kit|ffmpeg-kit-bundle)$ ]]; do
-		# shellcheck disable=SC2199
-		if [[ -n "${unknown_opts[@]}" ]]; then
-			echo -e -n 'Unknown option(s)'
-			for unknown_opt in "${unknown_opts[@]}"; do
-				echo -e -n " '$unknown_opt'"
-			done
-			echo -e ', ignored.'
-			echo
-		fi
-		cat <<'EOF'
-What would you like to clean?
-  1. all
-  2. ffmpeg
-  3. ffmpeg-kit
-  4. ffmpeg-kit-bundle
-  5. Exit
-EOF
-		echo -e -n 'Input your choice [1-5]: '
-		read -r clean_type
-	done
-	case "$clean_type" in
-	1) export clean_type="all" ;;
-	2) export clean_type="ffmpeg" ;;
-	3) export clean_type="ffmpeg-kit" ;;
-	4) export clean_type="ffmpeg-kit-bundle" ;;
-	all) export clean_type="all" ;;
-	ffmpeg) export clean_type="ffmpeg" ;;
-	ffmpeg-kit) export clean_type="ffmpeg-kit" ;;
-	ffmpeg-kit-bundle) export clean_type="ffmpeg-kit-bundle" ;;
-	5)
-		exit_message 0 "exiting"
-		;;
-	*)
-		echo -e 'Your choice was not valid, please try again.'
-		echo
-		;;
-	esac
-}
-
 clean_ffmpeg_builds() {
 	[[ -z $host_platform ]] && pick_host_platform
   [[ -z $host_arch ]] && pick_host_arch
 	pick_clean_type
-  clean_builds "$host_name"
+  if [[ -z $host_name ]]; then
+		exit_message 1 "no build flavor provided"
+	fi
+	setup_build_environment
+  clean_builds "$clean_type" "$host_name"
   exit_message 0 "INFO: Done cleaning builds"
 }
 
 clean_builds() {
-	local build_flavor=$1
-	if [[ -z $build_flavor ]]; then
-		exit_message 1 "no build flavor provided"
-	fi
-	setup_build_environment
+	export clean_type=${1:-clean_type}
+  local build_flavor=${2:-host_name}
+  echo -e "WARNING: Executing clean for $clean_type and $host_name"
 	if [[ ${clean_type,,} =~ ^("all"|"ffmpeg")$ ]]; then
 		echo -e "INFO: Deleting ${ffmpeg_install_prefix}..."
 		remove_path -rf "${ffmpeg_install_prefix}"
@@ -943,7 +934,7 @@ at_least_required_version() { # params: required actual
 
 apt_not_installed() {
 	for x in "$@"; do
-		if ! dpkg -l "$x" | grep -q '^.i'; then
+		if ! check_package "$x"; then
 			need_install="$need_install $x"
 		fi
 	done
@@ -951,18 +942,30 @@ apt_not_installed() {
 }
 
 check_package() {
+  determine_distro
   local pkg_name="$1"
-  if hash "$package" &>/dev/null || dpkg -s "$package" &>/dev/null; then
+  local valid_name=""
+
+  if hash "$pkg_name" &>/dev/null; then
+    echo "INFO: $pkg_name already installed" >>"$LOG_FILE"
     return 0
-  else
-    return 1
   fi
+  if $CHECK_INSTALLED_CMD "$pkg_name" &>/dev/null; then
+    echo "INFO: $pkg_name already installed" >>"$LOG_FILE"
+    return 0
+  fi
+  if valid_name=$(validate_package "$pkg_name"); then
+    if $CHECK_INSTALLED_CMD "$valid_name" &>/dev/null; then
+        echo "INFO: $valid_name already installed" >>"$LOG_FILE"
+        return 0
+    fi
+  fi
+  return 1
 }
 
 get_missing_packages() {
-  local check_packages=("$@")
   local missing_packages=()
-  for package in "${check_packages[@]}"; do
+  for package in "$@"; do
 		  if [[ -n $package ]] && ! check_package "$package"; then
         missing_packages+=("$package")
       fi
@@ -973,25 +976,26 @@ get_missing_packages() {
 }
 
 check_missing_packages() {
-	# We will need this later if we don't want to just constantly be grepping the /etc/os-release file
-	if [ -z "${VENDOR}" ] && grep -E '(centos|rhel)' /etc/os-release &>/dev/null; then
-		# In RHEL this should always be set anyway. But not so sure about CentOS
-		VENDOR="redhat"
-	fi
+  determine_distro
   # apt install autoconf-archive autoconf autogen automake autopoint bc bison bzip2 cargo clang cmake coreutils curl cvs ed ed flex g++ gcc gettext git gperf help2man libtool libtool-bin make meson nasm p7zip-full patch pax pkg-config python3 python3-setuptools python3-venv ragel subversion unzip wget xz-utils yasm zlib1g-dev libglib2.0-dev libglib2.0-dev-bin sudo apt install binutils llvm lld xutils-dev python3-numpy cython3
 	# zeranoe's build scripts use wget, though we don't here...
-	local check_packages=('ragel' 'curl' 'pkg-config' 'make' 'git' 'svn' 'gcc' 'autoconf' 'automake' 'yasm' 'cvs' 'flex' 'bison' 'makeinfo' 'g++' 'ed' 'pax' 'unzip' 'patch' 'wget' 'xz' 'nasm' 'gperf' 'autogen' 'bzip2' 'realpath' 'clang' 'python3' 'python3-venv' 'bc' 'autopoint' 'zstd' 'glib-mkenums' 'ld' 'ld.lld' 'xutils-dev' 'python3-numpy' 'cython3')
-	# autoconf-archive is just for leptonica FWIW
+	local check_packages=('ragel' 'curl' 'pkg-config' 'make' 'git' 'svn' 'gcc' 'autoconf' 'automake' 'yasm' 'cvs' 'flex' 'bison' 'makeinfo' 'g++' 'ed' 'pax' 'unzip' 'patch' 'wget' 'xz' 'nasm' 'gperf' 'autogen' 'bzip2' 'realpath' 'clang' 'python3' 'bc' 'autopoint' 'glib-mkenums' 'ld' 'ld.lld')
+	
+  # autoconf-archive is just for leptonica FWIW
 	# I'm not actually sure if VENDOR being set to centos is a thing or not. On all the centos boxes I can test on it's not been set at all.
 	# that being said, if it where set I would imagine it would be set to centos... And this contition will satisfy the "Is not initially set"
 	# case because the above code will assign "redhat" all the time.
 	if [ -z "${VENDOR}" ] || [ "${VENDOR}" != "redhat" ] && [ "${VENDOR}" != "centos" ]; then
 		check_packages+=('cmake')
+  elif [ "${VENDOR}" == "redhat" ]; then
+    check_packages+=('libzstd-devel')
+  elif [ "${VENDOR}" == "canonical" ]; then
+    check_packages+=('zstd' 'cython3' 'xutils-dev' 'python3-venv' 'python3-numpy')
 	fi
 	# libtool check is wonky...
 	check_packages+=('libtoolize') # the rest of the world
 	# Use hash to check if the packages exist or not. Type is a bash builtin which I'm told behaves differently between different versions of bash.
-	mapfile -t missing_packages < <(get_missing_packages "${check_packages[@]}")
+	install_missing_packages=$(get_missing_packages "${check_packages[@]}")
   # for package in "${check_packages[@]}"; do
 	# 	  check_package "$package" || missing_packages=("$package" "${missing_packages[@]}")
 	# done
@@ -1004,27 +1008,26 @@ check_missing_packages() {
 		echo -e "DEBUG:" | tee -a "$LOG_FILE"
 		echo -e "Could not find the following execs (svn is actually package subversion, makeinfo is actually package texinfo if you're missing them): ${missing_packages[*]}" | tee -a "$LOG_FILE"
 		echo -e 'Install the missing packages before running this script.' | tee -a "$LOG_FILE"
-		determine_distro
-
+		
 		apt_pkgs='autoconf-archive autoconf autogen automake autopoint bc bison bzip2 cargo clang cmake coreutils curl cvs ed ed flex g++ gcc gettext git gperf help2man libtool libtool-bin make meson nasm p7zip-full patch pax pkg-config python3 python3-setuptools ragel subversion unzip wget xz-utils yasm zlib1g-dev libglib2.0-dev libglib2.0-dev-bin'
 
 		[[ $DISTRO == "debian" ]] && apt_pkgs="$apt_pkgs libtool-bin ed" # extra for debian
 		case "$DISTRO" in
 		Ubuntu)
 			echo -e "for ubuntu:" | tee -a "$LOG_FILE"
-			echo -e "$ sudo apt-get update" | tee -a "$LOG_FILE"
+			echo -e "$ sudo $INSTALL_COMMAND update" | tee -a "$LOG_FILE"
 			ubuntu_ver="$(lsb_release -rs)"
-			if [ "$(sortable_version "$ubuntu_ver")" -lt "$(sortable_version "22.04")" ]; then
-        echo "Ubuntu < 22.04 not supported."
+			if [ "$(sortable_version "$ubuntu_ver")" -lt "$(sortable_version "24.04")" ]; then
+        echo "Ubuntu < 24.04 not supported."
       fi
 			if at_least_required_version "22.04" "$ubuntu_ver"; then
 				apt_pkgs="$apt_pkgs ninja-build" # needed
 			fi
-			echo -e "$ sudo apt-get install $apt_pkgs -y" | tee -a "$LOG_FILE"
+			echo -e "$ sudo $INSTALL_COMMAND install $apt_pkgs -y" | tee -a "$LOG_FILE"
 			;;
 		debian)
 			echo -e "for debian:" | tee -a "$LOG_FILE"
-			echo -e "$ sudo apt-get update" | tee -a "$LOG_FILE"
+			echo -e "$ sudo $INSTALL_COMMAND update" | tee -a "$LOG_FILE"
 			# Debian version is always encoded in the /etc/debian_version
 			# This file is deployed via the base-files package which is the essential one - deployed in all installations.
 			# See their content for individual debian releases - https://sources.debian.org/src/base-files/
@@ -1048,10 +1051,10 @@ check_missing_packages() {
 				apt_pkgs="$apt_pkgs python-is-python3" # needed
 			fi
 			apt_missing="$(apt_not_installed "$apt_pkgs")"
-			echo -e "$ sudo apt-get install $apt_missing -y" | tee -a "$LOG_FILE"
+			echo -e "$ sudo $INSTALL_COMMAND install $apt_missing -y" | tee -a "$LOG_FILE"
 			;;
 		*)
-			exit_message 1 "Build platform not supported. Please use a container with Ubuntu >= 22.04 (jammy)"
+			exit_message 1 "Build platform not supported. Please use a container with Ubuntu >= 24.04 (noble)"
 			;;
 		esac
 		exit_message 1
@@ -1086,7 +1089,7 @@ check_missing_packages() {
 	fi
 
 	if [[ ! -f /usr/include/zlib.h ]]; then
-		echo -e "WARNING: you may need to install zlib development headers first if you want to build mp4-box [on ubuntu: $ apt-get install zlib1g-dev] [on redhat/fedora distros: $ yum install zlib-devel]" | tee -a "$LOG_FILE" # XXX do like configure does and attempt to compile and include zlib.h instead?
+		echo -e "WARNING: you may need to install zlib development headers first if you want to build mp4-box [on ubuntu: $ $INSTALL_COMMAND install zlib1g-dev] [on redhat/fedora distros: $ yum install zlib-devel]" | tee -a "$LOG_FILE" # XXX do like configure does and attempt to compile and include zlib.h instead?
 		sleep 1
 	fi
 
@@ -1131,22 +1134,146 @@ check_missing_packages() {
 }
 
 determine_distro() {
+  local os_id=""
+  local os_id_like=""
 
-	# Determine OS platform from https://askubuntu.com/a/459425/20972
-	UNAME=$(uname | tr "[:upper:]" "[:lower:]")
-	# If Linux, try to determine specific distribution
-	if [ "$UNAME" == "linux" ]; then
-		# If available, use LSB to identify distribution
-		if [ -f /etc/lsb-release ] || [ -d /etc/lsb-release.d ]; then
-			export DISTRO=$(lsb_release -i | cut -d: -f2 | sed s/'^\t'//)
-		# Otherwise, use release info file
-		else
-			export DISTRO=$(grep '^ID' /etc/os-release | sed 's#.*=\(\)#\1#')
-		fi
-	fi
-	# For everything else (or if above failed), just use generic identifier
-	[ "$DISTRO" == "" ] && export DISTRO=$UNAME
-	unset UNAME
+  unset VENDOR
+  unset INSTALL_COMMAND
+  unset SEARCH_COMMAND
+
+  if [ -f /etc/os-release ]; then
+    . /etc/os-release
+    os_id="$ID"
+    os_id_like="$ID_LIKE"
+  elif [ -f /etc/lsb-release ]; then
+    . /etc/lsb-release
+    os_id="$DISTRIB_ID"
+  else
+    os_id=$(uname -s | tr '[:upper:]' '[:lower:]')
+  fi
+  # shellcheck disable=2222,2221
+  case "${os_id}|${os_id_like}" in
+    *rhel*|*centos*|*fedora*|*rocky*|*almalinux*|*amzn*)
+      export VENDOR="redhat"
+      export INSTALL_COMMAND="dnf"
+      export SEARCH_COMMAND="dnf list"
+      export CHECK_INSTALLED_CMD="rpm -q"
+      ;;
+    *ubuntu*|*debian*|*mint*|*kali*|*pop*|*raspbian*)
+      export VENDOR="canonical"
+      export INSTALL_COMMAND="apt-get"
+      export SEARCH_COMMAND="apt-cache show"
+      export CHECK_INSTALLED_CMD="dpkg -s"
+      ;;
+    *arch*|*manjaro*|*endeavouros*)
+      export VENDOR="arch"
+      export INSTALL_COMMAND="pacman"
+      export SEARCH_COMMAND="pacman -Ss"
+      export CHECK_INSTALLED_CMD="pacman -Q"
+      ;;
+    *alpine*)
+      export VENDOR="alpine"
+      export INSTALL_COMMAND="apk"
+      export SEARCH_COMMAND="apk search"
+      export CHECK_INSTALLED_CMD="apk info -e"
+      ;;
+    *void*)
+      export VENDOR="void"
+      export INSTALL_COMMAND="xbps-install"
+      export SEARCH_COMMAND="xbps-query -Rs"
+      export CHECK_INSTALLED_CMD="xbps-query" 
+      ;;
+    *gentoo*)
+      export VENDOR="gentoo"
+      export INSTALL_COMMAND="emerge"
+      export SEARCH_COMMAND="emerge --search"
+      export CHECK_INSTALLED_CMD="qlist -I"
+      ;;
+    *freebsd*)
+      export VENDOR="freebsd"
+      export INSTALL_COMMAND="pkg"
+      export SEARCH_COMMAND="pkg search"
+      export CHECK_INSTALLED_CMD="pkg info"
+      ;;
+    *sles*|*suse*)
+      export VENDOR="sles"
+      export INSTALL_COMMAND="zypper"
+      export SEARCH_COMMAND="zypper search"
+      export CHECK_INSTALLED_CMD="rpm -q"
+      ;;
+    *nix*)
+      export VENDOR="nix"
+      export INSTALL_COMMAND="nix-env"
+      export SEARCH_COMMAND="nix-env -qa"
+      export CHECK_INSTALLED_CMD="nix-env -q"
+      ;;
+    *guix*)
+      export VENDOR="guix"
+      export INSTALL_COMMAND="guix"
+      export SEARCH_COMMAND="guix package -A"
+      export CHECK_INSTALLED_CMD="guix package -I"
+      ;;
+    *)
+      export VENDOR="unknown"
+      return 1
+      ;;
+  esac
+}
+
+package_exists() {
+  determine_distro
+  local pkg="$1"
+  echo "Running $SEARCH_COMMAND $pkg" >>"$LOG_FILE"
+  if eval "$SEARCH_COMMAND $pkg -y" >>"$LOG_FILE" 2>&1; then
+    return 0
+  fi
+  return 1
+}
+
+validate_package() {
+  local pkg="$1"
+  local candidates=()
+
+  if package_exists "$pkg"; then
+    echo "$pkg"
+    return 0
+  fi
+  if [[ "$pkg" == *-dev ]]; then
+    candidates+=("${pkg%-dev}-devel")
+  elif [[ "$pkg" == *-devel ]]; then
+    candidates+=("${pkg%-devel}-dev")
+  fi
+  if [[ "$pkg" == lib* ]]; then
+    candidates+=("${pkg#lib}")
+  else
+    candidates+=("lib${pkg}")
+  fi
+  for candidate in "${candidates[@]}"; do
+    if package_exists "$candidate"; then
+      [ -n "$LOG_FILE" ] && echo "DEBUG: Remapped '$pkg' to '$candidate'" >> "$LOG_FILE"
+      echo "$candidate"
+      return 0
+    fi
+  done
+  return 1
+}
+
+install_missing_packages() {
+  determine_distro
+  # shellcheck disable=2086,2048
+  mapfile -t missing_packages < <(get_missing_packages $*)
+  if [[ "${#missing_packages[*]}" -gt 0 ]]; then
+    echo "INFO: Missing packages: ${missing_packages[*]}" >>"$LOG_FILE"
+    for package in "${missing_packages[@]}"; do
+      new_pkg="$(validate_package "$package")"
+      if [[ -n $new_pkg ]]; then
+        echo -e "INFO: Installing validated package: $new_pkg\n  running: \"$INSTALL_COMMAND install ${new_pkg} -y\"" >>"$LOG_FILE"
+        eval "$INSTALL_COMMAND install ${new_pkg} -y" > >(redirect_output) 2>&1 || true;
+      else
+        echo "DEBUG: No validated package found for $package" >>"$LOG_FILE"
+      fi
+    done
+  fi
 }
 
 # made into a method so I don't/don't have to download this script every time if only doing just 32 or just6 64 bit builds...
@@ -1224,12 +1351,36 @@ svn_hard_reset() {
     fi
 }
 
-get_valid_remote() {
-  local repo_url=$1
-  local name=$2
-  local to_dir=$3
+get_git_command() {
+  local repo_url="$1"
+  local name="$2"
+  local to_dir="$3"
+  local type="$4"
+  case "${type,,}" in
+    commit)
+    echo "git clone \"$repo_url\" \"$to_dir\" --recurse-submodules --single-branch && cd \"$to_dir\" && git checkout \"$name\""
+    return 0
+    ;;
+    branch)
+    echo "git clone --depth 1 --branch \"$name\" \"$repo_url\" \"$to_dir\" --recurse-submodules --single-branch"
+    return 0
+    ;;
+    tag)
+    echo "git clone --depth 1 --branch \"$name\" \"$repo_url\" \"$to_dir\" --recurse-submodules --single-branch"
+    return 0
+    ;;
+    *)
+    exit_message 1 "invalid git ref type $type"
+    exit 1
+    ;;
+  esac
+}
 
-  echo "DEBUG: Starting search for '$name' in $repo_url to extract into $to_dir" >>"$LOG_FILE"
+get_valid_remote() {
+  local repo_url="$1"
+  local name="$2"
+
+  echo "DEBUG: Starting search for '$name' in $repo_url" >>"$LOG_FILE"
   
   # Get all refs at once
   local all_refs
@@ -1245,7 +1396,7 @@ get_valid_remote() {
     echo "DEBUG: '$name' matches SHA pattern" >>"$LOG_FILE"
     if echo "$all_refs" | grep -q "^$name"; then
       echo "DEBUG: Found '$name' as a valid commit" >>"$LOG_FILE"
-      echo "git clone \"$repo_url\" \"$to_dir\" --recurse-submodules --single-branch && cd \"$to_dir\" && git checkout \"$name\" && cd .."
+      echo "commit $name"
       return 0
     else
       echo "DEBUG: '$name' matches SHA pattern but not found in remote" >>"$LOG_FILE"
@@ -1256,7 +1407,7 @@ get_valid_remote() {
   echo "DEBUG: Checking if '$name' is a branch..." >>"$LOG_FILE"
   if echo "$all_refs" | grep -q "refs/heads/$name"; then
     echo "DEBUG: Found '$name' as a branch" >>"$LOG_FILE"
-    echo "git clone --depth 1 --branch \"$name\" \"$repo_url\" \"$to_dir\" --recurse-submodules --single-branch"
+    echo "branch $name"
     return 0
   fi
   
@@ -1264,7 +1415,7 @@ get_valid_remote() {
   echo "DEBUG: Checking if '$name' is a tag..." >>"$LOG_FILE"
   if echo "$all_refs" | grep -q "refs/tags/$name"; then
     echo "DEBUG: Found '$name' as a tag" >>"$LOG_FILE"
-    echo "git clone --depth 1 --branch \"$name\" \"$repo_url\" \"$to_dir\" --recurse-submodules --single-branch"
+    echo "tag $name"
     return 0
   fi
   
@@ -1273,7 +1424,7 @@ get_valid_remote() {
   for branch in main master; do
     if echo "$all_refs" | grep -q "refs/heads/$branch"; then
       echo "DEBUG: Found fallback branch '$branch'" >>"$LOG_FILE"
-      echo "git clone --depth 1 --branch \"$branch\" \"$repo_url\" \"$to_dir\" --recurse-submodules --single-branch"
+      echo "branch $branch"
       return 0
     fi
   done
@@ -1286,21 +1437,25 @@ get_valid_remote() {
 retry_git_or_die() { # originally from https://stackoverflow.com/a/76012343/32453
 	local RETRIES_NO=50
 	local RETRY_DELAY=30
-	local repo_url=$1
-	local to_dir=$2
+	local repo_url="$1"
+	local to_dir="$2"
 	local desired_branch="$3"
-  # shellcheck disable=2248
+  # shellcheck disable=2248,2207
+  local valid_remote=($(get_valid_remote "$repo_url" "$desired_branch"))
+  local remote_type="${valid_remote[0]}"
+  local remote_name="${valid_remote[*]:1}"
+  local git_command="$(get_git_command "$repo_url" "$remote_name" "$to_dir.tmp" "$remote_type")"
 	for i in $(seq 1 $RETRIES_NO); do
-		if ! git_command="$(get_valid_remote "$repo_url" "$desired_branch" "$to_dir.tmp")"; then
-			echo -e "DEBUG: Could not find $desired_branch in $repo_url" >>"$LOG_FILE"
-		else
-			echo -e "INFO: Downloading (via git clone) branch, tag, or commit: $desired_branch to $to_dir from $repo_url" >>"$LOG_FILE"
-			remove_path -rf "$to_dir.tmp" # just in case it was interrupted previously...not sure if necessary...
-			create_dir "$to_dir.tmp"
-			echo -e "DEBUG: Evaluating \"$git_command\"\n" >>"$LOG_FILE"
+    if [[ -n $git_command ]]; then
+      echo -e "INFO: Downloading (via git clone) branch, tag, or commit: $desired_branch to $to_dir from $repo_url" >>"$LOG_FILE"
+      remove_path -rf "$to_dir.tmp" # just in case it was interrupted previously...not sure if necessary...
+      create_dir "$to_dir.tmp"
+      echo -e "DEBUG: Evaluating \"$git_command\"\n" >>"$LOG_FILE"
       # shellcheck disable=SC2086
-			eval "$git_command" > >(redirect_output) 2>&1 && chmod -R u+rwx "$to_dir.tmp" && break
-		fi
+      eval "$git_command" > >(redirect_output) 2>&1 && chmod -R u+rwx "$to_dir.tmp" && break
+    else
+      exit_message 1 "Could not generate git command for $repo_url $remote_type $remote_name $to_dir"
+    fi
 		#git clone --depth 1 -b "$desired_branch" "$repo_url" "$to_dir.tmp" --recurse-submodules --single-branch && break
 		# get here -> failure
 		[[ $i -eq $RETRIES_NO ]] && exit_message 1 "DEBUG: Failed to execute git cmd $repo_url $to_dir after $RETRIES_NO retries"
@@ -1332,7 +1487,7 @@ is_empty_dir() {
 
 # Get the current branch name (e.g., "main" or "feature/login")
 get_git_branch() {
-  git rev-parse --abbrev-ref HEAD 2>/dev/null
+  git branch --show-current 2>/dev/null
 }
 
 # Get the most recent tag (e.g., "v1.0.4")
@@ -1357,36 +1512,48 @@ get_git_commit_short() {
 
 is_current_git_ref() {
     local input="$1"
+    
     [ -z "$input" ] && return 1
 
     # 1. Check against current Branch name
     local current_branch=$(get_git_branch)
     local all_refs=$(git ls-remote "$repo_url" 2>/dev/null)
-    if echo "$all_refs" | grep -q "refs/heads/$current_branch"; then
+    echo "DEBUG: Checking branch $current_branch against $input" >>"$LOG_FILE"
+    if [[ "$input" == "$current_branch" ]]; then
+      echo "DEBUG: Matched branch $input == $current_branch" >>"$LOG_FILE"
       return 0
     fi
-
     # 2. Check against current exact Tag
     # (Checking if HEAD is exactly at this tag)
-    local current_tag=$(git describe --tags --exact-match 2>/dev/null)
-    if echo "$all_refs" | grep -q "refs/tags/$current_tag"; then
+    local current_tag=$(get_git_tag)
+    echo "DEBUG: Checking tag $current_tag against $input" >>"$LOG_FILE"
+    if [[ "$input" == "$current_tag" ]]; then
+      echo "DEBUG: Matched tag $input == $current_tag" >>"$LOG_FILE"
       return 0
     fi
 
     # 3. Check against current Release string 
     # (e.g., v1.0.4-5-g7f2)
     local current_release=$(get_git_release)
-    [[ "$input" == "$current_release" ]] && return 0
+    echo "DEBUG: Checking release $current_release against $input" >>"$LOG_FILE"
+    if [[ "$input" == "$current_release" ]]; then 
+      echo "DEBUG: Matched release $input == $current_release" >>"$LOG_FILE"
+      return 0
+    fi
 
     # 4. Check against current Commit (Long and Short)
     local long_commit=$(get_git_commit)
     local short_commit=$(get_git_commit_short)
-    if echo "$all_refs" | grep -q "^$long_commit"; then
+    echo "DEBUG: Checking comit $long_commit against $input" >>"$LOG_FILE"
+    echo "DEBUG: Checking release $short_commit against $input" >>"$LOG_FILE"
+    if [[ "$input" == "$long_commit" ]]; then
+      echo "DEBUG: Matched long commit $input == $long_commit" >>"$LOG_FILE"
       return 0
-    elif echo "$all_refs" | grep -q "^$short_commit"; then
+    elif [[ "$input" == "$short_commit" ]]; then
+      echo "DEBUG: Matched short commit $input == $short_commit" >>"$LOG_FILE"
       return 0
     fi
-
+    echo "DEBUG: $input is not current git ref" >>"$LOG_FILE"
     return 1
 }
 
@@ -1413,17 +1580,16 @@ do_git_checkout() {
       eval "git fetch --unshallow" >>"$LOG_FILE" 2>/dev/null
       eval "git config remote.origin.fetch \"+refs/heads/*:refs/remotes/origin/*\"" >>"$LOG_FILE" 2>/dev/null
       eval "git fetch --all --tags" >>"$LOG_FILE" 2>/dev/null
-      eval "git checkout $desired_branch" >>"$LOG_FILE" || {
-        if [[ ${desired_branch,,} =~ ^(master|main)$ ]]; then
-          do_git_checkout "$repo_url" "$to_dir" "$desired_branch"
-        else
-          exit_message 1 "could not checkout $repo_url to $desired_branch or master/main";
-        fi
-      }
-    elif truthy "$build_force"; then
+      local valid_remote=("$(get_valid_remote "$repo_url" "$desired_branch")")
+      local remote_type="${valid_remote[0]}"
+      local remote_name="${valid_remote[*]:1}"
+      eval "git checkout $remote_name" >>"$LOG_FILE" || exit_message 1 "could not checkout $remote_name from $repo_url"
+    fi
+    if truthy "$build_force"; then
       echo -e "INFO: Force requested, resetting repository" >>"$LOG_FILE"
       git_hard_reset "$(pwd)"
-		elif truthy "$git_get_latest"; then
+		fi
+    if truthy "$git_get_latest"; then
       echo -e "INFO: Fetching git instead" >>"$LOG_FILE"
 			git fetch --quiet >>"$LOG_FILE" # want this for later...
 		else
@@ -1435,13 +1601,7 @@ do_git_checkout() {
       remove_path -rf "$to_dir"
     fi
 		echo -e "INFO: Downloading $repo_url $desired_branch into $to_dir" >>"$LOG_FILE"
-		retry_git_or_die "$repo_url" "$to_dir" "$desired_branch" || {
-        if [[ ${desired_branch,,} =~ ^(master|main)$ ]]; then
-          do_git_checkout "$repo_url" "$to_dir" "$desired_branch"
-        else
-          exit_message 1 "could not checkout $repo_url to $desired_branch or master/main";
-        fi
-      }
+		retry_git_or_die "$repo_url" "$to_dir" "$desired_branch" || exit_message 1 "could not checkout $desired_branch from $repo_url"
     mv "$to_dir.tmp" "$to_dir" 2>>"$LOG_FILE"
 		chmod -R u+rwx "$to_dir" 2>>"$LOG_FILE"
     change_dir "$to_dir"
@@ -1544,9 +1704,9 @@ create_touch_file() {
 get_small_touchfile_name() { # have to call with assignment like a=$(get_small...)
 	local beginning="$1"
 	local extra_stuff="$2"
-	local touch_name="${beginning}_$(echo -e -- "$extra_stuff" "$(get_build_type)" | /usr/bin/env md5sum)" # md5sum to make it smaller, cflags to force rebuild if changes
+	local touch_name="${beginning}_$(echo -e -- "$extra_stuff" | /usr/bin/env md5sum)" # md5sum to make it smaller, cflags to force rebuild if changes
 	touch_name=$(echo -e "$touch_name" | sed "s/ //g")                                                      # md5sum introduces spaces, remove them
-	echo -e "$touch_name"                                                                                   # bash cruddy return system LOL
+	echo -e "$touch_name.touch"                                                                                   # bash cruddy return system LOL
 }
 
 redirect_output() {
@@ -1610,13 +1770,15 @@ do_python() {
 	local cur_dir2=$(pwd)
 	local english_name=$(basename "$cur_dir2")
   local touch_prefix="${host_name}${touch_postfix}already"
-	local touch_name=$(get_small_touchfile_name "${touch_prefix}_python" "$configure_options ${configure_command[*]}")
+	local touch_name=$(get_small_touchfile_name "${touch_prefix}_python_$(basename "${configure_name[*]}")" "$configure_options")
 	if truthy "$build_force"; then
-		remove_path -f "$cur_dir2/${touch_prefix}_"*
+		reset_touch "$cur_dir2"
+    { eval "python3 ./waf clean" > >(redirect_output) 2>&1 || true; }
+    { eval "python3 ./waf uninstall" > >(redirect_output) 2>&1 || true; }
 	fi
 	if [ ! -f "$touch_name" ]; then
-    remove_path -f "${touch_prefix}_python"* # reset
-		echo -e "INFO: Using python:\n  PATH=$PATH\n  PKG_CONFIG_PATH=$PKG_CONFIG_PATH\n  CFLAGS:$CFLAGS\n  CXXFLAGS:$CXXFLAGS\n  CPPFLAGS:$CPPFLAGS\n  LDFLAGS:$LDFLAGS\n  $english_name ($PWD) as PATH=$PATH ${configure_env}\n ${configure_command[*]} $configure_options" >>"$LOG_FILE"
+    remove_path -f "${touch_prefix}_python_$(basename "${configure_name[*]}")"*
+		echo -e "INFO: Using python:\n  DIR=$cur_dir2\n  PATH=$PATH\n  PKG_CONFIG_PATH=$PKG_CONFIG_PATH\n  CFLAGS:$CFLAGS\n  CXXFLAGS:$CXXFLAGS\n  CPPFLAGS:$CPPFLAGS\n  LDFLAGS:$LDFLAGS\n  $english_name ($PWD) as PATH=$PATH ${configure_env}\n ${configure_command[*]} $configure_options" >>"$LOG_FILE"
 		# shellcheck disable=SC1078,SC2086
 		eval "${configure_command[*]} $configure_options" > >(redirect_output) 2>&1 || exit_message 1 "could not run configure ${configure_command[*]}"
 		create_touch_file 0 "$touch_name"
@@ -1644,11 +1806,15 @@ do_cargo_build() {
   local touch_prefix="${host_name}${touch_postfix}already"
 	local touch_name=$(get_small_touchfile_name "${touch_prefix}_cargo_build" "cargo build $extra_build_args")
 	if truthy "$build_force"; then
-		remove_path -f "$cur_dir2/${touch_prefix}_"*
+		reset_touch "$cur_dir2"
+    { cargo uninstall >>"$LOG_FILE" 2>&1 || true; }
+    { cargo clean --release >>"$LOG_FILE" 2>&1 || true; }
 	fi
 	if [ ! -f "$touch_name" ]; then
-    remove_path -f "${touch_prefix}_cargo_build"* # reset
-		echo -e "INFO: Running cargo build with:\n  RUSTFLAGS=$RUSTFLAGS\n  PATH=$PATH\n  PKG_CONFIG_PATH=$PKG_CONFIG_PATH\n  CFLAGS:$CFLAGS\n  CXXFLAGS:$CXXFLAGS\n  CPPFLAGS:$CPPFLAGS\n  LDFLAGS:$LDFLAGS\n  \"cargo build --target $rust_target $extra_build_args\"" >>"$LOG_FILE"
+    remove_path -f "${touch_prefix}_cargo_build"*
+    { cargo clean --release >>"$LOG_FILE" 2>&1 || true; }
+    export RUSTFLAGS+=" -C relocation-model=pic"
+		echo -e "INFO: Running cargo build with:\n  DIR=$cur_dir2\n  RUSTFLAGS=$RUSTFLAGS\n  PATH=$PATH\n  PKG_CONFIG_PATH=$PKG_CONFIG_PATH\n  CFLAGS:$CFLAGS\n  CXXFLAGS:$CXXFLAGS\n  CPPFLAGS:$CPPFLAGS\n  LDFLAGS:$LDFLAGS\n  \"cargo build --target $rust_target $extra_build_args\"" >>"$LOG_FILE"
     rustup target add $rust_target > >(redirect_output) 2>&1
 		cargo build --target "$rust_target" $extra_build_args > >(redirect_output) 2>&1 || {
 			exit_message 1 "failed cargo build with $extra_build_args\n see $LOG_FILE for more details"
@@ -1670,13 +1836,14 @@ do_cargo_install() {
   local touch_prefix="${host_name}${touch_postfix}already"
 	local touch_name=$(get_small_touchfile_name "${touch_prefix}_cargo_install" "cargo install $extra_install_args")
 	if truthy "$build_force"; then
-		remove_path -f "$cur_dir2/${touch_prefix}_"*
+		reset_touch "$cur_dir2"
 	fi
 	if [ ! -f "$touch_name" ]; then
-    remove_path -f "${touch_prefix}_cargo_install"* # reset
+    remove_path -f "${touch_prefix}_cargo_install"*
+    export RUSTFLAGS+=" -C relocation-model=pic"
 		echo -e "INFO: Running cargo install cargo-c" >>"$LOG_FILE"
-    echo -e "INFO: Running cargo cinstall with:\n  RUSTFLAGS=$RUSTFLAGS\n  PATH=$PATH\n  PKG_CONFIG_PATH=$PKG_CONFIG_PATH\n  CFLAGS:$CFLAGS\n  CXXFLAGS:$CXXFLAGS\n  CPPFLAGS:$CPPFLAGS\n  LDFLAGS:$LDFLAGS\n  \"cargo cinstall --prefix=$dependency_install_prefix --target $rust_target $extra_install_args\"" >>"$LOG_FILE"
-		cargo cinstall --prefix="$dependency_install_prefix" --target "$rust_target" $extra_install_args > >(redirect_output) 2>&1 || {
+    echo -e "INFO: Running cargo cinstall with:\n  DIR=$cur_dir2\n  RUSTFLAGS=$RUSTFLAGS\n  PATH=$PATH\n  PKG_CONFIG_PATH=$PKG_CONFIG_PATH\n  CFLAGS:$CFLAGS\n  CXXFLAGS:$CXXFLAGS\n  CPPFLAGS:$CPPFLAGS\n  LDFLAGS:$LDFLAGS\n  \"cargo cinstall --prefix=$dependency_install_prefix --target $rust_target $extra_install_args\"" >>"$LOG_FILE"
+    cargo cinstall --prefix="$dependency_install_prefix" --target "$rust_target" $extra_install_args > >(redirect_output) 2>&1 || {
 			exit_message 1 "failed cargo cinstall with $extra_install_args\n see $LOG_FILE for more details"
 		}
 		create_touch_file 0 "$touch_name"
@@ -1695,11 +1862,11 @@ do_configure() {
 	local configure_name="$2"
 	local touch_postfix=""
 	[[ -n $3 ]] && touch_postfix="_${3}_" || touch_postfix="_"
-	if [[ "$configure_name" = "" ]]; then
-    if [[ -f configure ]]; then
-		  configure_name="./configure"
-    elif [[ -f Configure ]]; then
+	if [[ -z "$configure_name" ]]; then
+    if [[ -f Configure ]]; then
       configure_name="./Configure"
+    else
+      configure_name="./configure"
     fi
 	fi
 	local cur_dir2=$(pwd)
@@ -1707,10 +1874,14 @@ do_configure() {
   local touch_prefix="${host_name}${touch_postfix}already"
 	local touch_name=$(get_small_touchfile_name "${touch_prefix}_configure" "$configure_options $configure_name")
 	if truthy "$build_force"; then
-		remove_path -f "$cur_dir2/${touch_prefix}_"*
+		reset_touch "$cur_dir2"
+    { nice make clean -j"$(get_concurrent_proc)" > >(redirect_output) 2>&1 || true; }
+    [[ -f ninja.build ]] && { nice ninja uninstall > >(redirect_output) 2>&1 || true; }
+    [[ -f Makefile ]] && { nice make uninstall > >(redirect_output) 2>&1 || true; }
 	fi
 	if [ ! -f "$touch_name" ]; then
-    remove_path -f "${touch_prefix}_configure"* # reset
+    remove_path -f "${touch_prefix}_configure"*
+    { nice make clean -j"$(get_concurrent_proc)" > >(redirect_output) 2>&1 || true; }
 		# make uninstall # does weird things when run under ffmpeg src so disabled for now...
 		echo -e "INFO: configuring $english_name ($PWD) $configure_name $configure_options" >>"$LOG_FILE" # say it now in case bootstrap fails etc.
 		echo -e "INFO: all touch files ${touch_prefix}_configure* touchname= $touch_name" >>"$LOG_FILE"
@@ -1721,11 +1892,16 @@ do_configure() {
 		if [[ ! -f $configure_name && -f bootstrap.sh ]]; then # fftw wants to only run this if no configure :|
 			./bootstrap.sh > >(redirect_output) 2>&1
 		fi
-    #autoheader > >(redirect_output) 2>&1
-    #autoreconf --install --force > >(redirect_output) 2>&1
-    #automake --force-missing --add-missing > >(redirect_output) 2>&1
+    if [[ ! -f $configure_name && -f configure.ac ]]; then
+      echo -e "INFO: Configure not found. Running autoreconf with existing configure.ac..." >>"$LOG_FILE"
+			autoreconf_library # a handful of them require this to create ./configure :|
+    fi
+    if [[ ! -f Makefile.in && ! -f Makefile ]]; then
+      echo -e "INFO: Makefile and Makefile.in not found. running autoreconf and automake..." >>"$LOG_FILE"
+      autoreconf_library # a handful of them require this to create ./configure :|
+      automake --force-missing --add-missing > >(redirect_output) 2>&1
+    fi
 		if [[ ! -f $configure_name ]]; then
-			echo -e "INFO: running autoheader, automake --force-missing --add-missing, and autoreconf to generate configure file for us..." >>"$LOG_FILE"
       if [[ -f gitsub.sh ]]; then
         echo "INFO: gitsub.sh found. Running gitsub.sh..."
         ./gitsub.sh pull
@@ -1734,21 +1910,34 @@ do_configure() {
         echo "INFO: autogen.sh found. Running autogen.sh..."
 			  ./autogen.sh > >(redirect_output) 2>&1 # some need this to create ./configure :|
 		  fi
-			autoreconf_library # a handful of them require this to create ./configure :|
 		fi
+    if [[ ! -f config.h.in ]]; then
+      echo -e "INFO: config.h.in not found. Running autoheader..." >>"$LOG_FILE"
+      autoheader > >(redirect_output) 2>&1
+    fi
 		chmod -R u+rwx "$configure_name" # In non-windows environments, with devcontainers, the configuration file doesn't have execution permissions
-		echo -e "INFO: do_configure() PATH=$PATH\n PKG_CONFIG_PATH=$PKG_CONFIG_PATH\n  CFLAGS:$CFLAGS\n  CXXFLAGS:$CXXFLAGS\n  CPPFLAGS:$CPPFLAGS\n  LDFLAGS:$LDFLAGS\n nice running: \"$configure_name $configure_options\"" >>"$LOG_FILE"
-		# shellcheck disable=SC2086
+		echo -e "INFO: do_configure() with:\n  DIR=$cur_dir2\n  PATH=$PATH\n  PKG_CONFIG_PATH=$PKG_CONFIG_PATH\n  CFLAGS:$CFLAGS\n  CXXFLAGS:$CXXFLAGS\n  CPPFLAGS:$CPPFLAGS\n  LDFLAGS:$LDFLAGS\n nice running: \"$configure_name $configure_options\"" >>"$LOG_FILE"
 		eval "nice -n 5 $configure_name $configure_options" > >(redirect_output) 2>&1 || {
 			exit_message 1 "failed configure $english_name \n see $(find "$(pwd)" -name "config.log" -print)"
 		} # less nicey than make (since single thread, and what if you're running another ffmpeg nice build elsewhere?)
 		create_touch_file 0 "$touch_name"
-		# echo -e "INFO: doing preventative make clean" >>"$LOG_FILE"
-		# echo -e "INFO: do_configure() nice running: \"make clean -j $(get_concurrent_proc)\"" >>"$LOG_FILE"
-		# nice make clean -j "$(get_concurrent_proc)" > >(redirect_output) 2>&1 # sometimes useful when files change, etc.
 	else
 	 echo -e "DEBUG: already configured $(basename "$cur_dir2")" >>"$LOG_FILE"
 	fi
+}
+# 1. extra config options
+# 2. configure_name
+# 3. touch_postfix
+# shellcheck disable=2128,2178
+generic_configure() {
+	build_triple="${build_triple:-$(gcc -dumpmachine)}"
+	local extra_configure_options="$1"
+  local configure_name="$2"
+  local touch_postfix="$3"
+	local options=$extra_configure_options
+	if [[ -n $build_triple ]]; then extra_configure_options+=" --build=$build_triple"; fi
+  options+=" --disable-shared --enable-static"
+	do_configure "--host=$host_target --prefix=$dependency_install_prefix $options" "$configure_name" "$touch_postfix"
 }
 # 1. extra_build_args
 # 2. touch_postfix
@@ -1760,11 +1949,11 @@ do_autogen() {
   local touch_prefix="${host_name}${touch_postfix}already"
 	local touch_name=$(get_small_touchfile_name "${touch_prefix}_autogen" "autogen $extra_build_args")
 	if truthy "$build_force"; then
-		remove_path -f "$cur_dir2/${touch_prefix}_"*
+		reset_touch "$cur_dir2"
 	fi
 	if [ ! -f "$touch_name" ]; then
-    remove_path -f "${touch_prefix}_autogen"* # reset
-		echo -e "INFO: Running ./autogen.sh with:\n  \"./autogen.sh --build-"w$bits_target" $extra_build_args\"" >>"$LOG_FILE"
+    remove_path -f "${touch_prefix}_autogen"*
+		echo -e "INFO: Running ./autogen.sh with:\n  DIR=$cur_dir2\n  \"./autogen.sh --build-"w$bits_target" $extra_build_args\"" >>"$LOG_FILE"
 		./autogen.sh --build-"w$bits_target" $extra_build_args > >(redirect_output) 2>&1 || {
 			exit_message 1 "failed ./autogen.sh with $extra_build_args\n see $LOG_FILE for more details"
 		}
@@ -1783,24 +1972,33 @@ do_make() {
 	extra_make_options="-j$(get_concurrent_proc) $extra_make_options"
 	local cur_dir2=$(pwd)
   local touch_prefix="${host_name}${touch_postfix}already"
-	local touch_name=$(get_small_touchfile_name "${touch_prefix}_make" "make $extra_make_options")
+	local touch_name=$(get_small_touchfile_name "${touch_prefix}_make_make" "make $extra_make_options")
 	if truthy "$build_force"; then
-		remove_path -f "$cur_dir2/${touch_prefix}_"*
-    nice make clean -j"$(get_concurrent_proc)" > >(redirect_output) 2>&1
+		reset_touch "$cur_dir2"
+    { nice make clean -j"$(get_concurrent_proc)" > >(redirect_output) 2>&1 || true; }
+    [[ -f ninja.build ]] && { nice ninja uninstall > >(redirect_output) 2>&1 || true; }
+    [[ -f Makefile ]] && { nice make uninstall > >(redirect_output) 2>&1 || true; }
 	fi
 	if [ ! -f "$touch_name" ]; then
-    remove_path -f "${touch_prefix}_make"* # reset
+    remove_path -f "${touch_prefix}_make_make"*
+    { nice make clean -j"$(get_concurrent_proc)" > >(redirect_output) 2>&1 || true; }
 		echo -e "INFO: Making $cur_dir2 as $ PATH=$PATH make $extra_make_options" >>"$LOG_FILE"
-		if [ ! -f configure ]; then
-			echo -e "INFO: do_make() nice running: \"make clean -j$(get_concurrent_proc)\"" >>"$LOG_FILE"
-			nice make clean -j"$(get_concurrent_proc)" > >(redirect_output) 2>&1 # just in case helpful if old junk left around and this is a 're make' and wasn't cleaned at reconfigure time
-		fi
-		echo -e "INFO: do_make()with:\n  PATH=$PATH\n  PKG_CONFIG_PATH=$PKG_CONFIG_PATH\n  CFLAGS:$CFLAGS\n  CXXFLAGS:$CXXFLAGS\n  CPPFLAGS:$CPPFLAGS\n  LDFLAGS:$LDFLAGS\n  nice running: \"make $extra_make_options\"" >>"$LOG_FILE"
-		eval "nice make -j$(get_concurrent_proc) $extra_make_options" > >(redirect_output) 2>&1 || exit_message 1 "could not make with $extra_make_options"
-		create_touch_file 1 "$touch_name" # only touch if the build was OK
+		echo -e "INFO: do_make()with:\n  DIR=$cur_dir2\n  PATH=$PATH\n  PKG_CONFIG_PATH=$PKG_CONFIG_PATH\n  CFLAGS:$CFLAGS\n  CXXFLAGS:$CXXFLAGS\n  CPPFLAGS:$CPPFLAGS\n  LDFLAGS:$LDFLAGS\n  nice running: \"make $extra_make_options\"" >>"$LOG_FILE"
+		eval "nice make $extra_make_options" > >(redirect_output) 2>&1 || exit_message 1 "could not make with $extra_make_options"
+		create_touch_file 0 "$touch_name" # only touch if the build was OK
 	else
 		echo -e "INFO: Already made $(dirname "$cur_dir2") $(basename "$cur_dir2") ..." >>"$LOG_FILE"
 	fi
+}
+generic_make() {
+  extra_make_options="$1"
+  touch_postfix="$2"
+  do_make "$extra_make_options PREFIX=$dependency_install_prefix" "$touch_postfix"
+}
+generic_make_install() {
+  extra_install_options="$1"
+  touch_postfix="$2"
+  do_make_install "$extra_install_options PREFIX=$dependency_install_prefix" "" "$touch_postfix"
 }
 # 1. extra_make_options
 # 2. extra_install_options
@@ -1809,8 +2007,8 @@ do_make_and_make_install() {
 	extra_make_options="$1"
 	extra_install_options="$2"
 	touch_postfix="$3"
-	do_make "$extra_make_options PREFIX=$dependency_install_prefix" "$touch_postfix"
-	do_make_install "$extra_install_options PREFIX=$dependency_install_prefix" "" "$touch_postfix"
+	generic_make "$extra_make_options" "$touch_postfix"
+	do_make_install "$extra_install_options" "" "$touch_postfix"
 }
 # 1. extra_make_install_options
 # 2. override_make_install_options
@@ -1819,6 +2017,7 @@ do_make_install() {
 	local extra_make_install_options="$1"
 	local override_make_install_options="$2" # startingly, some need/use something different than just 'make install'
 	local touch_postfix=""
+  local cur_dir2=$(pwd)
 	[[ -n $3 ]] && touch_postfix="_${3}_" || touch_postfix="_"
 	if [[ -z $override_make_install_options ]]; then
 		local make_install_options="install $extra_make_install_options"
@@ -1828,68 +2027,43 @@ do_make_install() {
   local touch_prefix="${host_name}${touch_postfix}already"
 	local touch_name=$(get_small_touchfile_name "${touch_prefix}_make_install" "make install $make_install_options")
 	if truthy "$build_force"; then
-		remove_path -f "$cur_dir2/${touch_prefix}_"*
+		reset_touch "$cur_dir2"
+    [[ -f ninja.build ]] && { nice ninja uninstall > >(redirect_output) 2>&1 || true; }
+    [[ -f Makefile ]] && { nice make uninstall > >(redirect_output) 2>&1 || true; }
 	fi
 	if [ ! -f "$touch_name" ]; then
-    remove_path -f "${touch_prefix}_make_install"* # reset
-		echo -e "INFO: do_make_install() with:\n  PATH=$PATH\n  PKG_CONFIG_PATH=$PKG_CONFIG_PATH\n  CFLAGS:$CFLAGS\n  CXXFLAGS:$CXXFLAGS\n  CPPFLAGS:$CPPFLAGS\n  LDFLAGS:$LDFLAGS\n  nice running: \"make $make_install_options\"" >>"$LOG_FILE"
+    remove_path -f "${touch_prefix}_make_install"*
+		echo -e "INFO: do_make_install() with:\n  DIR=$(pwd)\n  PATH=$PATH\n  PKG_CONFIG_PATH=$PKG_CONFIG_PATH\n  CFLAGS:$CFLAGS\n  CXXFLAGS:$CXXFLAGS\n  CPPFLAGS:$CPPFLAGS\n  LDFLAGS:$LDFLAGS\n  nice running: \"make $make_install_options\"" >>"$LOG_FILE"
 		eval "nice make -j$(get_concurrent_proc) $make_install_options" > >(redirect_output) 2>&1 || exit_message 1 "could not make with $make_install_options"
-		create_touch_file 1 "$touch_name"
+		create_touch_file 0 "$touch_name"
 	fi
-}
-
-check_cmake_cache() {
-    local build_dir="${1:-./build}"
-    local expected_source_dir="${2:-$(pwd)}"
-    
-    if [[ -f "$build_dir/CMakeCache.txt" ]]; then
-        echo "INFO: Checking CMake cache in $build_dir" >>"$LOG_FILE"
-        # Get cached values
-        local cache_build_dir=$(grep "^CMAKE_CACHEFILE_DIR:" "$build_dir/CMakeCache.txt" | cut -d'=' -f2- 2>/dev/null | xargs || echo "")
-        local cache_source_dir=$(grep "^CMAKE_HOME_DIRECTORY:" "$build_dir/CMakeCache.txt" | cut -d'=' -f2- 2>/dev/null | xargs || echo "")
-        echo "INFO: Current build dir: $build_dir" >>"$LOG_FILE"
-        echo "INFO: Cached build dir: $cache_build_dir" >>"$LOG_FILE"
-        echo "INFO: Expected source dir: $expected_source_dir" >>"$LOG_FILE"
-        echo "INFO: Cached source dir: $cache_source_dir" >>"$LOG_FILE"
-        # Check if build directory matches
-        if [[ "$cache_build_dir" != "$build_dir" ]]; then
-            echo "WARNING: CMakeCache.txt build directory mismatch" >>"$LOG_FILE"
-            echo "  Cache expects: $cache_build_dir" >>"$LOG_FILE"
-            echo "  Current build: $build_dir" >>"$LOG_FILE"
-            return 1
-        fi
-        # Check if source directory matches (most important check)
-        if [[ "$cache_source_dir" != "$expected_source_dir" ]]; then
-            echo "WARNING: CMakeCache.txt source directory mismatch" >>"$LOG_FILE"
-            echo "  Cache expects: $cache_source_dir" >>"$LOG_FILE"
-            echo "  Current source: $expected_source_dir" >>"$LOG_FILE"
-            return 1
-        fi
-        echo "INFO: CMake cache is valid" >>"$LOG_FILE"
-        return 0
-    else
-        echo "INFO: No CMakeCache.txt found in $build_dir" >>"$LOG_FILE"
-        return 0
-    fi
 }
 
 # Usage example:
 clean_cmake_cache() {
     local build_dir="${1:-./build}"
     local source_dir="${2:-$(pwd)}"
-		if ! check_cmake_cache "$source_dir" "$source_dir"; then
-        echo "DEBUG: Removing invalid CMake cache..." >>"$LOG_FILE"
-        remove_path -f "$source_dir/CMakeCache.txt" 2>/dev/null || true
-        remove_path -rf "$source_dir/CMakeFiles" 2>/dev/null || true
-        echo "DEBUG: CMake cache cleaned" >>"$LOG_FILE"
-				return 0
-    fi
-    if ! check_cmake_cache "$build_dir" "$source_dir"; then
-        echo "DEBUG: Removing invalid CMake cache..." >>"$LOG_FILE"
-        remove_path -f "$build_dir/CMakeCache.txt" 2>/dev/null || true
-        remove_path -rf "$build_dir/CMakeFiles" 2>/dev/null || true
-        echo "DEBUG: CMake cache cleaned" >>"$LOG_FILE"
-				return 0
+    do_clean_steps() {
+        if [[ -f build.ninja || -f ninja.build ]]; then
+             echo "  Running ninja clean..." >>"$LOG_FILE"
+             nice ninja -t clean >/dev/null 2>&1 || true
+        fi
+        if [[ -f Makefile ]]; then
+             echo "  Running make clean..." >>"$LOG_FILE"
+             nice make clean -j"$(get_concurrent_proc)" >/dev/null 2>&1 || true
+             nice make distclean -j"$(get_concurrent_proc)" >/dev/null 2>&1 || true
+        fi
+        echo "  Force removing CMake artifacts..." >>"$LOG_FILE"
+        rm -rf CMakeCache.txt CMakeFiles cmake_install.cmake Makefile build.ninja ninja.build
+    }
+    if [[ "$(realpath "$build_dir")" == "$(realpath "$source_dir")" ]]; then
+        echo "DEBUG: clean_cmake_cache: In-source build detected." >>"$LOG_FILE"
+        do_clean_steps
+    else
+        echo "DEBUG: clean_cmake_cache: Out-of-source build in $build_dir" >>"$LOG_FILE"
+        if [ -d "$build_dir" ]; then
+            ( cd "$build_dir" && do_clean_steps )
+        fi
     fi
 }
 
@@ -1898,51 +2072,67 @@ clean_cmake_cache() {
 # 3. touch_postfix
 do_cmake() {
 	extra_args="$1"
-	local build_from_dir="$2"
+	local source_dir="$2"
 	local touch_postfix=""
+  local cur_dir2=$(pwd)
 	[[ -n $3 ]] && touch_postfix="_${3}_" || touch_postfix="_"
-	if [[ -z $build_from_dir ]]; then
-		build_from_dir="."
+	if [[ -z $source_dir ]]; then
+		source_dir="$cur_dir2"
 	fi
   local touch_prefix="${host_name}${touch_postfix}already"
 	local touch_name=$(get_small_touchfile_name "${touch_prefix}_cmake" "cmake $extra_args")
 	if truthy "$build_force"; then
-		remove_path -f "$cur_dir2/${touch_prefix}_"*
-    clean_cmake_cache "$(pwd)/build" "$(pwd)"
+		reset_touch "$cur_dir2"
+    [[ -f ninja.build ]] && { nice ninja uninstall > >(redirect_output) 2>&1 || true; }
+    [[ -f Makefile ]] && { nice make uninstall > >(redirect_output) 2>&1 || true; }
+    { clean_cmake_cache "$cur_dir2" "$(realpath "$source_dir")" || true; }
 	fi
 	if [ ! -f "$touch_name" ]; then
-    remove_path -f "${touch_prefix}_cmake"* # reset
-		local cur_dir2=$(pwd)
+    remove_path -f "${touch_prefix}_cmake"*
+    [[ -f ninja.build ]] && { nice ninja uninstall > >(redirect_output) 2>&1 || true; }
+    [[ -f Makefile ]] && { nice make uninstall > >(redirect_output) 2>&1 || true; }
+    { clean_cmake_cache "$cur_dir2" "$(realpath "$source_dir")" || true; }
+    [[ ! -d "$cur_dir2" ]] && create_dir "$cur_dir2"
 		local config_options=""
 		if [ "$bits_target" = 32 ]; then
 			local config_options+="-DCMAKE_SYSTEM_PROCESSOR=x86"
 		else
 			local config_options+="-DCMAKE_SYSTEM_PROCESSOR=AMD64"
 		fi
-    if [[ $host_platform == "windows" ]]; then
+    local command="${source_dir} -DCMAKE_MESSAGE_LOG_LEVEL=ERROR"
+		command+=" $extra_args"
+		echo -e "INFO: do_cmake() nice running:\n  DIR=$cur_dir2\n  PATH=$PATH\n  PKG_CONFIG_PATH=$PKG_CONFIG_PATH\n  CFLAGS:$CFLAGS\n  CXXFLAGS:$CXXFLAGS\n  CPPFLAGS:$CPPFLAGS\n  LDFLAGS:$LDFLAGS\n  \"${cmake_command} -G\"Unix Makefiles\" $command\"" >>"$LOG_FILE"
+		# shellcheck disable=SC2086
+		eval "nice -n 5 ${cmake_command} -G\"Unix Makefiles\" $command" > >(redirect_output) 2>&1 || exit_message 1 "could not run nice: \"${cmake_command} -G\"Unix Makefiles\" $command\""
+		create_touch_file 0 "$touch_name"
+	fi
+}
+generic_cmake() {
+  # 1. extra_args
+  # 2. source_dir
+  # 3. touch_postfix
+  extra_args="$1"
+  source_dir="$2"
+	touch_postfix="$3"
+  if [[ $host_platform == "windows" ]]; then
       extra_args+=" -DENABLE_STATIC_RUNTIME=1 \
 -DCMAKE_SYSTEM_NAME=Windows \
 -DCMAKE_RANLIB=${cross_prefix}ranlib \
 -DCMAKE_C_COMPILER=${cross_prefix}gcc \
 -DCMAKE_CXX_COMPILER=${cross_prefix}g++ \
 -DCMAKE_RC_COMPILER=${cross_prefix}windres"
-    fi
-		# TODO: Allow shared library build
-		local command="${build_from_dir} -DCMAKE_MESSAGE_LOG_LEVEL=ERROR \
--DCMAKE_FIND_ROOT_PATH=$dependency_install_prefix \
+  fi
+		extra_args+=" -DCMAKE_FIND_ROOT_PATH=$dependency_install_prefix \
 -DCMAKE_FIND_ROOT_PATH_MODE_PROGRAM=NEVER \
--DCMAKE_FIND_ROOT_PATH_MODE_LIBRARY=BOTH \
--DCMAKE_FIND_ROOT_PATH_MODE_INCLUDE=BOTH \
--DCMAKE_INSTALL_PREFIX=$dependency_install_prefix $config_options"
-		if [[ $extra_args != *"-DBUILD_STATIC_LIBS="* && $extra_args != *"-DBUILD_SHARED_LIBS="* && $extra_args != *"-DENABLE_SHARED="* && $extra_args != *"-DENABLE_STATIC="* ]]; then
-			command+=" -DBUILD_SHARED_LIBS=0"
-		fi
-		command+=" $extra_args"
-		echo -e "INFO: do_cmake() nice running:\n  PATH=$PATH\n  PKG_CONFIG_PATH=$PKG_CONFIG_PATH\n  CFLAGS:$CFLAGS\n  CXXFLAGS:$CXXFLAGS\n  CPPFLAGS:$CPPFLAGS\n  LDFLAGS:$LDFLAGS\n  \"${cmake_command} -G\"Unix Makefiles\" $command\"" >>"$LOG_FILE"
-		# shellcheck disable=SC2086
-		eval "nice -n 5  ${cmake_command} -G\"Unix Makefiles\" $command" > >(redirect_output) 2>&1 || exit_message 1 "could not run nice: \"${cmake_command} -G\"Unix Makefiles\" $command\""
-		create_touch_file 1 "$touch_name"
-	fi
+-DCMAKE_INSTALL_LIBDIR=$dependency_install_prefix/lib \
+-DCMAKE_INSTALL_PREFIX=$dependency_install_prefix \
+$config_options"
+  [[ $extra_args != *"-DCMAKE_FIND_ROOT_PATH_MODE_LIBRARY"* ]] && extra_args+=" -DCMAKE_FIND_ROOT_PATH_MODE_LIBRARY=ONLY"
+  [[ $extra_args != *"-DCMAKE_FIND_ROOT_PATH_MODE_INCLUDE"* ]] && extra_args+=" -DCMAKE_FIND_ROOT_PATH_MODE_INCLUDE=ONLY"
+  [[ $extra_args != *"-DCMAKE_FIND_ROOT_PATH_MODE_PACKAGE"* ]] && extra_args+=" -DCMAKE_FIND_ROOT_PATH_MODE_PACKAGE=ONLY"
+  extra_args+=" -DBUILD_STATIC_LIBS=1 -DENABLE_STATIC=1"
+  extra_args+=" -DCMAKE_POSITION_INDEPENDENT_CODE=1"
+  do_cmake "$extra_args" "$source_dir" "$touch_postfix"
 }
 # 1. source_dir
 # 2. extra_args
@@ -1951,7 +2141,7 @@ do_cmake_from_build_dir() { # some sources don't allow it, weird XXX combine wit
 	source_dir="$1"
 	extra_args="$2"
 	touch_postfix="$3"
-	do_cmake "$extra_args" "$source_dir" "$touch_postfix"
+	generic_cmake "$extra_args" "$source_dir" "$touch_postfix"
 }
 # 1. extra_args
 # 2. source_dir
@@ -1960,7 +2150,7 @@ do_cmake_and_install() {
 	extra_args="$1"
 	source_dir="$2"
 	touch_postfix="$3"
-	do_cmake "$extra_args" "$source_dir" "$touch_postfix"
+	generic_cmake "$extra_args" "$source_dir" "$touch_postfix"
 	do_make_and_make_install "" "" "$touch_postfix"
 }
 
@@ -1991,7 +2181,6 @@ do_meson() {
 	local configure_env="$3"
 	local touch_postfix=""
 	[[ -n $4 ]] && touch_postfix="_${4}_" || touch_postfix="_"
-	local configure_noclean=""
 	if [[ -z "${configure_command[*]}" || "${configure_command[*]}" == "setup build" ]]; then
 		configure_name=("setup" "build")
 		configure_options+=" --unity=off --warnlevel=0"
@@ -2005,21 +2194,21 @@ do_meson() {
 	local cur_dir2=$(pwd)
 	local english_name=$(basename "$cur_dir2")
   local touch_prefix="${host_name}${touch_postfix}already"
-	local touch_name=$(get_small_touchfile_name "${touch_prefix}_meson" "meson $configure_options ${configure_command[*]}")
+	local touch_name=$(get_small_touchfile_name "${touch_prefix}_meson_${configure_name[*]}" "meson $configure_options")
 	if truthy "$build_force"; then
-		remove_path -f "$cur_dir2/${touch_prefix}_"*
-    remove_path -rf "$(pwd)/build"
+		reset_touch "$cur_dir2"
+    [[ -f ninja.build ]] && { nice ninja uninstall > >(redirect_output) 2>&1 || true; }
+    [[ -f Makefile ]] && { nice make uninstall > >(redirect_output) 2>&1 || true; }
+    { python3 "$local_meson" compile --clean -C build > >(redirect_output) 2>&1 || true; }
 	fi
 	if [ ! -f "$touch_name" ]; then
-    remove_path -f "${touch_prefix}_meson"* # reset
-		if [ "$configure_noclean" != "noclean" ]; then
-			make clean > >(redirect_output) 2>&1 # just in case
-		fi
 		if [[ -n "${configure_command[*]}" && -d "$(pwd)/build" && "${configure_name[*]}" == "setup build" ]]; then
+      remove_path -f "${touch_prefix}_meson_${configure_name[*]}"*
+      { python3 "$local_meson" compile --clean -C build > >(redirect_output) 2>&1 || true; }
 			echo -e "INFO: Adding --reconfigure to meson config because there is an existing previous build" >>"$LOG_FILE"
 			configure_options+=" --reconfigure"
 		fi
-		echo -e "INFO: Using meson:\n  PATH=$PATH\n  PKG_CONFIG_PATH=$PKG_CONFIG_PATH\n  CFLAGS:$CFLAGS\n  CXXFLAGS:$CXXFLAGS\n  CPPFLAGS:$CPPFLAGS\n  LDFLAGS:$LDFLAGS\n  ${configure_command[*]} $configure_options" >>"$LOG_FILE"
+		echo -e "INFO: Using meson:\n  DIR=$cur_dir2\n  PATH=$PATH\n  PKG_CONFIG_PATH=$PKG_CONFIG_PATH\n  CFLAGS:$CFLAGS\n  CXXFLAGS:$CXXFLAGS\n  CPPFLAGS:$CPPFLAGS\n  LDFLAGS:$LDFLAGS\n  ${configure_command[*]} $configure_options" >>"$LOG_FILE"
 		#env
 		export MESON_BUILD_ROOT="$(pwd)/build"
 		export MESON_SOURCE_ROOT="$(pwd)"
@@ -2038,8 +2227,9 @@ generic_meson() {
 	local extra_configure_options="$1"
 	local touch_postfix="$2"
 	#create_dir "$(pwd)/build"
-	# TODO: Allow shared library build
-	do_meson "-Dprefix=${dependency_install_prefix} -Dlibdir=${dependency_install_prefix}/lib -Dbuildtype=release --default-library=static $extra_configure_options" "setup build" "$touch_postfix" # --cross-file=$(get_meson_cross_file)
+  extra_configure_options+=" -Dprefix=${dependency_install_prefix} -Dlibdir=${dependency_install_prefix}/lib -Dbuildtype=release"
+  extra_configure_options+=" --default-library=static -Db_staticpic=true"
+	do_meson "$extra_configure_options" "setup build" "$touch_postfix" # --cross-file=$(get_meson_cross_file)
 }
 # 1. extra_args
 # 2. touch_postfix
@@ -2052,18 +2242,19 @@ generic_meson_ninja_install() {
 do_ninja_and_ninja_install() {
 	local extra_ninja_options="$1"
 	local touch_postfix=""
+  local cur_dir2=$(pwd)
 	[[ -n $2 ]] && touch_postfix="_${2}_" || touch_postfix="_"
 	do_ninja "$extra_ninja_options" "$touch_postfix"
   local touch_prefix="${host_name}${touch_postfix}already"
-	local touch_name=$(get_small_touchfile_name "${touch_prefix}_ninja_build_install" "ninja build install $extra_ninja_options")
+	local touch_name=$(get_small_touchfile_name "${touch_prefix}_ninja_install" "ninja install $extra_ninja_options")
 	if truthy "$build_force"; then
-		remove_path -f "$cur_dir2/${touch_prefix}_"*
+		reset_touch "$cur_dir2"
 	fi
 	if [ ! -f "$touch_name" ]; then
-    remove_path -f "${touch_prefix}_ninja_build_install"* # reset
-		echo -e "INFO: do_ninja() with:\n  PATH=$PATH\n  PKG_CONFIG_PATH=$PKG_CONFIG_PATH\n  CFLAGS:$CFLAGS\n  CXXFLAGS:$CXXFLAGS\n  CPPFLAGS:$CPPFLAGS\n  LDFLAGS:$LDFLAGS\n  in $(pwd) ninja running: \"build $extra_make_options\"" >>"$LOG_FILE"
+    remove_path -f "${touch_prefix}_ninja_install"* # reset
+		echo -e "INFO: do_ninja() with:\n  DIR=$cur_dir2\n  PATH=$PATH\n  PKG_CONFIG_PATH=$PKG_CONFIG_PATH\n  CFLAGS:$CFLAGS\n  CXXFLAGS:$CXXFLAGS\n  CPPFLAGS:$CPPFLAGS\n  LDFLAGS:$LDFLAGS\n  in $(pwd) ninja running: \"build $extra_make_options\"" >>"$LOG_FILE"
 		ninja -C build install > >(redirect_output) 2>&1 || exit_message 1 "could not do_ninja() in $(pwd) ninja running: \"build $extra_make_options\""
-		create_touch_file 1 "$touch_name"
+		create_touch_file 0 "$touch_name"
 	fi
 }
 
@@ -2076,15 +2267,17 @@ do_ninja() {
   local touch_prefix="${host_name}${touch_postfix}already"
 	local touch_name=$(get_small_touchfile_name "${touch_prefix}_ninja_build" "ninja build $extra_make_options")
 	if truthy "$build_force"; then
-		remove_path -f "$cur_dir2/${touch_prefix}_"*
+		reset_touch "$cur_dir2"
+    [[ -f ninja.build ]] && { nice ninja uninstall > >(redirect_output) 2>&1 || true; }
+    [[ -f Makefile ]] && { nice make uninstall > >(redirect_output) 2>&1 || true; }
 	fi
 	if [ ! -f "$touch_name" ]; then
-    remove_path -f "${touch_prefix}_ninja_build"* # reset
+    remove_path -f "${touch_prefix}_ninja_build"*
 		echo -e "INFO: ninja-ing $cur_dir2 as PATH=$PATH ninja -C build $extra_make_options" >>"$LOG_FILE"
-		echo -e "INFO: do_ninja() ninja running:\n  PATH=$PATH\n  PKG_CONFIG_PATH=$PKG_CONFIG_PATH\n  CFLAGS:$CFLAGS\n  CXXFLAGS:$CXXFLAGS\n  CPPFLAGS:$CPPFLAGS\n  LDFLAGS:$LDFLAGS\n  \"build $extra_make_options\"" >>"$LOG_FILE"
+		echo -e "INFO: do_ninja() ninja running:\n  DIR=$cur_dir2\n  PATH=$PATH\n  PKG_CONFIG_PATH=$PKG_CONFIG_PATH\n  CFLAGS:$CFLAGS\n  CXXFLAGS:$CXXFLAGS\n  CPPFLAGS:$CPPFLAGS\n  LDFLAGS:$LDFLAGS\n  \"build $extra_make_options\"" >>"$LOG_FILE"
 		# shellcheck disable=SC2086
 		ninja -C build ${extra_make_options} > >(redirect_output) 2>&1 || exit_message 1 "could not do_ninja() ninja running: \"build $extra_make_options\""
-		create_touch_file 1 "$touch_name" # only touch if the build was OK
+		create_touch_file 0 "$touch_name" # only touch if the build was OK
 	else
 		echo -e "INFO: already did ninja $(basename "$cur_dir2")" >>"$LOG_FILE"
 	fi
@@ -2131,11 +2324,11 @@ download_and_unpack_file() {
             chmod -R u+rwx "$dest_folder"
         fi
     fi
-    local marker_file="$dest_folder/unpacked.successfully"
-    if [ ! -f "$marker_file" ]; then
+    local touch_name="${dest_folder}/$(get_small_touchfile_name "already_unpacked_successfully" "$url $dest_folder")"
+    if [ ! -f "$touch_name" ]; then
         echo "INFO: Downloading $url into $dest_folder" >>"$LOG_FILE"
         if [[ "$filename" == *.zst ]] && ! command -v zstd &> /dev/null; then
-             exit_message 1 "zstd is not installed. Run: sudo apt-get install zstd"
+             exit_message 1 "zstd is not installed. Run: sudo $INSTALL_COMMAND install zstd"
         fi
         if [[ -f "$filename" ]]; then
             rm -f "$filename"
@@ -2153,11 +2346,10 @@ download_and_unpack_file() {
         fi
         remove_path -f "$filename"
         chmod -R u+rwx "$dest_folder"
-        create_touch_file 0 "$marker_file"
+        create_touch_file 0 "$touch_name"
     else
       echo "DEBUG: Archive already downloaded and extracted at $dest_folder" >>"$LOG_FILE"
       chmod -R u+rwx "$dest_folder"
-      create_touch_file 0 "$marker_file"
     fi
 }
 extract_tar() {
@@ -2198,22 +2390,6 @@ extract_zip() {
         # Multiple items: normal extraction
         unzip -o "$archive" -d "$dest_dir"
     fi
-}
-# 1. extra config options
-# 2. configure_name
-# 3. touch_postfix
-# shellcheck disable=2128,2178
-generic_configure() {
-	build_triple="${build_triple:-$(gcc -dumpmachine)}"
-	local extra_configure_options="$1"
-  local configure_name="$2"
-  local touch_postfix="$3"
-	local options=$extra_configure_options
-	if [[ -n $build_triple ]]; then extra_configure_options+=" --build=$build_triple"; fi
-	if [[ $extra_configure_options != *"disable-shared"* && $extra_configure_options != *"enable-shared"* && $extra_configure_options != *"disable-static"* && $extra_configure_options != *"enable-static"* ]]; then
-		options+=" --disable-shared --enable-static"
-	fi
-	do_configure "--host=$host_target --prefix=$dependency_install_prefix $options" "$configure_name" "$touch_postfix"
 }
 
 # 1. url, 
@@ -2273,7 +2449,7 @@ gen_ld_script() {
 }
 
 install_local_dependency() {
-  eval "apt-get update && sudo apt-get install -y $*" > >(redirect_output) 2>&1 || exit_message 1 "failed to install required dependencies"
+  eval "$INSTALL_COMMAND update && sudo $INSTALL_COMMAND install -y $*" > >(redirect_output) 2>&1 || exit_message 1 "failed to install required dependencies"
 }
 
 # Usage: convert_msvc_to_mingw -t=<directory_to_scan> -c=<toolchain_prefix> -o=<output_pc_file> -i=<install dir> -v=<version> -n=<descriptive name> -d=<description>
@@ -2594,66 +2770,70 @@ print_progress() {
 	printf "\r\033[K[%s] %3d%% (%2d/%2d) | %s" "$bar_str" "$percent" "$current_step" "$steps" "$step_name"
 }
 
-build_all_ffmpeg_dependencies() {
+run_valid_build_functions() {
 	local start_from=$1
-	local skip_mode=false
+	local skip_mode=${2:-false}
 	# Create a clean array without empty elements
 	local steps=0
 	local current_step=0
+  export LDFLAGS+=" -static-libgcc -static-libstdc++"
+  if [[ -n "$start_from" && "$start_from" == build_* ]] && ! array_index_of "$start_from" "${BUILD_STEPS[@]}" >/dev/null; then
+    run_valid_function "$start_from"
+  elif [[ -n "$start_from" && "$start_from" == build_* ]] && truthy "$skip_mode"; then
+    run_valid_function "$start_from"
+  else
+    # Count non-empty steps first
+    for step_name in "${BUILD_STEPS[@]}"; do
+      if [[ -n "${step_name// /}" ]]; then
+        ((steps++))
+      fi
+    done
 
-	# Count non-empty steps first
-	for step_name in "${BUILD_STEPS[@]}"; do
-		if [[ -n "${step_name// /}" ]]; then
-			((steps++))
-		fi
-	done
+    # If start_from is empty, start from beginning
+    if [[ -z "$start_from" ]]; then
+      skip_mode=false
+    else
+      echo -e "INFO: Starting from step: $start_from" | tee -a "$LOG_FILE"
+      skip_mode=true
+    fi
 
-	# If start_from is empty, start from beginning
-	if [[ -z "$start_from" ]]; then
-		skip_mode=false
-	else
-		echo -e "INFO: Starting from step: $start_from" | tee -a "$LOG_FILE"
-		skip_mode=true
-	fi
-
-	for step_name in "${BUILD_STEPS[@]}"; do
-		if [[ -z "${step_name// /}" ]]; then
-			continue
-		fi
-		# Handle skip mode
-		if [[ "$skip_mode" == true ]]; then
-			if [[ "$step_name" == "$start_from" ]]; then
-				skip_mode=false
-				echo -e "INFO: Building dependencies from: $step_name" | tee -a "$LOG_FILE"
-			else
-				((current_step++))
-				continue
-			fi
-		fi
-		((current_step++))
-		print_progress "$current_step" "$steps" "$step_name"
-
-		build_ffmpeg_dependency_only "$step_name" || echo | tee -a "$LOG_FILE"
-	done
-	printf "\r\033[KAll dependencies built successfully!\n"
+    for step_name in "${BUILD_STEPS[@]}"; do
+      if [[ -z "${step_name// /}" ]]; then
+        continue
+      fi
+      # Handle skip mode
+      if [[ "$skip_mode" == true ]]; then
+        if [[ "$step_name" == "$start_from" ]]; then
+          skip_mode=false
+          echo -e "INFO: Building dependencies from: $step_name" | tee -a "$LOG_FILE"
+        else
+          ((current_step++))
+          continue
+        fi
+      fi
+      ((current_step++))
+      print_progress "$current_step" "$steps" "$step_name"
+      run_valid_function "$step_name" || echo | tee -a "$LOG_FILE"
+    done
+    printf "\r\033[KAll dependencies built successfully!\n"
+  fi
+  check_static_pic "$dependency_install_prefix/lib/pkgconfig"
+  reset_ldflags
 }
 
-build_ffmpeg_dependency_only() {
+run_valid_function() {
 	step=$1
 	if [[ -n "$step" ]]; then
 		change_dir "$src_dir"
 		if declare -F "$step" >/dev/null; then
 			echo -e "INFO: --- Executing step: $step ---" >>"$LOG_FILE"
 			"$step" # Execute the function
-      echo | tee -a "$LOG_FILE"
 			echo -e "INFO: --- Finished executing step: $step ---" >>"$LOG_FILE"
 		else
-      echo | tee -a "$LOG_FILE"
 			echo -e "ERROR: Function '$step' not found." | tee -a "$LOG_FILE"
 			return 1 # Indicate an error
 		fi
 	else
-    echo | tee -a "$LOG_FILE"
 		echo -e "ERROR: Step argument is missing." | tee -a "$LOG_FILE"
 		return 1 # Indicate an error
 	fi
@@ -2666,7 +2846,7 @@ configure_ffmpeg() {
 	change_dir "$ffmpeg_source_dir" || return 1
 
 	if truthy "$build_force"; then
-		remove_path -f "${ffmpeg_source_dir}/already_configured_$(get_build_type)"*
+		remove_path -f "${ffmpeg_source_dir}/already_configured_$build_ffmpeg_type"*
 	fi
 
 	change_dir "$ffmpeg_source_dir" || exit
@@ -2697,12 +2877,15 @@ configure_ffmpeg() {
 	init_options+=" --enable-pic"
 	init_options+=" --enable-swscale"
   init_options+=" --extra-libs=\"-lm -lstdc++ -lrt -ldl\""
+  init_options+=" --extra-cflags=\"-ffunction-sections -fdata-sections\""
+  init_options+=" --extra-cxxflags=\"-ffunction-sections -fdata-sections\""
 	truthy "$enable_lto" && init_options+=" --enable-optimizations"
-	truthy "$enable_small" && init_options+=" --enable-small"
+	truthy "$build_small" && init_options+=" --enable-small"
 
 	if [[ $host_platform != "linux" ]]; then
     init_options+=" --enable-cross-compile"
     init_options+=" --cross-prefix=$cross_prefix"
+  else
     init_options+=" --extra-libs=\"-lpthread\""
   fi
 
@@ -2717,15 +2900,16 @@ configure_ffmpeg() {
 	  init_options+=" --extra-cflags=-mtune=generic"
 	  init_options+=" --extra-cflags=-O3"
 	  init_options+=" --extra-cflags=-pipe"
-    init_options+=" --extra-cflags=-ffunction-sections -fdata-sections"
-    init_options+=" --extra-cxxflags=-ffunction-sections -fdata-sections"
   fi
 
 	# can't mix and match --enable-static --enable-shared unfortunately, or the final executable seems to just use shared if the're both present
-	if truthy "$build_static"; then
-		postpend_configure_opts=" --enable-static --disable-shared"
+	if [[ $build_ffmpeg_type == "static" ]]; then
+		postpend_configure_opts=" --enable-static --disable-shared --enable-pic"
+    init_options+=" --extra-cflags=\"-fPIC -DPIC\""
+    init_options+=" --extra-cxxflags=\"-fPIC -DPIC\""
+    init_options+=" --env=\"X86ASMFLAGS=-DPIC\""
 	else
-    postpend_configure_opts=" --enable-shared --disable-static" # I guess this doesn't have to be at the end...
+    postpend_configure_opts=" --enable-shared --disable-static"
 	fi
 
 	local config_options=""
@@ -2744,7 +2928,6 @@ configure_ffmpeg() {
   truthy "$disable_jni" && config_options+=" --disable-jni"                           # enable JNI support [no]
   truthy "$disable_ladspa" && config_options+=" --disable-ladspa"                     # enable LADSPA audio filtering [no]
   truthy "$disable_mediacodec" && config_options+=" --disable-mediacodec"             # enable Android MediaCodec support [no]
-  truthy "$enable_libsmbclient" && config_options+=" --enable-libsmbclient"           # enable Samba protocol via libsmbclient [no]
   fi
   #------------------------------------------------------------------------------    
   # --------------------------- OpenHarmony features ----------------------------     
@@ -2775,11 +2958,13 @@ configure_ffmpeg() {
   truthy "$disable_sndio" && config_options+=" --disable-sndio"                       # disable sndio support [autodetect]
                                                                                       # XXX --enable-libtorch ABI mismatch on windows
   truthy "$enable_libtorch" && config_options+=" --enable-libtorch \
-  --extra-cflags=\"-I${dependency_install_prefix}/torch/include/torch/csrc/api/include \
-  -I${dependency_install_prefix}/torch/include\" \
-  --extra-cxxflags=\"-I${dependency_install_prefix}/torch/include/torch/csrc/api/include \
-  -I${dependency_install_prefix}/torch/include\" \
-  --extra-ldflags=\"-L${dependency_install_prefix}/torch/lib\""
+  --extra-cflags=\"\
+  -I${dependency_install_prefix}/libtorch/include/torch/csrc/api/include \
+  -I${dependency_install_prefix}/libtorch/include\" \
+  --extra-cxxflags=\"\
+  -I${dependency_install_prefix}/libtorch/include/torch/csrc/api/include \
+  -I${dependency_install_prefix}/libtorch/include\" \
+  --extra-ldflags=\"-L${dependency_install_prefix}/libtorch/lib\""
                                                                                       # enable Torch as one DNN backend [no]
   fi
   #------------------------------------------------------------------------------
@@ -2790,6 +2975,15 @@ configure_ffmpeg() {
   truthy "$enable_libmfx" && config_options+=" --enable-libmfx"                       # enable Intel MediaSDK (AKA Quick Sync Video) code via libmfx [no]
   truthy "$enable_libvpl" && config_options+=" --enable-libvpl"                       # enable Intel oneVPL code via libvpl if libmfx is not used [no]
   truthy "$enable_vulkan_static" && config_options+=" --enable-vulkan-static"         # enable statically link to libvulkan [no]
+  truthy "$enable_cuda_llvm" && config_options+=" --enable-cuda-llvm"                 # enable CUDA compilation using clang [autodetect]
+  truthy "$enable_cuvid" && config_options+=" --enable-cuvid"                         # enable Nvidia CUVID support [autodetect]
+  truthy "$enable_ffnvcodec" && config_options+=" --enable-ffnvcodec"                 # enable dynamically linked Nvidia code [autodetect]
+  truthy "$enable_nvdec" && config_options+=" --enable-nvdec"                         # enable Nvidia video decoding acceleration (via hwaccel) [autodetect]
+  truthy "$enable_nvenc" && config_options+=" --enable-nvenc"                         # enable Nvidia video encoding code [autodetect]
+  truthy "$enable_vdpau" && config_options+=" --enable-vdpau"                         # enable Nvidia Video Decode and Presentation API for Unix code [autodetect]
+  truthy "$enable_cuda_nvcc" && config_options+=" --enable-cuda-nvcc \
+  --nvccflags=\"-gencode arch=compute_86,code=sm_86 -O2\""                             # enable Nvidia CUDA compiler [no]
+  truthy "$enable_libnpp" && config_options+=" --enable-libnpp"                       # enable Nvidia Performance Primitives-based code [no]
   #------------------------------------------------------------------------------
   # ----------------------------- windows features ------------------------------ 
   #------------------------------------------------------------------------------
@@ -2800,7 +2994,11 @@ configure_ffmpeg() {
   # -------------------------- cross-platform features --------------------------
   #------------------------------------------------------------------------------ 
   if [[ $host_platform != "windows" ]]; then
-  truthy "$enable_libsmbclient" && config_options+=" --enable-libsmbclient"           # enable Samba protocol via libsmbclient [no]
+  truthy "$enable_libsmbclient" && config_options+=" --enable-libsmbclient \
+  --extra-cflags=\"-I/usr/include/samba-4.0\" \
+  --extra-cxxflags=\"-I/usr/include/samba-4.0\" \
+  --extra-libs=\"-lsmbclient\" \
+  --extra-ldflags=\"-L/usr/lib64 -lsmbclient\""                                       # enable Samba protocol via libsmbclient [no]
   fi
   truthy "$disable_bzlib" && config_options+=" --disable-bzlib"                       # disable bzlib [autodetect]
   truthy "$disable_iconv" && config_options+=" --disable-iconv"                       # disable iconv [autodetect]
@@ -2886,7 +3084,7 @@ configure_ffmpeg() {
   --extra-libs=\"-Wl,--start-group -ltesseract -lleptonica -ltiff -lpng16 -ljpeg \
   -lopenjp2 -ljbig -lLerc -ldeflate -lzstd -llzma -lwebpmux -lwebp -lgif -lcurl \
   -lnghttp2 -lssl -lcrypto -lpsl -lbrotlidec -lbrotlicommon -larchive -lbz2 -lz \
-  -lexpat -liconv -Wl,--end-group\""                                                    # enable Tesseract, needed for ocr filter [no]
+  -lexpat -liconv -Wl,--end-group\""                                                  # enable Tesseract, needed for ocr filter [no]
   truthy "$enable_libtheora" && config_options+=" --enable-libtheora"                 # enable Theora encoding via libtheora [no]
   truthy "$enable_libtls" && config_options+=" --enable-libtls"                       # enable LibreSSL (via libtls), needed for https support if openssl, gnutls or mbedtls is not used [no]
   truthy "$enable_libtwolame" && config_options+=" --enable-libtwolame"               # enable MP2 encoding via libtwolame [no]
@@ -2908,7 +3106,9 @@ configure_ffmpeg() {
   truthy "$enable_libzimg" && config_options+=" --enable-libzimg"                     # enable z.lib, needed for zscale filter [no]
   truthy "$enable_libzmq" && config_options+=" --enable-libzmq"                       # enable message passing via libzmq [no]
   truthy "$enable_libzvbi" && config_options+=" --enable-libzvbi"                     # enable teletext support via libzvbi [no]
-  truthy "$enable_lv2" && config_options+=" --enable-lv2"                             # enable LV2 audio filtering [no]
+  truthy "$enable_lv2" && config_options+=" --enable-lv2\
+  --extra-libs=\"-Wl,--start-group -lsratom -lsord \
+  -lzix -lserd -llilv -Wl,--end-group\""                                                 # enable LV2 audio filtering [no]
   truthy "$enable_mbedtls" && config_options+=" --enable-mbedtls"                     # enable mbedTLS, needed for https support if openssl, gnutls or libtls is not used [no]
   truthy "$enable_openal" && config_options+=" --enable-openal"                       # enable OpenAL 1.1 capture support [no]
   truthy "$enable_opencl" && config_options+=" --enable-opencl"                       # enable OpenCL processing [no]
@@ -2917,7 +3117,7 @@ configure_ffmpeg() {
   truthy "$enable_pocketsphinx" && config_options+=" --enable-pocketsphinx"           # enable PocketSphinx, needed for asr filter [no]
   truthy "$enable_vapoursynth" && config_options+=" --enable-vapoursynth"             # enable VapourSynth demuxer [no]
   truthy "$enable_whisper" && config_options+=" --enable-whisper \
-  --extra-libs=\"-lwhisper -lggml -lggml-cpu -lggml-base -lgomp\""                           # enable whisper filter [no]
+  --extra-libs=\"-lwhisper -lggml -lggml-cpu -lggml-base -lgomp\""                    # enable whisper filter [no]
 
   # add any additional ff prefixed flags 
   if [[ -n $ff_flags_values ]]; then
@@ -2925,25 +3125,16 @@ configure_ffmpeg() {
     config_options+=" $ff_flags"
   fi
 
-	if truthy "$enable_gpl"; then
+	if truthy "$build_gpl"; then
 		config_options+=" --enable-gpl"
   fi
-  if [[ -n $enable_nonfree ]]; then 
+  if truthy "$build_nonfree"; then 
     config_options+=" --enable-nonfree"
     #------------------------------------------------------------------------------
     # ------------------------ non-free non-gpl libraries -------------------------
     #------------------------------------------------------------------------------ 
     truthy "$enable_decklink" && config_options+=" --enable-decklink"                   # enable Blackmagic DeckLink I/O support [no]
     truthy "$enable_libfdk_aac" && config_options+=" --enable-libfdk-aac"               # enable AAC de/encoding via libfdk-aac [no]
-    # ----------------------------- hardware features ----------------------------- 
-    truthy "$enable_cuda_llvm" && config_options+=" --enable-cuda-llvm"                 # enable CUDA compilation using clang [autodetect]
-    truthy "$enable_cuvid" && config_options+=" --enable-cuvid"                         # enable Nvidia CUVID support [autodetect]
-    truthy "$enable_ffnvcodec" && config_options+=" --enable-ffnvcodec"                 # enable dynamically linked Nvidia code [autodetect]
-    truthy "$enable_nvdec" && config_options+=" --enable-nvdec"                         # enable Nvidia video decoding acceleration (via hwaccel) [autodetect]
-    truthy "$enable_nvenc" && config_options+=" --enable-nvenc"                         # enable Nvidia video encoding code [autodetect]
-    truthy "$enable_vdpau" && config_options+=" --enable-vdpau"                         # enable Nvidia Video Decode and Presentation API for Unix code [autodetect]
-    truthy "$enable_cuda_nvcc" && config_options+=" --enable-cuda-nvcc"                 # enable Nvidia CUDA compiler [no]
-    truthy "$enable_libnpp" && config_options+=" --enable-libnpp"                       # enable Nvidia Performance Primitives-based code [no]
     # --------------------------- linux/unix features -----------------------------    
     if [[ $host_platform == "rpi" ]]; then
     truthy "$enable_mmal" && config_options+=" --enable-mmal"                           # enable Broadcom Multi-Media Abstraction Layer (Raspberry Pi) via MMAL [no]
@@ -2976,61 +3167,61 @@ configure_ffmpeg() {
 		postpend_configure_opts+=" --disable-debug"
 	fi
 
-	do_configure "$init_options$config_options$postpend_configure_opts" "./configure" "$(get_build_type)" || exit_message 1 "unable to configure ffmpeg. see $LOG_FILE for details."
+	do_configure "$init_options$config_options$postpend_configure_opts" "./configure" "$(get_ffmpeg_directory)" || exit_message 1 "unable to configure ffmpeg. see $LOG_FILE for details."
 
 	echo -e "INFO: Done configuering ffmpeg" | tee -a "$LOG_FILE"
 }
 
 build_exists() {
-	shared_build_exists=0
-	static_build_exists=0
+	shared_build_exists=n
+	static_build_exists=n
 
 	# Check shared build
 	local build_dir="$work_dir/$(get_ffmpeg_directory shared)" #ffmpeg_install_prefix
 	echo -e "INFO: Checking $build_dir" >>"$LOG_FILE"
 	if [[ -d "$build_dir" && -d "$build_dir/bin" ]]; then
 		echo -e "INFO: Checking binaries in $build_dir/bin..." >>"$LOG_FILE"
-		check_binaries=0
+		check_binaries=n
 		if find "$build_dir/bin" -maxdepth 1 -type f \( -name '*.a' -o -name '*.dll' -o -name '*.so' -o -name '*.dylib' -o -name '*.lib' -o -name '*.exe' \) -print -quit | grep -q .; then
-			check_binaries=1
+			check_binaries=y
 		fi
-		[[ $check_binaries -eq 1 ]] && shared_build_exists=1
+		truthy "$check_binaries" && shared_build_exists=y
 	fi
 	build_dir="$work_dir/$(get_ffmpeg_directory static)" #ffmpeg_install_prefix
 	echo -e "INFO: Checking $build_dir" >>"$LOG_FILE"
 	# Check static build
 	if [[ -d "$build_dir" && -d "$build_dir/bin" ]]; then
 		echo -e "INFO: Checking binaries in $build_dir/bin..." >>"$LOG_FILE"
-		check_binaries=0
+		check_binaries=n
 		if find "$build_dir/bin" -maxdepth 1 -type f \( -name '*.a' -o -name '*.dll' -o -name '*.so' -o -name '*.dylib' -o -name '*.lib' -o -name '*.exe' \) -print -quit | grep -q .; then
-			check_binaries=1
+			check_binaries=y
 		fi
-		[[ $check_binaries -eq 1 ]] && static_build_exists=1
+		truthy "$check_binaries" && static_build_exists=y
 	fi
 
 	echo -e "INFO: Checking if build already exists..." | tee -a "$LOG_FILE"
 
-	if truthy "$build_static"; then
+	if [[ $build_ffmpeg_type == "static" ]]; then
 		echo -e "INFO: Static build requested..." | tee -a "$LOG_FILE"
-		if [[ $static_build_exists == 0 ]] || truthy "$build_force"; then
+		if ! truthy "$static_build_exists" || truthy "$build_force"; then
 			build_dir="$work_dir/$(get_ffmpeg_directory static)" #ffmpeg_install_prefix
 			echo -e "INFO: Static build does not exist or force requested. (Re-)configuring Ffmpeg for static build..." | tee -a "$LOG_FILE"
 			# shellcheck disable=SC2129
 			remove_path -rf "$build_dir" 
-			remove_path -f "${ffmpeg_source_dir}/already_"* 
+			remove_path -f "${ffmpeg_source_dir}/"*.touch
 			return 1
 		else
 			echo -e "INFO: Static build already exists at $build_dir" | tee -a "$LOG_FILE"
       return 0
 		fi
-	elif ! truthy "$build_static"; then
+	elif [[ $build_ffmpeg_type == "static" ]]; then
 		echo -e "INFO: Shared build requested..." | tee -a "$LOG_FILE"
-		if [[ $shared_build_exists == 0 ]] || truthy "$build_force"; then
+		if ! truthy "$shared_build_exists" || truthy "$build_force"; then
 			build_dir="$work_dir/$(get_ffmpeg_directory shared)" #ffmpeg_install_prefix
 			echo -e "INFO: Shared build does not exist or force requested. (Re-)configuring Ffmpeg for shared build..." | tee -a "$LOG_FILE"
 			# shellcheck disable=SC2129
 			remove_path -rf "$build_dir" 
-			remove_path -f "${ffmpeg_source_dir}/already_"* 
+			remove_path -f "${ffmpeg_source_dir}/"*.touch
 			return 1
 		else
 			echo -e "INFO: Shared build already exists at $build_dir" | tee -a "$LOG_FILE"
@@ -3044,11 +3235,12 @@ install_ffmpeg() {
 	change_dir "$ffmpeg_source_dir"
 
 	echo -e "INFO: Making Ffmpeg $(pwd)" | tee -a "$LOG_FILE"
-  
-  remove_path -rf "$ffmpeg_install_prefix"
+  if truthy "$build_force"; then
+    remove_path -rf "$ffmpeg_install_prefix"
+  fi
 	create_dir "$ffmpeg_install_prefix"
 
-	do_make_and_make_install "" "" "$(get_build_type)"
+	do_make_and_make_install "" "" "$(get_ffmpeg_directory)"
 
 	echo -e "INFO: Moving all binaries" | tee -a "$LOG_FILE"
 
@@ -3060,77 +3252,92 @@ install_ffmpeg() {
 	echo -e "INFO: Done installing ffmpeg" | tee -a "$LOG_FILE"
   chmod -R u+rwx "$work_dir"
 	install_ffmpeg_pkg
+  if [[ $build_ffmpeg_type == "static" ]]; then
+    check_static_pic "${ffmpeg_install_prefix}/lib/pkgconfig" "$(create_linker_script)"
+  fi
 }
 
 install_ffmpeg_pkg() {
 	echo -e "INFO: Checking deployment files..." | tee -a "$LOG_FILE"
+  local touch_postfix="$(get_ffmpeg_directory)"
+	local FFMPEG_KIT_VERSION=$(get_ffmpeg_kit_version)
 
-	required_files=(
-		"${ffmpeg_install_prefix}/lib/pkgconfig/libavformat.pc"
-		"${ffmpeg_install_prefix}/lib/pkgconfig/libswresample.pc"
-		"${ffmpeg_install_prefix}/lib/pkgconfig/libswscale.pc"
-		"${ffmpeg_install_prefix}/lib/pkgconfig/libavdevice.pc"
-		"${ffmpeg_install_prefix}/lib/pkgconfig/libavfilter.pc"
-		"${ffmpeg_install_prefix}/lib/pkgconfig/libavcodec.pc"
-		"${ffmpeg_install_prefix}/lib/pkgconfig/libavutil.pc")
+  local touch_prefix="${touch_postfix}_already"
+	local touch_name=$(get_small_touchfile_name "${touch_prefix}_pkgconfig" "ffmpeg $(get_ffmpeg_directory)")
+	
+  if truthy "$build_force"; then
+		remove_path -rf "${ffmpeg_source_dir}/${touch_prefix}_pkgconfig"*.touch
+	fi
+  if [[ ! -f "${ffmpeg_source_dir}/$touch_name" ]]; then
+    required_files=(
+      "${ffmpeg_install_prefix}/lib/pkgconfig/libavformat.pc"
+      "${ffmpeg_install_prefix}/lib/pkgconfig/libswresample.pc"
+      "${ffmpeg_install_prefix}/lib/pkgconfig/libswscale.pc"
+      "${ffmpeg_install_prefix}/lib/pkgconfig/libavdevice.pc"
+      "${ffmpeg_install_prefix}/lib/pkgconfig/libavfilter.pc"
+      "${ffmpeg_install_prefix}/lib/pkgconfig/libavcodec.pc"
+      "${ffmpeg_install_prefix}/lib/pkgconfig/libavutil.pc")
 
-	check_files_exist "false" "${required_files[@]}"
+    check_files_exist "false" "${required_files[@]}"
 
-	echo -e "INFO: Done checking deployment files." | tee -a "$LOG_FILE"
+    echo -e "INFO: Done checking deployment files." | tee -a "$LOG_FILE"
 
-	echo -e "INFO: Installing ffmpeg pkg-config" | tee -a "$LOG_FILE"
+    echo -e "INFO: Installing ffmpeg pkg-config" | tee -a "$LOG_FILE"
 
-	create_dir "$install_pkgconfig_dir"
+    create_dir "$install_pkgconfig_dir"
 
-	# MANUALLY COPY PKG-CONFIG FILES
-	overwrite_file "${ffmpeg_install_prefix}"/lib/pkgconfig/libavformat.pc "${install_pkgconfig_dir}/libavformat.pc" || return 1
-	overwrite_file "${ffmpeg_install_prefix}"/lib/pkgconfig/libswresample.pc "${install_pkgconfig_dir}/libswresample.pc" || return 1
-	overwrite_file "${ffmpeg_install_prefix}"/lib/pkgconfig/libswscale.pc "${install_pkgconfig_dir}/libswscale.pc" || return 1
-	overwrite_file "${ffmpeg_install_prefix}"/lib/pkgconfig/libavdevice.pc "${install_pkgconfig_dir}/libavdevice.pc" || return 1
-	overwrite_file "${ffmpeg_install_prefix}"/lib/pkgconfig/libavfilter.pc "${install_pkgconfig_dir}/libavfilter.pc" || return 1
-	overwrite_file "${ffmpeg_install_prefix}"/lib/pkgconfig/libavcodec.pc "${install_pkgconfig_dir}/libavcodec.pc" || return 1
-	overwrite_file "${ffmpeg_install_prefix}"/lib/pkgconfig/libavutil.pc "${install_pkgconfig_dir}/libavutil.pc" || return 1
+    # MANUALLY COPY PKG-CONFIG FILES
+    overwrite_file "${ffmpeg_install_prefix}"/lib/pkgconfig/libavformat.pc "${install_pkgconfig_dir}/libavformat.pc" || return 1
+    overwrite_file "${ffmpeg_install_prefix}"/lib/pkgconfig/libswresample.pc "${install_pkgconfig_dir}/libswresample.pc" || return 1
+    overwrite_file "${ffmpeg_install_prefix}"/lib/pkgconfig/libswscale.pc "${install_pkgconfig_dir}/libswscale.pc" || return 1
+    overwrite_file "${ffmpeg_install_prefix}"/lib/pkgconfig/libavdevice.pc "${install_pkgconfig_dir}/libavdevice.pc" || return 1
+    overwrite_file "${ffmpeg_install_prefix}"/lib/pkgconfig/libavfilter.pc "${install_pkgconfig_dir}/libavfilter.pc" || return 1
+    overwrite_file "${ffmpeg_install_prefix}"/lib/pkgconfig/libavcodec.pc "${install_pkgconfig_dir}/libavcodec.pc" || return 1
+    overwrite_file "${ffmpeg_install_prefix}"/lib/pkgconfig/libavutil.pc "${install_pkgconfig_dir}/libavutil.pc" || return 1
 
-	# # MANUALLY ADD REQUIRED HEADERS
-	{
-		mkdir -p "${ffmpeg_install_prefix}"/include/libavutil/x86
-		mkdir -p "${ffmpeg_install_prefix}"/include/libavutil/arm
-		mkdir -p "${ffmpeg_install_prefix}"/include/libavutil/aarch64
-		mkdir -p "${ffmpeg_install_prefix}"/include/libavcodec/x86
-		mkdir -p "${ffmpeg_install_prefix}"/include/libavcodec/arm
-		overwrite_file "${ffmpeg_source_dir}"/config.h "${ffmpeg_install_prefix}"/include/config.h
-		overwrite_file "${ffmpeg_source_dir}"/libavcodec/mathops.h "${ffmpeg_install_prefix}"/include/libavcodec/mathops.h
-		overwrite_file "${ffmpeg_source_dir}"/libavcodec/x86/mathops.h "${ffmpeg_install_prefix}"/include/libavcodec/x86/mathops.h
-		overwrite_file "${ffmpeg_source_dir}"/libavcodec/arm/mathops.h "${ffmpeg_install_prefix}"/include/libavcodec/arm/mathops.h
-		overwrite_file "${ffmpeg_source_dir}"/libavformat/network.h "${ffmpeg_install_prefix}"/include/libavformat/network.h
-		overwrite_file "${ffmpeg_source_dir}"/libavformat/os_support.h "${ffmpeg_install_prefix}"/include/libavformat/os_support.h
-		overwrite_file "${ffmpeg_source_dir}"/libavformat/url.h "${ffmpeg_install_prefix}"/include/libavformat/url.h
-		overwrite_file "${ffmpeg_source_dir}"/libavutil/attributes_internal.h "${ffmpeg_install_prefix}"/include/libavutil/attributes_internal.h
-		overwrite_file "${ffmpeg_source_dir}"/libavutil/bprint.h "${ffmpeg_install_prefix}"/include/libavutil/bprint.h
-		overwrite_file "${ffmpeg_source_dir}"/libavutil/getenv_utf8.h "${ffmpeg_install_prefix}"/include/libavutil/getenv_utf8.h
-		overwrite_file "${ffmpeg_source_dir}"/libavutil/internal.h "${ffmpeg_install_prefix}"/include/libavutil/internal.h
-		overwrite_file "${ffmpeg_source_dir}"/libavutil/libm.h "${ffmpeg_install_prefix}"/include/libavutil/libm.h
-		overwrite_file "${ffmpeg_source_dir}"/libavutil/reverse.h "${ffmpeg_install_prefix}"/include/libavutil/reverse.h
-		overwrite_file "${ffmpeg_source_dir}"/libavutil/thread.h "${ffmpeg_install_prefix}"/include/libavutil/thread.h
-		overwrite_file "${ffmpeg_source_dir}"/libavutil/timer.h "${ffmpeg_install_prefix}"/include/libavutil/timer.h
-		overwrite_file "${ffmpeg_source_dir}"/libavutil/x86/asm.h "${ffmpeg_install_prefix}"/include/libavutil/x86/asm.h
-		overwrite_file "${ffmpeg_source_dir}"/libavutil/x86/timer.h "${ffmpeg_install_prefix}"/include/libavutil/x86/timer.h
-		overwrite_file "${ffmpeg_source_dir}"/libavutil/arm/timer.h "${ffmpeg_install_prefix}"/include/libavutil/arm/timer.h
-		overwrite_file "${ffmpeg_source_dir}"/libavutil/aarch64/timer.h "${ffmpeg_install_prefix}"/include/libavutil/aarch64/timer.h
-		overwrite_file "${ffmpeg_source_dir}"/compat/w32pthreads.h "${ffmpeg_install_prefix}"/include/libavutil/compat/w32pthreads.h
-		overwrite_file "${ffmpeg_source_dir}"/libavutil/wchar_filename.h "${ffmpeg_install_prefix}"/include/libavutil/wchar_filename.h
-	} >>"$LOG_FILE"
-  chmod -R u+rwx "$work_dir"
-	echo -e "INFO: Done installing ffmpeg pkg-config" | tee -a "$LOG_FILE"
+    # # MANUALLY ADD REQUIRED HEADERS
+    {
+      mkdir -p "${ffmpeg_install_prefix}"/include/libavutil/{x86,arm,aarch64}
+      mkdir -p "${ffmpeg_install_prefix}"/include/libavcodec/{x86,arm}
+      overwrite_file "${ffmpeg_source_dir}"/config.h "${ffmpeg_install_prefix}"/include/config.h
+      overwrite_file "${ffmpeg_source_dir}"/libavcodec/mathops.h "${ffmpeg_install_prefix}"/include/libavcodec/mathops.h
+      overwrite_file "${ffmpeg_source_dir}"/libavcodec/x86/mathops.h "${ffmpeg_install_prefix}"/include/libavcodec/x86/mathops.h
+      overwrite_file "${ffmpeg_source_dir}"/libavcodec/arm/mathops.h "${ffmpeg_install_prefix}"/include/libavcodec/arm/mathops.h
+      overwrite_file "${ffmpeg_source_dir}"/libavformat/network.h "${ffmpeg_install_prefix}"/include/libavformat/network.h
+      overwrite_file "${ffmpeg_source_dir}"/libavformat/os_support.h "${ffmpeg_install_prefix}"/include/libavformat/os_support.h
+      overwrite_file "${ffmpeg_source_dir}"/libavformat/url.h "${ffmpeg_install_prefix}"/include/libavformat/url.h
+      overwrite_file "${ffmpeg_source_dir}"/libavutil/attributes_internal.h "${ffmpeg_install_prefix}"/include/libavutil/attributes_internal.h
+      overwrite_file "${ffmpeg_source_dir}"/libavutil/bprint.h "${ffmpeg_install_prefix}"/include/libavutil/bprint.h
+      overwrite_file "${ffmpeg_source_dir}"/libavutil/getenv_utf8.h "${ffmpeg_install_prefix}"/include/libavutil/getenv_utf8.h
+      overwrite_file "${ffmpeg_source_dir}"/libavutil/internal.h "${ffmpeg_install_prefix}"/include/libavutil/internal.h
+      overwrite_file "${ffmpeg_source_dir}"/libavutil/libm.h "${ffmpeg_install_prefix}"/include/libavutil/libm.h
+      overwrite_file "${ffmpeg_source_dir}"/libavutil/reverse.h "${ffmpeg_install_prefix}"/include/libavutil/reverse.h
+      overwrite_file "${ffmpeg_source_dir}"/libavutil/thread.h "${ffmpeg_install_prefix}"/include/libavutil/thread.h
+      overwrite_file "${ffmpeg_source_dir}"/libavutil/timer.h "${ffmpeg_install_prefix}"/include/libavutil/timer.h
+      overwrite_file "${ffmpeg_source_dir}"/libavutil/x86/asm.h "${ffmpeg_install_prefix}"/include/libavutil/x86/asm.h
+      overwrite_file "${ffmpeg_source_dir}"/libavutil/x86/timer.h "${ffmpeg_install_prefix}"/include/libavutil/x86/timer.h
+      overwrite_file "${ffmpeg_source_dir}"/libavutil/arm/timer.h "${ffmpeg_install_prefix}"/include/libavutil/arm/timer.h
+      overwrite_file "${ffmpeg_source_dir}"/libavutil/aarch64/timer.h "${ffmpeg_install_prefix}"/include/libavutil/aarch64/timer.h
+      overwrite_file "${ffmpeg_source_dir}"/compat/w32pthreads.h "${ffmpeg_install_prefix}"/include/libavutil/compat/w32pthreads.h
+      overwrite_file "${ffmpeg_source_dir}"/compat/stdbit/stdbit.h "${ffmpeg_install_prefix}"/include/stdbit/stdbit.h
+      overwrite_file "${ffmpeg_source_dir}"/libavutil/wchar_filename.h "${ffmpeg_install_prefix}"/include/libavutil/wchar_filename.h
+    } >>"$LOG_FILE"
+    chmod -R u+rwx "$work_dir"
+    echo -e "INFO: Done installing ffmpeg pkg-config" | tee -a "$LOG_FILE"
+  fi
 }
 
 install_ffmpeg_kit() {
 	echo -e "INFO: Installing ffmpeg kit to ${ffmpeg_kit_install}" | tee -a "$LOG_FILE"
-
+  
 	change_dir "${ffmpeg_kit_src_dir}"
-  remove_path -rf "$ffmpeg_kit_install"
-  do_make "PREFIX=$ffmpeg_kit_install" "$(get_build_type)" || exit_message 1 "unable to make ffmpeg-kit. see $LOG_FILE for details."
-  do_make_install "PREFIX=$ffmpeg_kit_install" "" "$(get_build_type)" || exit_message 1 "unable to make install ffmpeg-kit. see $LOG_FILE for details."
+
+  if truthy "$build_force"; then
+    remove_path -rf "$ffmpeg_kit_install"
+  fi
+  
+  do_make "PREFIX=$ffmpeg_kit_install" "$(get_ffmpeg_kit_directory)" || exit_message 1 "unable to make ffmpeg-kit. see $LOG_FILE for details."
+  do_make_install "PREFIX=$ffmpeg_kit_install" "" "$(get_ffmpeg_kit_directory)" || exit_message 1 "unable to make install ffmpeg-kit. see $LOG_FILE for details."
 	
   chmod -R u+rwx "$work_dir"
 	echo -e "INFO: Done installing ffmpeg kit to ${ffmpeg_kit_install}" | tee -a "$LOG_FILE"
@@ -3172,20 +3379,17 @@ get_ffmpeg_kit_version() {
 
 create_ffmpeg_kit_bundle() {
 	echo -e "INFO: Creating bundle" | tee -a "$LOG_FILE"
-	local touch_postfix="$(get_build_type)"
+	local touch_postfix="$(get_bundle_directory)"
 	local FFMPEG_KIT_VERSION=$(get_ffmpeg_kit_version)
 
-	if truthy "$build_force"; then
-		remove_path -rf "${ffmpeg_kit_src_dir}/already_bundled_${touch_postfix}_"*
-    remove_path "-rf" "${ffmpeg_kit_bundle}"
-	fi
-  local touch_prefix="${host_name}_${touch_postfix}_already"
-	local touch_name=$(get_small_touchfile_name "${touch_prefix}_ninja_build" "ninja build $extra_make_options")
-	if truthy "$build_force"; then
-		remove_path -f "$cur_dir2/${touch_prefix}_"*
+  local touch_prefix="${touch_postfix}_already"
+	local touch_name=$(get_small_touchfile_name "${touch_prefix}_bundled" "ffmpeg-kit-bundle $(get_bundle_directory)")
+	
+  if truthy "$build_force"; then
+		remove_path -rf "${ffmpeg_kit_src_dir}/${touch_prefix}_bundled"*.touch
+    remove_path -rf "${ffmpeg_kit_bundle}"
 	fi
 	if [ ! -f "$touch_name" ]; then
-    remove_path -f "${touch_prefix}_ninja_build"* # reset
 		export FFMPEG_KIT_BUNDLE_INCLUDE_DIRECTORY="${ffmpeg_kit_bundle}/include"
 		export FFMPEG_KIT_BUNDLE_LIB_DIRECTORY="${ffmpeg_kit_bundle}/lib"
 		export FFMPEG_KIT_BUNDLE_BIN_DIRECTORY="${ffmpeg_kit_bundle}/bin"
@@ -3217,38 +3421,30 @@ create_ffmpeg_kit_bundle() {
 		local LICENSE_BASEDIR="${ffmpeg_kit_bundle}/licenses"
 
 		create_dir "${LICENSE_BASEDIR}"
-
-		echo -e "INFO: Copying licenses..." | tee -a "$LOG_FILE"
-		# TODO: fix license fetch for relevant libraries only
-    # bash "${SCRIPTDIR}/extract_licenses.sh" "${src_dir}" "${LICENSE_BASEDIR}" > >(redirect_output) 2>&1
-		echo -e "INFO: Done copying licenses" | tee -a "$LOG_FILE"
+		
+		get_licenses
 
 		copy_path "${BASEDIR}"/tools/source/SOURCE "${LICENSE_BASEDIR}/source.txt"
 		copy_path "${BASEDIR}"/tools/license/LICENSE.GPLv3 "${LICENSE_BASEDIR}"/license.txt
 		create_touch_file 0 "$touch_name"
+    echo -e "INFO: Done creating bundle at $ffmpeg_kit_bundle" | tee -a "$LOG_FILE"
 	fi
   if truthy "$create_release"; then
     echo -e "INFO: Creating release bundle" | tee -a "$LOG_FILE"
     create_dir "$work_dir/releases"
     local out_dir=$(basename "$ffmpeg_kit_bundle")
     zip_dir "$ffmpeg_kit_bundle" "$work_dir/releases/$out_dir"
+    echo -e "INFO: Done creating release bundle at $work_dir/releases/$out_dir.zip" | tee -a "$LOG_FILE"
+    clean_builds "all"
   fi
   chmod -R u+rwx "$work_dir"
-	echo -e "INFO: Done creating bundle" | tee -a "$LOG_FILE"
 }
 uninstall_manifest() {
   local manifest="$1"
   if [[ -f "$manifest" ]]; then
     echo "WARNING: found $manifest. Uninstalling files from $manifest if installed"
-    while IFS= read -r line || [[ -n "$line" ]]; do
-        [[ -z "$line" ]] && continue
-        if [[ -f "$line" ]]; then
-          echo "WARNING: uninstalling file: $line"
-          remove_path -f "$line"
-        else
-          echo "WARNING: could not uninstall file: $line"
-        fi
-    done < "$manifest"
+    xargs --verbose -d '\n' rm -rf < "$manifest"
+    echo
     remove_path -f "$manifest"
   else
     echo "WARNING: $manifest not found."
@@ -3256,7 +3452,7 @@ uninstall_manifest() {
 }
 pick_gpu_support() {
     if truthy "$accept_defaults"; then
-      export gpu_support=0
+      export gpu_support=n
       return 0
     fi
     export gpu_support=${1:-gpu_support}
@@ -3292,16 +3488,16 @@ EOF
         # Check if timeout occurred
         if [[ -z "$gpu_support" ]] && { (( i == 0 )) || truthy "$accept_defaults"; }; then
             echo "No input received within 10 seconds. Defaulting to 'no'."
-            export gpu_support=0
+            export gpu_support=n
         fi
     done
     case "${gpu_support,,}" in
         1|yes|y) 
-            export gpu_support=1
+            export gpu_support=y
             return 0
             ;;
         0|no|n|"") 
-            export gpu_support=0
+            export gpu_support=n
             return 1
             ;;
         *)
@@ -3316,7 +3512,7 @@ EOF
 zip_dir() {
     # Check for zip command
     if ! command -v zip >/dev/null 2>&1; then
-        echo "Error: 'zip' command not found. Install with: apt-get install zip / yum install zip / brew install zip" | tee -a "$LOG_FILE"
+        echo "Error: 'zip' command not found. Install with: $INSTALL_COMMAND install zip / yum install zip / brew install zip" | tee -a "$LOG_FILE"
         return 1
     fi
     
@@ -3369,6 +3565,19 @@ zip_dir() {
     fi
 }
 
+LAST_TS=$(date +%s)
+
+ts() {
+  local NOW=$(date +%s)
+  local DIFF=$((NOW - LAST_TS))
+  LAST_TS=$NOW
+
+  # Convert seconds to HH:MM:SS
+  local ELAPSED=$(printf '%02d:%02d:%02d' $((DIFF/3600)) $((DIFF%3600/60)) $((DIFF%60)))
+  
+  echo "$(date +"[%Y-%m-%d %H:%M:%S]") (Elapsed: $ELAPSED)"
+}
+
 intro() {
 	cat <<EOL
      ##################### Welcome ######################
@@ -3380,7 +3589,7 @@ intro() {
   the $sandbox directory, since it will have some hard coded paths in there.
   You can, of course, rebuild ffmpeg from within it, etc.
 EOL
-	echo -e "$(date)" | tee -a "$LOG_FILE" # for timestamping super long builds LOL
+	echo -e "$(ts)" | tee -a "$LOG_FILE"
 	if [[ ! -d $WORKDIR ]]; then
 		echo -e
 		echo -e "Building in $WORKDIR, will use ~ 285GB space!" | tee -a "$LOG_FILE"
@@ -3403,6 +3612,65 @@ apply_preset() {
           fi
       done
     fi
+}
+
+pick_clean_type() {
+  if truthy "$accept_defaults"; then
+    export clean_type="all"
+    echo "$clean_type"
+    return 0
+  fi
+	while [[ ! "$clean_type" =~ ^([1-5]|all|ffmpeg|ffmpeg-kit|ffmpeg-kit-bundle)$ ]]; do
+		# shellcheck disable=SC2199
+		if [[ -n "${unknown_opts[@]}" ]]; then
+			echo -e -n 'Unknown option(s)'
+			for unknown_opt in "${unknown_opts[@]}"; do
+				echo -e -n " '$unknown_opt'"
+			done
+			echo -e ', ignored.'
+			echo
+		fi
+		cat <<'EOF'
+What would you like to clean?
+  1. all [default]
+  2. ffmpeg
+  3. ffmpeg-kit
+  4. ffmpeg-kit-bundle
+  5. Exit
+EOF
+		local timeout=10
+    export clean_type=""
+    echo -ne 'Input your choice [1-5] (defaulting to "all" in 10 seconds): '
+    for ((i=timeout; i>0; i--)); do
+        if read -r -t 1 clean_type; then
+            break
+        fi
+        if (( i > 1 )); then
+            echo -ne "\rInput your choice [1-5] (defaulting to \"all\" in $((i-1)) seconds): "
+        else
+            echo -ne "\rInput your choice [1-5] (defaulting to \"all\" in 0 seconds): "
+        fi
+    done
+    
+    # Check if timeout occurred
+    if [[ -z "$clean_type" ]] && { (( i == 0 )) || truthy "$accept_defaults"; }; then
+        echo "No input received within 10 seconds. Defaulting to 'all'."
+        export clean_type="all"
+    fi
+	done
+	case "$clean_type" in
+	1|all) export clean_type="all" ;;
+	2|ffmpeg) export clean_type="ffmpeg" ;;
+	3|ffmpeg-kit) export clean_type="ffmpeg-kit" ;;
+	4|ffmpeg-kit-bundle) export clean_type="ffmpeg-kit-bundle" ;;
+	5)
+		exit_message 0 "exiting"
+		;;
+	*)
+		echo -e 'Your choice was not valid, please try again.'
+		echo
+		;;
+	esac
 }
 
 pick_host_platform() {
@@ -3599,9 +3867,9 @@ EOF
                 break
             fi
             if (( i > 1 )); then
-                echo -ne "\rInput your choice [1-2] (defaulting to \"OpenSSL\" in $((i-1)) seconds): "
+                echo -ne "\rInput your choice [1-4] (defaulting to \"OpenSSL\" in $((i-1)) seconds): "
             else
-                echo -ne "\rInput your choice [1-2] (defaulting to \"OpenSSL\" in 0 seconds): "
+                echo -ne "\rInput your choice [1-4] (defaulting to \"OpenSSL\" in 0 seconds): "
             fi
         done
         
@@ -3781,17 +4049,10 @@ check_and_resolve() {
 }
 
 resolve_collisions() {
-    echo "[CONFIG] Resolving library collisions and preferences..." >> "$LOG_FILE"
+    echo -e "\n  [CONFIG] Resolving library collisions and preferences..." >> "$LOG_FILE"
 
-    check_and_resolve "libspeex" "libcodec2"
-    check_and_resolve "libopenmpt" "libmodplug"
-    check_and_resolve "libmp3lame" "libshine"
     check_and_resolve "libvpl" "libmfx"
-    check_and_resolve "libaribcaption" "libaribb24"
     check_and_resolve "libshaderc" "libglslang"
-    check_and_resolve "libsvtav1" "libaom"
-    check_and_resolve "libdav1d" "libaom"
-    check_and_resolve "libsvtav1" "librav1e"
 
     if is_library_enabled "openssl"; then
         is_library_enabled "gnutls" && disable_library "gnutls"
@@ -3837,21 +4098,26 @@ TARGET_DIR="$1"
 }
 
 check_gpl_libraries() {
-  if truthy "$enable_gpl"; then
-    enable_library "libx264"
-    enable_library "libx265"
-    enable_library "libxvid"
-    enable_library "frei0r"
-    enable_library "libdvdread"
-    enable_library "v4l2-m2m"
-    enable_library "avisynth"
-    enable_library "libjack"
-    enable_library "libbs2b"
-    enable_library "libcdio"
-    enable_library "libdvdnav"
-    enable_library "librubberband"
-    enable_library "libsmbclient"
-    enable_library "libvidstab"
+  echo -e "\n  [CONFIG] Checling libraries for GPL conflicts..." >>"$LOG_FILE"
+  if truthy "$build_gpl"; then
+    truthy "$enable_libx264" && enable_library "libx264"
+    truthy "$enable_libx265" && enable_library "libx265"
+    truthy "$enable_libxvid" && enable_library "libxvid"
+    truthy "$enable_frei0r" && enable_library "frei0r"
+    truthy "$enable_libdvdread" && enable_library "libdvdread"
+    truthy "$enable_v4l2_m2m" && enable_library "v4l2-m2m"
+    truthy "$enable_avisynth" && enable_library "avisynth"
+    truthy "$enable_libjack" && enable_library "libjack"
+    truthy "$enable_libbs2b" && enable_library "libbs2b"
+    truthy "$enable_libcdio" && enable_library "libcdio"
+    truthy "$enable_libdvdnav" && enable_library "libdvdnav"
+    truthy "$enable_librubberband" && enable_library "librubberband"
+    truthy "$enable_libsmbclient" && enable_library "libsmbclient"
+    truthy "$enable_libvidstab" && enable_library "libvidstab"
+    truthy "$enable_libdavs2" && enable_library "libdavs2"
+    truthy "$enable_libxavs" && enable_library "libxavs"
+    truthy "$enable_libxavs2" && enable_library "libxavs2"
+    truthy "$enable_libaribb24" && enable_library "libaribb24"
   else
     disable_library "libx264"
     disable_library "libx265"
@@ -3867,11 +4133,16 @@ check_gpl_libraries() {
     disable_library "librubberband"
     disable_library "libsmbclient"
     disable_library "libvidstab"
+    disable_library "libdavs2"
+    disable_library "libxavs"
+    disable_library "libxavs2"
+    disable_library "libaribb24"
   fi
 }
 
 # disable libraries autodetected by default to prevent inadvertent bundling
 disable_autodetected() {
+  echo -e "\n  [CONFIG] Disabling libraries autodetected by default to prevent inadvertent bundling..." >>"$LOG_FILE"
   disable_library "alsa"
   disable_library "libdc1394"
   disable_library "libdrm"
@@ -3909,3 +4180,593 @@ disable_autodetected() {
   disable_library "securetransport"
   disable_library "videotoolbox"
 }
+
+add_src_dir() {
+  local dir="$1"
+  local dir_file="$install_pkgconfig_dir/$(get_bundle_directory).txt"
+  if [[ -f "$dir_file" ]]; then
+    if ! grep -q "$dir" "$dir_file"; then
+      echo "$dir" >> "$dir_file"
+      echo "INFO: Added $dir to license src dir list $dir_file" >> "$LOG_FILE"
+    fi
+  else
+    echo -n "" > "$dir_file"
+    chmod -R u+rwx "$dir_file"
+  fi
+}
+
+get_licenses() {
+  local dir_file="$install_pkgconfig_dir/$(get_bundle_directory).txt"
+  [[ ! -f "$dir_file" ]] && { echo -e "DEBUG: could not find license src dir list file $dir_file\n  No licenses copied."; return 1; }
+  mapfile -t license_dir_list < "$install_pkgconfig_dir/$(get_bundle_directory).txt"
+  for dir in "${license_dir_list[@]}"; do
+    [[ -z "$dir" ]] && continue
+    [[ ! -d "$dir" ]] && continue
+    bash "${SCRIPTDIR}/extract_licenses.sh" "${dir}" "${LICENSE_BASEDIR}/$(basename "$dir")" > >(redirect_output) 2>&1
+  done
+}
+
+reset_and_clean() {
+  local src_path="$1"
+  local dirs=()
+  # reset_touch "$src_path"
+  if [[ -z "$1" ]]; then
+    shopt -s nullglob
+    dirs+=( "$src_dir"/*/ )
+    shopt -u nullglob
+  else
+    dirs+=("$src_path")
+  fi
+  activate_meson
+  for dir in "${dirs[@]}"; do
+    if [[ -n "$dir" ]]; then
+      cd "$dir" || continue
+      mapfile -t sub_dirs < <(find "$dir" -name "Makefile" -exec dirname {} \; | sort -u 2>/dev/null)
+      for sub_dir in "${sub_dirs[@]}"; do
+        cd "$sub_dir" || continue
+        if [[ -f Makefile ]]; then
+          echo "Cleaning Makefile artifacts at $sub_dir..." > >(redirect_output)
+          { nice make clean -j"$(get_concurrent_proc)" > >(redirect_output) 2>&1 || true; }
+          { nice make distclean -j"$(get_concurrent_proc)" > >(redirect_output) 2>&1 || true; }
+        fi
+      done
+      mapfile -t sub_dirs < <(find "$dir" -name "CMakeList.txt" -exec dirname {} \; | sort -u 2>/dev/null)
+      for sub_dir in "${sub_dirs[@]}"; do
+        cd "$sub_dir" || continue
+        if [[ -f CMakeList.txt ]]; then
+          echo "Cleaning CMake artifacts at $sub_dir..." > >(redirect_output)
+          clean_cmake_cache "$(pwd)"
+        fi
+      done
+      mapfile -t sub_dirs < <(find "$dir" -name "CMakeList.txt" -exec dirname {} \; | sort -u 2>/dev/null)
+      for sub_dir in "${sub_dirs[@]}"; do
+        cd "$sub_dir" || continue
+        if [[ -f Cargo.toml ]]; then
+          echo "Cleaning Cargo artifacts at $sub_dir..." > >(redirect_output)
+          { cargo clean --release > >(redirect_output) 2>&1 || true; }
+        fi
+      done
+      mapfile -t sub_dirs < <(find "$dir" -name "CMakeList.txt" -exec dirname {} \; | sort -u 2>/dev/null)
+      for sub_dir in "${sub_dirs[@]}"; do
+        cd "$sub_dir" || continue
+        if [[ -f meson.build ]]; then
+          echo "Cleaning meson artifacts at $sub_dir..." > >(redirect_output)
+          { python3 "$local_meson" compile --clean -C build > >(redirect_output) 2>&1 || true; }
+        fi
+      done
+      mapfile -t sub_dirs < <(find "$dir" -name "CMakeList.txt" -exec dirname {} \; | sort -u 2>/dev/null)
+      for sub_dir in "${sub_dirs[@]}"; do
+        cd "$sub_dir" || continue
+        if [[ -f waf ]]; then
+          echo "Cleaning waf artifacts at $sub_dir..." > >(redirect_output)
+          { eval "python3 ./waf clean" > >(redirect_output) 2>&1 || true; }
+        fi
+      done
+    fi
+  done
+}
+
+reset_touch() {
+  shopt -s nullglob
+  if [[ -n "$1" ]]; then
+    echo -e "INFO: Resetting $1" >>"$LOG_FILE"
+    find -D stat "$(realpath "$1")" -maxdepth 3 \( -name "*.touch" -o -name "*already_*" \) -delete > >(redirect_output) 2>&1
+  else
+    echo -e "INFO: No directory provided. Resetting all src directories in prebuilt/src/" >>"$LOG_FILE"
+    find -D stat "$(realpath "${BASEDIR}/prebuilt/src")" -maxdepth 3 \( -name "*.touch" -o -name "*already_*" \) -delete > >(redirect_output) 2>&1
+  fi
+  echo -e "INFO: Done resetting source directories touch files." >>"$LOG_FILE"
+  shopt -u nullglob
+}
+
+disable_nonessential() {
+  local src_dir="$1"
+  shift
+
+  if [ -z "$src_dir" ] || [ ! -d "$src_dir" ]; then
+    echo "ERROR: Please provide a valid source directory." >>"$LOG_FILE"
+    return 1
+  fi
+
+  echo "INFO: Searching for non-essential Makefiles in: $src_dir" >>"$LOG_FILE"
+
+  # 1. Use an Array to build the find arguments
+  local find_args=()
+  
+  # Start the grouping for logical OR
+  find_args+=( \( )
+  
+  # Add default patterns
+  find_args+=( -name "doc*" -o )
+  find_args+=( -name "test*" -o )
+  find_args+=( -name "example*" -o )
+  find_args+=( -name "sample*" -o )
+  find_args+=( -name "program*" -o )
+  find_args+=( -name "app*" -o )
+
+  # Add dynamic patterns passed as arguments
+  for ptrn in "$@"; do
+    find_args+=( -name "$ptrn" -o )
+  done
+
+  # Add the final pattern (no trailing -o)
+  find_args+=( -name "tool*" )
+  
+  # Close the grouping
+  find_args+=( \) )
+
+  # 2. Use Process Substitution to avoid subshell issues
+  # 3. Use -print0 and read -d '' to handle strange directory names
+  while IFS= read -r -d '' subdir; do
+    disable_makefile "$subdir/Makefile"
+    disable_meson "$subdir/meson.build"
+  done < <(find "$src_dir" -type d "${find_args[@]}" -print0)
+}
+
+disable_makefile() {
+  local mkfile="$1"
+  if [ -f "$mkfile" ]; then
+    echo "  Disabling: $mkfile" >>"$LOG_FILE"
+    
+    # Using a literal tab variable for clarity
+    local tab
+    tab="$(printf '\t')"
+
+    # Use > to overwrite the file cleanly
+    cat <<EOF > "$mkfile"
+.SUFFIXES:
+all install install-strip check test clean mostlyclean distclean realclean:
+${tab}@echo "Target \$@ disabled: $mkfile"
+.DEFAULT:
+${tab}@echo "Target \$@ ignored: $mkfile"
+EOF
+  fi
+}
+
+disable_meson() {
+  local mfile="$1"
+  if [ -f "$mfile" ]; then
+    echo "  Disabling Meson: $mfile" >>"$LOG_FILE"
+    
+    # Overwrite with a valid Meson script that just prints a message
+    cat <<EOF > "$mfile"
+message('Build disabled for being non-essential')
+EOF
+  fi
+}
+
+check_custom_install() {
+  local install_dir="$1"
+  local lib_name="$2"
+
+  if [ -z "$install_dir" ] || [ -z "$lib_name" ]; then
+      echo "Usage: check_custom_install /path/to/custom/location library_name"
+      return 1
+  fi
+
+  local lib_path="$install_dir/lib"
+  local pc_path="$lib_path/pkgconfig"
+  local include_path="$install_dir/include"
+
+  echo "INFO: --- Checking Installation for: $lib_name ---"
+
+  # 1. Check for .pc file (The Metadata)
+  if [ -f "$pc_path/$lib_name.pc" ]; then
+      echo "  [OK] Found pkg-config file: $pc_path/$lib_name.pc"
+  else
+      echo "  [ERROR] Missing .pc file. pkg-config will not find this library."
+  fi
+
+  # 2. Check for Static Library (.a)
+  # Note: Using find to account for versioned names or subdirs
+  local static_lib=$(find "$lib_path" -name "lib${lib_name}.a" -o -name "lib${lib_name}-*.a" | head -n 1)
+  if [ -n "$static_lib" ]; then
+      echo "  [OK] Found static archive: $static_lib"
+  else
+      echo "  [ERROR] Could not find lib${lib_name}.a in $lib_path"
+  fi
+
+  # 3. Validate Dependencies via pkg-config
+  echo "  [INFO] Querying dependencies for $lib_name..."
+  
+  # We set PKG_CONFIG_LIBDIR to force it to ONLY look in your custom folder
+  # We use PKG_CONFIG_PATH as a secondary to ensure it finds everything
+  local deps=$(PKG_CONFIG_LIBDIR="$pc_path" PKG_CONFIG_PATH="$pc_path" pkg-config --print-requires-private --static "$lib_name" 2>/dev/null)
+  
+  if [ $? -eq 0 ]; then
+      echo "  [OK] Dependency tree resolved:"
+      echo "     $deps"
+      
+      # Check if each dependency actually exists in our custom folder
+      for dep in $deps; do
+          # Remove version constraints (e.g., glib-2.0 >= 2.80 -> glib-2.0)
+          dep_clean=$(echo "$dep" | awk '{print $1}')
+          if [ ! -f "$pc_path/$dep_clean.pc" ]; then
+              echo "     [!] WARNING: Dependency '$dep_clean' not found in custom pkgconfig folder."
+          fi
+      done
+  else
+      echo "  [ERROR] pkg-config failed to resolve dependencies for $lib_name."
+      echo "        Ensure all required .pc files are in $pc_path"
+  fi
+
+  # 4. Check for Headers
+  if [ -d "$include_path" ] && [ -n "$(ls -A "$include_path" 2>/dev/null)" ]; then
+      echo "  [OK] Headers directory is not empty: $include_path"
+  else
+      echo "  [WARNING] Headers directory is missing or empty."
+  fi
+  echo ""
+}
+
+# Usage: copy_and_link <destination> <link_to> <source_file_1> [source_file_2 ...]
+copy_and_link() {
+    # 1. Log the call for debugging
+    echo "DEBUG: copy_and_link - $*" >>"$LOG_FILE"
+    
+    local destination="$1"
+    local link_to="$2"
+    shift 2
+
+    # 2. Validation
+    if [[ -z "$destination" || -z "$link_to" ]]; then
+        echo "ERROR: destination and link_to are required." >&2
+        return 1
+    fi
+
+    # Assuming create_dir is defined elsewhere in your script
+    create_dir "$destination" || return 1
+    create_dir "$link_to" || return 1
+
+    local error_count=0
+
+    for file in "$@"; do
+        # Handle glob fail (e.g. if the glob literal is passed because no files matched)
+        if [[ ! -e "$file" ]]; then
+            echo "  [Error] Failed to find $file" >&2
+            continue
+        fi
+
+        local filename
+        filename=$(basename "$file")
+        local dest_full_path="${destination}/${filename}"
+        local link_full_path="${link_to}/${filename}"
+
+        # 3. Copy
+        if ! cp -rf "$file" "$destination/"; then
+            echo "  [Error] Failed to copy $file" >&2
+            ((error_count++))
+            continue
+        fi
+
+        # 4. Clean existing link/dir
+        if [[ -e "$link_full_path" || -L "$link_full_path" ]]; then
+            if ! rm -rf "$link_full_path"; then
+                echo "  [Error] Failed to clear existing $link_full_path" >&2
+                ((error_count++))
+                continue
+            fi
+        fi
+
+        # 5. Link (Removed -v to keep manifest clean)
+        if ! ln -sf "$dest_full_path" "$link_full_path"; then
+             echo "  [Error] Failed to link $filename" >&2
+             ((error_count++))
+             continue
+        fi
+
+        # 6. Output to Manifest (Standard Output)
+        echo "$dest_full_path" >&1
+        # Uncomment below if you REALLY want the symlink in the manifest too:
+        # echo "$link_full_path" >&1
+    done
+
+    # 7. Final Exit Code Check
+    # This ensures your '|| exit_message' works correctly
+    if [[ "$error_count" -gt 0 ]]; then
+        return 1
+    fi
+}
+
+# shellcheck disable=2206
+# Usage: check_static_pic "/path/to/lib.pc" OR "/path/to/pkgconfig"
+check_static_pic() {
+    # 0. Pre-check
+    if truthy "$skip_validation"; then
+        echo
+        echo "WARNING: Skipping check for Static + PIC (Linker Test)"
+        return 0
+    fi
+
+    local input_path="$1" map_file="$2"
+    local use_map=false
+    [[ -n "$map_file" && -f "$map_file" ]] && use_map=true
+
+    # --------------------------------------------------------------------------
+    # HELPER: Check System Pkg Fallback
+    # --------------------------------------------------------------------------
+    _csp_check_system_pkg() {
+        local pc_file="$1" log_file="$2"
+        local system_paths="/usr/lib64/pkgconfig:/usr/lib/pkgconfig:/usr/share/pkgconfig:/usr/local/lib/pkgconfig:/opt/python/cp312-cp312/lib/pkgconfig"
+        export PKG_CONFIG_PATH="$PKG_CONFIG_PATH:$system_paths"
+        pkg-config --static --libs "$pc_file" 2>>"$log_file"
+    }
+
+    # --------------------------------------------------------------------------
+    # HELPER: Find Targets (.pc and .a files)
+    # --------------------------------------------------------------------------
+    _csp_find_targets() {
+        local path="$1"
+        local -n targets_ref="$2" # Output array via nameref
+        
+        if [ -f "$path" ]; then
+            if [[ "$path" == *.pc || "$path" == *.a ]]; then
+                targets_ref+=("$path")
+            else
+                echo "ERROR: File '$path' is not a .pc or .a file." >&2
+                return 1
+            fi
+        elif [ -d "$path" ]; then
+            local pcfg_dir="$path"
+            [ -d "$path/lib/pkgconfig" ] && pcfg_dir="$path/lib/pkgconfig"
+            
+            # Find .pc files
+            if [ -d "$pcfg_dir" ]; then
+                while IFS= read -r -d '' f; do targets_ref+=("$f"); done < <(find "$pcfg_dir" -maxdepth 1 -name "*.pc" -print0)
+            fi
+            # Find .a files (recursive)
+            while IFS= read -r -d '' f; do targets_ref+=("$f"); done < <(find "$path" -type f -name "*.a" -print0)
+        else
+            echo "ERROR: Input '$path' is not a valid file or directory." >&2
+            return 1
+        fi
+    }
+
+    # --------------------------------------------------------------------------
+    # HELPER: Resolve Libraries (Pkg-Config -> File Paths)
+    # --------------------------------------------------------------------------
+    _csp_resolve_libs() {
+        local target="$1" log_file="$2"
+        local -n res_libs="$3" res_stats="$4" # Outputs
+
+        # A. Handle Static Lib Direct
+        if [[ "$target" == *.a ]]; then
+            res_libs="$target"
+            res_stats[0]=1 # static_count
+            return 0
+        fi
+
+        # B. Handle Pkg-Config
+        local pcfg_dir=$(dirname "$target")
+        local fallback_base=$(dirname "$(dirname "$pcfg_dir")")
+        local pkg_prefix=$(pkg-config --variable=prefix "$target" 2>/dev/null)
+        local search_base="${pkg_prefix:-$fallback_base}"
+        
+        export PKG_CONFIG_PATH="$pcfg_dir"
+        
+        local raw_flags
+        if ! raw_flags=$(pkg-config --static --libs "$target" 2>"$log_file"); then
+            if ! raw_flags=$(_csp_check_system_pkg "$target" "$log_file"); then
+                return 1 # Parse failure
+            fi
+        fi
+
+        # Parse Flags
+        local search_paths=("${search_base}/lib")
+        local final_libs=""
+        
+        for flag in $raw_flags; do
+            if [[ "$flag" == -L* ]]; then
+                search_paths+=("${flag#-L}")
+            elif [[ "$flag" == /*.a ]]; then
+                final_libs="$final_libs $flag"
+                res_stats[0]=$((res_stats[0] + 1))
+            elif [[ "$flag" == -l* ]]; then
+                local lib="${flag#-l}"
+                # Filter system libs
+                if [[ "$lib" =~ ^(m|c|dl|rt|pthread|stdc\+\+|gcc|gcc_s|atomic|glu|gl|GLEW|X11|Xext)$ ]]; then
+                    res_stats[2]=$((res_stats[2] + 1)) # system_count
+                    continue
+                fi
+                # Resolve -l to file
+                for path in "${search_paths[@]}"; do
+                    if [ -f "${path}/lib${lib}.a" ]; then
+                        final_libs="$final_libs ${path}/lib${lib}.a"
+                        res_stats[0]=$((res_stats[0] + 1))
+                        break
+                    elif v_lib=$(find "${path}" -maxdepth 1 -name "lib${lib}.a.*" -print -quit 2>/dev/null) && [ -n "$v_lib" ]; then
+                        final_libs="$final_libs $v_lib"
+                        res_stats[0]=$((res_stats[0] + 1))
+                        break
+                    elif [ -f "${path}/lib${lib}.so" ]; then
+                        final_libs="$final_libs ${path}/lib${lib}.so"
+                        res_stats[1]=$((res_stats[1] + 1)) # shared_count
+                        break
+                    fi
+                done
+            fi
+        done
+        res_libs="$final_libs"
+        return 0
+    }
+
+    # --------------------------------------------------------------------------
+    # HELPER: Verify Binary (GCC Link Test)
+    # --------------------------------------------------------------------------
+    _csp_verify_binary() {
+        local libs="$1" name="$2" tmp="$3" log="$4"
+        local out_bin="${tmp}/${name}.so"
+        
+        local cmd=(gcc -shared -fPIC -o "$out_bin")
+        cmd+=("-Wl,--whole-archive")
+        cmd+=($libs)
+        cmd+=("-Wl,--no-whole-archive")
+        
+        if [ "$use_map" = true ]; then
+            cmd+=("-Wl,--version-script=$map_file" "-Wl,-Bsymbolic")
+        fi
+        cmd+=("-Wl,--allow-multiple-definition" "-Wl,--unresolved-symbols=ignore-all")
+
+        if "${cmd[@]}" > "$log" 2>&1 && [[ -f "$out_bin" ]]; then
+            du -h "$out_bin" | cut -f1
+            return 0
+        fi
+        return 1
+    }
+
+    # --------------------------------------------------------------------------
+    # HELPER: Print Report
+    # --------------------------------------------------------------------------
+    _csp_print_report() {
+        local -n succ="$1" skip="$2" fail="$3"
+        
+        # Success Table
+        if [ ${#succ[@]} -gt 0 ]; then
+            echo -e "\n  [ VERIFIED PACKAGES ]"
+            printf "  %-8s %-30s %-12s %-12s %-12s\n" "SIZE" "PACKAGE" "STATIC" "SHARED" "SYSTEM"
+            echo "  --------------------------------------------------------------------------------"
+            printf "%s\n" "${succ[@]}"
+        fi
+
+        # Skipped Table
+        if [ ${#skip[@]} -gt 0 ]; then
+            echo -e "\n  [ SKIPPED PACKAGES ]"
+            printf "  %-30s %s\n" "PACKAGE" "REASON"
+            echo "  --------------------------------------------------------------------------------"
+            printf "%s\n" "${skip[@]}"
+        fi
+
+        # Failed Table
+        if [ ${#fail[@]} -gt 0 ]; then
+            echo -e "\n  [ FAILED PACKAGES ]"
+            echo "  --------------------------------------------------------------------------------"
+            printf "%b\n" "${fail[@]}"
+        fi
+
+        # Summary
+        echo -e "\n--------------------------------------------------------------------------------"
+        local total=$((${#succ[@]} + ${#skip[@]} + ${#fail[@]}))
+        if [ ${#fail[@]} -eq 0 ]; then
+            echo "SUCCESS: Checked $total pkgs. Verified: ${#succ[@]}, Skipped: ${#skip[@]}, Failed: 0."
+            return 0
+        else
+            echo "FAILURE: Checked $total pkgs. Verified: ${#succ[@]}, Skipped: ${#skip[@]}, Failed: ${#fail[@]}."
+            return 1
+        fi
+    }
+
+    # ==========================================================================
+    # MAIN LOGIC
+    # ==========================================================================
+    {
+        echo
+        echo "VERIFYING BUILD: Checking for Static + PIC (Linker Test)"
+        
+        local targets=()
+        if ! _csp_find_targets "$input_path" targets; then
+            return 1
+        fi
+
+        local tmp_dir=$(mktemp -d)
+        local a_success=() a_skipped=() a_failed=()
+        local total=${#targets[@]} count=0
+
+        if [ "$total" -eq 0 ]; then
+            echo "WARNING: No targets found in $input_path"
+            rm -rf "$tmp_dir"
+            return 0
+        fi
+
+        # Hide Cursor
+        printf "\033[?25l"
+
+        for target in "${targets[@]}"; do
+            count=$((count + 1))
+            local pkg_name=$(basename "$target")
+            [[ "$target" == *.pc ]] && pkg_name=$(basename "$target" .pc)
+            
+            local log_file="${tmp_dir}/${pkg_name}_error.log"
+            printf "\r\033[K[ %d / %d ] Checking: %s..." "$count" "$total" "$pkg_name" >&2
+
+            # 1. Resolve Libraries
+            local resolved_libs=""
+            local -a stats=(0 0 0) # static, shared, system
+            
+            if ! _csp_resolve_libs "$target" "$log_file" resolved_libs stats; then
+                local err=$(sed 's/^/        | /' "$log_file")
+                a_failed+=("  [FAIL] $pkg_name (Config Parse Error)\n$err")
+                continue
+            fi
+
+            # 2. Skip Logic (Header only or System only)
+            if [[ -z "$resolved_libs" ]]; then
+                if [ "${stats[2]}" -gt 0 ]; then
+                    a_skipped+=("$(printf "  %-30s %s" "$pkg_name" "System/External Libs Only (${stats[2]})")")
+                else
+                    a_skipped+=("$(printf "  %-30s %s" "$pkg_name" "Header-only / No Libs")")
+                fi
+                continue
+            fi
+
+            # 3. Verify Binary
+            local bin_size
+            if bin_size=$(_csp_verify_binary "$resolved_libs" "$pkg_name" "$tmp_dir" "$log_file"); then
+                a_success+=("$(printf "  %-8s %-30s %-12d %-12d %-12d" "$bin_size" "$pkg_name" "${stats[0]}" "${stats[1]}" "${stats[2]}")")
+            else
+                local err=$(sed 's/^/        | /' "$log_file")
+                a_failed+=("  [FAIL] $pkg_name (Linker Error)\n         Libraries: $resolved_libs\n$err")
+            fi
+        done
+
+        # Reset Cursor & Cleanup
+        printf "\r\033[K" >&2
+        printf "\033[?25h"
+        rm -rf "$tmp_dir"
+
+        # 4. Report
+        _csp_print_report a_success a_skipped a_failed
+
+    } | tee -a "${LOG_FILE}"
+}
+
+create_linker_script() {
+  local script="$ffmpeg_source_dir/ffmpeg-linker-script.map"
+  if [[ ! -f "$script" ]]; then
+  cat > "$script" << EOF
+{
+    global:
+        av*;
+        postproc_*;
+        pp_*;
+        swr_*;
+        swresample_*;
+        swscale_*;
+        sws_*;
+    local:
+        *;
+};
+EOF
+  fi
+  echo "$script"
+}
+

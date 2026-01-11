@@ -125,8 +125,7 @@ install_cross_compiler() {
 
 configure_ffmpeg_kit() {
 	echo -e "INFO: Configuring ffmpeg kit" | tee -a "$LOG_FILE"
-  build_libjsoncpp
-	local type_postfix="$(get_build_type)"
+	local type_postfix="$build_ffmpeg_kit_type"
 	local ffmpeg_kit_version=$(get_ffmpeg_kit_version)
 
 	if truthy "$build_force"; then
@@ -158,7 +157,7 @@ configure_ffmpeg_kit() {
 	local config_options="--prefix=${ffmpeg_kit_install} --with-ffmpeg-src=$ffmpeg_source_dir --with-ffmpeg-build=$ffmpeg_install_prefix"
 
 	config_options+=" --host=${host_target}"
-	if truthy "$build_static"; then
+	if [[ "$build_ffmpeg_kit_type" == "static" ]]; then
 		config_options+=" --enable-static"
 		config_options+=" --disable-shared"
 	else
@@ -169,7 +168,7 @@ configure_ffmpeg_kit() {
   export CFLAGS="${local_cflags}"
   export CXXFLAGS="${local_cxxfalgs}"
   export LDFLAGS="$LDFLAGS -lpthread"
-	do_configure "${config_options}" "./configure" "${type_postfix}" || exit_message 1 "unable to configure ffmpeg-kit. see $LOG_FILE for details."
+	do_configure "${config_options}" "./configure" "$(get_bundle_directory)" || exit_message 1 "unable to configure ffmpeg-kit. see $LOG_FILE for details."
 
 	echo -e "INFO: Done configuring ffmpeg kit" | tee -a "$LOG_FILE"
 }

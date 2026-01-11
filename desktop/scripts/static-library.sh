@@ -1,0 +1,90 @@
+#!/usr/bin/env bash
+
+set -e
+OUTPUT_LIB="$1"
+AR_CMD="$2"
+RANLIB_CMD="$3"
+FFMPEG_BUILD_DIR="$4"
+
+echo "Generating monolithic static library: $OUTPUT_LIB"
+rm -f lib.mri bundle_manifest.txt
+echo "CREATE $OUTPUT_LIB" > lib.mri
+echo "ADDLIB libffmpegkit.a" >> lib.mri
+# 1. Get dependencies via pkg-config
+PKG_CONFIG_PATH="$FFMPEG_BUILD_DIR/lib/pkgconfig"
+pkg-config --static --libs libavdevice libavfilter libavformat libavcodec libswresample libswscale libavutil > libs.txt
+# 2. Parse libraries - ONE CONTINUOUS SHELL COMMAND
+raw_libs_to_keep=""
+deps=$(cat libs.txt)
+search_paths=""
+
+# First pass: Collect search paths (-L)
+for flag in $deps; do
+  case "$flag" in
+    -L*)
+      path=${flag#-L}
+      search_paths="$search_paths $path"
+      ;;
+  esac
+done
+# Second pass: Process libraries (-l)
+for flag in $deps; do
+  case "$flag" in
+    -l*)
+      name=${flag#-l}
+      case "$name" in
+        # --- Category A: System Libraries (Skip) ---
+        m|c|pthread|dl|rt|stdc++|gcc|gcc_s|atomic|z)
+          raw_libs_to_keep="$raw_libs_to_keep -l$name"
+          ;;
+        # --- Category B: Windows System Libraries (Skip) ---
+        mingw*|moldname|kernel32|user32|gdi32|winmm|ws2_32|iphlpapi|advapi32|shell32|ole32|uuid|bcrypt|psapi|shlwapi|crypt32|secur32)
+          raw_libs_to_keep="$raw_libs_to_keep -l$name"
+          ;;
+        # --- Category C: Linux Utils (Skip) ---
+        blkid|util|mount|selinux|sepol|resolv)
+          raw_libs_to_keep="$raw_libs_to_keep -l$name"
+          ;;
+        # --- Category D: Bundled Libraries ---
+        *)
+          found=no
+          for dir in $search_paths; do
+            # 1. Try to find Static Library (.a)
+            if test -f "$dir/lib$name.a"; then
+              echo "ADDLIB $dir/lib$name.a" >> lib.mri
+              found=yes
+              break
+            fi
+            # 2. If static not found, look for Shared Library (.so)
+            # We use 'ls' inside $(...) to correctly expand wildcards in the shell
+            shared_lib=$(ls "$dir/lib$name.so" 2>/dev/null || ls "$dir/lib$name.dylib" 2>/dev/null)
+            if test -n "$shared_lib"; then
+                echo "	[FOUND SHARED] $shared_lib (Queued for bundle)"
+                echo "$shared_lib" >> bundle_manifest.txt
+                found=yes
+                break
+            fi
+          done
+          # 3. If neither found, keep the linker flag for the consumer to resolve
+          if test "$found" = "no"; then
+              raw_libs_to_keep="$raw_libs_to_keep -l$name"
+          fi
+          ;;
+      esac
+      ;;
+  esac
+done
+echo "SAVE" >> lib.mri
+echo "END" >> lib.mri
+$AR_CMD -M < lib.mri
+$RANLIB_CMD "$OUTPUT_LIB"
+rm -f lib.mri libs.txt
+# Clean up duplicate flags
+clean_libs=$(echo "$raw_libs_to_keep" | awk '{for (i=1;i<=NF;i++) if (!seen[$i]++) printf("%s%s", $i, OFS)}' | sed 's/ *$//')
+echo "Created $OUTPUT_LIB"
+if test -f bundle_manifest.txt; then
+    echo "Shared libraries queued for install: $(cat bundle_manifest.txt)"
+fi
+if test -f ffmpeg-kit.pc; then
+    sed -i "s|FFMPEG_KIT_EXT_LIBS|$clean_libs|g" ffmpeg-kit.pc
+fi

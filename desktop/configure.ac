@@ -110,10 +110,8 @@ if cp -rf "$ffmpeg_src_dir/fftools/." "src/"; then
     AC_MSG_RESULT([Successfully copied fftools content to src directory.])
     rm -f "src/ffplay"*.c # remove ffplay for now
     rm -f "src/ffplay"*.h # remove ffplay for now
-    if test "x$target_os_clean" = "xwindows"; then
-        AC_MSG_NOTICE([Copying windows compat files...])
-        cp -rf "$ffmpeg_src_dir/compat/stdbit/stdbit.h" "src/stdbit.h"
-    fi
+    AC_MSG_NOTICE([Copying stdbit compat files...])
+    cp -rf "$ffmpeg_src_dir/compat/stdbit/stdbit.h" "src/stdbit.h"
 else
     AC_MSG_ERROR([Failed to copy files from fftools to src.])
 fi
@@ -175,19 +173,28 @@ AM_MAINTAINER_MODE
 
 # Add shared/static library options
 AC_ARG_ENABLE([shared],
-    [AS_HELP_STRING([--enable-shared], [build shared libraries @<:@default=yes@:>@])],
-    [enable_shared=$enableval], [enable_shared=yes])
+    [AS_HELP_STRING([--enable-shared], [build shared libraries @<:@default=no@:>@])],
+    [enable_shared=$enableval], [enable_shared=no])
 
 AC_ARG_ENABLE([static],
-    [AS_HELP_STRING([--enable-static], [build static libraries @<:@default=no@:>@])],
-    [enable_static=$enableval], [enable_static=no])
+    [AS_HELP_STRING([--enable-static], [build static libraries @<:@default=yes@:>@])],
+    [enable_static=$enableval], [enable_static=yes])
 
-if test "x$enable_shared" = "xyes"; then BUILD_SHARED=yes; else BUILD_SHARED=no; fi
-if test "x$enable_static" = "xyes"; then BUILD_STATIC=yes; else BUILD_STATIC=no; fi
+if test "x$enable_shared" = "xyes"; then 
+  BUILD_SHARED=yes; BUILD_STATIC=no;
+else 
+  BUILD_SHARED=no; BUILD_STATIC=yes;
+fi
+if test "x$enable_static" = "xyes"; then 
+  BUILD_STATIC=yes; BUILD_SHARED=no;
+else 
+  BUILD_STATIC=no; BUILD_SHARED=yes;
+fi
 
 AC_SUBST([BUILD_SHARED])
 AC_SUBST([BUILD_STATIC])
 AM_CONDITIONAL([BUILD_STATIC_LIB], [test "x$BUILD_STATIC" = "xyes"])
+AM_CONDITIONAL([BUILD_SHARED_LIB], [test "x$BUILD_SHARED" = "xyes"])
 
 # Check for cross-compilation
 AC_MSG_CHECKING([whether we are cross compiling])
@@ -330,7 +337,11 @@ if test -d "src"; then
         if test "$rel_path" != "$STATIC_SOURCE"; then
              # Change extension to .lo for Libtool objects
              # Use sed to replace only the last occurrence
-             objname=$(echo "$rel_path" | sed 's/\.cpp$/.lo/;s/\.c$/.lo/')
+            if test "x$enable_shared" = "xyes"; then
+              objname=$(echo "$rel_path" | sed 's/\.cpp$/.lo/;s/\.c$/.lo/')
+            else
+              objname=$(echo "$rel_path" | sed 's/\.cpp$/.o/;s/\.c$/.o/')
+            fi
              FFMPEGKIT_OBJECTS_VAR="$FFMPEGKIT_OBJECTS_VAR $objname"
         fi
     done
