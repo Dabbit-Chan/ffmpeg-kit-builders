@@ -70,3 +70,7 @@ textformat/tw_avio.c
 textformat/tw_buffer.c
 textformat/tw_stdout.c
 config.h.in
+stdbit.h
+bundle_manifest.txt
+ffmpeg-linker-script.map
+libs.txt

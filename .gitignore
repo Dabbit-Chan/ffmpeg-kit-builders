@@ -16,3 +16,4 @@ linux/src/Makefile.in
 /ffmpeg-kit-test/
 /*.bak
 .code-workspace
+my_test_env
