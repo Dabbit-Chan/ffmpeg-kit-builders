@@ -15,14 +15,12 @@
       "extensions": [
         "ms-vscode.cpptools-extension-pack",
         "cschlosser.doxdocgen",
-        "ms-vscode.cpptools", // Debugging and IntelliSense
-        "ms-vscode.cmake-tools", // If you use CMake
-        "mesonbuild.mesonbuild", // Since you asked about Meson earlier
-        "twxs.cmake", // Syntax highlighting for CMake
-        "Dart-Code.flutter", // Official Flutter extension
-        "Dart-Code.dart-code", // Official Dart extension
-        "eamodio.gitlens", // Better Git history visualization
-        "editorconfig.editorconfig", // Standardizes indentation across languages
+        "ms-vscode.cpptools",
+        "ms-vscode.cmake-tools",
+        "twxs.cmake",
+        "Dart-Code.flutter",
+        "Dart-Code.dart-code",
+        "editorconfig.editorconfig",
         "rogalmic.bash-debug",
         "mads-hartmann.bash-ide-vscode",
         "jeff-hykin.better-shellscript-syntax",
@@ -38,9 +36,9 @@
           ],
           "editor.formatOnSave": true
         },
-        "terminal.integrated.defaultProfile.linux": "bash",
+        "terminal.integrated.defaultProfile.linux": "zsh",
         "git.ignoredRepositories": [
-            "${workspaceFolder}/prebuilt"
+          "${workspaceFolder}/prebuilt"
         ]
       }
     }
@@ -49,6 +47,6 @@
     3000,
     8000
   ],
-  "postCreateCommand": "sudo apt-get update && sudo apt-get install -y binfmt-support && echo 'Container ready!'",
+  "postCreateCommand": "sudo chown -R vscode:vscode . && echo 'Container ready!'",
   "remoteUser": "vscode"
 }

@@ -1,75 +1,88 @@
-# Use the Ubuntu 24.04 base image (Noble)
-FROM mcr.microsoft.com/devcontainers/base:ubuntu-24.04
+# Use the official Manylinux 2.28 image (AlmaLinux 8 based, glibc 2.28)
+# This ensures binaries work on Ubuntu 20.04+, Debian 10+, RHEL 8+
+FROM quay.io/pypa/manylinux_2_28_x86_64
 
-# Avoid prompts from apt
-ARG DEBIAN_FRONTEND=noninteractive
+# 1. Setup Environment & Repositories
+# Install EPEL (Extra Packages for Enterprise Linux) for tools like Ragel/Wine dependencies
+RUN dnf install -y epel-release && \
+    dnf config-manager --set-enabled powertools && \
+    dnf update -y
 
-# Update and install all requested system packages
-RUN apt-get update && \
-    apt-get install -qq --no-install-recommends \
-    ragel \
-    pkg-config \
-    make \
+# 2. Install System Packages
+# Added '--allowerasing' to resolve the coreutils conflict.
+# Removed packages that logs showed were already installed (make, autoconf, gcc, etc.) to speed up build.
+RUN dnf install -y --allowerasing --setopt=install_weak_deps=False \
     autoconf \
-    automake \
-    yasm \
-    cvs \
-    flex \
-    bison \
-    texinfo \
-    ed \
-    pax \
-    unzip \
-    patch \
-    wget \
-    xz-utils \
-    nasm \
-    gperf \
+    autoconf-archive \
     autogen \
+    automake \
+    bc \
+    binutils \
+    bison \
     bzip2 \
     clang \
-    bc \
-    autopoint \
-    zstd \
-    curl \
-    git \
-    subversion \
-    libtool-bin \
-    build-essential \
     cmake \
-    software-properties-common \
-    python3 \
     coreutils \
-    python3-pip \
-    apt-transport-https \
-    ca-certificates \
-    python3-setuptools \
-    ninja-build \
-    autoconf-archive \
-    g++ \
+    curl \
+    cvs \
+    ed \
+    flex \
     gcc \
+    gcc-c++ \
+    gcc-gfortran \
     gettext \
+    gettext-devel \
+    git \
+    glib2-devel \
+    glibc-static \
+    gperf \
+    gtkmm30-devel \
     help2man \
+    java-17-openjdk-devel \
+    libstdc++-static \
     libtool \
-    p7zip-full \
-    python3-venv \
-    binutils \
-    llvm \
+    libzstd-devel \
     lld \
-    xutils-dev \
-    python3-numpy \
-    cython3 \
-    libssl-dev \
-    zlib1g-dev \
-    libglib2.0-dev \
-    libglib2.0-dev-bin \
-    shellcheck \
-    libgtkmm-3.0-dev \
-    libsdl2-dev
+    llvm \
+    make \
+    nasm \
+    ninja-build \
+    openssl-devel \
+    p7zip \
+    patch \
+    pax \
+    perl-IPC-Cmd \
+    perl-Time-Piece \
+    pkgconf-pkg-config \
+    python3-Cython \
+    python3-setuptools \
+    ragel \
+    SDL2-devel \
+    subversion \
+    sudo \
+    texinfo \
+    unzip \
+    wget \
+    which \
+    xorg-x11-util-macros \
+    xz \
+    yasm \
+    zlib-devel
+
+ENV PATH="/opt/python/cp312-cp312/bin:${PATH}"
+
+RUN python3 --version && pip3 --version && \
+    pip3 install numpy Cython setuptools
+
+# 3. Create 'vscode' user
+# Manylinux images are root-only by default. We must recreate the vscode user 
+# to match the Dev Container standard.
+RUN useradd -m -s /bin/bash vscode && \
+    echo "vscode ALL=(ALL) NOPASSWD:ALL" >> /etc/sudoers
 
 ENV PATH="/usr/local/mingw-w64/bin:${PATH}"
 
-# Install xPack MinGW-w64 GCC 15.2.0-2
+# 4. Install xPack MinGW-w64 GCC 15.2.0-2
 RUN wget https://github.com/xpack-dev-tools/mingw-w64-gcc-xpack/releases/download/v15.2.0-2/xpack-mingw-w64-gcc-15.2.0-2-linux-x64.tar.gz && \
     mkdir -p tools && \
     tar xf xpack-mingw-w64-gcc-15.2.0-2-linux-x64.tar.gz -C tools && \
@@ -78,81 +91,78 @@ RUN wget https://github.com/xpack-dev-tools/mingw-w64-gcc-xpack/releases/downloa
     chown -R root:users /usr/local/mingw-w64 && \
     chmod -R 775 /usr/local/mingw-w64
 
-# 1. Force Rust to install globally (Best practice for Dev Containers)
+# 5. Rust Installation
 ENV RUSTUP_HOME=/usr/local/rustup \
     CARGO_HOME=/usr/local/cargo \
     PATH=/usr/local/cargo/bin:$PATH
 
-# 2. Install Tools
 RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --no-modify-path && \
-    # Source the global env file (not ${HOME})
     . /usr/local/cargo/env && \
     rustup target add x86_64-pc-windows-gnu && \
-    # Verify Rust
     rustc --version && \
     cargo --version && \
-    # Install cargo-c
     cargo install cargo-c && \
     ln -sf /usr/local/cargo/bin/* /usr/local/bin/ && \
-    pip3 install meson --break-system-packages && \
-    # Cleanup
-    apt-get clean -y && \
-    rm -rf /var/lib/apt/lists/*
+    dnf clean all
 
-# 3. CRITICAL: Allow 'vscode' user to use Cargo (install crates, update index, etc.)
+# Allow 'vscode' user to use Cargo
 RUN chmod -R a+w /usr/local/cargo /usr/local/rustup
 
-# --- INSTALL FLUTTER ---
-# 1. Clone Flutter to a system directory
+# 6. Install Flutter
 RUN git clone https://github.com/flutter/flutter.git -b stable /usr/local/flutter
-
-# 2. Set permissions: Give 'vscode' ownership so it can write cache/locks
-#    (Assuming 'vscode' user exists; if using a standard devcontainer base, it does)
 RUN chown -R vscode:vscode /usr/local/flutter
-
-# 3. Add to PATH permanently
 ENV PATH="/usr/local/flutter/bin:${PATH}"
-
-# 4. Mark directory as safe for Git to suppress "dubious ownership" warnings
 RUN git config --system --add safe.directory /usr/local/flutter
 
-# 5. Pre-download development binaries (run as vscode to ensure permissions stay correct)
+# Pre-download development binaries as vscode
 USER vscode
 RUN flutter config --no-analytics && flutter precache
 USER root
 
-RUN dpkg --add-architecture i386
+# 7. Install WineHQ (RHEL 8 / AlmaLinux 8 version)
+# We need to add the WineHQ repo. 
+RUN dnf makecache --refresh && \
+    dnf install -y wine
 
-RUN mkdir -pm755 /etc/apt/keyrings && \
-    wget -O /etc/apt/keyrings/winehq-archive.key https://dl.winehq.org/wine-builds/winehq.key && \
-    wget -NP /etc/apt/sources.list.d/ https://dl.winehq.org/wine-builds/ubuntu/dists/noble/winehq-noble.sources
-
-RUN apt-get update && \
-    apt-get install -y --install-recommends winehq-stable
-
-# --- INSTALL ANDROID SDK ---
-# 1. Install OpenJDK 17 (Required for Android SDK)
-RUN apt-get update && apt-get install -y openjdk-17-jdk unzip
-
-# 2. Set Environment Variables
+# 8. Install Android SDK
+# (Note: We already installed java-17-openjdk-devel in step 2)
 ENV ANDROID_HOME=/usr/local/android-sdk
 ENV PATH="${PATH}:${ANDROID_HOME}/cmdline-tools/latest/bin:${ANDROID_HOME}/platform-tools"
 
-# 3. Download Android Command Line Tools
-#    (Note: The tool requires a specific folder structure: cmdline-tools/latest/bin)
 RUN mkdir -p ${ANDROID_HOME}/cmdline-tools && \
     curl -o /tmp/cmdline-tools.zip -L https://dl.google.com/android/repository/commandlinetools-linux-13114758_latest.zip && \
     unzip -q /tmp/cmdline-tools.zip -d ${ANDROID_HOME}/cmdline-tools && \
     mv ${ANDROID_HOME}/cmdline-tools/cmdline-tools ${ANDROID_HOME}/cmdline-tools/latest && \
     rm /tmp/cmdline-tools.zip
 
-# 4. Fix Permissions: Give 'vscode' ownership so it can write updates/licenses
 RUN chown -R vscode:vscode ${ANDROID_HOME}
 
-# 5. Accept Licenses & Install Basics (Run as vscode to keep permissions correct)
+RUN wget https://github.com/koalaman/shellcheck/releases/download/v0.11.0/shellcheck-v0.11.0.linux.x86_64.tar.xz && \
+    tar -xvf shellcheck-v0.11.0.linux.x86_64.tar.xz && \
+    mkdir -p /usr/local/shellcheck/bin && \
+    cp shellcheck-v0.11.0/shellcheck /usr/local/shellcheck/bin/shellcheck && \
+    rm -rf shellcheck-v0.11.0 shellcheck-v0.11.0.linux.x86_64.tar.xz
+
+ENV PATH="/usr/local/shellcheck/bin:${PATH}"
+ENV ARM_TOOLCHAIN_PATH="/usr/local/arm-gnu-toolchain"
+RUN curl -Lo /tmp/arm-toolchain.tar.xz "https://developer.arm.com/-/media/Files/downloads/gnu/13.2.rel1/binrel/arm-gnu-toolchain-13.2.rel1-x86_64-aarch64-none-linux-gnu.tar.xz" && \
+    mkdir -p ${ARM_TOOLCHAIN_PATH} && \
+    tar -xf /tmp/arm-toolchain.tar.xz --strip-components=1 -C ${ARM_TOOLCHAIN_PATH} && \
+    rm /tmp/arm-toolchain.tar.xz && \
+    # Create compatibility symlinks (e.g., aarch64-linux-gnu-gcc -> aarch64-none-linux-gnu-gcc)
+    mkdir -p ${ARM_TOOLCHAIN_PATH}/sys-bin && \
+    for tool in gcc g++ ar as ld nm objcopy objdump ranlib strip; do \
+        ln -sf ${ARM_TOOLCHAIN_PATH}/bin/aarch64-none-linux-gnu-$tool ${ARM_TOOLCHAIN_PATH}/sys-bin/aarch64-linux-gnu-$tool; \
+    done
+    
+# Accept Licenses & Install Basics
 USER vscode
 RUN yes | sdkmanager --licenses && \
     sdkmanager "platform-tools" "platforms;android-34" "build-tools;34.0.0"
 USER root
 
+# Finalize
 RUN git config --global --add safe.directory '*'
+
+# Set the default user back to vscode for the dev container
+USER vscode
