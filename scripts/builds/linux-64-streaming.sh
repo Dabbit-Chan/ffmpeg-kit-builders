@@ -1,29 +1,31 @@
 #!/usr/bin/env bash
 
 small=""
-
-case "${2,,}" in
-  s|small|m|min)
-    small="--enable-small"
-    ;;
-  *);;
-esac
+force=""
+default=""
+gpl=""
+if [[ -n "$1" || -n "$2" ]]; then
+  [[ "${1,,}${2,,}" == *s* ]] && small="--enable-small"
+  [[ "${1,,}${2,,}" == *f* ]] && force="-f"
+  [[ "${1,,}${2,,}" == *y* ]] && default="-y"
+  [[ "${1,,}${2,,}" == *g* ]] && gpl="--gpl"
+fi
 cd "$(pwd)/../../" || exit 1
 case "$1" in
   1)
-  ./runner.sh --host=linux --arch=x86_64 -y --streaming-bundle --build-deps-only $small
+  ./runner.sh --host=linux --arch=x86_64 $default --streaming-bundle --build-deps-only $small $force $gpl
   exit 0
   ;;
   2)
-  ./runner.sh --host=linux --arch=x86_64 -y --streaming-bundle --build-ffmpeg-only -f $small
+  ./runner.sh --host=linux --arch=x86_64 $default --streaming-bundle --build-ffmpeg-only=static $small $force $gpl
   exit 0
   ;;
   3)
-  ./runner.sh --host=linux --arch=x86_64 -y --streaming-bundle --build-ffmpeg-kit-only -f --release $small
+  ./runner.sh --host=linux --arch=x86_64 $default --streaming-bundle --build-ffmpeg-kit-only=shared --release $small $force $gpl
   exit 0
   ;;
   *)
-  ./runner.sh --host=linux --arch=x86_64 -y --streaming-bundle $small
+  ./runner.sh --host=linux --arch=x86_64 $default --streaming-bundle $small $force --release $gpl
   exit 0
   ;;
 esac

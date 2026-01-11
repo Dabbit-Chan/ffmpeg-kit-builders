@@ -19,19 +19,19 @@ fi
 cd "$(pwd)/../../" || exit 1
 case "$1" in
   1)
-  ./runner.sh --host=linux --arch=x86_64 $default --video-ai-gpu$gpu-bundle --build-deps-only $small $force $gpl
+  ./runner.sh --host=linux --arch=x86_64 $default --video-hw-ai-gpu$gpu-bundle --build-deps-only $small $force $gpl
   exit 0
   ;;
   2)
-  ./runner.sh --host=linux --arch=x86_64 $default --video-ai-gpu$gpu-bundle --build-ffmpeg-only=static $small $force $gpl
+  ./runner.sh --host=linux --arch=x86_64 $default --video-hw-ai-gpu$gpu-bundle --build-ffmpeg-only=static $small $force $gpl
   exit 0
   ;;
   3)
-  ./runner.sh --host=linux --arch=x86_64 $default --video-ai-gpu$gpu-bundle --build-ffmpeg-kit-only=shared --release $small $force $gpl
+  ./runner.sh --host=linux --arch=x86_64 $default --video-hw-ai-gpu$gpu-bundle --build-ffmpeg-kit-only=shared --release $small $force $gpl
   exit 0
   ;;
   *)
-  ./runner.sh --host=linux --arch=x86_64 $default --video-ai-gpu$gpu-bundle $small $force --release $gpl
+  ./runner.sh --host=linux --arch=x86_64 $default --video-hw-ai-gpu$gpu-bundle $small $force --release $gpl
   exit 0
   ;;
 esac
