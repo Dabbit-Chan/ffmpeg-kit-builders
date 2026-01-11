@@ -726,8 +726,6 @@ fi
 echo -e "\n  [CONFIG] Disabling deprecated libraries..." >>"$LOG_FILE"
 disable_library "libnpp"
 disable_library "libcelt"
-echo "Rockchip Media Process integration has been disabled due to copyright dispute with FFmpeg." >>"$LOG_FILE"
-disable_library "rkmpp"
 
 resolve_collisions
 

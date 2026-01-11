@@ -27,7 +27,7 @@ elif [[ -n "$build_only" ]]; then
 	step_name="${BUILD_STEPS[$index]}"
 	echo -e "INFO: --- Executing single build step: $step_name ---" | tee -a "$LOG_FILE"
 	echo -e "WARNING: This may fail if previous dependencies havent been built yet." | tee -a "$LOG_FILE"
-	run_valid_function "$step_name"
+	run_valid_build_functions "$step_name" true
   echo | tee -a "$LOG_FILE"
 	echo -e "INFO: --- Done building single build step: $step_name ---" | tee -a "$LOG_FILE"
 elif [[ -n "$build_from" ]]; then

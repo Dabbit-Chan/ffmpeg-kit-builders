@@ -325,19 +325,20 @@ build_rkmpp() {
   if ! truthy "$disable_rkmpp" && truthy "$enable_rkmpp"; then
   # https://github.com/rockchip-linux/mpp
   local lib="rkmpp"
-  local repo="https://github.com/rockchip-linux/mpp"
+  # local repo="https://github.com/rockchip-linux/mpp"
+  local repo="https://github.com/HermanChen/mpp"
   local repo_ver="1.0.11"
   disable_library "rkmpp"
-  echo "Rockchip Media Process integration has been disabled due to copyright dispute with FFmpeg." >>"$LOG_FILE"
-#   change_dir "$src_dir"
-# 	do_git_checkout "$repo" "$src_dir/$lib" "$repo_ver"
-#   change_dir "$src_dir/$lib"
-#   generic_cmake "-DCMAKE_BUILD_TYPE=Release \
-# -DBUILD_SHARED_LIBS=OFF" "$src_dir/$lib"
-#   disable_nonessential "$src_dir/$lib"
-#   do_make_and_make_install
-# add_src_dir "$src_dir/$lib"
-#   change_dir "$src_dir"
+  change_dir "$src_dir"
+	do_git_checkout "$repo" "$src_dir/$lib" "$repo_ver"
+  change_dir "$src_dir/$lib"
+  generic_cmake "-DCMAKE_BUILD_TYPE=Release \
+-DBUILD_TEST=OFF \
+-DBUILD_SHARED_LIBS=OFF" "$src_dir/$lib"
+  disable_nonessential "$src_dir/$lib"
+  do_make_and_make_install
+add_src_dir "$src_dir/$lib"
+  change_dir "$src_dir"
   fi
 }
 # build_v4l2_m2m          # config_options+= --disable-v4l2-m2m           # disable V4L2 mem2mem code [autodetect]
