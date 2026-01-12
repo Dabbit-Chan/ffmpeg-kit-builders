@@ -157,39 +157,39 @@ prebuilt/
 ### Feature presets
 | Option | Description |
 |--------|-------------|
-|`--enable-full                      `|enable all available external libraries (based on gpl/non-gpl selection)
-|`--enable-small                     `|exclude certain extra libraries from presets to reduce size (see --list-excluded)
-|`--enable-https                     `|enable https libraries
-|`--enable-audio                     `|enable all audio processing libraries
-|`--enable-audio-ai                  `|enable all audio processing ai libraries
-|`--enable-video                     `|enable all video processing libraries
-|`--enable-video-streaming           `|enable all video streaming libraries
-|`--enable-video-ai-cpu              `|enable all video ai cpu based libraries
-|`--enable-video-ai-gpu              `|enable all video ai pick gpu based libraries
-|`--enable-video-ai-gpu-cuda         `|enable all video ai gpu cuda based libraries
-|`--enable-video-ai-gpu-rocm         `|enable all video ai gpu rocm based libraries
-|`--enable-hardware                  `|enable all hardware accel libraries
-|`--enable-ssh                       `|enable SSH/SFTP support
-|`--enable-smb                       `|enable SMB (SAMBA) file sharing protocol support
-|`--enable-mq                        `|enable distributed systems support
+|`--enable-full`|enable all available external libraries (based on gpl/non-gpl selection)
+|`--enable-small`|exclude certain extra libraries from presets to reduce size (see --list-excluded)
+|`--enable-https`|enable https libraries
+|`--enable-audio`|enable all audio processing libraries
+|`--enable-audio-ai`|enable all audio processing ai libraries
+|`--enable-video`|enable all video processing libraries
+|`--enable-video-streaming`|enable all video streaming libraries
+|`--enable-video-ai-cpu`|enable all video ai cpu based libraries
+|`--enable-video-ai-gpu`|enable all video ai pick gpu based libraries
+|`--enable-video-ai-gpu-cuda`|enable all video ai gpu cuda based libraries
+|`--enable-video-ai-gpu-rocm`|enable all video ai gpu rocm based libraries
+|`--enable-hardware`|enable all hardware accel libraries
+|`--enable-ssh`|enable SSH/SFTP support
+|`--enable-smb`|enable SMB (SAMBA) file sharing protocol support
+|`--enable-mq`|enable distributed systems support
 
 ### Bundle presets
 | Option | Description |
 |--------|-------------|
-|`--audio-bundle                `|contains https + audio only libraries in the final bundle
-|`--audio-ai-bundle             `|contains https + audio + audio only ai libraries in the final bundle
-|`--video-bundle                `|contains https + audio + video libraries in the final bundle
-|`--video-ai-cpu-bundle         `|contains https + audio + video + ai (cpu) libraries in the final bundle
-|`--video-ai-gpu-bundle         `|contains https + audio + video + ai (pick gpu interactive) libraries in the final bundle
-|`--video-ai-gpu-cuda-bundle    `|contains https + audio + video + ai (gpu:- cuda) libraries in the final bundle
-|`--video-ai-gpu-rocm-bundle    `|contains https + audio + video + ai (gpu:- rocm) libraries in the final bundle
-|`--video-hw-bundle             `|contains https + audio + video + hardware libraries in the final bundle
-|`--video-hw-ai-cpu-bundle      `|contains https + audio + video + hardware + ai (cpu) libraries in the final bundle
-|`--video-hw-ai-gpu-bundle      `|contains https + audio + video + hardware + ai (pick gpu interactive) libraries in the final bundle
-|`--video-hw-ai-gpu-cuda-bundle `|contains https + audio + video + hardware + ai (gpu:- cuda) libraries in the final bundle
-|`--video-hw-ai-gpu-rocm-bundle `|contains https + audio + video + hardware + ai (gpu:- rocm) libraries in the final bundle
-|`--streaming-bundle            `|contains https + audio + video + streaming libraries in the final bundle
-|`--full-bundle                 `|contains https + audio + video + hardware + ai + streaming + ssh + smb + mq libraries in the final bundle
+|`--audio-bundle`|contains https + audio only libraries in the final bundle
+|`--audio-ai-bundle`|contains https + audio + audio only ai libraries in the final bundle
+|`--video-bundle`|contains https + audio + video libraries in the final bundle
+|`--video-ai-cpu-bundle`|contains https + audio + video + ai (cpu) libraries in the final bundle
+|`--video-ai-gpu-bundle`|contains https + audio + video + ai (pick gpu interactive) libraries in the final bundle
+|`--video-ai-gpu-cuda-bundle`|contains https + audio + video + ai (gpu:- cuda) libraries in the final bundle
+|`--video-ai-gpu-rocm-bundle`|contains https + audio + video + ai (gpu:- rocm) libraries in the final bundle
+|`--video-hw-bundle`|contains https + audio + video + hardware libraries in the final bundle
+|`--video-hw-ai-cpu-bundle`|contains https + audio + video + hardware + ai (cpu) libraries in the final bundle
+|`--video-hw-ai-gpu-bundle`|contains https + audio + video + hardware + ai (pick gpu interactive) libraries in the final bundle
+|`--video-hw-ai-gpu-cuda-bundle`|contains https + audio + video + hardware + ai (gpu:- cuda) libraries in the final bundle
+|`--video-hw-ai-gpu-rocm-bundle`|contains https + audio + video + hardware + ai (gpu:- rocm) libraries in the final bundle
+|`--streaming-bundle`|contains https + audio + video + streaming libraries in the final bundle
+|`--full-bundle`|contains https + audio + video + hardware + ai + streaming + ssh + smb + mq libraries in the final bundle
 
 ### Build Options
 
