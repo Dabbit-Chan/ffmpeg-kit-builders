@@ -1231,31 +1231,32 @@ package_exists() {
 }
 
 validate_package() {
-  local pkg="$1"
-  local candidates=()
-
-  if package_exists "$pkg"; then
-    echo "$pkg"
-    return 0
-  fi
-  if [[ "$pkg" == *-dev ]]; then
-    candidates+=("${pkg%-dev}-devel")
-  elif [[ "$pkg" == *-devel ]]; then
-    candidates+=("${pkg%-devel}-dev")
-  fi
-  if [[ "$pkg" == lib* ]]; then
-    candidates+=("${pkg#lib}")
-  else
-    candidates+=("lib${pkg}")
-  fi
-  for candidate in "${candidates[@]}"; do
-    if package_exists "$candidate"; then
-      [ -n "$LOG_FILE" ] && echo "DEBUG: Remapped '$pkg' to '$candidate'" >> "$LOG_FILE"
-      echo "$candidate"
-      return 0
+    local pkg="$1"
+    local candidates=()
+    local roots=("$pkg")
+    if [[ "$pkg" == lib* ]]; then
+        roots+=("${pkg#lib}")
+    else
+        roots+=("lib${pkg}")
     fi
-  done
-  return 1
+    for root in "${roots[@]}"; do
+        candidates+=("$root")
+        if [[ "$root" == *-dev ]]; then
+            candidates+=("${root}el")
+        elif [[ "$root" == *-devel ]]; then
+            candidates+=("${root%el}")
+        fi
+    done
+    for candidate in "${candidates[@]}"; do
+        if package_exists "$candidate"; then
+            if [[ "$candidate" != "$pkg" ]]; then
+                [ -n "$LOG_FILE" ] && echo "DEBUG: Remapped '$pkg' to '$candidate'" >> "$LOG_FILE"
+            fi
+            echo "$candidate"
+            return 0
+        fi
+    done
+    return 1
 }
 
 install_missing_packages() {
@@ -4190,7 +4191,8 @@ add_src_dir() {
       echo "INFO: Added $dir to license src dir list $dir_file" >> "$LOG_FILE"
     fi
   else
-    echo -n "" > "$dir_file"
+    create_dir "$install_pkgconfig_dir"
+    touch "$dir_file"
     chmod -R u+rwx "$dir_file"
   fi
 }
@@ -4209,10 +4211,11 @@ get_licenses() {
 reset_and_clean() {
   local src_path="$1"
   local dirs=()
-  # reset_touch "$src_path"
-  if [[ -z "$1" ]]; then
+  if [[ "$#" -gt 1 ]]; then
+    dirs+=("$@")
+  elif [[ -z "$1" ]]; then
     shopt -s nullglob
-    dirs+=( "$src_dir"/*/ )
+    mapfile -t dirs < <(sudo find "$src_dir" -name "*.touch" -printf '%h\n' | sort -u)
     shopt -u nullglob
   else
     dirs+=("$src_path")
@@ -4220,6 +4223,7 @@ reset_and_clean() {
   activate_meson
   for dir in "${dirs[@]}"; do
     if [[ -n "$dir" ]]; then
+      reset_touch "$dir"
       cd "$dir" || continue
       mapfile -t sub_dirs < <(find "$dir" -name "Makefile" -exec dirname {} \; | sort -u 2>/dev/null)
       for sub_dir in "${sub_dirs[@]}"; do
@@ -4229,7 +4233,13 @@ reset_and_clean() {
           { nice make clean -j"$(get_concurrent_proc)" > >(redirect_output) 2>&1 || true; }
           { nice make distclean -j"$(get_concurrent_proc)" > >(redirect_output) 2>&1 || true; }
         fi
+        cd "$dir" || continue
       done
+      mapfile -t sub_dirs < <(find "$dir" -name "meson.build" -exec dirname {} \; | sort -u 2>/dev/null)
+      if [[ -f meson.build ]] && [[ "${#sub_dirs[@]}" -gt 0 ]]; then
+        echo "Cleaning meson artifacts at $sub_dir..." > >(redirect_output)
+        { python3 "$local_meson" compile --clean -C build > >(redirect_output) 2>&1 || true; }
+      fi
       mapfile -t sub_dirs < <(find "$dir" -name "CMakeList.txt" -exec dirname {} \; | sort -u 2>/dev/null)
       for sub_dir in "${sub_dirs[@]}"; do
         cd "$sub_dir" || continue
@@ -4237,30 +4247,39 @@ reset_and_clean() {
           echo "Cleaning CMake artifacts at $sub_dir..." > >(redirect_output)
           clean_cmake_cache "$(pwd)"
         fi
+        cd "$dir" || continue
       done
-      mapfile -t sub_dirs < <(find "$dir" -name "CMakeList.txt" -exec dirname {} \; | sort -u 2>/dev/null)
+      mapfile -t sub_dirs < <(find "$dir" -name "CMakeCache.txt" -exec dirname {} \; | sort -u 2>/dev/null)
+      for sub_dir in "${sub_dirs[@]}"; do
+        cd "$sub_dir" || continue
+        if [[ -f CMakeCache.txt ]]; then
+          echo "Cleaning CMake artifacts at $sub_dir..." > >(redirect_output)
+          clean_cmake_cache "$(pwd)"
+        fi
+        cd "$dir" || continue
+      done
+      mapfile -t sub_dirs < <(find "$dir" -name "Cargo.toml" -exec dirname {} \; | sort -u 2>/dev/null)
       for sub_dir in "${sub_dirs[@]}"; do
         cd "$sub_dir" || continue
         if [[ -f Cargo.toml ]]; then
           echo "Cleaning Cargo artifacts at $sub_dir..." > >(redirect_output)
           { cargo clean --release > >(redirect_output) 2>&1 || true; }
         fi
+        cd "$dir" || continue
       done
-      mapfile -t sub_dirs < <(find "$dir" -name "CMakeList.txt" -exec dirname {} \; | sort -u 2>/dev/null)
-      for sub_dir in "${sub_dirs[@]}"; do
-        cd "$sub_dir" || continue
-        if [[ -f meson.build ]]; then
-          echo "Cleaning meson artifacts at $sub_dir..." > >(redirect_output)
-          { python3 "$local_meson" compile --clean -C build > >(redirect_output) 2>&1 || true; }
-        fi
-      done
-      mapfile -t sub_dirs < <(find "$dir" -name "CMakeList.txt" -exec dirname {} \; | sort -u 2>/dev/null)
+      mapfile -t sub_dirs < <(find "$dir" -name "build.ninja" -exec dirname {} \; | sort -u 2>/dev/null)
+      if [[ -f build.ninja ]] && [[ "${#sub_dirs[@]}" -gt 0 ]]; then
+        echo "Cleaning ninja artifacts at $sub_dir..." > >(redirect_output)
+        { nice ninja -t clean >/dev/null 2>&1 || true; }
+      fi
+      mapfile -t sub_dirs < <(find "$dir" -name "waf" -exec dirname {} \; | sort -u 2>/dev/null)
       for sub_dir in "${sub_dirs[@]}"; do
         cd "$sub_dir" || continue
         if [[ -f waf ]]; then
           echo "Cleaning waf artifacts at $sub_dir..." > >(redirect_output)
           { eval "python3 ./waf clean" > >(redirect_output) 2>&1 || true; }
         fi
+        cd "$dir" || continue
       done
     fi
   done

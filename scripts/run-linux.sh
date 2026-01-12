@@ -35,7 +35,7 @@ build_jni() {
 }
 # build_ladspa            # config_options+= --disable-ladspa             # enable LADSPA audio filtering [no]
 build_ladspa() {
-  if ! truthy "$disable_ladspa" && truthy "$enable_ladspa"; then
+  if ! truthy "$disable_ladspa" && truthy "$enable_ladspa" || [[ -n "$1" ]]; then
   build_libsndfile
 	local lib="ladspa"
   local repo="http://www.ladspa.org/download/ladspa_sdk_1.17.tgz"
@@ -151,11 +151,12 @@ build_libdrm() {
   change_dir "$src_dir"
 	do_git_checkout "$repo" "$src_dir/$lib" "$repo_ver"
   change_dir "$src_dir/$lib"
-  export LDFLAGS="-L${dependency_install_prefix}/lib -lxml2 -llzma"
-  local meson_options=""
+  export LIBS="-ldl"
+  local meson_options="-Dc_link_args=\"-L${dependency_install_prefix}/lib $LIBS\""
 	generic_meson "$meson_options"
   disable_nonessential "$src_dir/$lib"
 	do_ninja_and_ninja_install
+  unset LIBS
   reset_ldflags
   add_src_dir "$src_dir/$lib"
   change_dir "$src_dir"
@@ -1352,19 +1353,21 @@ build_libfontconfig() {
   change_dir "$src_dir"
   do_git_checkout "$repo" "$src_dir/$lib" "$repo_ver"
   change_dir "$src_dir/$lib"
-  export LDFLAGS="$LDFLAGS -lz -llzma"
-  local meson_options=" -Ddoc=disabled -Diconv=enabled -Dtests=disabled -Dxml-backend=libxml2"
+  export LIBS="-lz -llzma -lbrotlidec -lbrotlicommon"
+  local meson_options="-Ddoc=disabled -Diconv=enabled -Dtests=disabled -Dxml-backend=libxml2 -Dc_link_args=\"-L$dependency_install_prefix/lib $LIBS\""
   generic_meson "$meson_options"
   disable_nonessential "$src_dir/$lib"
   do_ninja_and_ninja_install
   add_src_dir "$src_dir/$lib"
   change_dir "$src_dir"
   reset_ldflags
+  unset LIBS
   fi
 }
 # build_libfreetype       # config_options+= --enable-libfreetype         # enable libfreetype, needed for drawtext filter [no]
 build_libfreetype() {
   if ! truthy "$disable_libfreetype" && truthy "$enable_libfreetype" || [[ -n "$1" ]]; then
+  build_brotli
   local lib="freetype"
   local repo="https://github.com/freetype/freetype"
   local repo_ver="VER-2-14-1"
@@ -1372,7 +1375,7 @@ build_libfreetype() {
   change_dir "$src_dir"
   do_git_checkout "$repo" "$src_dir/$lib" "$repo_ver"
   change_dir "$src_dir/$lib"
-  local meson_options=" -Dtests=disabled -Dharfbuzz=disabled -Dpng=disabled -Dbzip2=disabled -Dzlib=disabled"
+  local meson_options="-Dtests=disabled -Dharfbuzz=disabled -Dpng=disabled -Dbzip2=disabled -Dzlib=disabled"
   generic_meson "$meson_options"
   disable_nonessential "$src_dir/$lib"
   do_ninja_and_ninja_install
@@ -1638,8 +1641,8 @@ build_libjack() {
 # build_libjxl            # config_options+= --enable-libjxl              # enable JPEG XL de/encoding via libjxl [no]
 build_libjxl() {
   if ! truthy "$disable_libjxl" && truthy "$enable_libjxl"; then
-  # build_brotli
-  # build_lcms2 1
+  build_brotli
+  build_lcms2 1
   local lib="libjxl"
   local repo="https://github.com/libjxl/libjxl"
   local repo_ver="v0.7.2"
@@ -2022,9 +2025,9 @@ build_liboapv() {
 # build_libopencv         # config_options+= --enable-libopencv           # enable video filtering via libopencv [no]
 build_libopencv() {
   if ! truthy "$disable_libopencv" && truthy "$enable_libopencv"; then
-  # build_vaapi 1
-  # build_libtiff
-  # build_libwebp 1
+  build_vaapi 1
+  build_libtiff
+  build_libwebp 1
   local lib="libopencv"
   local repo="https://github.com/opencv/opencv/"
   local repo_ver="4.12.0"
@@ -2288,7 +2291,7 @@ build_libplacebo() {
     meson_options+=" -Dshaderc=disabled"
   fi
   generic_meson "$meson_options"
-  disable_nonessential "$src_dir/$lib"
+  # disable_nonessential "$src_dir/$lib"
 	do_ninja_and_ninja_install
 	sed -i.bak 's/-lplacebo.*$/-lplacebo -lm -lunwind -lxxhash -lstdc++/' "$dependency_install_prefix/lib/pkgconfig/libplacebo.pc"
   add_src_dir "$src_dir/$lib"
@@ -2502,7 +2505,7 @@ build_cairo() {
   export CFLAGS="$CFLAGS -lpthread"
   export CXXFLAGS="$CXXFLAGS -lpthread"
   export LDFLAGS="$LDFLAGS -lpthread"
-  export LIBS="-lpng -lpthread -llzma"
+  export LIBS="-lpng -lpthread -llzma -lbrotlidec -lbrotlicommon"
 	local meson_options="-Dtests=disabled \
 -Dgtk_doc=false \
 -Dglib=enabled \
@@ -2652,6 +2655,8 @@ prefix=${dependency_install_prefix}"
 # build_librubberband     # config_options+= --enable-librubberband       # enable rubberband needed for rubberband filter [no]
 build_librubberband() {
   if ! truthy "$disable_librubberband" && truthy "$enable_librubberband"; then
+  build_ladspa 1
+  build_lv2 1
   local lib="librubberband"
   local repo="https://github.com/breakfastquay/rubberband"
   local repo_ver="v4.0.0"
@@ -2695,7 +2700,9 @@ build_libshaderc() {
 -DBUILD_SHARED_LIBS=OFF"
   disable_nonessential "$src_dir/$lib"
 	do_make_and_make_install
-	cp -fv build/libshaderc_util/libshaderc_util.a "$dependency_install_prefix/lib" >>"$LOG_FILE"
+	if [[ -f "$src_dir/$lib/build/libshaderc_util/libshaderc_util.a" ]] ; then
+    copy_path "$src_dir/$lib/build/libshaderc_util/libshaderc_util.a" "$dependency_install_prefix/lib/libshaderc_util.a" >>"$LOG_FILE"
+  fi
 	sed -i.bak "s/Libs: .*/& -lstdc++/" "$dependency_install_prefix/lib/pkgconfig/shaderc_combined.pc"
 	sed -i.bak "s/Libs: .*/& -lstdc++/" "$dependency_install_prefix/lib/pkgconfig/shaderc_static.pc"
   add_src_dir "$src_dir/$lib"
@@ -2831,6 +2838,7 @@ build_libsrt() {
 # build_libssh            # config_options+= --enable-libssh              # enable SFTP protocol via libssh [no]
 build_libssh() {
   if ! truthy "$disable_libssh" && truthy "$enable_libssh"; then
+  build_openssl 1
   local lib="libssh"
   # https://github.com/canonical/libssh
   local repo="https://github.com/canonical/libssh"
@@ -3640,7 +3648,7 @@ build_libvpx() {
 --enable-vp9-highbitdepth \
 --extra-cflags=-fno-asynchronous-unwind-tables \
 --extra-cflags=-mstackrealign" # fno for Error: invalid register for .seh_savexmm
-	disable_nonessential "$src_dir/$lib"
+	# disable_nonessential "$src_dir/$lib"
   do_make_and_make_install
   add_src_dir "$src_dir/$lib"
   change_dir "$src_dir"
@@ -3909,6 +3917,7 @@ build_libxml2() {
   fi
 }
 build_libxv() {
+  build_xlib 1
   local lib="libxv"
   local repo="https://gitlab.freedesktop.org/xorg/lib/libxv"
   local repo_ver="libXv-1.0.13"
@@ -4136,7 +4145,7 @@ build_lilv() {
 }
 # build_lv2               # config_options+= --enable-lv2                 # enable LV2 audio filtering [no]
 build_lv2() {
-  if ! truthy "$disable_lv2" && truthy "$enable_lv2"; then
+  if ! truthy "$disable_lv2" && truthy "$enable_lv2" || [[ -n "$1" ]]; then
   activate_meson
   local lib="lv2"
   local repo="https://github.com/lv2/lv2"
@@ -4269,7 +4278,6 @@ build_glew() {
 -DCMAKE_FIND_ROOT_PATH_MODE_LIBRARY=BOTH \
 -DCMAKE_FIND_ROOT_PATH_MODE_INCLUDE=BOTH \
 -DCMAKE_POLICY_VERSION_MINIMUM=3.5"
-  install_missing_packages libXmu-dev libXi-dev libgl-dev libgl1-mesa-dev libglu1-mesa-dev freeglut3-dev mesa-common-dev mesa-libGLU.x86_64 mesa-libGLU-devel.x86_64
 	do_cmake_from_build_dir "$src_dir/$lib/build/cmake" "$cmake_params"
   disable_nonessential "$src_dir/$lib/build/cmake"
 	do_make_and_make_install
@@ -4285,7 +4293,6 @@ build_glfw() {
 	change_dir "$src_dir"
   do_git_checkout "$repo" "$src_dir/$lib" "$repo_ver"
 	change_dir "$src_dir/$lib"
-  install_missing_packages libwayland-dev libxkbcommon-dev xorg-dev
 	generic_cmake "-DBUILD_SHARED_LIBS=OFF \
 -DGLFW_LIBRARY_TYPE=STATIC \
 -DGLFW_BUILD_EXAMPLES=OFF \
@@ -4294,6 +4301,9 @@ build_glfw() {
 -DGLFW_BUILD_X11=ON \
 -DGLFW_BUILD_WIN32=OFF \
 -DGLFW_BUILD_COCOA=OFF \
+-DCMAKE_FIND_ROOT_PATH_MODE_PACKAGE=BOTH \
+-DCMAKE_FIND_ROOT_PATH_MODE_LIBRARY=BOTH \
+-DCMAKE_FIND_ROOT_PATH_MODE_INCLUDE=BOTH \
 -DGLFW_BUILD_WAYLAND=ON" "$src_dir/$lib"
   disable_nonessential "$src_dir/$lib"
   do_make_and_make_install
@@ -4304,9 +4314,13 @@ build_glfw() {
 # build_opengl            # config_options+= --enable-opengl              # enable OpenGL rendering [no]
 build_opengl() {
   if ! truthy "$disable_opengl" && truthy "$enable_opengl"; then
+  install_missing_packages libXrandr-dev libwayland-dev libxkbcommon-dev xorg-dev libXmu-dev libXi-dev libgl-dev libgl1-mesa-dev libglu1-mesa-dev freeglut3-dev mesa-common-dev mesa-libGLU.x86_64 mesa-libGLU-devel.x86_64
+  local orig_pkg_config=$PKG_CONFIG_PATH
+  export PKG_CONFIG_PATH="/usr/lib64/pkgconfig:$orig_pkg_config"
   build_glew
   build_glfw
   local lib="opengl"
+  export PKG_CONFIG_PATH=$orig_pkg_config
   fi
 }
 # build_openssl           # config_options+= --enable-openssl             # enable openssl, needed for https support if gnutls, libtls or mbedtls is not used [no]
@@ -4850,6 +4864,7 @@ build_omx() {
   # disable omxregister utility. not needed for ffmpeg
   sed -i 's/bin_PROGRAMS = omxregister-bellagio/#bin_PROGRAMS = omxregister-bellagio/' src/Makefile.am
   find . -name "configure.ac" -exec sed -i 's/-Werror//g' {} +
+  find . -exec touch {} +
   generic_configure "--disable-doc"
   disable_nonessential "$src_dir/$lib"
   do_make_and_make_install
