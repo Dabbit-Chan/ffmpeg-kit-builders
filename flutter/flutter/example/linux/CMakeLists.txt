@@ -35,10 +35,6 @@ if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
 endif()
 
 # Compilation settings that should be applied to most targets.
-#
-# Be cautious about adding new options here, as plugins use this function by
-# default. In most cases, you should add new options to specific targets instead
-# of modifying this function.
 function(APPLY_STANDARD_SETTINGS TARGET)
   target_compile_features(${TARGET} PUBLIC cxx_std_14)
   target_compile_options(${TARGET} PRIVATE -Wall -Werror)
@@ -71,6 +67,19 @@ set_target_properties(${BINARY_NAME}
 
 # Enable the test target.
 set(include_ffmpeg_kit_flutter_tests TRUE)
+
+# ==============================================================================
+# FFmpegKit Configuration
+# ==============================================================================
+# Uncomment and set ONE of the following variables to test specific flavors/bundles.
+# If left commented out, the plugin will look for the default bundle in the 
+# repository's 'prebuilt' folder.
+
+# Option A: Local Path to extracted bundle (must contain 'lib' and 'include' folders)
+# set(FFMPEG_KIT_Config_Path "/path/to/your/custom/bundle" CACHE STRING "Custom FFmpegKit Path" FORCE)
+
+# Option B: URL to download a bundle archive
+# set(FFMPEG_KIT_Config_Url "https://github.com/user/repo/releases/download/v1.0/bundle.tar.gz" CACHE STRING "Custom FFmpegKit URL" FORCE)
 
 # Generated plugin build rules, which manage building the plugins and adding
 # them to the application.
