@@ -63,7 +63,7 @@ for item in "$SOURCE_BASE"/*; do
             safe_filename="${dir_name}_${license_filename}"
             
             cp "$license_file" "$DEST_DIR/$safe_filename"
-            chmod -R u+rwx "$DEST_DIR/$safe_filename"
+            chmod -R a+rwx "$DEST_DIR/$safe_filename"
             echo "  COPY: $license_filename -> $safe_filename"
             
             license_count=$((license_count + 1))

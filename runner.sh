@@ -5,42 +5,66 @@
 export BASEDIR="$(pwd)"
 export SCRIPTDIR="${BASEDIR}/scripts"
 export LOG_FILE="${BASEDIR}/build.log"
+export sandbox="prebuilt"
+export WORKDIR="$BASEDIR/$sandbox"
+export src_dir="${WORKDIR}/src"
+export RUN_ARGS=("${@}")
 
 source "${SCRIPTDIR}/variable.sh"
 source "${SCRIPTDIR}/function.sh"
 
 require_sudo
 
-chown -R "$USER:$USER" "$LOG_FILE"
-
 remove_path -f "$LOG_FILE"
+chmod -R a+rwx "$LOG_FILE" || true;
 
-echo -e "INFO: Build options: $*\n" 1>>"$LOG_FILE" 2>&1
+echo -e "INFO: Build options: ${RUN_ARGS[*]}\n" 1>>"$LOG_FILE" 2>&1
 
-# If --get-all-steps is passed, just print the array and exit.
-for arg in "$@"; do
-	if [[ "$arg" == "--get-all-steps" ]]; then
-		print_build_steps
-		exit 0
-	fi
+# Loop through all arguments implicitly
+for arg; do
+  case "$arg" in
+    --reset-and-clean=*)
+      path="${arg#*=}"
+      [[ -n $path ]] && reset_and_clean "$(validate_path "prebuilt/src/$path")"
+      [[ -z $path ]] && exit_message 1 "Valid folder not provided."
+      echo "INFO: Attempting to clean prebuilt/src/$path..." | tee -a "$LOG_FILE"
+      exit 0
+      ;;
+    --reset-and-clean)
+      reset_and_clean
+      exit 0
+      ;;
+    --get-all-steps)
+      print_build_steps
+      exit 0
+      ;;
+    --get-total-steps)
+      echo "${#BUILD_STEPS[@]}"
+      exit 0
+      ;;
+    --get-step-name=*)
+      index="${arg#*=}"
+      echo "${BUILD_STEPS[$index]}"
+      exit 0
+      ;;
+  esac
 done
 
-# If --get-total-steps is passed, just print the size of the array and exit.
-for arg in "$@"; do
-	if [[ "$arg" == "--get-total-steps" ]]; then
-		echo -e ${#BUILD_STEPS[@]}
-		exit 0
-	fi
-done
+if [[ "$*" == *"--get-all-steps"* ]]; then
+  print_build_steps
+  exit 0
+fi
 
-# If --get-step-name is passed, print the name at that index and exit.
-for arg in "$@"; do
-	if [[ "$arg" == --get-step-name=* ]]; then
-		index="${1#*=}"
-		echo -e "${BUILD_STEPS[$index]}"
-		exit 0
-	fi
-done
+if [[ "$*" == *"--get-total-steps"* ]]; then
+  echo "${#BUILD_STEPS[@]}"
+  exit 0
+fi
+
+if [[ "$*" =~ --get-step-name=([0-9]+) ]]; then
+  index="${BASH_REMATCH[1]}"
+  echo "${BUILD_STEPS[$index]}"
+  exit 0
+fi
 
 ff_flags_raw=()    # Original arguments: --ff-something
 ff_flags_values=() # Extracted values: something
@@ -120,6 +144,8 @@ Build Options:
                                                                 (static or shared build only affects ffmpeg and ffmpeg-kit.
                                                                 dependencies are always built statically.)
 	--clean-builds=[shared]|static                                clean ffmpeg and ffmpeg-kit builds of type [shared] or static and exit
+  --reset-and-clean[=ARG]                                       reset and clean all source directories of touch files and build artifacts
+  --resume                                                      resume previously inturrupted run (based on ~run.state file)
 
 Advanced Dependency Control:
 	--get-total-steps|--get-step-name=[*]                         get dependency steps and step name by index
@@ -147,18 +173,19 @@ Dynamic Library Control:
 "
 }
 
+parse_arguments() {
 # parse command line parameters, if any
 while [ $# -gt 0 ]; do
 	case $1 in
 	-h | --help)
 		display_help
 		shift
+    exit 0
 		;;
 	-v | --version) 
     display_version
     shift
     exit 0
-    break
     ;;
 	-d | --debug)
     export do_debug_build=y
@@ -174,11 +201,7 @@ while [ $# -gt 0 ]; do
     echo "Skipping interactive. Accepting defult selections."
     shift
     ;;
-  --clean-up=*)
-    # clean-up level 1 - minimal cleanup of final compiled artifacts like ffmpeg, ffmpeg-kit, and bundle (if release was generated)
-    # clean-up level 2 - clean up compiled dependency libraries.
-    # clean-up level 3 -clean up source directories
-    export cleanup_level="${1#*=}"
+  --resume)
     shift
     ;;
   --skip-validation|--skip-val|--skip)
@@ -496,15 +519,64 @@ while [ $# -gt 0 ]; do
     ;;
 	--)
 		shift
-		break
 		;;
 	-*)
 		echo -e "Error, unknown option: '$1'."
 		exit 1
 		;;
-	*) break ;;
+	*)
+    echo "Unknown argument: $1"
+    shift 
+    ;;
 	esac
 done
+}
+
+export RUN_STATE_FILE="$BASEDIR/~run.state"
+export BUILT_STATE_FILE="$BASEDIR/~built.state"
+
+if [[ "$*" == *"--resume"* ]]; then
+  if [[ -f "$BUILT_STATE_FILE" ]]; then
+      while IFS= read -r line; do
+          INSTALLED_LIBS["$line"]="1"
+      done < "$BUILT_STATE_FILE"
+  fi
+  if [[ -f "$RUN_STATE_FILE" ]]; then
+    LINE=$(head -n 1 "$RUN_STATE_FILE")
+    STEP=$(sed -n '2{p;q;}' "$RUN_STATE_FILE")
+    read -r -a args <<< "$LINE"
+    idx_run=-1
+    idx_build_only=-1
+    idx_build_from=-1
+    for i in "${!args[@]}"; do
+      case "${args[i]}" in
+        --run-only=*)   idx_run=$i ;;
+        --build-only=*) idx_build_only=$i ;;
+        --build-from=*) idx_build_from=$i ;;
+      esac
+    done
+    # shellcheck disable=2004
+    if [[ $idx_run -ge 0 ]]; then
+       args[$idx_run]="--run-only=$STEP"
+    elif [[ $idx_build_only -ge 0 ]]; then
+       args[$idx_build_only]="--build-only=$STEP"
+    elif [[ $idx_build_from -ge 0 ]]; then
+       args[$idx_build_from]="--build-from=$STEP"
+    else
+       args+=("--build-from=$STEP")
+    fi
+    RUN_ARGS=("${args[@]}")
+    echo "INFO: Resuming previous run with: ${RUN_ARGS[*]}" | tee -a "$LOG_FILE"
+    parse_arguments "${RUN_ARGS[@]}"
+  else
+    echo "Error: could not find previous run.state file."
+    exit 1
+  fi
+else
+  [[ -f "$BUILT_STATE_FILE" ]] && remove_path -f "$BUILT_STATE_FILE"
+  parse_arguments "$@"
+fi
+
 
 [[ -z $host_platform ]] && pick_host_platform
 [[ -z $host_arch ]] && pick_host_arch
@@ -540,6 +612,9 @@ fi
 
 setup_build_environment
 
+source "${SCRIPTDIR}/function-$host_platform.sh"
+source "${SCRIPTDIR}/run-$host_platform.sh"
+
 # Setup config variables
 
 # disable libraries autodetected by default to prevent inadvertent bundling
@@ -549,33 +624,33 @@ echo -e "\n  [CONFIG] Enabling selected libraries..." >>"$LOG_FILE"
 
 apply_preset "$CONFIG_GENERAL"
 
-if truthy "$audio_bundle"; then
+if truthy "$audio_bundle" || truthy "$enable_full"; then
   enable_audio=y
   enable_https=y
 fi
-if truthy "$audio_ai_bundle"; then
+if truthy "$audio_ai_bundle" || truthy "$enable_full"; then
   enable_audio=y
   enable_audio_ai=y
   enable_https=y
 fi
-if truthy "$video_bundle"; then
+if truthy "$video_bundle" || truthy "$enable_full"; then
   enable_audio=y
   enable_video=y
   enable_https=y
 fi
-if truthy "$video_ai_bundle"; then
+if truthy "$video_ai_bundle" || truthy "$enable_full"; then
   enable_audio=y
   enable_video=y
   enable_video_ai=y
   enable_https=y
 fi
-if truthy "$video_hw_bundle"; then
+if truthy "$video_hw_bundle" || truthy "$enable_full"; then
   enable_audio=y
   enable_video=y
   enable_hardware=y
   enable_https=y
 fi
-if truthy "$video_ai_hw_bundle"; then
+if truthy "$video_ai_hw_bundle" || truthy "$enable_full"; then
   enable_audio=y
   enable_video=y
   enable_audio_ai=y
@@ -583,7 +658,7 @@ if truthy "$video_ai_hw_bundle"; then
   enable_hardware=y
   enable_https=y
 fi
-if truthy "$streaming_bundle"; then
+if truthy "$streaming_bundle" || truthy "$enable_full"; then
   enable_audio=y
   enable_video=y
   enable_streaming=y
@@ -732,4 +807,73 @@ resolve_collisions
 # strict gpl libraries
 check_gpl_libraries
 
-source "${SCRIPTDIR}/main-$host_platform.sh"
+main() {
+  if [[ -n $run_only ]]; then
+    echo -e "INFO: --- Executing single function: $run_only ---" | tee -a "$LOG_FILE"
+    if [[ "$run_only" == build_* ]]; then
+      run_valid_build_functions "$run_only" true
+    else
+      eval "$run_only" || exit_message 1 "unable to run $run_only"
+    fi
+    echo | tee -a "$LOG_FILE"
+    echo -e "INFO: --- Done executing single function: $run_only ---" | tee -a "$LOG_FILE"
+  elif [[ -n "$build_only" ]]; then
+    if [[ $(is_integer "$build_only") == 0 ]]; then
+      index=$build_only
+    fi
+    index=$(array_index_of "$build_only" "${BUILD_STEPS[@]}") || exit_message 1 "Invalid build function $build_only"
+    # Now, call the single requested build function by its index
+    step_name="${BUILD_STEPS[$index]}"
+    echo -e "INFO: --- Executing single build step: $step_name ---" | tee -a "$LOG_FILE"
+    echo -e "WARNING: This may fail if previous dependencies havent been built yet." | tee -a "$LOG_FILE"
+    run_valid_build_functions "$step_name" true
+    echo | tee -a "$LOG_FILE"
+    echo -e "INFO: --- Done building single build step: $step_name ---" | tee -a "$LOG_FILE"
+  elif [[ -n "$build_from" ]]; then
+    if [[ $(is_integer "$build_from") != 0 ]]; then
+      index=$(array_index_of "$build_from" "${BUILD_STEPS[@]}")
+    else
+      index=$build_from
+    fi
+    # Now, call the single requested build function by its index
+    step_name="${BUILD_STEPS[$index]}"
+    echo -e "INFO: --- Building dependencies from step: $step_name ---" | tee -a "$LOG_FILE"
+    echo -e "WARNING: This may fail if previous dependencies havent been built yet." | tee -a "$LOG_FILE"
+    run_valid_build_functions "$step_name"
+    echo | tee -a "$LOG_FILE"
+    echo -e "INFO: --- Done building dependencies from step: $step_name ---" | tee -a "$LOG_FILE"
+  else
+    change_dir "$work_dir" || exit 1
+
+    if truthy "$build_dependencies_only"; then
+      echo -e "INFO: Building dependencies only..." | tee -a "$LOG_FILE"
+      echo -e "WARNING: This may fail if previous dependencies havent been built yet." | tee -a "$LOG_FILE"
+      run_valid_build_functions
+    elif truthy "$build_ffmpeg_only"; then
+      echo -e "INFO: Building ffmpeg only..." | tee -a "$LOG_FILE"
+      echo -e "WARNING: This may fail if previous dependencies havent been built yet." | tee -a "$LOG_FILE"
+      download_ffmpeg
+      build_exists || configure_ffmpeg
+      install_ffmpeg
+    elif truthy "$build_ffmpeg_kit_only"; then
+      echo -e "INFO: Building ffmpeg-kit only..." | tee -a "$LOG_FILE"
+      echo -e "WARNING: This may fail if previous dependencies havent been built yet." | tee -a "$LOG_FILE"
+      configure_ffmpeg_kit
+      install_ffmpeg_kit
+      create_ffmpeg_kit_bundle
+    else
+      echo -e "INFO: Building all..." | tee -a "$LOG_FILE"
+      run_valid_build_functions
+      download_ffmpeg
+      build_exists || configure_ffmpeg
+      install_ffmpeg
+      configure_ffmpeg_kit
+      install_ffmpeg_kit
+      create_ffmpeg_kit_bundle
+    fi
+  fi
+  echo -e "$(ts)" | tee -a "$LOG_FILE"
+  exit 0
+}
+
+main
