@@ -1,8 +1,26 @@
 diff --git a/caca/figfont.c b/caca/figfont.c
-index 4c50b4e..a41966a 100644
+old mode 100644
+new mode 100755
+index c880aa7..c129fd6
 --- a/caca/figfont.c
 +++ b/caca/figfont.c
-@@ -635,29 +635,3 @@ static uint32_t hsmush(uint32_t ch1, uint32_t ch2, int rule)
+@@ -29,15 +29,6 @@
+ #include "caca.h"
+ #include "caca_internals.h"
+ 
+-#if defined _WIN32 && defined __GNUC__ && __GNUC__ >= 3
+-#   if !HAVE_SPRINTF_S
+-int sprintf_s(char *s, size_t n, const char *fmt, ...) CACA_WEAK;
+-#   endif
+-#   if !HAVE_VSNPRINTF
+-int vsnprintf(char *s, size_t n, const char *fmt, va_list ap) CACA_WEAK;
+-#   endif
+-#endif
+-
+ struct caca_charfont
+ {
+     int term_width;
+@@ -635,29 +626,3 @@ static uint32_t hsmush(uint32_t ch1, uint32_t ch2, int rule)
  
      return 0;
  }
