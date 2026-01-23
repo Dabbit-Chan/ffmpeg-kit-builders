@@ -2,38 +2,6 @@
 
 # shellcheck disable=SC2317,SC2129,SC1091,SC2120,SC2035,SC2016
 
-is_shared_library() {
-  case "${1,,}" in
-    *pulse*)
-    return 0
-    ;;
-    *jack*)
-    return 0
-    ;;
-    *openvino*)
-    return 0
-    ;;
-    *cuda*)
-    return 0
-    ;;
-    *tensorflow*)
-    return 0
-    ;;
-    *torch*)
-    return 0
-    ;;
-    *vdpau*)
-    return 0
-    ;;
-    *nvcc*)
-    return 0
-    ;;
-    *)
-    return 1
-    ;;
-  esac
-}
-
 # 1. exit code
 # 2. message
 # shellcheck disable=SC2244
@@ -1697,13 +1665,19 @@ do_git_checkout() {
       local remote_type="${valid_remote[0]}"
       local remote_name="${valid_remote[*]:1}"
       # shellcheck disable=2128
-      echo "Checking out $remote_type $remote_name from $repo_url" >>"$LOG_FILE" 2>&1
-      git checkout "$remote_name" >>"$LOG_FILE" 2>&1|| exit_message 1 "do_git_checkout: could not checkout $remote_name from $repo_url"
+      echo "INFO: Checking out $remote_type $remote_name from $repo_url" >>"$LOG_FILE" 2>&1
+      if ! git checkout "$remote_name" >>"$LOG_FILE" 2>&1; then
+        echo "WARNING: Checkout failed due to conflicts. forcing nuclear clean..." >>"$LOG_FILE"
+        git reset --hard HEAD >>"$LOG_FILE" 2>&1
+        git clean -fdx >>"$LOG_FILE" 2>&1
+        git checkout "$remote_name" >>"$LOG_FILE" 2>&1 || exit_message 1 "do_git_checkout: final checkout failed for $remote_name"
+      fi
       add_src_dir "$(pwd)"
     fi
     if truthy "$build_force" || [[ ! -f "$host_touch" ]]; then
       [[ ! -f "$host_touch" ]] && echo "INFO: Source state file not found $host_touch" >>"$LOG_FILE"
       echo -e "INFO: Force requested, resetting repository: build_force: $build_force" >>"$LOG_FILE"
+      git clean -fdx >>"$LOG_FILE" 2>&1
       git_hard_reset "$(pwd)"
       add_src_dir "$(pwd)"
 		fi
@@ -2097,15 +2071,12 @@ do_configure() {
 		if [[ ! -f $configure_name && -f bootstrap.sh ]]; then # fftw wants to only run this if no configure :|
 			./bootstrap.sh > >(redirect_output) 2>&1
 		fi
-    # || needs_autoreconf > >(redirect_output) 2>&1 
     if [[ ! -f $configure_name && -f configure.ac ]] || needs_autoreconf > >(redirect_output) 2>&1 ; then
       echo -e "INFO: Configure not found. Running autoreconf with existing configure.ac..." >>"$LOG_FILE"
 			autoreconf_library # a handful of them require this to create ./configure :|
     fi
-    # || needs_autoreconf > >(redirect_output) 2>&1 
-    if [[ ! -f Makefile.in && ! -f Makefile ]] || needs_autoreconf > >(redirect_output) 2>&1 ; then
+    if [[ ! -f Makefile.in && ! -f Makefile && -f Makefile.am ]] || needs_autoreconf > >(redirect_output) 2>&1 ; then
       echo -e "INFO: Makefile and Makefile.in not found. running autoreconf and automake..." >>"$LOG_FILE"
-      autoreconf_library # a handful of them require this to create ./configure :|
       automake --force-missing --add-missing > >(redirect_output) 2>&1
     fi
 		if [[ ! -f $configure_name ]]; then
@@ -2118,7 +2089,7 @@ do_configure() {
 			  ./autogen.sh > >(redirect_output) 2>&1 # some need this to create ./configure :|
 		  fi
 		fi
-    if [[ ! -f config.h.in ]]; then
+    if [[ ! -f config.h.in && -f configure.ac ]]; then
       echo -e "INFO: config.h.in not found. Running autoheader..." >>"$LOG_FILE"
       autoheader > >(redirect_output) 2>&1
     fi
@@ -2980,6 +2951,7 @@ download_ffmpeg() {
 	  do_git_checkout "$ffmpeg_git_checkout" "$output_dir" "$desired_version" || exit_message 1 "download_ffmpeg: could not git $ffmpeg_git_checkout $output_dir $desired_version"
     ffmpeg_source_dir=$output_dir
 	fi
+  touch "$ffmpeg_source_dir/no.autoreconf"
 }
 
 
@@ -3136,6 +3108,8 @@ configure_ffmpeg() {
 	local init_options=""
 
   if iswindows; then
+    fix_pkgconfig_flags
+    export LD=${cross_prefix}gcc # ld weirdness with windows
 	  init_options+=" --target-os=mingw32"
     init_options+=" --enable-w32threads"
   else
@@ -3148,16 +3122,16 @@ configure_ffmpeg() {
 	init_options+=" --enable-version3"
 	init_options+=" --arch=$ARCH"
 	init_options+=" --prefix=$ffmpeg_install_prefix"
-  init_options+=" --extra-ldflags=\"-Wl,--allow-multiple-definition\""
+  init_options+=" --extra-ldflags=\" -Wl,--allow-multiple-definition \""
 	init_options+=" --enable-pic"
 	init_options+=" --enable-swscale"
   init_options+=" --extra-libs=\"-ldl -lstdc++\""
-  init_options+=" --extra-cflags=\"-ffunction-sections -fdata-sections\""
-  init_options+=" --extra-cxxflags=\"-ffunction-sections -fdata-sections\""
+  init_options+=" --extra-cflags=\" -ffunction-sections -fdata-sections \""
+  init_options+=" --extra-cxxflags=\" -ffunction-sections -fdata-sections \""
 	truthy "$enable_lto" && init_options+=" --enable-optimizations"
 	truthy "$build_small" && init_options+=" --enable-small"
 
-	if islinux; then
+	if ! islinux; then
     init_options+=" --enable-cross-compile"
     init_options+=" --cross-prefix=$cross_prefix"
   else
@@ -3165,28 +3139,27 @@ configure_ffmpeg() {
   fi
 
   if iswindows; then
-    init_options+=" --extra-cflags=-DWIN32_LEAN_AND_MEAN"
-	  init_options+=" --extra-cflags=-DWIN32_ANSI_API"
-	  init_options+=" --extra-cflags=-DHAVE_WCHAR_FILENAME_H=0"
-	  init_options+=" --extra-ldflags=-lole32"
-	  init_options+=" --extra-ldflags=-lshlwapi"
-	  init_options+=" --extra-ldflags=-static-libgcc"
-	  init_options+=" --extra-ldflags=-static-libstdc++"
-	  init_options+=" --extra-cflags=-mtune=generic"
-	  init_options+=" --extra-cflags=-O3"
-	  init_options+=" --extra-cflags=-pipe"
+    init_options+=" --extra-cflags=\" -DWIN32_LEAN_AND_MEAN \""
+	  init_options+=" --extra-cflags=\" -DWIN32_ANSI_API \""
+	  init_options+=" --extra-cflags=\" -DHAVE_WCHAR_FILENAME_H=0 \""
+	  init_options+=" --extra-ldflags=\" -lole32 \""
+	  init_options+=" --extra-ldflags=\" -lshlwapi \""
+	  init_options+=" --extra-ldflags=\" -static-libgcc \""
+	  init_options+=" --extra-ldflags=\" -static-libstdc++ \""
+	  init_options+=" --extra-cflags=\" -mtune=generic \""
+	  init_options+=" --extra-cflags=\" -O3 \""
+	  init_options+=" --extra-cflags=\" -pipe \""
+    init_options+=" --extra-cflags=\" $extra_ffmpeg_c_flags \""
+    init_options+=" --extra-libs=\" -static \""
+    init_options+=" --extra-cflags=\" -Wno-pedantic -Wno-cpp \""
   fi
 
 	# can't mix and match --enable-static --enable-shared unfortunately, or the final executable seems to just use shared if the're both present
 	if [[ $build_ffmpeg_type == "static" ]]; then
 		postpend_configure_opts+=" --enable-static --disable-shared --enable-pic"
-    init_options+=" --extra-cflags=\"-fPIC -DPIC\""
-    init_options+=" --extra-cxxflags=\"-fPIC -DPIC\""
+    init_options+=" --extra-cflags=\" -fPIC -DPIC \""
+    init_options+=" --extra-cxxflags=\" -fPIC -DPIC \""
     init_options+=" --env=\"X86ASMFLAGS=-DPIC\""
-    if iswindows; then
-      init_options+=" --extra-cflags=\"$extra_ffmpeg_c_flags\""
-      init_options+=" --extra-libs=\"-static\""
-    fi
 	else
     postpend_configure_opts+=" --enable-shared --disable-static"
 	fi
@@ -3236,10 +3209,10 @@ configure_ffmpeg() {
   truthy "$disable_sndio" && config_options+=" --disable-sndio"                       # disable sndio support [autodetect]
                                                                                       # XXX --enable-libtorch ABI mismatch on windows
   truthy "$enable_libtorch" && config_options+=" --enable-libtorch \
-  --extra-cflags=\"\
+  --extra-cflags=\" \
   -I${dependency_install_prefix}/libtorch/include/torch/csrc/api/include \
   -I${dependency_install_prefix}/libtorch/include\" \
-  --extra-cxxflags=\"\
+  --extra-cxxflags=\" \
   -I${dependency_install_prefix}/libtorch/include/torch/csrc/api/include \
   -I${dependency_install_prefix}/libtorch/include\" \
   --extra-ldflags=\"-L${dependency_install_prefix}/libtorch/lib\""
@@ -3250,6 +3223,7 @@ configure_ffmpeg() {
   --extra-libs=\"-lxcb -lXau -lX11 -liconv -lXdmcp\""                                 # enable Pulseaudio input via libpulse [no]
   truthy "$enable_libjack" && config_options+=" --enable-libjack \
   --extra-libs=\"-lxcb -liconv\""                                                     # enable JACK audio sound server [no]
+  truthy "$enable_vdpau" && config_options+=" --enable-vdpau"                         # enable Nvidia Video Decode and Presentation API for Unix code [autodetect]
   fi
   #------------------------------------------------------------------------------
   # ----------------------------- hardware features ----------------------------- 
@@ -3259,14 +3233,17 @@ configure_ffmpeg() {
   truthy "$enable_libmfx" && config_options+=" --enable-libmfx"                       # enable Intel MediaSDK (AKA Quick Sync Video) code via libmfx [no]
   truthy "$enable_libvpl" && config_options+=" --enable-libvpl"                       # enable Intel oneVPL code via libvpl if libmfx is not used [no]
   truthy "$enable_vulkan_static" && config_options+=" --enable-vulkan-static"         # enable statically link to libvulkan [no]
-  truthy "$enable_cuda_llvm" && config_options+=" --enable-cuda-llvm"                 # enable CUDA compilation using clang [autodetect]
   truthy "$enable_cuvid" && config_options+=" --enable-cuvid"                         # enable Nvidia CUVID support [autodetect]
   truthy "$enable_ffnvcodec" && config_options+=" --enable-ffnvcodec"                 # enable dynamically linked Nvidia code [autodetect]
   truthy "$enable_nvdec" && config_options+=" --enable-nvdec"                         # enable Nvidia video decoding acceleration (via hwaccel) [autodetect]
   truthy "$enable_nvenc" && config_options+=" --enable-nvenc"                         # enable Nvidia video encoding code [autodetect]
-  truthy "$enable_vdpau" && config_options+=" --enable-vdpau"                         # enable Nvidia Video Decode and Presentation API for Unix code [autodetect]
-  truthy "$enable_cuda_nvcc" && config_options+=" --enable-cuda-nvcc \
-  --nvccflags=\"-gencode arch=compute_86,code=sm_86 -O2\""                             # enable Nvidia CUDA compiler [no]
+  if islinux; then
+  truthy "$enable_cuda_nvcc" && config_options+=" --enable-cuda-nvcc"
+  truthy "$enable_cuda_nvcc" && config_options+=" \
+  --nvccflags=\" -gencode arch=compute_86,code=sm_86 -O2 \""                          # enable Nvidia CUDA compiler [no]
+  elif iswindows; then
+  truthy "$enable_cuda_llvm" && config_options+=" --enable-cuda-llvm"                 # enable CUDA compilation using clang [autodetect]
+  fi
   truthy "$enable_libnpp" && config_options+=" --enable-libnpp"                       # enable Nvidia Performance Primitives-based code [no]
   #------------------------------------------------------------------------------
   # ----------------------------- windows features ------------------------------ 
@@ -3277,12 +3254,12 @@ configure_ffmpeg() {
   #------------------------------------------------------------------------------
   # -------------------------- cross-platform features --------------------------
   #------------------------------------------------------------------------------ 
-  if [[ $host_platform != "windows" ]]; then
+  if ! iswindows; then
   truthy "$enable_libsmbclient" && config_options+=" --enable-libsmbclient \
-  --extra-cflags=\"-I/usr/include/samba-4.0\" \
-  --extra-cxxflags=\"-I/usr/include/samba-4.0\" \
+  --extra-cflags=\" -I/usr/include/samba-4.0 \" \
+  --extra-cxxflags=\" -I/usr/include/samba-4.0 \" \
   --extra-libs=\"-lsmbclient\" \
-  --extra-ldflags=\"-L/usr/lib64 -lsmbclient\""                                       # enable Samba protocol via libsmbclient [no]
+  --extra-ldflags=\" -L/usr/lib64 -lsmbclient \""                                       # enable Samba protocol via libsmbclient [no]
   fi
   truthy "$disable_bzlib" && config_options+=" --disable-bzlib"                       # disable bzlib [autodetect]
   truthy "$disable_iconv" && config_options+=" --disable-iconv"                       # disable iconv [autodetect]
@@ -3368,10 +3345,11 @@ configure_ffmpeg() {
   # --extra-libs=\"-Wl,--start-group -ltesseract -lleptonica -ltiff -lpng16 -ljpeg \
   # -lopenjp2 -ljbig -lLerc -ldeflate -lzstd -llzma -lwebpmux -lwebp -lgif -lcurl \
   # -lnghttp2 -lssl -lcrypto -lpsl -lbrotlidec -lbrotlicommon -larchive -lbz2 -lz \
-  # -lexpat -liconv -Wl,--end-group\""                                                  # enable Tesseract, needed for ocr filter [no]
+  # -lexpat -liconv -Wl,--end-group\""                                                # enable Tesseract, needed for ocr filter [no]
   truthy "$enable_libtheora" && config_options+=" --enable-libtheora"                 # enable Theora encoding via libtheora [no]
   truthy "$enable_libtls" && config_options+=" --enable-libtls"                       # enable LibreSSL (via libtls), needed for https support if openssl, gnutls or mbedtls is not used [no]
-  truthy "$enable_libtwolame" && config_options+=" --enable-libtwolame"               # enable MP2 encoding via libtwolame [no]
+  truthy "$enable_libtwolame" && config_options+=" --enable-libtwolame \
+  --extra-cflags=\" -DLIBTWOLAME_STATIC \""                                           # enable MP2 encoding via libtwolame [no]
   truthy "$enable_libuavs3d" && config_options+=" --enable-libuavs3d"                 # enable AVS3 decoding via libuavs3d [no]
   truthy "$enable_libvidstab" && config_options+=" --enable-libvidstab"               # enable video stabilization using vid.stab [no]
   truthy "$enable_libvmaf" && config_options+=" --enable-libvmaf"                     # enable vmaf filter via libvmaf [no]
@@ -3447,10 +3425,11 @@ configure_ffmpeg() {
 	fi
 
 	if truthy "$do_debug_build"; then
-		postpend_configure_opts+=" --disable-stripping --disable-optimizations --extra-cflags=-Og --extra-cflags=-fno-omit-frame-pointer --enable-debug=3 --extra-cflags=-fno-inline"
+		postpend_configure_opts+=" --disable-stripping --disable-optimizations --extra-cflags=\" -Og \" --extra-cflags=\" -fno-omit-frame-pointer \" --enable-debug=3 --extra-cflags=\" -fno-inline \""
 	else
 		postpend_configure_opts+=" --disable-debug"
 	fi
+  postpend_configure_opts+=" --extra-cflags=\"-std=gnu17\""
 
 	do_configure "$init_options$config_options$postpend_configure_opts" "./configure" "$(get_ffmpeg_directory)" || exit_message 1 "configure_ffmpeg: unable to configure ffmpeg. see $LOG_FILE for details."
 
@@ -3524,14 +3503,19 @@ install_ffmpeg() {
     remove_path -rf "$ffmpeg_install_prefix"
   fi
 	create_dir "$ffmpeg_install_prefix"
+  
+  cross_windres y
+  unset RC
+  ffmpeg_windows_patches
 
 	do_make_and_make_install "" "" "$(get_ffmpeg_directory)"
-
+  
 	echo -e "INFO: Moving all binaries" | tee -a "$LOG_FILE"
 
 	{	
     shopt -s nullglob
-    mv -v -- */*.a */*.dylib */*.lib */*.dll *.exe *.so "${ffmpeg_install_prefix}/bin" > >(redirect_output) 2>&1 || true
+    mv -v -- */*.dylib */*.dll *.exe "${ffmpeg_install_prefix}/bin" > >(redirect_output) 2>&1 || true
+    mv -v -- */*.a */*.lib *.so "${ffmpeg_install_prefix}/lib" > >(redirect_output) 2>&1 || true
 	} >>"$LOG_FILE"
 
 	echo -e "INFO: Done installing ffmpeg" | tee -a "$LOG_FILE"
@@ -3540,6 +3524,7 @@ install_ffmpeg() {
   if [[ $build_ffmpeg_type == "static" ]]; then
     static_link_check "${ffmpeg_install_prefix}/lib/pkgconfig" "$(create_linker_script)"
   fi
+  reset_cross_vars
 }
 
 install_ffmpeg_pkg() {
@@ -4910,12 +4895,15 @@ copy_and_link() {
             echo "  [Error] Failed to copy $file" >&2
             ((error_count++))
             continue
+        else
+            echo "  [Installed] $dest_full_path" >&2
         fi
 
         # 4. Filter: Only create links for FILES
         # If the source was a directory, we are done with this item (we don't symlink dirs)
         if [[ -d "$file" ]]; then
             find "$dest_full_path" >&1
+            echo "  [Warning] Skipping $file is a directory" >&2
             continue
         fi
 
@@ -4927,14 +4915,18 @@ copy_and_link() {
         elif [[ -e "$link_full_path" ]]; then
             # It exists, but it is NOT a symlink (it's a real file or dir).
             # We must PROTECT it. Do not overwrite.
-            echo "  [Warning] Skipping link creation for $filename: Target exists and is not a symlink." >>"$LOG_FILE"
+            echo "$link_full_path" >&1
+            echo "  [Warning] Skipping link creation for $filename: Target exists and is not a symlink." >&2
             continue
         fi
 
         # 6. Link
         # We checked safety above, so we can link. 
         # using 'ln -s' without -f is safe because we manually removed conflicting symlinks.
-        if ! ln -s "$dest_full_path" "$link_full_path"; then
+        if [[ "$dest_full_path" == "$link_full_path" ]]; then
+          echo " [Warning] Not creating link because destination is the same as link - $dest_full_path == $link_full_path" >&2
+          echo "$link_full_path" >&1
+        elif ! ln -s "$dest_full_path" "$link_full_path"; then
              echo "  [Error] Failed to link $filename" >&2
              ((error_count++))
              continue
@@ -4950,6 +4942,13 @@ copy_and_link() {
     fi
 }
 
+# Helper: Define complex libs that require shared linking
+is_shared_library() {
+  case "${1,,}" in
+    *pulse*|*jack*|*openvino*|*cuda*|*tensorflow*|*torch*|*vdpau*|*nvcc*|*python*) return 0 ;;
+    *) return 1 ;;
+  esac
+}
 # shellcheck disable=2206
 # Usage: static_link_check "/path/to/lib.pc" OR "/path/to/pkgconfig"
 static_link_check() {
@@ -4960,7 +4959,7 @@ static_link_check() {
         return 0
     fi
     local input_path="$1" map_file="$2"
-    local use_map=false
+    local use_map=false``
     [[ -n "$map_file" && -f "$map_file" ]] && use_map=true
     # --------------------------------------------------------------------------
     # HELPER: Check System Pkg Fallback
@@ -4976,10 +4975,7 @@ static_link_check() {
     # --------------------------------------------------------------------------
     _slc_is_compiler_pkg() {
       local lib="${1#-l}"
-      if [[ "$lib" =~ ^(mingw32|mingwex|gcc|gcc_s|stdc\+\+)$ ]]; then
-        return 0
-      fi
-      return 1
+      [[ "$lib" =~ ^(mingw32|mingwex|gcc|gcc_s|stdc\+\+)$ ]]
     }
     # --------------------------------------------------------------------------
     # HELPER: Check if its System Pkg
@@ -5004,7 +5000,6 @@ static_link_check() {
     # --------------------------------------------------------------------------
     _slc_strip_rsrc() {
       local lib="$1"
-      local lib_name="$(basename "$lib")"
       local lib_dir="$(dirname "$lib")"
       local strip_log="$lib_dir/.rsrc_stripped_log"
       local ranlib_tool="${cross_prefix}ranlib"
@@ -5013,7 +5008,6 @@ static_link_check() {
       fi
       if iswindows; then
           [[ ! -f "$strip_log" ]] && touch "$strip_log"
-          # Only strip if we haven't marked it yet (optimization)
           if [[ -f "$lib" ]] && ! grep -Fqx "$lib" "$strip_log"; then
             "${cross_prefix}objcopy" --remove-section=.rsrc --enable-deterministic-archives "$lib" 2>/dev/null || true
             "$ranlib_tool" "$lib" >/dev/null 2>&1
@@ -5026,7 +5020,7 @@ static_link_check() {
     # --------------------------------------------------------------------------
     _slc_find_targets() {
         local path="$1"
-        local -n targets_ref="$2" # Output array via nameref
+        local -n targets_ref="$2"
         if [ -f "$path" ]; then
             if [[ "$path" == *.pc || "$path" == *.a ]]; then
                 targets_ref+=("$path")
@@ -5037,12 +5031,9 @@ static_link_check() {
         elif [ -d "$path" ]; then
             local pcfg_dir="$path"
             [ -d "$path/lib/pkgconfig" ] && pcfg_dir="$path/lib/pkgconfig"
-            
-            # Find .pc files
             if [ -d "$pcfg_dir" ]; then
                 while IFS= read -r -d '' f; do targets_ref+=("$f"); done < <(find "$pcfg_dir" -maxdepth 1 -name "*.pc" -print0)
             fi
-            # Find .a files (recursive)
             while IFS= read -r -d '' f; do targets_ref+=("$f"); done < <(find "$path" -type f -name "*.a" -print0)
         else
             echo "ERROR: Input '$path' is not a valid file or directory." >&2
@@ -5052,16 +5043,13 @@ static_link_check() {
     # --------------------------------------------------------------------------
     # HELPER: Resolve Libraries (Pkg-Config -> File Paths)
     # --------------------------------------------------------------------------
-    # --------------------------------------------------------------------------
-    # HELPER: Resolve Libraries (Pkg-Config -> File Paths)
-    # --------------------------------------------------------------------------
     _slc_resolve_libs() {
         local target="$1" log_file="$2"
-        local -n res_libs="$3" res_stats="$4" # Outputs
+        local -n res_libs="$3" res_stats="$4"
         # A. Handle Static Lib Direct
         if [[ "$target" == *.a || "$target" == *.lib ]]; then
             res_libs="$target"
-            res_stats[0]=1 # static_count
+            res_stats[0]=1 
             return 0
         fi
         # B. Handle Pkg-Config
@@ -5073,10 +5061,9 @@ static_link_check() {
         local raw_flags
         if ! raw_flags=$(pkg-config --static --libs "$target" 2>"$log_file"); then
             if ! raw_flags=$(_slc_check_system_pkg "$target" "$log_file"); then
-                return 1 # Parse failure
+                return 1 
             fi
         fi
-        # Parse Flags
         local search_paths=("${search_base}/lib")
         local final_libs=""
         for flag in $raw_flags; do
@@ -5087,53 +5074,70 @@ static_link_check() {
                 res_stats[0]=$((res_stats[0] + 1))
             elif [[ "$flag" == -l* ]]; then
                 local lib="${flag#-l}"
-                # Filter system libs (Linux & Windows)
+                # Check if this lib requires shared linking
+                local force_shared=false
+                if is_shared_library "$lib"; then
+                    force_shared=true
+                fi
+                # Filter system libs
                 if _slc_is_system_pkg "$lib"; then
-                    if _slc_is_compiler_pkg "$lib"; then
-                         continue
-                    fi
-                    res_stats[2]=$((res_stats[2] + 1)) # system_count
+                    if _slc_is_compiler_pkg "$lib"; then continue; fi
+                    res_stats[2]=$((res_stats[2] + 1))
                     final_libs="$final_libs -l${lib}"
                     continue
                 fi
-                # Resolve -l to file
                 local found=false
                 for path in "${search_paths[@]}"; do
-                    # 1. MinGW Import Lib (Preferred for DLL builds)
+                    # --- SHARED PRIORITY FOR COMPLEX LIBS ---
+                    if [ "$force_shared" = true ]; then
+                        # 1. MinGW Import Lib (.dll.a)
+                        if [ -f "${path}/lib${lib}.dll.a" ]; then
+                            final_libs="$final_libs ${path}/lib${lib}.dll.a"
+                            res_stats[1]=$((res_stats[1] + 1)) # Count as shared
+                            found=true; break
+                        # 2. Raw DLL (.dll) - if supported by linker
+                        elif [ -f "${path}/lib${lib}.dll" ]; then
+                            final_libs="$final_libs ${path}/lib${lib}.dll"
+                            res_stats[1]=$((res_stats[1] + 1))
+                            found=true; break
+                        # 3. Linux Shared Object (.so)
+                        elif [ -f "${path}/lib${lib}.so" ]; then
+                            final_libs="$final_libs ${path}/lib${lib}.so"
+                            res_stats[1]=$((res_stats[1] + 1))
+                            found=true; break
+                        fi
+                    fi
+                    # ----------------------------------------
+                    # Standard Static Search (Default)
                     if [ -f "${path}/lib${lib}.dll.a" ]; then
                         final_libs="$final_libs ${path}/lib${lib}.dll.a"
                         res_stats[0]=$((res_stats[0] + 1))
                         found=true; break
-                    # 2. Standard Linux Static: libNAME.a
                     elif [ -f "${path}/lib${lib}.a" ]; then
                         _slc_strip_rsrc "${path}/lib${lib}.a"
                         final_libs="$final_libs ${path}/lib${lib}.a"
                         res_stats[0]=$((res_stats[0] + 1))
                         found=true; break
-                    # 3. Windows/MSVC Static or Import: NAME.lib (Fix for python312.lib)
                     elif [ -f "${path}/${lib}.lib" ]; then
                         final_libs="$final_libs ${path}/${lib}.lib"
                         res_stats[0]=$((res_stats[0] + 1))
                         found=true; break
-                    # 4. Windows Lib with prefix: libNAME.lib
                     elif [ -f "${path}/lib${lib}.lib" ]; then
                         final_libs="$final_libs ${path}/lib${lib}.lib"
                         res_stats[0]=$((res_stats[0] + 1))
                         found=true; break
-                    # 5. Versioned Static (Rare)
                     elif v_lib=$(find "${path}" -maxdepth 1 -name "lib${lib}.a.*" 2>/dev/null | sort -V | tail -n 1) && [ -n "$v_lib" ]; then
                         _slc_strip_rsrc "$v_lib"
                         final_libs="$final_libs $v_lib"
                         res_stats[0]=$((res_stats[0] + 1))
                         found=true; break
-                    # 6. Shared Object (.so)
                     elif [ -f "${path}/lib${lib}.so" ]; then
+                         # Fallback to shared if static is missing, but count it
                         final_libs="$final_libs ${path}/lib${lib}.so"
-                        res_stats[1]=$((res_stats[1] + 1)) # shared_count
+                        res_stats[1]=$((res_stats[1] + 1))
                         found=true; break
                     fi
                 done
-                # If not found on disk, log warning and pass it through
                 if [ "$found" = false ]; then
                      echo "        | [WARNING]: Could not find library file for -l${lib} in search paths: ${search_paths[*]}" >>"$log_file"
                      final_libs="$final_libs -l${lib}"
@@ -5148,23 +5152,31 @@ static_link_check() {
     # --------------------------------------------------------------------------
     _slc_verify_binary() {
         local libs="$1" name="$2" tmp="$3" log="$4"
-        local ext=
-        if islinux; then
-          ext="so"
-        elif iswindows; then
-          ext="dll"
-        fi
+        local ext="so"
+        if iswindows; then ext="dll"; fi
         local out_bin="${tmp}/${name}.${ext}"
-        if truthy "$build_cross_compile"; then
-          local gcc_bin=${cross_prefix}g++
-        else
-          local gcc_bin=g++
+        local gcc_bin=g++
+        if truthy "$build_cross_compile"; then gcc_bin=${cross_prefix}g++; fi
+        # Determine if we have shared libs involved.
+        # If yes, we must NOT use --whole-archive globally, as it breaks shared linking.
+        local has_shared=false
+        if [[ "$libs" == *.dll* || "$libs" == *.so* ]]; then
+            has_shared=true
         fi
         local cmd=($gcc_bin -shared -fPIC -o "$out_bin")
         cmd+=("-DGLIB_STATIC_COMPILATION")
-        cmd+=("-Wl,--whole-archive")
-        cmd+=($libs)
-        cmd+=("-Wl,--no-whole-archive")
+        # Logic Update: Only apply whole-archive to static .a files
+        if [ "$has_shared" = true ]; then
+            # Mixed Mode: Don't wrap everything. 
+            # We assume static libs are passed as full paths and shared as well.
+            # We rely on the order provided by pkg-config.
+            cmd+=($libs)
+        else
+            # Pure Static Mode (Strict)
+            cmd+=("-Wl,--whole-archive")
+            cmd+=($libs)
+            cmd+=("-Wl,--no-whole-archive")
+        fi
         cmd+=("-static-libgcc" "-static-libstdc++")
         if [ "$use_map" = true ]; then
             cmd+=("-Wl,--version-script=$map_file" "-Wl,-Bsymbolic")
@@ -5181,27 +5193,23 @@ static_link_check() {
     # --------------------------------------------------------------------------
     _slc_print_report() {
         local -n succ="$1" skip="$2" fail="$3"
-        # Success Table
         if [ ${#succ[@]} -gt 0 ]; then
             echo -e "\n  [ VERIFIED PACKAGES ]"
             printf "  %-8s %-30s %-12s %-12s %-12s\n" "SIZE" "PACKAGE" "STATIC" "SHARED" "SYSTEM"
             echo "  --------------------------------------------------------------------------------"
             printf "%s\n" "${succ[@]}"
         fi
-        # Skipped Table
         if [ ${#skip[@]} -gt 0 ]; then
             echo -e "\n  [ SKIPPED PACKAGES ]"
             printf "  %-30s %s\n" "PACKAGE" "REASON"
             echo "  --------------------------------------------------------------------------------"
             printf "%s\n" "${skip[@]}"
         fi
-        # Failed Table
         if [ ${#fail[@]} -gt 0 ]; then
             echo -e "\n  [ FAILED PACKAGES ]"
             echo "  --------------------------------------------------------------------------------"
             printf "%b\n" "${fail[@]}"
         fi
-        # Summary
         echo -e "\n--------------------------------------------------------------------------------"
         local total=$((${#succ[@]} + ${#skip[@]} + ${#fail[@]}))
         if [ ${#fail[@]} -eq 0 ]; then
@@ -5219,9 +5227,7 @@ static_link_check() {
         echo
         echo "VERIFYING BUILD: Checking for Static + PIC (Linker Test)"
         local targets=()
-        if ! _slc_find_targets "$input_path" targets; then
-            return 1
-        fi
+        if ! _slc_find_targets "$input_path" targets; then return 1; fi
         local tmp_dir=$(mktemp -d)
         local a_success=() a_skipped=() a_failed=()
         local total=${#targets[@]} count=0
@@ -5230,7 +5236,6 @@ static_link_check() {
             rm -rf "$tmp_dir"
             return 0
         fi
-        # Hide Cursor
         printf "\033[?25l"
         for target in "${targets[@]}"; do
             count=$((count + 1))
@@ -5238,15 +5243,13 @@ static_link_check() {
             [[ "$target" == *.pc ]] && pkg_name=$(basename "$target" .pc)
             local log_file="${tmp_dir}/${pkg_name}_error.log"
             printf "\r\033[K[ %d / %d ] Checking: %s..." "$count" "$total" "$pkg_name" >&2
-            # 1. Resolve Libraries
             local resolved_libs=""
-            local -a stats=(0 0 0) # static, shared, system
+            local -a stats=(0 0 0)
             if ! _slc_resolve_libs "$target" "$log_file" resolved_libs stats; then
                 local err=$(sed -e 's|.*libraries/lib|...libraries/lib|' -e 's/^/        | /' "$log_file")
                 a_failed+=("  [FAIL] $pkg_name (Config Parse Error)\n$err")
                 continue
             fi
-            # 2. Skip Logic (Header only or System only)
             if [[ -z "$resolved_libs" ]]; then
                 if [ "${stats[2]}" -gt 0 ]; then
                     a_skipped+=("$(printf "  %-30s %s" "$pkg_name" "System/External Libs Only (${stats[2]})")")
@@ -5255,22 +5258,17 @@ static_link_check() {
                 fi
                 continue
             fi
-            # 3. Verify Binary
             local bin_size
             if bin_size=$(_slc_verify_binary "$resolved_libs" "$pkg_name" "$tmp_dir" "$log_file"); then
                 a_success+=("$(printf "  %-8s %-30s %-12d %-12d %-12d" "$bin_size" "$pkg_name" "${stats[0]}" "${stats[1]}" "${stats[2]}")")
             else
-                local err=$(sed -e 's|.*libraries/lib|...libraries/lib|' \
-                                -e 's/^/        | /' \
-                                "$log_file")
+                local err=$(sed -e 's|.*libraries/lib|...libraries/lib|' -e 's/^/        | /' "$log_file")
                 a_failed+=("  [FAIL] $pkg_name (Linker Error)\n        Libraries: $resolved_libs\n$err")
             fi
         done
-        # Reset Cursor & Cleanup
         printf "\r\033[K" >&2
         printf "\033[?25h"
         rm -rf "$tmp_dir"
-        # 4. Report
         _slc_print_report a_success a_skipped a_failed
 
     } | tee -a "${LOG_FILE}"
@@ -5297,183 +5295,52 @@ EOF
   echo "$script"
 }
 
-# 1. variant
-# @. custom values
-# Usage: get_generic_windows_cmake_toolchain [variant_suffix] [VAR="VALUE" ...]
-# Example: get_generic_windows_cmake_toolchain "rabbitmq" CMAKE_C_FLAGS_INIT="-static -Wno-error"
-get_generic_windows_cmake_toolchain() {
-    local variant="$1"
-    local base_filename="$host_name-toolchain.cmake"
-    local base_filepath="$src_dir/$base_filename"
-    shift
-    # Determine filename based on variant presence
-    local toolchain_filename="$host_name-toolchain.cmake"
-    if [[ -n "$variant" ]]; then
-      toolchain_filename="$host_name-toolchain-$variant.cmake"
-      local toolchain_path="$(pwd)/$toolchain_filename"
-    else
-      toolchain_filename="$host_name-toolchain.cmake"
-      local toolchain_path="$src_dir/$toolchain_filename"
-    fi
-    # Only generate if it doesn't exist
-    if [[ ! -e "$toolchain_path" ]]; then
-        local cpu_family="x86_64"
-        if [ "$bits_target" = 32 ]; then
-            cpu_family="x86"
-        fi
-        declare -A cmake_config
-        # System info
-        cmake_config["CMAKE_SYSTEM_NAME"]="Windows"
-        cmake_config["CMAKE_SYSTEM_PROCESSOR"]="${target_proc:-$cpu_family}"
-        # Toolchain locations
-        cmake_config["TOOLCHAIN_PREFIX"]="${host_target}"
-        cmake_config["TOOLCHAIN_ROOT"]="${toolchain_root_dir}"
-        # Compilers
-        cmake_config["CMAKE_C_COMPILER"]="${cross_prefix}gcc"
-        cmake_config["CMAKE_CXX_COMPILER"]="${cross_prefix}g++"
-        # cmake_config["CMAKE_RC_COMPILER"]="${cross_prefix}windres"
-        cmake_config["CMAKE_AR"]="${cross_prefix}ar"
-        cmake_config["CMAKE_RANLIB"]="${cross_prefix}ranlib"
-        cmake_config["CMAKE_STRIP"]="${cross_prefix}strip"
-        # Search Paths
-        cmake_config["CMAKE_FIND_ROOT_PATH"]="${dependency_install_prefix}"
-        cmake_config["CMAKE_FIND_ROOT_PATH_MODE_PROGRAM"]="NEVER"
-        cmake_config["CMAKE_FIND_ROOT_PATH_MODE_LIBRARY"]="ONLY"
-        cmake_config["CMAKE_FIND_ROOT_PATH_MODE_INCLUDE"]="ONLY"
-        # Flags (Using INIT to allow appending later)
-        cmake_config["CMAKE_C_FLAGS_INIT"]="-static -static-libgcc -static-libstdc++"
-        cmake_config["CMAKE_CXX_FLAGS_INIT"]="-static -static-libgcc -static-libstdc++"
-        cmake_config["CMAKE_EXE_LINKER_FLAGS_INIT"]="-static -static-libgcc -static-libstdc++"
-        # Loop through remaining args in format KEY="VALUE"
-        for arg in "$@"; do
-            local key="${arg%%=*}"
-            local value="${arg#*=}"
-            echo "DEBUG: adding KEY:$key and VALUE:$value to cmake toolchain file for $variant" >>"$LOG_FILE"
-            cmake_config["$key"]="$value"
-        done
-        echo "# Generated via get_generic_windows_cmake_toolchain" > "$toolchain_path"
-        # Write CMAKE_SYSTEM_NAME first (convention)
-        echo "set(CMAKE_SYSTEM_NAME \"${cmake_config[CMAKE_SYSTEM_NAME]}\")" >> "$toolchain_path"
-        unset 'cmake_config[CMAKE_SYSTEM_NAME]'
-        # Write the rest
-        for key in "${!cmake_config[@]}"; do
-            echo "set($key \"${cmake_config[$key]}\")" >> "$toolchain_path"
-        done
-    fi
-    echo "$toolchain_path"
-}
-
-get_generic_windows_meson_cross_file() {
-    local variant_name="$1"      # e.g., "librist"
-    local extra_content="$2"     # e.g., "[built-in options]..."
-    local base_filename="$host_name-meson-cross.mingw.txt"
-    local base_filepath="$src_dir/$base_filename"
-    # 1. Generate the BASE file if it doesn't exist (Standard Logic)
-    if [[ ! -e "$base_filepath" ]]; then
-        local cpu_family="x86_64"
-        if [ "$bits_target" = 32 ]; then
-            cpu_family="x86"
-        fi
-        cat >"$base_filepath" <<EOF
-[built-in options]
-buildtype = 'release'
-wrap_mode = 'nofallback'  
-default_library = 'static'  
-prefer_static = 'true'
-backend = 'ninja'
-prefix = '$dependency_install_prefix'
-libdir = '$dependency_install_prefix/lib'
-b_staticpic = 'true'
- 
-[binaries]
-c = '${cross_prefix}gcc'
-cpp = '${cross_prefix}g++'
-ld = '${cross_prefix}ld'
-ar = '${cross_prefix}ar'
-strip = '${cross_prefix}strip'
-nm = '${cross_prefix}nm'
-dlltool = '${cross_prefix}dlltool'
-windres = '/usr/bin/true'
-pkg-config = 'pkg-config'
-nasm = 'nasm'
-cmake = 'cmake'
-
-[host_machine]
-system = 'windows'
-cpu_family = '$cpu_family'
-cpu = '$cpu_family'
-endian = 'little'
-
-[properties]
-sys_root = '$dependency_install_prefix'
-pkg_config_sysroot_dir = '$dependency_install_prefix'
-pkg_config_libdir = '$pkg_config_sysroot_dir/lib/pkgconfig'
-needs_exe_wrapper = true
-EOF
-    fi
-    # 2. Handle Custom Variant logic
-    if [[ -n "$variant_name" ]]; then
-        local custom_filepath="$(pwd)/$host_name-meson-cross.mingw.${variant_name}.txt"
-        # Always overwrite the variant with a fresh copy of the base
-        cp "$base_filepath" "$custom_filepath" 2>"$LOG_FILE"
-        # Append custom options if provided
-        if [[ -n "$extra_content" ]]; then
-            # Add a newline for safety
-            echo "" >> "$custom_filepath"
-            echo -e "$extra_content" >> "$custom_filepath"
-        fi
-        # Return the path to the NEW custom file
-        echo "$custom_filepath"
-    else
-        # No customization requested, return the standard base file
-        echo "$base_filepath"
-    fi
-}
-
 add_libs_to_pkg() {
-    local pc="" pub_l=() priv_l=() pub_r=() priv_r=()
-    
-    # 1. Parse Arguments
+    local pc="" pub_l=() priv_l=() pub_r=() priv_r=() cflags_l=()
+    local mode="append" 
     while [[ $# -gt 0 ]]; do case "$1" in
         -t=*|--target=*) pc="${1#*=}" ;;
         -l=*|--libs=*)             IFS=' ' read -r -a _t <<< "${1#*=}"; pub_l+=("${_t[@]}") ;;
         -p=*|--private=*)          IFS=' ' read -r -a _t <<< "${1#*=}"; priv_l+=("${_t[@]}") ;;
         -r=*|--requires=*)         IFS=' ' read -r -a _t <<< "${1#*=}"; pub_r+=("${_t[@]}") ;;
         -rp=*|--requires-private=*) IFS=' ' read -r -a _t <<< "${1#*=}"; priv_r+=("${_t[@]}") ;;
+        -c=*|--cflags=*)           IFS=' ' read -r -a _t <<< "${1#*=}"; cflags_l+=("${_t[@]}") ;;
+        --prepend) mode="prepend" ;;  # Insert at START of line
         --) shift; break ;;
-        *) echo "ERROR: Unknown option '$1'" >&2; return 1 ;;
+        *) echo "ERROR: Unknown option '$1'" >>"$LOG_FILE"; return 1 ;;
     esac; shift; done
-
-    # 2. Validation
-    [[ -z "$pc" || ! -f "$pc" || "$pc" != /* ]] && { echo "ERROR: Invalid target '$pc'" >&2; return 1; }
-
-    # 3. Helper: Injection Logic
+    [[ -z "$pc" || ! -f "$pc" || "$pc" != /* ]] && { echo "ERROR: Invalid target '$pc'" >>"$LOG_FILE"; return 1; }
     _inject() {
         local field="$1" sanitize="$2"; shift 2; local items=("$@")
         [[ ${#items[@]} -eq 0 ]] && return
-        
-        # Ensure field exists
-        ! grep -q "^$field:" "$pc" && echo "$field:" >> "$pc"
-        
+        grep -q "^$field:" "$pc" || echo "$field:" >> "$pc"
+        local insertion_buffer=""
         for item in "${items[@]}"; do
             [[ -z "$item" ]] && continue
             local token="$item"
-            
-            # Sanitize only if requested (for Libs)
-            if [[ "$sanitize" == "1" ]]; then
+            if [[ "$sanitize" == "1" && "$token" != -* ]]; then
                 local name="${token#-l}"; name="${name#lib}"; name="${name%.*}"
                 token="-l$name"
             fi
-            
-            # Deduplicate with Strict Token Matching
-            grep "^$field:" "$pc" | grep -E -q "(^|[[:space:]])${token//\//\\/}($|[[:space:]])" || \
-                sed -i "s|^$field:.*|& $token|" "$pc"
+            # shellcheck disable=2001
+            local regex_token=$(echo "$token" | sed 's/[][()\.^$?*+{|}]/\\&/g')
+            local sed_pattern="${regex_token//#/\\#}"
+            if grep "^$field:" "$pc" | grep -E -q "(^|[[:space:]])${sed_pattern}($|[[:space:]])"; then
+                sed -i -E "s#([[:space:]]|^)${sed_pattern}([[:space:]]|$)# #g" "$pc"
+            fi
+            insertion_buffer="${insertion_buffer} ${token}"
         done
+        if [[ -n "$insertion_buffer" ]]; then
+            if [[ "$mode" == "prepend" ]]; then
+                sed -i "s|^$field:|&${insertion_buffer}|" "$pc"
+            else
+                sed -i "s|^$field:.*|&${insertion_buffer}|" "$pc"
+            fi
+        fi
     }
-
-    # 4. Execution
     _inject "Requires"         0 "${pub_r[@]}"
     _inject "Requires.private" 0 "${priv_r[@]}"
     _inject "Libs"             1 "${pub_l[@]}"
     _inject "Libs.private"     1 "${priv_l[@]}"
+    _inject "Cflags"           0 "${cflags_l[@]}"
 }

@@ -103,6 +103,7 @@ build_libxavs2() {
 		do_make_and_make_install "AS= AR=\"$AR rc \" " "AS= AR=\"$AR rc \" "
     reset_cross_vars
 	change_dir "$src_dir"
+  sed -i "s/^Version:.*/Version: $repo_ver.0/g" "$install_pkgconfig_dir/xavs2.pc"
 	fi
 	fi
 }
@@ -571,6 +572,7 @@ build_brotli() {
 build_libfreetype() {
   if ! truthy "$disable_libfreetype" && truthy "$enable_libfreetype" || [[ -n "$1" ]]; then
 	run_valid_function "build_brotli" 1
+  run_valid_function "build_libpng"
   activate_meson
 	local lib="freetype"
   local repo="https://github.com/freetype/freetype"
@@ -605,12 +607,6 @@ build_graphite() {
 -DCMAKE_POLICY_VERSION_MINIMUM=3.5" "$src_dir/$lib"
   disable_nonessential "$src_dir/$lib"
   do_make_and_make_install
-  if [[ -f "$dependency_install_prefix/lib/libgraphite2.a" ]]; then
-    copy_path "$dependency_install_prefix/lib/libgraphite2.a" "$dependency_install_prefix/lib/libgraphite2.dll.a" "-fv" >>"$LOG_FILE" 2>&1
-  fi
-  if [[ -f "$dependency_install_prefix/lib/libgraphite2.a" ]]; then
-    copy_path "$dependency_install_prefix/lib/libgraphite2.a" "$dependency_install_prefix/lib/libgraphite2.dll" "-fv" >>"$LOG_FILE" 2>&1
-  fi
 	change_dir "$src_dir"
 }
 # build_libharfbuzz       # config_options+= --enable-libharfbuzz         # enable libharfbuzz, needed for drawtext filter [no]
@@ -1337,7 +1333,9 @@ build_libsnappy() {
   while IFS= read -r -d '' file; do
     add_libs_to_pkg -t="$file" -l="-lshlwapi"
   done < <(find "$install_pkgconfig_dir" -name "benchmark*.pc" -print0)
-  add_libs_to_pkg -t="$install_pkgconfig_dir/libhwy-test.pc" -l="-lhwy"
+  if [[ -f "$install_pkgconfig_dir/libhwy-test.pc" ]]; then
+    remove_path -f "$install_pkgconfig_dir/libhwy-test.pc"
+  fi
 	fi
 }
 
@@ -1355,7 +1353,7 @@ build_vamp_plugin() {
 		sed -i.bak "s/c++11/gnu++11/" configure
 		sed -i.bak "s/c++11/gnu++11/" Makefile.in
 	fi
-	do_configure "--host=$host_target --prefix=$dependency_install_prefix --disable-programs"
+	generic_configure "--host=$host_target --prefix=$dependency_install_prefix --disable-programs"
 	do_make "install-static" # No need for 'do_make_install', because 'install-static' already has install-instructions.
 	change_dir "$src_dir"
 }
@@ -1606,17 +1604,6 @@ build_libass() {
 -Dfontconfig=enabled"
   generic_meson "$meson_options"
   do_ninja_and_ninja_install
-#   local config_options="--with-sysroot=\"${dependency_install_prefix}\" \
-# --enable-static \
-# --disable-shared \
-# --disable-test \
-# --disable-compare \
-# --disable-fontconfig \
-# --disable-require-system-font-provider \
-# NASM=nasm"
-#   generic_configure "$config_options"
-#   disable_nonessential "$src_dir/$lib"
-#   do_make_and_make_install "AS=nasm"
 	change_dir "$src_dir"
   unset nasm
 	fi
@@ -1768,55 +1755,6 @@ build_liblensfun() {
 	change_dir "$src_dir"
 	fi
 }
-# build_libtensorflow     # config_options+= --enable-libtensorflow       # enable TensorFlow as a DNN module backend for DNN based filters like sr [no]
-build_libtensorflow() {
-  if ! truthy "$disable_libtensorflow" && truthy "$enable_libtensorflow"; then
-    local base_lib="libtensorflow"
-    local lib="$base_lib-$host_name"
-    local repo_ver="2.10.0"
-    local repo="https://storage.googleapis.com/tensorflow/libtensorflow/libtensorflow-gpu-windows-x86_64-2.10.0.zip"
-    local subdir="cuda"
-
-    pick_gpu_support
-    if ! truthy "$gpu_support"; then
-         repo="https://storage.googleapis.com/tensorflow/versions/2.18.1/libtensorflow-cpu-windows-x86_64.zip"
-         subdir="cpu"
-         repo_ver="2.18.1"
-    fi
-
-    local manifest="$work_dir/pkgconfig/${lib}_${subdir}_manifest"
-    [[ ! -f "$manifest" ]] && touch "$manifest"
-    
-    change_dir "$src_dir"
-    local touch_name=$(get_small_touchfile_name "${host_name}_installed" "$repo")
-    
-    truthy "$build_force" && remove_path -rf "$src_dir/$lib/$subdir"
-    if [[ -f "$manifest" && ! -f "$src_dir/$lib/$subdir/$touch_name" ]]; then
-      [[ -d "$src_dir/$lib" ]] && reset_touch "$src_dir/$lib"
-      uninstall_manifest "$manifest" >/dev/null 2>&1
-      remove_path -f "$src_dir/$lib/$subdir/$touch_name"
-    fi
-
-    change_dir "$src_dir/$lib" 1
-
-    if [ ! -f "$src_dir/$lib/$subdir/$touch_name" ]; then
-        download_and_unpack_file "$repo" "$src_dir/$lib/$subdir"
-        
-        install_msvc_binary \
-            -n="$base_lib" -v="$repo_ver" \
-            -s="$src_dir/$lib/$subdir" \
-            -I="include" \
-            -L="lib" \
-            -B="lib" \
-            -m="$manifest" \
-            -d="TensorFlow C Library ($subdir)" || exit_message 1 "could not install libtensorflow"
-
-        change_dir "$src_dir/$lib/$subdir"
-        create_touch_file 0 "$touch_name"
-        echo "$src_dir/$lib/$subdir/$touch_name" >>"$manifest"
-    fi
-  fi
-}
 # build_libvpx            # config_options+= --enable-libvpx              # enable VP8 and VP9 de/encoding via libvpx [no]
 build_libvpx() {
   if ! truthy "$disable_libvpx" && truthy "$enable_libvpx"; then
@@ -1834,7 +1772,9 @@ build_libvpx() {
 	fi
 	export CROSS="$cross_prefix"
   clear_cross_vars AS
-	do_configure "--enable-static \
+	do_configure "--prefix=$dependency_install_prefix \
+--libdir=$dependency_install_prefix/lib \
+--enable-static \
 --disable-shared \
 --disable-examples \
 --disable-tools \
@@ -1940,19 +1880,16 @@ EOF
 # build_libopenh264       # config_options+= --enable-libopenh264         # enable H.264 encoding via OpenH264 [no]
 build_libopenh264() {
   if ! truthy "$disable_libopenh264" && truthy "$enable_libopenh264"; then
+  activate_meson
 	local lib="libopenh264"
   local repo="https://github.com/cisco/openh264.git"
   local repo_ver="v2.6.0" #75b9fcd2669c75a99791 # wels/codec_api.h weirdness
 	change_dir "$src_dir"
   do_git_checkout "$repo" "$src_dir/$lib" "$repo_ver"
   change_dir "$src_dir/$lib"
-	sed -i.bak "s/_M_X64/_M_DISABLED_X64/" codec/encoder/core/inc/param_svc.h # for 64 bit, avoid missing _set_FMA3_enable, it needed to link against msvcrt120 to get this or something weird?
-	if [[ $bits_target == 32 ]]; then
-		local arch=i686 # or x86?
-	else
-		local arch=x86_64
-	fi
-	do_make "PREFIX=$dependency_install_prefix OS=mingw_nt ARCH=$arch ASM=yasm install-static"
+  local meson_options="-Dtests=disabled"
+  generic_meson "$meson_options"
+  do_ninja_and_ninja_install
 	change_dir "$src_dir"
   fi
 }
@@ -2088,7 +2025,7 @@ build_avisynth() {
 	change_dir "$src_dir/$lib/build" 1
 	do_cmake_from_build_dir "$src_dir/$lib" "-DHEADERS_ONLY:bool=on"
   disable_nonessential "$src_dir/$lib/build"
-	do_make "$(get_compiler_flags) VersionGen install"
+  do_make_and_make_install "$(get_compiler_flags) VersionGen install"
 	change_dir "$src_dir"
 	fi
 }
@@ -2211,6 +2148,7 @@ build_libkvazaar() {
   do_make_and_make_install
 	change_dir "$src_dir"
   unset ASFLAGS
+  add_libs_to_pkg -t="$install_pkgconfig_dir/kvazaar.pc" -c="-DKVZ_STATIC_LIB"
 	fi
 }
 # build_openssl           # config_options+= --enable-openssl             # enable openssl, needed for https support if gnutls, libtls or mbedtls is not used [no]
@@ -2677,7 +2615,9 @@ CROSS_COMPILE="
   while IFS= read -r -d '' file; do
     add_libs_to_pkg -t="$file" -l="-lshlwapi"
   done < <(find "$install_pkgconfig_dir" -name "benchmark*.pc" -print0)
-  add_libs_to_pkg -t="$install_pkgconfig_dir/libhwy-test.pc" -l="-lhwy"
+  if [[ -f "$install_pkgconfig_dir/libhwy-test.pc" ]]; then
+    remove_path -f "$install_pkgconfig_dir/libhwy-test.pc"
+  fi
 }
 # build_pocketsphinx      # config_options+= --enable-pocketsphinx        # enable PocketSphinx, needed for asr filter [no]
 build_pocketsphinx() {
@@ -2699,6 +2639,7 @@ build_pocketsphinx() {
 --host=\"$build_triple\" \
 --prefix=$dependency_install_prefix \
 --libdir=$dependency_install_prefix/lib \
+--without-pcre \
 --enable-static --disable-shared --enable-pic --with-pic"
   do_make "CC=gcc AR=ar AS=as RANLIB=ranlib LD=ld STRIP=strip CXX=g++ WINDRES= CROSS_COMPILE="
   do_make_install "CC=gcc AR=ar AS=as RANLIB=ranlib LD=ld STRIP=strip CXX=g++ WINDRES= CROSS_COMPILE="
@@ -2841,6 +2782,7 @@ build_librist() {
 	meson_options+=" --cross-file=$cross_file"
   do_meson "$meson_options"
 	do_ninja_and_ninja_install
+  sed -i 's|^Libs:.*|Libs: -lrist -lws2_32 -liphlpapi|g' "$install_pkgconfig_dir/librist.pc"
 	change_dir "$src_dir"
 	fi
 }
@@ -2918,6 +2860,9 @@ build_librabbitmq() {
   do_cmake_from_build_dir "$src_dir/$lib" "$cmake_params"
   disable_nonessential "$src_dir/$lib/build"
   do_make_and_make_install
+  if [[ -f "librabbitmq.pc" ]]; then
+    copy_path "librabbitmq.pc" "$install_pkgconfig_dir/librabbitmq.pc" "-fv"
+  fi
 	change_dir "$src_dir"
 	fi
 }
@@ -2958,7 +2903,7 @@ build_libssh() {
   disable_nonessential "$src_dir/$lib/build"
   do_make_and_make_install
 	change_dir "$src_dir"
-  add_libs_to_pkg -t="$install_pkgconfig_dir/libssh.pc" -l="-lssl -lcrypto -lcrypt32 -lws2_32 -lz -liphlpapi"
+  add_libs_to_pkg -t="$install_pkgconfig_dir/libssh.pc" -l="-lssl -lcrypto -lcrypt32 -lws2_32 -lz -liphlpapi" -c="-DLIBSSH_STATIC"
 	fi
 }
 # build_libtls            # config_options+= --enable-libtls              # enable LibreSSL (via libtls), needed for https support if openssl, gnutls or mbedtls is not used [no]
@@ -3079,6 +3024,7 @@ build_libdc1394() {
 	echo "Only available on Linux build" >>"$LOG_FILE"
 	# https://github.com/damienfirmonte/libdc1394
 	local lib="libdc1394"
+    disable_library "libdc1394"
 	fi
 }
 
@@ -3088,6 +3034,7 @@ build_rkmpp() {
 	echo "Only available on Linux build" >>"$LOG_FILE"
 	# 
 	local lib="rkmpp"
+    disable_library "rkmpp"
 	fi
 }
 
@@ -3097,6 +3044,7 @@ build_libiec61883() {
 	echo "Only available on Linux build" >>"$LOG_FILE"
 	# https://github.com/Mint-Fan/libiec61883
 	local lib="libiec61883"
+    disable_library "libiec61883"
 	fi
 }
 # build_libv4l2           # config_options+= --enable-libv4l2             # enable libv4l2/v4l-utils [no]
@@ -3105,6 +3053,7 @@ build_libv4l2() {
 	echo "Only available for Linux build" >>"$LOG_FILE"
 	# https://git.linuxtv.org/v4l-utils
 	local lib="libv4l2"
+    disable_library "libv4l2"
 	fi
 }
 # build_opencl            # config_options+= --enable-opencl              # enable OpenCL processing [no]
@@ -3149,16 +3098,76 @@ build_opencl() {
   disable_nonessential "$src_dir/$parentlib/$lib/build"
   do_make_and_make_install
 	change_dir "$src_dir"
+  add_libs_to_pkg -t="$install_pkgconfig_dir/OpenCL.pc" -l="-lcfgmgr32 -lole32"
+  if [[ -f "$dependency_install_prefix/lib/OpenCL.a" ]]; then
+    mv -f "$dependency_install_prefix/lib/OpenCL.a" "$dependency_install_prefix/lib/libOpenCL.a"
+  fi
 	fi
 }
+# build_libtensorflow     # config_options+= --enable-libtensorflow       # enable TensorFlow as a DNN module backend for DNN based filters like sr [no]
+build_libtensorflow() {
+  if ! truthy "$disable_libtensorflow" && truthy "$enable_libtensorflow" && [[ $bits_target == 64 ]]; then
+    local lib_name="libtensorflow"
+    local lib="$lib_name-$host_name"
+    local repo_ver="2.18.0"
+    local repo="https://storage.googleapis.com/tensorflow/versions/2.18.0/libtensorflow-cpu-windows-x86_64.zip"
+    local subdir="cpu"
+    pick_gpu_support
+    if truthy "$gpu_support"; then
+      pick_gpu_type
+      subdir=$gpu_type
+      if [[ $subdir == "rocm" ]]; then
+        echo -e "WARNING: [disabled] $lib ROCm support is not availbale on Windows" >>"$LOG_FILE"
+        disable_library "libtensorflow"
+        return
+      else
+        local repo="https://storage.googleapis.com/tensorflow/libtensorflow/libtensorflow-gpu-windows-x86_64-2.10.0.zip"
+        repo_ver="2.10.0"
+        echo "WARNING: uninstalling cpu $lib_name if installed." >> "$LOG_FILE"
+        uninstall_manifest "$install_pkgconfig_dir/${lib}_cpu_manifest" > >(redirect_output) 2>&1
+      fi
+    fi
 
+    local manifest="$work_dir/pkgconfig/${lib}_${subdir}_manifest"
+    [[ ! -f "$manifest" ]] && touch "$manifest"
+    
+    change_dir "$src_dir"
+    local touch_name=$(get_small_touchfile_name "${host_name}_installed" "$repo")
+    
+    truthy "$build_force" && remove_path -rf "$src_dir/$lib/$subdir"
+    if [[ -f "$manifest" && ! -f "$src_dir/$lib/$subdir/$touch_name" ]]; then
+      [[ -d "$src_dir/$lib" ]] && reset_touch "$src_dir/$lib" "${host_name}_installed*.touch"
+      uninstall_manifest "$manifest" >>"$LOG_FILE" 2>&1
+    fi
+
+    change_dir "$src_dir/$lib" 1
+
+    if [ ! -f "$src_dir/$lib/$subdir/$touch_name" ]; then
+        download_and_unpack_file "$repo" "$src_dir/$lib/$subdir"
+        
+        install_msvc_binary \
+            -n="$lib_name" -v="$repo_ver" \
+            -s="$src_dir/$lib/$subdir" \
+            -I="include" \
+            -L="lib" \
+            -B="lib" \
+            -m="$manifest" \
+            -d="TensorFlow C Library ($subdir)" || exit_message 1 "could not install $lib_name"
+
+        change_dir "$src_dir/$lib/$subdir"
+        create_touch_file 0 "$touch_name"
+        echo "$src_dir/$lib/$subdir/$touch_name" >>"$manifest"
+    fi
+  fi
+}
 # build_libopenvino       # config_options+= --enable-libopenvino         # enable OpenVINO as a DNN module backend for DNN based filters like dnn_processing [no]
 build_libopenvino() {
-  if ! truthy "$disable_libopenvino" && truthy "$enable_libopenvino"; then
+  if ! truthy "$disable_libopenvino" && truthy "$enable_libopenvino" && [[ $bits_target == 64 ]]; then
+    run_valid_function "build_cpuinfo"
     local lib_name="libopenvino"
     local repo_ver="2025.4.0"
     local repo="https://storage.openvinotoolkit.org/repositories/openvino/packages/2025.4/windows/openvino_toolkit_windows_2025.4.0.20398.8fdad55727d_x86_64.zip"
-    
+
     local lib="$lib_name-$host_name"
     local manifest="$work_dir/pkgconfig/${lib}_manifest"
     [[ ! -f "$manifest" ]] && touch "$manifest"
@@ -3170,7 +3179,7 @@ build_libopenvino() {
     truthy "$build_force" && remove_path -rf "$src_dir/$lib"
     if [[ -f "$manifest" && ! -f "$src_dir/$lib/$touch_name" ]]; then
         [[ -d "$src_dir/$lib" ]] && reset_touch "$src_dir/$lib" "${host_name}_installed*.touch"
-        uninstall_manifest "$manifest" >/dev/null 2>&1
+        uninstall_manifest "$manifest" >>"$LOG_FILE" 2>&1
     fi
 
     if [ ! -f "$src_dir/$lib/$touch_name" ]; then
@@ -3178,39 +3187,90 @@ build_libopenvino() {
         change_dir "$src_dir/$lib"
         # 1. Install Main OpenVINO
         install_msvc_binary \
-            -n="$lib_name" -v="$repo_ver" \
+            -n="openvino" -v="$repo_ver" \
             -s="$src_dir/$lib" \
             -I="runtime/include" \
             -L="runtime/lib/intel64/Release" \
             -B="runtime/bin/intel64/Release" \
             -m="$manifest" \
-            -d="OpenVINO Toolkit" || exit_message 1 "could not install libtensorflow"
-
+            -d="OpenVINO Toolkit" || exit_message 1 "could not install $lib_name"
         # 2. Install TBB Dependency
         install_msvc_binary \
-            -n="tbb" -v="2025.4.0" \
+            -n="tbb" -v="$repo_ver" \
             -s="$src_dir/$lib" \
             -I="runtime/3rdparty/tbb/include" \
             -L="runtime/3rdparty/tbb/lib" \
             -B="runtime/3rdparty/tbb/bin" \
             -m="$manifest" \
-            -d="Threading Building Blocks for OpenVINO" || exit_message 1 "could not install libtensorflow"
-        
-        # Re-assert correct directory before creating touch file
-        
+            -d="Threading Building Blocks for OpenVINO" || exit_message 1 "could not install $lib_name"
         create_touch_file 0 "$touch_name"
         echo "$src_dir/$lib/$touch_name" >>"$manifest"
+        # patch winodws BOOLEAN conflict
+        if [[ -f "$dependency_install_prefix/include/openvino/c/openvino.h" ]]; then
+        sed -i 's/^#define BOOLEAN OV_BOOLEAN/\/\/ #define BOOLEAN OV_BOOLEAN/g' "$dependency_install_prefix/include/openvino/c/openvino.h"
+        fi
+        if [[ -f "$dependency_install_prefix/include/openvino/c/ov_common.h" ]]; then
+        sed -i -E 's/^([[:space:]]*)BOOLEAN,/\1OV_BOOLEAN,/g' "$dependency_install_prefix/include/openvino/c/ov_common.h"
+        fi
     fi
     add_libs_to_pkg -t="$install_pkgconfig_dir/libout123.pc" -l="-lwinmm"
   fi
 }
 # build_libtorch          # config_options+= --enable-libtorch            # enable Torch as one DNN backend [no]
 build_libtorch() {
-  if ! truthy "$disable_libtorch" && truthy "$enable_libtorch"; then
+  if ! truthy "$disable_libtorch" && truthy "$enable_libtorch" && [[ $bits_target == 64 ]]; then
     # https://github.com/pytorch/pytorch # compiling from source fails and is complicated. 
-    # https://download.pytorch.org/libtorch/cpu/libtorch-win-shared-with-deps-2.9.1%2Bcpu.zip
-    local lib="libtorch"
-    echo -e "WARNING: [disabled] Using $lib may cause segmentation faults due to ABI mismatch (mingw vs mscv)" >>"$LOG_FILE"
+    # echo -e "WARNING: [disabled] Using $lib may cause segmentation faults due to ABI mismatch (mingw vs mscv)" >>"$LOG_FILE"
+    local lib_name="libtorch"
+    local lib="$lib_name-$host_name"
+    local repo_ver="2.9.1"
+    local repo="https://download.pytorch.org/libtorch/cpu/libtorch-win-shared-with-deps-2.9.1%2Bcpu.zip"
+    local subdir=cpu
+    pick_gpu_support
+    if truthy "$gpu_support"; then
+      pick_gpu_type
+      subdir=$gpu_type
+      if [[ $subdir == "rocm" ]]; then
+        echo -e "WARNING: [disabled] $lib ROCm support is not availbale on Windows" >>"$LOG_FILE"
+        disable_library "libtorch"
+        return
+      else
+        local repo="https://download.pytorch.org/libtorch/cu130/libtorch-win-shared-with-deps-2.9.1%2Bcu130.zip"
+        echo "WARNING: uninstalling cpu libtorch if installed." >> "$LOG_FILE"
+        uninstall_manifest "$install_pkgconfig_dir/${lib}_cpu_manifest" > >(redirect_output) 2>&1
+      fi
+    fi
+
+    local manifest="$work_dir/pkgconfig/${lib}_${subdir}_manifest"
+    [[ ! -f "$manifest" ]] && touch "$manifest"
+    
+    change_dir "$src_dir"
+    local touch_name=$(get_small_touchfile_name "${host_name}_installed" "$repo")
+    
+    truthy "$build_force" && remove_path -rf "$src_dir/$lib/$subdir"
+    if [[ -f "$manifest" && ! -f "$src_dir/$lib/$subdir/$touch_name" ]]; then
+      [[ -d "$src_dir/$lib" ]] && reset_touch "$src_dir/$lib" "${host_name}_installed*.touch"
+      uninstall_manifest "$manifest" >>"$LOG_FILE" 2>&1
+    fi
+
+    change_dir "$src_dir/$lib" 1
+
+    if [ ! -f "$src_dir/$lib/$subdir/$touch_name" ]; then
+        download_and_unpack_file "$repo" "$src_dir/$lib/$subdir"
+        
+        install_msvc_binary \
+            -n="$lib_name" -v="$repo_ver" \
+            -s="$src_dir/$lib/$subdir" \
+            -I="include" \
+            -L="lib" \
+            -B="lib" \
+            -m="$manifest" \
+            -d="PyTorch Library ($subdir)" || exit_message 1 "could not install libtensorflow"
+
+        change_dir "$src_dir/$lib/$subdir"
+        create_touch_file 0 "$touch_name"
+        echo "$src_dir/$lib/$subdir/$touch_name" >>"$manifest"
+    fi
 	fi
 }
 
@@ -3352,6 +3412,9 @@ build_liblc3() {
 	local meson_options="-Dtools=false -Dpython=false"
 	generic_meson "$meson_options"
 	do_ninja_and_ninja_install
+  if [[ -f "$install_pkgconfig_dir/lc3.pc" ]]; then
+    sed -i "s|^Libs: -L\${libdir}.*|Libs: -Wl,--whole-archive $dependency_install_prefix/lib/liblc3.a -Wl,--no-whole-archive|g" "$install_pkgconfig_dir/lc3.pc"
+  fi
 	change_dir "$src_dir"
 	fi
 }
@@ -3377,7 +3440,9 @@ build_liblcevc_dec() {
   # disable_nonessential "$src_dir/$lib"
 	do_make_and_make_install
 	change_dir "$src_dir"
-  [[ -f "$install_pkgconfig_dir/lcevc_dec_utility.pc" ]] && remove_path -f "$install_pkgconfig_dir/lcevc_dec_utility.pc"
+  if [[ -f "$install_pkgconfig_dir/lcevc_dec_utility.pc" ]]; then
+    remove_path -f "$install_pkgconfig_dir/lcevc_dec_utility.pc"
+  fi
 	fi
 }
 # build_liboapv           # config_options+= --enable-liboapv             # enable APV encoding via liboapv [no]
@@ -3490,7 +3555,7 @@ build_libuavs3d() {
   if ! truthy "$disable_libuavs3d" && truthy "$enable_libuavs3d"; then
 	local lib="libuavs3d"
   local repo="https://github.com/uavs3/uavs3d"
-  local repo_ver="1.0"
+  local repo_ver="master"
 	change_dir "$src_dir"
 	do_git_checkout "$repo" "$src_dir/$lib" "$repo_ver"
   if [[ -f "$src_dir/$lib/version.sh" ]]; then
@@ -3522,7 +3587,7 @@ build_vapoursynth() {
   change_dir "$src_dir/$lib"
   local py_root="$src_dir/$lib/python_dep"
   local py_inc="$py_root/tools/include"
-  local py_lib_dir="$py_root/tools/libs"
+  local py_lib_dir="$py_root/tools"
   download_and_unpack_file "https://globalcdn.nuget.org/packages/python.3.12.0.nupkg" "python_dep"
 	[[ ! -f "src/vsscript/vsscript.cpp.bak" ]] && copy_path "src/vsscript/vsscript.cpp" "src/vsscript/vsscript.cpp.bak" "-fv" >>"$LOG_FILE" 2>&1
 	sed -i 's/#include <Windows.h>/#include <windows.h>/' src/vsscript/vsscript.cpp
@@ -3535,7 +3600,7 @@ build_vapoursynth() {
 -Denable_python_module=false \
 -Dc_args=\"$CFLAGS -I$py_inc\" \
 -Dcpp_args=\"$CXXFLAGS -I$py_inc\" \
--Dcpp_link_args=\"$LDFLAGS -L$py_lib_dir -lpython312\""
+-Dcpp_link_args=\"$LDFLAGS -L$py_lib_dir -lpython312 -lpython3\""
 	generic_meson "$meson_options"
 	disable_nonessential "$src_dir/$lib"
   do_ninja_and_ninja_install
@@ -3546,7 +3611,7 @@ build_vapoursynth() {
     sed -i -e 's/^Libs:.*/Libs: -L\${libdir} -lvapoursynth-script/' \
       -e '/^Libs.private:.*/d' \
       "$pkg_file"
-    echo "Libs.private: -L$py_lib_dir -lpython312" >> "$pkg_file"
+    echo "Libs.private: -L$py_lib_dir -lpython312 -lpython3" >> "$pkg_file"
   fi
 	fi
 }
@@ -3555,6 +3620,7 @@ build_vapoursynth() {
 build_metal() {
   if ! truthy "$disable_metal" && truthy "$enable_metal"; then
     echo "WARNING: Including this library will make the binaries non-redistributable" >>"$LOG_FILE"
+    disable_library "metal"
     echo "Only available on Apple build" >>"$LOG_FILE"
   fi
 }
@@ -3562,6 +3628,7 @@ build_metal() {
 build_sndio() {
   if ! truthy "$disable_sndio" && truthy "$enable_sndio"; then
     echo "WARNING: Library does not have MinGW/windows support. Unable to enable on Windows currently." >>"$LOG_FILE"
+    disable_library "sndio"
     # https://github.com/ratchov/sndio
     local lib="sndio"
   fi
@@ -3577,6 +3644,7 @@ build_schannel() {
 build_securetransport() {
   if ! truthy "$disable_securetransport" && truthy "$enable_securetransport"; then
     echo "WARNING: Including this library will make the binaries non-redistributable" >>"$LOG_FILE"
+    disable_library "securetransport"
     echo "Only available on Apple build" >>"$LOG_FILE"
   fi
 }
@@ -3584,6 +3652,7 @@ build_securetransport() {
 build_xlib() {
   if ! truthy "$disable_xlib" && truthy "$enable_xlib"; then
     echo "Only available on Linux build" >>"$LOG_FILE"
+    disable_library "xlib"
     # https://github.com/mirror/libX11
   fi
 }
@@ -3591,6 +3660,7 @@ build_xlib() {
 build_v4l2_m2m() {
   if ! truthy "$disable_v4l2_m2m" && truthy "$enable_v4l2_m2m"; then
     echo "Only available on Linux build" >>"$LOG_FILE"
+    disable_library "v4l2-m2m"
   fi
 }
 # build_vaapi             # config_options+= --disable-vaapi              # disable Video Acceleration API (mainly Unix/Intel) code [autodetect]
@@ -3598,6 +3668,7 @@ build_vaapi() {
   if ! truthy "$disable_vaapi" && truthy "$enable_vaapi"; then
     echo "Only available on Linux build" >>"$LOG_FILE"
     # https://github.com/intel/libva
+    disable_library "vaapi"
   fi
 }
 # build_vdpau             # config_options+= --disable-vdpau              # disable Nvidia Video Decode and Presentation API for Unix code [autodetect]
@@ -3606,6 +3677,7 @@ build_vdpau() {
     echo "WARNING: Including this library will make the binaries non-redistributable" >>"$LOG_FILE"
     echo "Only available on Linux build" >>"$LOG_FILE"
     # https://gitlab.freedesktop.org/vdpau/libvdpau
+    disable_library "vdpau"
   fi
 }
 # build_videotoolbox      # config_options+= --disable-videotoolbox       # disable VideoToolbox code [autodetect]
@@ -3613,6 +3685,7 @@ build_videotoolbox() {
   if ! truthy "$disable_videotoolbox" && truthy "$enable_videotoolbox"; then
     echo "WARNING: Including this library will make the binaries non-redistributable" >>"$LOG_FILE"
     echo "Only available on Apple build" >>"$LOG_FILE"
+    disable_library "videotoolbox"
   fi
 }
 # build_alsa              # config_options+= --disable-alsa               # disable ALSA support [autodetect]
@@ -3620,6 +3693,7 @@ build_alsa() {
   if ! truthy "$disable_alsa" && truthy "$enable_alsa"; then
     echo "Only available on Linux build" >>"$LOG_FILE"
     # https://github.com/alsa-project/alsa-lib
+    disable_library "alsa"
   fi
 }
 # build_appkit            # config_options+= --disable-appkit             # disable Apple AppKit framework [autodetect]
@@ -3627,6 +3701,7 @@ build_appkit() {
   if ! truthy "$disable_appkit" && truthy "$enable_appkit"; then
     echo "WARNING: Including this library will make the binaries non-redistributable" >>"$LOG_FILE"
     echo "Only available on Apple build" >>"$LOG_FILE"
+    disable_library "appkit"
   fi
 }
 # build_audiotoolbox      # config_options+= --disable-audiotoolbox       # disable Apple AudioToolbox code [autodetect]
@@ -3634,6 +3709,7 @@ build_audiotoolbox() {
   if ! truthy "$disable_audiotoolbox" && truthy "$enable_audiotoolbox"; then
     echo "WARNING: Including this library will make the binaries non-redistributable" >>"$LOG_FILE"
     echo "Only available on Apple build" >>"$LOG_FILE"
+    disable_library "audiotoolbox"
   fi
 }
 # build_avfoundation      # config_options+= --disable-avfoundation       # disable Apple AVFoundation framework [autodetect]
@@ -3641,6 +3717,7 @@ build_avfoundation() {
   if ! truthy "$disable_avfoundation" && truthy "$enable_avfoundation"; then
     echo "WARNING: Including this library will make the binaries non-redistributable" >>"$LOG_FILE"
     echo "Only available on Apple build" >>"$LOG_FILE"
+    disable_library "avfoundation"
   fi
 }
 
@@ -3648,6 +3725,7 @@ build_avfoundation() {
 build_coreimage() {
   if ! truthy "$disable_coreimage" && truthy "$enable_coreimage"; then
     echo "WARNING: Including this library will make the binaries non-redistributable" >>"$LOG_FILE"
+    disable_library "coreimage"
     echo "Only available on Apple build" >>"$LOG_FILE"
   fi
 }
@@ -3672,7 +3750,7 @@ build_libnvvm() {
     truthy "$build_force" && remove_path -rf "$src_dir/$lib"
     if [[ -f "$manifest" && ! -f "$src_dir/$lib/$touch_name" ]]; then
       [[ -d "$src_dir/$lib" ]] && reset_touch "$src_dir/$lib" "${host_name}_installed*.touch"
-      uninstall_manifest "$manifest" >/dev/null 2>&1
+      uninstall_manifest "$manifest" >>"$LOG_FILE" 2>&1
     fi
 
     if [ ! -f "$src_dir/$lib/$touch_name" ]; then
@@ -3706,19 +3784,17 @@ build_cuda_cudart() {
     truthy "$build_force" && remove_path -rf "$src_dir/$lib"
     if [[ -f "$manifest" && ! -f "$src_dir/$lib/$touch_name" ]]; then
       [[ -d "$src_dir/$lib" ]] && reset_touch "$src_dir/$lib" "${host_name}_installed*.touch"
-      uninstall_manifest "$manifest" >/dev/null 2>&1
+      uninstall_manifest "$manifest" >>"$LOG_FILE" 2>&1
     fi
 
     if [ ! -f "$src_dir/$lib/$touch_name" ]; then
         download_and_unpack_file "$repo" "$src_dir/$lib"
         change_dir "$src_dir/$lib"
         
-        # copy_and_link "$dependency_install_prefix/$lib/libs" "$dependency_install_prefix/lib" "$src_dir/$lib/openvino/libs/"* 1>> "$manifest" 2>>"$LOG_FILE" || exit_message 1 "build_libopenvino: could not install $lib libs"
-        
-        # install_msvc_binary -n="$base_lib" -v="13.1.80" \
-        #     -s="$src_dir/$lib" \
-        #     -m="$manifest" \
-        #     -I="include" -L="lib" -B="bin" || exit_message 1 "could not install $base_lib"
+        install_msvc_binary -n="$base_lib" -v="13.1.80" \
+            -s="$src_dir/$lib" \
+            -m="$manifest" \
+            -I="include" -L="lib" -B="bin" || exit_message 1 "could not install $base_lib"
 
         create_touch_file 0 "$touch_name"
         echo "$src_dir/$lib/$touch_name" >>"$manifest"
@@ -3741,7 +3817,7 @@ build_cuda_crt() {
     truthy "$build_force" && remove_path -rf "$src_dir/$lib"
     if [[ -f "$manifest" && ! -f "$src_dir/$lib/$touch_name" ]]; then
       [[ -d "$src_dir/$lib" ]] && reset_touch "$src_dir/$lib" "${host_name}_installed*.touch"
-      uninstall_manifest "$manifest" >/dev/null 2>&1
+      uninstall_manifest "$manifest" >>"$LOG_FILE" 2>&1
     fi
 
     if [ ! -f "$src_dir/$lib/$touch_name" ]; then
@@ -3756,44 +3832,31 @@ build_cuda_crt() {
         echo "$src_dir/$lib/$touch_name" >>"$manifest"
     fi
 }
-# build_cuda_nvcc         # config_options+= --enable-cuda-nvcc           # enable Nvidia CUDA compiler [no]
-build_cuda_nvcc() {
+build_cuda_nvcc_native() {
   if ! truthy "$disable_cuda_nvcc" && truthy "$enable_cuda_nvcc"; then
-    echo "WARNING: This is a non-gpl library." >>"$LOG_FILE"
-    
     if [[ "$bits_target" != "32" ]]; then
-      # Dependencies (kept for arbitrary execution; guards inside them will skip if done)
-	run_valid_function "build_cuda_cudart"
-	run_valid_function "build_cuda_crt"
-	run_valid_function "build_libnvvm"
-
       local base_lib="cuda-nvcc"
+      local lib_native="$base_lib-linux-$host_arch"
       local lib="$base_lib-$host_name"
-      # URL in your snippet was 13.0.88, though var said 13.1.80. Matched URL.
-      local repo_ver="13.0.88" 
-      local repo="https://developer.download.nvidia.com/compute/cuda/redist/cuda_nvcc/windows-x86_64/cuda_nvcc-windows-x86_64-13.0.88-archive.zip"
+      local repo_ver="13.1.88" 
+      local repo="https://developer.download.nvidia.com/compute/cuda/redist/cuda_nvcc/linux-x86_64/cuda_nvcc-linux-x86_64-13.1.80-archive.tar.xz"
       
-      local manifest="$work_dir/pkgconfig/${lib}_manifest"
+      local manifest="$work_dir/pkgconfig/${base_lib}-${base_lib}-${host_name}_${base_lib}-linux-${host_arch}_manifest"
       [[ ! -f "$manifest" ]] && touch "$manifest"
-
-      change_dir "$src_dir"
-      local touch_name=$(get_small_touchfile_name "${host_name}_installed" "$repo")
       
-      truthy "$build_force" && remove_path -rf "$src_dir/$lib"
+      change_dir "$src_dir"
+      local touch_name=$(get_small_touchfile_name "linux-${host_arch}_installed" "$repo")\
+
+      truthy "$build_force" && remove_path -rf "$src_dir/$lib_native"
       # Force Rebuild Logic
-      if [[ -f "$manifest" && ! -f "$src_dir/$lib/$touch_name" ]]; then
-        [[ -d "$src_dir/$lib" ]] && reset_touch "$src_dir/$lib" "${host_name}_installed*.touch"
-        uninstall_manifest "$manifest" >/dev/null 2>&1
+      if [[ -f "$manifest" && ! -f "$src_dir/$lib_native/$touch_name" ]]; then
+        [[ -d "$src_dir/$lib_native" ]] && reset_touch "$src_dir/$lib_native" "linux-${host_arch}_installed*.touch"
+        uninstall_manifest "$manifest" >>"$LOG_FILE" 2>&1
       fi
-
-      if [ ! -f "$src_dir/$lib/$touch_name" ]; then
-        download_and_unpack_file "$repo" "$src_dir/$lib"
-        change_dir "$src_dir/$lib"
-
-        install_msvc_binary -n="$base_lib" -v="13.0.80" \
-            -s="$src_dir/$lib" \
-            -m="$manifest" \
-            -I="include" -B="bin" || exit_message 1 "could not install $base_lib"
+      if [ ! -f "$src_dir/$lib_native/$touch_name" ]; then
+        download_and_unpack_file "$repo" "$src_dir/$lib_native"
+        change_dir "$src_dir/$lib_native"
+        copy_and_link "$dependency_install_prefix/bin" "$dependency_install_prefix/bin" "$src_dir/$lib_native/bin/"* 1>> "$manifest" 2>>"$LOG_FILE" || exit_message 1 "build_cuda_nvcc: could not install $lib bins"
         create_touch_file 0 "$touch_name"
         echo "$src_dir/$lib/$touch_name" >>"$manifest"
       fi
@@ -3801,6 +3864,21 @@ build_cuda_nvcc() {
       echo -e "WARNING: 32bit not supported for cuda_nvcc" >>"$LOG_FILE"
     fi
     change_dir "$src_dir"
+  fi
+}
+# build_cuda_nvcc         # config_options+= --enable-cuda-nvcc           # enable Nvidia CUDA compiler [no]
+build_cuda_nvcc() {
+  if ! truthy "$disable_cuda_nvcc" && truthy "$enable_cuda_nvcc"; then
+    echo "WARNING: This is a non-gpl library." >>"$LOG_FILE"
+    if [[ "$bits_target" != "32" ]]; then
+      disable_library "cuda-nvcc"
+      enable_library "cuda-llvm"
+      install_missing_packages clang compiler-rt
+      run_valid_function "build_cuda_cudart"
+      run_valid_function "build_cuda_crt"
+      run_valid_function "build_libnvvm"
+      run_valid_function "build_cuda_nvcc_native"
+    fi
   fi
 }
 # build_d3d11va           # config_options+= --disable-d3d11va            # disable Microsoft Direct3D 11 video acceleration code [autodetect]
@@ -3826,6 +3904,7 @@ build_libdrm() {
   if ! truthy "$disable_libdrm" && truthy "$enable_libdrm"; then
     echo "Only available on Linux build" >>"$LOG_FILE"
     # https://gitlab.freedesktop.org/mesa/libdrm
+    disable_library "libdrm"
   fi
 }
 # build_omx_rpi           # config_options+= --disable-omx-rpi            # enable OpenMAX IL code for Raspberry Pi [no]
@@ -3833,6 +3912,7 @@ build_omx_rpi() {
   if ! truthy "$disable_omx_rpi" && truthy "$enable_omx_rpi"; then
     # https://github.com/tizonia/tizonia-openmax-il maybe?
     echo "Only available on Linux build" >>"$LOG_FILE"
+    disable_library "omx-rpi"
     #
   fi
 }
@@ -3841,7 +3921,7 @@ build_omx() {
   if ! truthy "$disable_omx" && truthy "$enable_omx"; then
     echo "Only available on Linux build" >>"$LOG_FILE"
     # https://github.com/tizonia/tizonia-openmax-il maybe?
-    #
+    disable_library "omx"
   fi
 }
 # build_mmal              # config_options+= --disable-mmal               # enable Broadcom Multi-Media Abstraction Layer (Raspberry Pi) via MMAL [no]
@@ -3849,7 +3929,7 @@ build_mmal() {
   if ! truthy "$disable_mmal" && truthy "$enable_mmal"; then
     # https://github.com/raspberrypi/userland/tree/master/interface/mmal maybe?
     echo "Only available on Linux build" >>"$LOG_FILE"
-    #
+    disable_library "mmal"
   fi
 }
 # build_libmfx            # config_options+= --enable-libmfx              # enable Intel MediaSDK (AKA Quick Sync Video) code via libmfx [no]
@@ -3857,6 +3937,7 @@ build_libmfx() {
   if ! truthy "$disable_libmfx" && truthy "$enable_libmfx"; then
     echo "WARNING: [disabled] Library has been archived and has security issues." >>"$LOG_FILE"
     # https://github.com/Intel-Media-SDK/MediaSDK
+    disable_library "libmfx"
   fi
 }
 # build_libnpp            # config_options+= --enable-libnpp              # enable Nvidia Performance Primitives-based code [no]
@@ -3983,11 +4064,15 @@ build_libshaderc() {
   while IFS= read -r -d '' file; do
     add_libs_to_pkg -t="$file" -l="-lshlwapi" || true;
   done < <(find "$install_pkgconfig_dir" -name "benchmark*.pc" -print0)
-  add_libs_to_pkg -t="$install_pkgconfig_dir/libhwy-test.pc" -l="-lhwy" || true;
+  if [[ -f "$install_pkgconfig_dir/libhwy-test.pc" ]]; then
+    remove_path -f "$install_pkgconfig_dir/libhwy-test.pc"
+  fi
   while IFS= read -r -d '' file; do
     add_libs_to_pkg -t="$file" -l="-lshaderc_util -lglslang -lMachineIndependent -lGenericCodeGen -lOSDependent -lSPIRV -lSPIRV-Tools-opt -lSPIRV-Tools -lstdc++" || true;
   done < <(find "$install_pkgconfig_dir" -name "shaderc*.pc" -print0)
-  [[ -f "$install_pkgconfig_dir/SPIRV-Tools-shared.pc" ]] && remove_path -f "$install_pkgconfig_dir/SPIRV-Tools-shared.pc"
+  if [[ -f "$install_pkgconfig_dir/SPIRV-Tools-shared.pc" ]]; then
+    remove_path -f "$install_pkgconfig_dir/SPIRV-Tools-shared.pc"
+  fi
   change_dir "$src_dir"
   fi
 }
@@ -4010,6 +4095,7 @@ build_libxcb() {
   if ! truthy "$disable_libxcb" && truthy "$enable_libxcb"; then
     echo "Only available on Linux build" >>"$LOG_FILE"
     # https://gitlab.freedesktop.org/xorg/lib/libxcb
+  disable_library "libxcb"
   fi
 }
 # build_libxcb_shape      # config_options+= --enable-libxcb-shape        # enable X11 grabbing shape rendering [autodetect]
@@ -4017,6 +4103,7 @@ build_libxcb_shape() {
   if ! truthy "$disable_libxcb_shape" && truthy "$enable_libxcb_shape"; then
     echo "Only available on Linux build" >>"$LOG_FILE"
     # https://gitlab.freedesktop.org/xorg/lib/libxcb
+  disable_library "libxcb-shape"
   fi
 }
 # build_libxcb_shm        # config_options+= --enable-libxcb-shm          # enable X11 grabbing shm communication [autodetect]
@@ -4024,6 +4111,7 @@ build_libxcb_shm() {
   if ! truthy "$disable_libxcb_shm" && truthy "$enable_libxcb_shm"; then
     echo "Only available on Linux build" >>"$LOG_FILE"
     # https://gitlab.freedesktop.org/xorg/lib/libxcb
+  disable_library "libxcb-shm"
   fi
 }
 # build_libxcb_xfixes     # config_options+= --enable-libxcb-xfixes       # enable X11 grabbing mouse rendering [autodetect]
@@ -4031,6 +4119,7 @@ build_libxcb_xfixes() {
   if ! truthy "$disable_libxcb_xfixes" && truthy "$enable_libxcb_xfixes"; then
     echo "Only available on Linux build" >>"$LOG_FILE"
     # https://gitlab.freedesktop.org/xorg/lib/libxcb
+  disable_library "libxcb-xfixes"
   fi
 }
 
@@ -4604,7 +4693,9 @@ build_cpuinfo() {
   while IFS= read -r -d '' file; do
     add_libs_to_pkg -t="$file" -l="-lshlwapi"
   done < <(find "$install_pkgconfig_dir" -name "benchmark*.pc" -print0)
-  add_libs_to_pkg -t="$install_pkgconfig_dir/libhwy-test.pc" -l="-lhwy"
+  if [[ -f "$install_pkgconfig_dir/libhwy-test.pc" ]]; then
+    remove_path -f "$install_pkgconfig_dir/libhwy-test.pc"
+  fi
 }
 
 build_vulkan_loader() {

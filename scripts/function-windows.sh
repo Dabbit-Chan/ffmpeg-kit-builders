@@ -38,9 +38,9 @@ check_cross_compiler_bin() {
 }
 
 check_cross_compiler() {
-  if [[ $(check_cross_compiler_bin) != 0 ]]; then
-    install_cross_compiler
-  fi
+	if [[ $(check_cross_compiler_bin) != 0 ]]; then
+		install_cross_compiler
+	fi
 }
 
 install_cross_compiler() {
@@ -70,19 +70,19 @@ install_cross_compiler() {
 		if [[ ! -f ../cross_compilers/mingw-w64-i686/i686-w64-mingw32/lib/libmingwex.a ]]; then
 			exit_message 1 "failure building mingwex? 32 bit"
 		fi
-    if [[ $host_arch == "x86_64" && ! -f ../$win64_gcc ]]; then
-      echo -e "Building win64 x86_64 cross compiler..." >>"$LOG_FILE"
-      download_gcc_build_script "$zeranoe_script_name"
-      # shellcheck disable=SC2086
-      CFLAGS='-O3 -pipe' CXXFLAGS='-O3 -pipe' nice ./"$zeranoe_script_name" "$zeranoe_script_options" x86_64 || exit_message 1 "could not update cross compiler script for x86_64"
-      if [[ ! -f ../$win64_gcc ]]; then
-        exit_message 1 "failure building 64 bit gcc? Recommend nuke prebuilt (rm -rf prebuilt) and start over..."
-      fi
-      if [[ ! -f ../cross_compilers/mingw-w64-x86_64/x86_64-w64-mingw32/lib/libmingwex.a ]]; then
-        exit_message 1 "failure building mingwex? 64 bit"
-      fi
-    fi
-    change_dir "$work_dir/cross_compilers/src"
+		if [[ $host_arch == "x86_64" && ! -f ../$win64_gcc ]]; then
+			echo -e "Building win64 x86_64 cross compiler..." >>"$LOG_FILE"
+			download_gcc_build_script "$zeranoe_script_name"
+			# shellcheck disable=SC2086
+			CFLAGS='-O3 -pipe' CXXFLAGS='-O3 -pipe' nice ./"$zeranoe_script_name" "$zeranoe_script_options" x86_64 || exit_message 1 "could not update cross compiler script for x86_64"
+			if [[ ! -f ../$win64_gcc ]]; then
+				exit_message 1 "failure building 64 bit gcc? Recommend nuke prebuilt (rm -rf prebuilt) and start over..."
+			fi
+			if [[ ! -f ../cross_compilers/mingw-w64-x86_64/x86_64-w64-mingw32/lib/libmingwex.a ]]; then
+				exit_message 1 "failure building mingwex? 64 bit"
+			fi
+		fi
+		change_dir "$work_dir/cross_compilers/src"
 	fi
 	# rm -f build.log # leave resultant build log...sometimes useful...
 	reset_cflags
@@ -104,7 +104,7 @@ configure_ffmpeg_kit() {
 
 	export PKG_CONFIG_PATH="${PKG_CONFIG_PATH}:${ffmpeg_install_prefix}/lib/pkgconfig"
 	set_toolchain_paths
-  
+
 	reset_cflags
 	reset_cppflags
 	local local_cflags="${CFLAGS} -I${ffmpeg_install_prefix}/include -L${ffmpeg_install_prefix}/lib -I${ffmpeg_source_dir} -I${ffmpeg_source_dir}/compat -DHAVE_W32PTHREADS_H=1"
@@ -132,9 +132,9 @@ configure_ffmpeg_kit() {
 		config_options+=" --disable-static"
 	fi
 	change_dir "${ffmpeg_kit_src_dir}"
-  export CFLAGS="${local_cflags}"
-  export CXXFLAGS="${local_cxxfalgs}"
-  export LDFLAGS="$LDFLAGS -lpthread"
+	export CFLAGS="${local_cflags}"
+	export CXXFLAGS="${local_cxxfalgs}"
+	export LDFLAGS="$LDFLAGS -lpthread"
 	do_configure "${config_options}" "./configure" "$(get_bundle_directory)" || exit_message 1 "unable to configure ffmpeg-kit. see $LOG_FILE for details."
 
 	echo -e "INFO: Done configuring ffmpeg kit" | tee -a "$LOG_FILE"
@@ -142,9 +142,9 @@ configure_ffmpeg_kit() {
 
 create_ffmpegkit_package_config() {
 	local kit_version="$1"
-  local location_prefix="$2"
-  create_dir "${location_prefix}/lib/pkgconfig"
-  cat >"${location_prefix}/lib/pkgconfig/ffmpeg-kit.pc" <<EOF
+	local location_prefix="$2"
+	create_dir "${location_prefix}/lib/pkgconfig"
+	cat >"${location_prefix}/lib/pkgconfig/ffmpeg-kit.pc" <<EOF
 prefix=${ffmpeg_kit_install}
 libdir=\${exec_prefix}/lib
 includedir=\${prefix}/include
@@ -168,210 +168,360 @@ EOF
 }
 
 get_static_macro_from_header() {
-    local base_name="$1"
-    local inc_dirs="$2"
-    
-    # 1. Gather all possible header paths
-    # pkg-config might return multiple -I paths; we check them all.
-    IFS=' ' read -r -a paths <<< "$inc_dirs"
-    
-    # Also add the default include root as a fallback
-    paths+=("-I${INCLUDE_ROOT}")
-
-    for path_flag in "${paths[@]}"; do
-        # Strip the -I prefix
-        local search_dir="${path_flag#-I}"
-        [[ -d "$search_dir" ]] || continue
-
-        # Look for the header (try "name.h", "libname.h", "name/name.h")
-        local header_found=$(find "$search_dir" -maxdepth 2 \
-            \( -name "${base_name}.h" -o -name "lib${base_name}.h" \) | head -n 1)
-            
-        if [[ -n "$header_found" ]]; then
-            # Grep for the magic macro
-            local macro=$(grep -E -o -h \
-                "defined\([A-Z0-9_]+_(NODLL|STATIC|STATICLIB)\)" \
-                "$header_found" | head -n 1)
-                
-            if [[ -n "$macro" ]]; then
-                macro="${macro#defined(}" # Strip defined(
-                macro="${macro%)}"        # Strip )
-                echo "-D${macro}"
-                return 0
-            fi
-        fi
-    done
-    return 1
+		local base_name="$1"
+		local inc_dirs="$2"
+		# 1. Gather all possible header paths
+		IFS=' ' read -r -a paths <<< "$inc_dirs"
+		paths+=("-I${INCLUDE_ROOT}")
+		for path_flag in "${paths[@]}"; do
+				local search_dir="${path_flag#-I}"
+				[[ -d "$search_dir" ]] || continue
+				# Look for the header
+				local header_found=$(find "$search_dir" -maxdepth 2 \
+						\( -name "${base_name}.h" -o -name "lib${base_name}.h" \) | head -n 1)
+				if [[ -n "$header_found" ]]; then
+						# 2a. Check for 'defined(MACRO)'
+						# We use sed -nE to match the pattern and print ONLY the capture group (\1)
+						local macro=$(sed -nE 's/.*defined\(([A-Z0-9_]+_(NODLL|STATIC|STATICLIB|STATIC_LIB))\).*/\1/p' "$header_found" | head -n 1)
+						if [[ -n "$macro" ]]; then
+								echo "-D${macro}"
+								return 0
+						fi
+						# 2b. Fallback: Check for '#ifdef MACRO'
+						# Matches: #ifdef MACRO, # ifdef MACRO, etc.
+						# Captures the MACRO name into \1 and prints it.
+						local ifdef_macro=$(sed -nE 's/^\s*#\s*ifdef\s+([A-Z0-9_]+_(NODLL|STATIC|STATICLIB|STATIC_LIB)).*/\1/p' "$header_found" | head -n 1)
+						if [[ -n "$ifdef_macro" ]]; then
+								 echo "-D${ifdef_macro}"
+								 return 0
+						fi
+				fi
+		done
+		return 1
 }
 
-update_dependency_pkgconfig() {
-  local ORIG_PKG_CONFIG_PATH=$PKG_CONFIG_PATH
-  local ORIG_PKG_CONFIG_LIBDIR=$PKG_CONFIG_LIBDIR
-  local ORIG_PKG_CONFIG_SYSROOT_DIR=$PKG_CONFIG_SYSROOT_DIR
+fix_pkgconfig_flags() {
+	local ORIG_PKG_CONFIG_PATH=$PKG_CONFIG_PATH
+	local ORIG_PKG_CONFIG_LIBDIR=$PKG_CONFIG_LIBDIR
+	local ORIG_PKG_CONFIG_SYSROOT_DIR=$PKG_CONFIG_SYSROOT_DIR
 
-  # Isolate pkg-config to strictly look at our cross-compiled environment
-  export PKG_CONFIG_PATH=""
-  export PKG_CONFIG_LIBDIR="$install_pkgconfig_dir"
-  export PKG_CONFIG_SYSROOT_DIR="$dependency_install_prefix"
+	export PKG_CONFIG_PATH=""
+	export PKG_CONFIG_LIBDIR="$install_pkgconfig_dir"
+	export PKG_CONFIG_SYSROOT_DIR="$dependency_install_prefix"
 
-  echo "INFO: Scanning .pc files in $PKG_CONFIG_LIBDIR..."
+	echo "INFO: Scanning .pc files in $PKG_CONFIG_LIBDIR..."
 
-  for pc_file in "$PKG_CONFIG_LIBDIR"/*.pc; do
-      [[ -e "$pc_file" ]] || continue
+	for pc_file in "$PKG_CONFIG_LIBDIR"/*.pc; do
+			[[ -e "$pc_file" ]] || continue
+			pkg_name=$(basename "$pc_file" .pc)
+			# Get Libs
+			lib_flags=$(pkg-config --static --libs-only-l "$pkg_name" 2>/dev/null)
+			clean_lib_name=$(echo "$lib_flags" | awk '{print $1}' | sed 's/^-l//')
+			[[ -z "$clean_lib_name" ]] && continue
+			# Get Cflags (Include Paths)
+			inc_flags=$(pkg-config --static --cflags-only-I "$pkg_name" 2>/dev/null)
+			search_name="${clean_lib_name#lib}"
+			# --- STRATEGY 1: EXCEPTION MAP ---
+			local flag=""
+			case "$pkg_name" in
+					kvazaar) flag="-DKVZ_STATIC_LIB" ;;
+					lc3)     flag="-DLC3_STATIC" ;;
+			esac
+			# --- STRATEGY 2: HEADER SCAN ---
+			if [[ -z "$flag" ]]; then
+					flag=$(get_static_macro_from_header "$search_name" "$inc_flags")
+			fi
+			# --- STRATEGY 3: FALLBACK GUESSING ---
+			if [[ -z "$flag" ]]; then
+					local upper=$(echo "$search_name" | tr '[:lower:]-' '[:upper:]_')
+					local guess="-D${upper}_STATIC"
+					if [[ "$search_name" == "ssh" || "$search_name" == "twolame" ]]; then
+							guess="-DLIB${upper}_STATIC"
+					fi
+					flag="$guess"
+			fi
+			# --- 5. DUPLICATION CHECK (UPDATED) ---
+			# CRITICAL FIX: Only grep the 'Cflags:' line, not the whole file.
+			# This allows adding the flag to Cflags even if it already exists in Cflags.private.
+			if grep "^Cflags:" "$pc_file" | grep -Fq -e "$flag"; then
+					 echo "  [OK]    $pkg_name: Already has flag $flag in Cflags" >>"$LOG_FILE"
+					 continue
+			fi
+			# 6. APPLY PATCH
+			cp -fv "$pc_file" "$pc_file.bak" >>"$LOG_FILE" 2>&1
+			if [[ -n "$flag" ]]; then
+					echo "  [FIX]   $pkg_name: Appending $flag to $pc_file" >>"$LOG_FILE"
+					add_libs_to_pkg -t="$pc_file" -c="$flag"
+			fi
+	done
 
-      # 1. Get the package name from the filename
-      pkg_name=$(basename "$pc_file" .pc)
-
-      # 2. ASK PKG-CONFIG: "What libraries does this link against?"
-      # --libs-only-l: Returns "-lz -lpng" etc.
-      lib_flags=$(pkg-config --static --libs-only-l "$pkg_name" 2>/dev/null)
-      
-      # Extract the main library name (remove -l)
-      clean_lib_name=$(echo "$lib_flags" | awk '{print $1}' | sed 's/^-l//')
-      
-      # If pkg-config failed or returned nothing (header-only lib), skip
-      if [[ -z "$clean_lib_name" ]]; then
-          continue
-      fi
-
-      # 3. GET HEADERS: "Where are the headers?"
-      inc_flags=$(pkg-config --static --cflags-only-I "$pkg_name" 2>/dev/null)
-
-      # 4. DETERMINE THE FLAG
-      # Hunt for the macro or fallback
-      search_name="${clean_lib_name#lib}"
-      
-      flag=$(get_static_macro_from_header "$search_name" "$inc_flags")
-
-      # If auto-detection failed, use the fallback guess
-      if [[ -z "$flag" ]]; then
-          sanitized=$(echo "$search_name" | tr '[:lower:]-' '[:upper:]_')
-          flag="-D${sanitized}_STATIC"
-      fi
-
-      # 5. DUPLICATION CHECK
-      # Read the raw file content to see if the SPECIFIC flag exists.
-      # We check the file directly because pkg-config output might be messy or reorganized.
-      if grep -Fq -e "$flag" "$pc_file"; then
-           echo "  [OK]   $pkg_name: Already has flag $flag in $pc_file" >>"$LOG_FILE"
-           continue
-      fi
-
-      # 6. APPLY PATCH
-      # Create backup only if we are actually modifying it
-      cp -fv "$pc_file" "$pc_file.bak" >>"$LOG_FILE" 2>&1
-      
-      if [[ -n "$flag" ]]; then
-          echo "  [FIX]  $pkg_name: Appending $flag to $pc_file" >>"$LOG_FILE"
-          sed -i "/^Cflags:/ s|$| $flag|" "$pc_file"
-      fi
-  done
-
-  # Restore original environment
-  export PKG_CONFIG_PATH="$ORIG_PKG_CONFIG_PATH"
-  export PKG_CONFIG_LIBDIR="$ORIG_PKG_CONFIG_LIBDIR"
-  export PKG_CONFIG_SYSROOT_DIR="$ORIG_PKG_CONFIG_SYSROOT_DIR"
-  
-  echo "INFO: Update Complete."
+	export PKG_CONFIG_PATH="$ORIG_PKG_CONFIG_PATH"
+	export PKG_CONFIG_LIBDIR="$ORIG_PKG_CONFIG_LIBDIR"
+	export PKG_CONFIG_SYSROOT_DIR="$ORIG_PKG_CONFIG_SYSROOT_DIR"
+	echo "INFO: Update Complete."
 }
 
 # WARNING: For pure C libraries only. Anything else will result in seg fault due to ABI mismatch
 # Usage: install_msvc_binary -n="libname" -v="1.0" -s="src_dir" -p="Install prefix" -I="include_path" -L="lib_path" -B="bin_path" -d="Library desc" -m="Install manifest"
 install_msvc_binary() {
-    local lib_name="" version="" src_root="" inc_sub="" lib_sub="" bin_sub="" desc="Prebuilt MSVC Library"
-    local manifest=""
-    while [[ $# -gt 0 ]]; do
-        case "$1" in
-            -n=*) lib_name="${1#*=}"; shift ;;
-            -v=*) version="${1#*=}"; shift ;;
-            -s=*) src_root="${1#*=}"; shift ;;
-            -p=*) install_dir="${1#*=}"; shift ;;
-            -I=*) inc_sub="${1#*=}"; shift ;;
-            -L=*) lib_sub="${1#*=}"; shift ;;
-            -B=*) bin_sub="${1#*=}"; shift ;;
-            -d=*) desc="${1#*=}"; shift ;;
-            -m=*) manifest="${1#*=}"; shift ;;
-            *) shift ;;
-        esac
-    done
-    [[ -z "$install_dir" ]] && install_dir="$dependency_install_prefix"
-    create_dir "$install_dir/{lib,bin,include}"
-    local install_lib="$install_dir/lib"
-    local install_bin="$install_dir/bin"
-    local install_inc="$install_dir/include"
-    [[ -z "$manifest" ]] && manifest="$install_pkgconfig_dir/${lib_name}_manifest"
-    [[ ! -f "$manifest" ]] && touch "$manifest"
-    echo "INFO: Installing Prebuilt $lib_name ($version)..." >>"$LOG_FILE"
-    local gendef_tool="${cross_prefix}gendef"
-    local dll_tool="${cross_prefix}dlltool"
-    [[ ! -x "$(command -v "$gendef_tool")" ]] && gendef_tool="gendef"
-    [[ ! -x "$(command -v "$dll_tool")" ]] && dll_tool="dlltool"
-    local pkg_scan_dir=$(mktemp -d)
-    if [[ -d "$src_root/$inc_sub" && -n "$inc_sub" ]]; then
-        cp -rfv "$src_root/$inc_sub"* "$install_inc/" >>"$LOG_FILE"
-        
-        find "$src_root/$inc_sub" -mindepth 1 -print0 | while IFS= read -r -d '' f; do
-            local rel_path="${f#"$src_root/$inc_sub/"}"
-            echo "$install_inc/$rel_path" >> "$manifest"
-            echo "  [Installed]: $install_inc/$rel_path" >>"$LOG_FILE"
-        done
-    fi
-    if [[ -n "$bin_sub" && -d "$src_root/$bin_sub" ]]; then
-        local tmp_def_dir=$(mktemp -d)
-        find "$src_root/$bin_sub" -name "*.dll" -print0 | while IFS= read -r -d '' f; do
-            local fname=$(basename "$f")
-            local libname="${fname%.dll}"
-            cp -rfv "$f" "$install_bin/" >>"$LOG_FILE"
-            echo "$install_bin/$fname" >> "$manifest"
-            echo "  [Installed]: $install_inc/$fname" >>"$LOG_FILE"
-            pushd "$tmp_def_dir" >/dev/null || return 1
-            "$gendef_tool" "$f" >/dev/null 2>&1
-            local def_file="$tmp_def_dir/$libname.def"
-            popd >/dev/null || return 1
-            if [[ -f "$def_file" ]]; then
-                echo "INFO: Generated MinGW import lib for $fname" >>"$LOG_FILE"
-                "$dll_tool" -d "$def_file" -D "$fname" -l "$install_lib/lib$libname.dll.a"
-                echo "$install_lib/lib$libname.dll.a" >> "$manifest"
-                cp -rfv "$install_lib/lib$libname.dll.a" "$pkg_scan_dir/" >>"$LOG_FILE"
-                rm -f "$install_lib/lib$libname.a"
-                echo "  [Installed]: $install_lib/lib$libname.dll.a" >>"$LOG_FILE"
-            else
-                echo "  [WARNING]: Failed to generate def file for $fname" >>"$LOG_FILE"
-            fi
-        done
-        rm -rf "$tmp_def_dir"
-        find "$src_root/$bin_sub" -type f \( -not -name "*.dll" \) -print0 | while IFS= read -r -d '' f; do
-            cp -rfv "$f" "$install_bin/" >>"$LOG_FILE"
-            echo "$install_bin/$(basename "$f")" >> "$manifest"
-            echo "  [Installed]: $install_bin/$(basename "$f")" >>"$LOG_FILE"
-        done
-    fi
-    if [[ -d "$src_root/$lib_sub" && -n "$lib_sub" ]]; then
-        find "$src_root/$lib_sub" \( -name "*.lib" -o -name "*.dll.a" \) -print0 | while IFS= read -r -d '' f; do
-            local fname=$(basename "$f")
-            local libname="${fname%.lib}"
-            cp -rfv "$f" "$install_lib/$fname" >>"$LOG_FILE"
-            echo "$install_lib/$fname" >> "$manifest"
-            echo "  [Installed]: $install_bin/$fname" >>"$LOG_FILE"
-            if [[ "$fname" == *.lib ]]; then
-                if [[ -f "$install_lib/lib$libname.dll.a" ]]; then
-                    : # We have a good import lib, do nothing
-                else
-                    cp -rfv "$f" "$install_lib/lib$libname.a" >>"$LOG_FILE"
-                    echo "$install_lib/lib$libname.a" >> "$manifest"
-                    cp -rfv "$install_lib/lib$libname.a" "$pkg_scan_dir/" >>"$LOG_FILE"
-                    echo "  [Installed]: $install_lib/lib$libname.a" >>"$LOG_FILE"
-                fi
-            fi
-        done
-    fi
-    generate_pkg_config -t="$pkg_scan_dir" \
-        -o="$install_pkgconfig_dir/$lib_name.pc" \
-        -i="$install_dir" \
-        -v="$version" -n="$lib_name" -d="$desc" >/dev/null 2>&1
-    rm -rf "$pkg_scan_dir"
+		local lib_name="" version="" src_root="" inc_sub="" lib_sub="" bin_sub="" desc="Prebuilt MSVC Library"
+		local manifest=""
+		while [[ $# -gt 0 ]]; do
+				case "$1" in
+						-n=*) lib_name="${1#*=}"; shift ;;
+						-v=*) version="${1#*=}"; shift ;;
+						-s=*) src_root="${1#*=}"; shift ;;
+						-p=*) install_dir="${1#*=}"; shift ;;
+						-I=*) inc_sub="${1#*=}"; shift ;;
+						-L=*) lib_sub="${1#*=}"; shift ;;
+						-B=*) bin_sub="${1#*=}"; shift ;;
+						-d=*) desc="${1#*=}"; shift ;;
+						-m=*) manifest="${1#*=}"; shift ;;
+						*) shift ;;
+				esac
+		done
+		[[ -z "$install_dir" ]] && install_dir="$dependency_install_prefix"
+		create_dir "$install_dir/{lib,bin,include}"
+		local install_lib="$install_dir/lib"
+		local install_bin="$install_dir/bin"
+		local install_inc="$install_dir/include"
+		[[ -z "$manifest" ]] && manifest="$install_pkgconfig_dir/${lib_name}_manifest"
+		[[ ! -f "$manifest" ]] && touch "$manifest"
+		echo "INFO: Installing Prebuilt $lib_name ($version)..." >>"$LOG_FILE"
+		local gendef_tool="${cross_prefix}gendef"
+		local dll_tool="${cross_prefix}dlltool"
+		[[ ! -x "$(command -v "$gendef_tool")" ]] && gendef_tool="gendef"
+		[[ ! -x "$(command -v "$dll_tool")" ]] && dll_tool="dlltool"
+		local pkg_scan_dir=$(mktemp -d)
+		if [[ -d "$src_root/$inc_sub" && -n "$inc_sub" ]]; then
+				cp -rfv "$src_root/$inc_sub/"* "$install_inc/" >>"$LOG_FILE"
+				find "$src_root/$inc_sub" -mindepth 1 -print0 | while IFS= read -r -d '' f; do
+						local rel_path="${f#"$src_root/$inc_sub/"}"
+						mkdir -p "$(dirname "$install_inc/$rel_path")"
+						cp -rfv "$f" "$install_inc/$rel_path" >>"$LOG_FILE"
+						echo "$install_inc/$rel_path" >>"$manifest"
+						echo "  [Installed]: $install_inc/$rel_path" >>"$LOG_FILE"
+				done
+		fi
+		if [[ -n "$bin_sub" && -d "$src_root/$bin_sub" ]]; then
+				local tmp_def_dir=$(mktemp -d)
+				find "$src_root/$bin_sub" -name "*.dll" -print0 | while IFS= read -r -d '' f; do
+						local fname=$(basename "$f")
+						local libname="${fname%.dll}"
+						cp -rfv "$f" "$install_bin/" >>"$LOG_FILE"
+						echo "$install_bin/$fname" >> "$manifest"
+						echo "  [Installed]: $install_inc/$fname" >>"$LOG_FILE"
+						pushd "$tmp_def_dir" >/dev/null || return 1
+						local def_file="$tmp_def_dir/$libname.def"
+						if ("$gendef_tool" "$f" >/dev/null 2>&1) && [[ -f "$def_file" ]]; then
+								 echo "INFO: Generated MinGW import lib for $fname" >>"$LOG_FILE"
+								"$dll_tool" -d "$def_file" -D "$fname" -l "$install_lib/lib$libname.dll.a"
+								echo "$install_lib/lib$libname.dll.a" >> "$manifest"
+								cp -rfv "$install_lib/lib$libname.dll.a" "$pkg_scan_dir/" >>"$LOG_FILE"
+								rm -f "$install_lib/lib$libname.a"
+								echo "  [Installed]: $install_lib/lib$libname.dll.a" >>"$LOG_FILE"
+						else
+								echo "  [WARNING]: Failed to generate def file for $fname (Crash/Error). Using direct DLL linking." >>"$LOG_FILE"
+								cp -fv "$f" "$install_lib/lib$libname.dll" >>"$LOG_FILE"
+								echo "$install_lib/lib$libname.dll" >> "$manifest"
+								cp -fv "$f" "$pkg_scan_dir/lib$libname.dll" >>"$LOG_FILE"
+						fi
+						popd >/dev/null || return 1
+						# -------- Handle Gendef Failure by using DLL directly --------
+						if [[ -f "$def_file" ]]; then
+								echo "INFO: Generated MinGW import lib for $fname" >>"$LOG_FILE"
+								"$dll_tool" -d "$def_file" -D "$fname" -l "$install_lib/lib$libname.dll.a"
+								echo "$install_lib/lib$libname.dll.a" >> "$manifest"
+								cp -rfv "$install_lib/lib$libname.dll.a" "$pkg_scan_dir/" >>"$LOG_FILE"
+								rm -f "$install_lib/lib$libname.a"
+								echo "  [Installed]: $install_lib/lib$libname.dll.a" >>"$LOG_FILE"
+						else
+								echo "  [WARNING]: Failed to generate def file for $fname. Using direct DLL linking." >>"$LOG_FILE"
+								# Copy the DLL to lib/libNAME.dll. The linker will accept this.
+								cp -fv "$f" "$install_lib/lib$libname.dll" >>"$LOG_FILE"
+								echo "$install_lib/lib$libname.dll" >> "$manifest"
+								# Copy to pkg_scan_dir so the pkg-config generator picks it up
+								cp -fv "$f" "$pkg_scan_dir/lib$libname.dll" >>"$LOG_FILE"
+						fi
+						# -------------------------------------------------------------
+				done
+				rm -rf "$tmp_def_dir"
+				find "$src_root/$bin_sub" -type f \( -not -name "*.dll" \) -print0 | while IFS= read -r -d '' f; do
+						cp -rfv "$f" "$install_bin/" >>"$LOG_FILE"
+						echo "$install_bin/$(basename "$f")" >> "$manifest"
+						echo "  [Installed]: $install_bin/$(basename "$f")" >>"$LOG_FILE"
+				done
+		fi
+		if [[ -d "$src_root/$lib_sub" && -n "$lib_sub" ]]; then
+				find "$src_root/$lib_sub" \( -name "*.lib" -o -name "*.dll.a" \) -print0 | while IFS= read -r -d '' f; do
+						local fname=$(basename "$f")
+						local libname="${fname%.lib}"
+						cp -rfv "$f" "$install_lib/$fname" >>"$LOG_FILE"
+						echo "$install_lib/$fname" >> "$manifest"
+						echo "  [Installed]: $install_bin/$fname" >>"$LOG_FILE"
+						if [[ "$fname" == *.lib ]]; then
+								# -------- Check for either .dll.a OR .dll before overwriting --------
+								if [[ -f "$install_lib/lib$libname.dll.a" || -f "$install_lib/lib$libname.dll" ]]; then
+										: # We have a good import lib OR a direct linkable DLL, do nothing
+								else
+										echo "  [SKIP]: Skipping incompatible MSVC static library: $fname" >>"$LOG_FILE"
+										continue
+								fi
+								# --------------------------------------------------------------------
 
-    echo "$install_pkgconfig_dir/$lib_name.pc" >> "$manifest"
-    echo "  [Installed]: $install_pkgconfig_dir/$lib_name.pc" >>"$LOG_FILE"
-    return 0
+						fi
+				done
+		fi
+		generate_pkg_config -t="$pkg_scan_dir" \
+				-o="$install_pkgconfig_dir/$lib_name.pc" \
+				-i="$install_dir" \
+				-v="$version" -n="$lib_name" -d="$desc" >/dev/null 2>&1
+		rm -rf "$pkg_scan_dir"
+
+		echo "$install_pkgconfig_dir/$lib_name.pc" >> "$manifest"
+		echo "  [Installed]: $install_pkgconfig_dir/$lib_name.pc" >>"$LOG_FILE"
+		return 0
+}
+
+# 1. variant
+# @. custom values
+# Usage: get_generic_windows_cmake_toolchain [variant_suffix] [VAR="VALUE" ...]
+# Example: get_generic_windows_cmake_toolchain "rabbitmq" CMAKE_C_FLAGS_INIT="-static -Wno-error"
+get_generic_windows_cmake_toolchain() {
+		local variant="$1"
+		local base_filename="$host_name-toolchain.cmake"
+		local base_filepath="$src_dir/$base_filename"
+		shift
+		# Determine filename based on variant presence
+		local toolchain_filename="$host_name-toolchain.cmake"
+		if [[ -n "$variant" ]]; then
+			toolchain_filename="$host_name-toolchain-$variant.cmake"
+			local toolchain_path="$(pwd)/$toolchain_filename"
+		else
+			toolchain_filename="$host_name-toolchain.cmake"
+			local toolchain_path="$src_dir/$toolchain_filename"
+		fi
+		# Only generate if it doesn't exist
+		if [[ ! -e "$toolchain_path" ]]; then
+				local cpu_family="x86_64"
+				if [ "$bits_target" = 32 ]; then
+						cpu_family="x86"
+				fi
+				declare -A cmake_config
+				# System info
+				cmake_config["CMAKE_SYSTEM_NAME"]="Windows"
+				cmake_config["CMAKE_SYSTEM_PROCESSOR"]="${target_proc:-$cpu_family}"
+				# Toolchain locations
+				cmake_config["TOOLCHAIN_PREFIX"]="${host_target}"
+				cmake_config["TOOLCHAIN_ROOT"]="${toolchain_root_dir}"
+				# Compilers
+				cmake_config["CMAKE_C_COMPILER"]="${cross_prefix}gcc"
+				cmake_config["CMAKE_CXX_COMPILER"]="${cross_prefix}g++"
+				# cmake_config["CMAKE_RC_COMPILER"]="${cross_prefix}windres"
+				cmake_config["CMAKE_AR"]="${cross_prefix}ar"
+				cmake_config["CMAKE_RANLIB"]="${cross_prefix}ranlib"
+				cmake_config["CMAKE_STRIP"]="${cross_prefix}strip"
+				# Search Paths
+				cmake_config["CMAKE_FIND_ROOT_PATH"]="${dependency_install_prefix}"
+				cmake_config["CMAKE_FIND_ROOT_PATH_MODE_PROGRAM"]="NEVER"
+				cmake_config["CMAKE_FIND_ROOT_PATH_MODE_LIBRARY"]="ONLY"
+				cmake_config["CMAKE_FIND_ROOT_PATH_MODE_INCLUDE"]="ONLY"
+				# Flags (Using INIT to allow appending later)
+				cmake_config["CMAKE_C_FLAGS_INIT"]="-static -static-libgcc -static-libstdc++"
+				cmake_config["CMAKE_CXX_FLAGS_INIT"]="-static -static-libgcc -static-libstdc++"
+				cmake_config["CMAKE_EXE_LINKER_FLAGS_INIT"]="-static -static-libgcc -static-libstdc++"
+				# Loop through remaining args in format KEY="VALUE"
+				for arg in "$@"; do
+						local key="${arg%%=*}"
+						local value="${arg#*=}"
+						echo "DEBUG: adding KEY:$key and VALUE:$value to cmake toolchain file for $variant" >>"$LOG_FILE"
+						cmake_config["$key"]="$value"
+				done
+				echo "# Generated via get_generic_windows_cmake_toolchain" > "$toolchain_path"
+				# Write CMAKE_SYSTEM_NAME first (convention)
+				echo "set(CMAKE_SYSTEM_NAME \"${cmake_config[CMAKE_SYSTEM_NAME]}\")" >> "$toolchain_path"
+				unset 'cmake_config[CMAKE_SYSTEM_NAME]'
+				# Write the rest
+				for key in "${!cmake_config[@]}"; do
+						echo "set($key \"${cmake_config[$key]}\")" >> "$toolchain_path"
+				done
+		fi
+		echo "$toolchain_path"
+}
+
+get_generic_windows_meson_cross_file() {
+		local variant_name="$1"      # e.g., "librist"
+		local extra_content="$2"     # e.g., "[built-in options]..."
+		local base_filename="$host_name-meson-cross.mingw.txt"
+		local base_filepath="$src_dir/$base_filename"
+		# 1. Generate the BASE file if it doesn't exist (Standard Logic)
+		if [[ ! -e "$base_filepath" ]]; then
+				local cpu_family="x86_64"
+				if [ "$bits_target" = 32 ]; then
+						cpu_family="x86"
+				fi
+				cat >"$base_filepath" <<EOF
+[built-in options]
+buildtype = 'release'
+wrap_mode = 'nofallback'
+default_library = 'static'
+prefer_static = 'true'
+backend = 'ninja'
+prefix = '$dependency_install_prefix'
+libdir = '$dependency_install_prefix/lib'
+b_staticpic = 'true'
+
+[binaries]
+c = '${cross_prefix}gcc'
+cpp = '${cross_prefix}g++'
+ld = '${cross_prefix}ld'
+ar = '${cross_prefix}ar'
+strip = '${cross_prefix}strip'
+nm = '${cross_prefix}nm'
+dlltool = '${cross_prefix}dlltool'
+windres = '/usr/bin/true'
+pkg-config = 'pkg-config'
+nasm = 'nasm'
+cmake = 'cmake'
+
+[host_machine]
+system = 'windows'
+cpu_family = '$cpu_family'
+cpu = '$cpu_family'
+endian = 'little'
+
+[properties]
+sys_root = '$dependency_install_prefix'
+pkg_config_sysroot_dir = '$dependency_install_prefix'
+pkg_config_libdir = '$pkg_config_sysroot_dir/lib/pkgconfig'
+needs_exe_wrapper = true
+EOF
+		fi
+		# 2. Handle Custom Variant logic
+		if [[ -n "$variant_name" ]]; then
+				local custom_filepath="$(pwd)/$host_name-meson-cross.mingw.${variant_name}.txt"
+				# Always overwrite the variant with a fresh copy of the base
+				cp "$base_filepath" "$custom_filepath" 2>"$LOG_FILE"
+				# Append custom options if provided
+				if [[ -n "$extra_content" ]]; then
+						# Add a newline for safety
+						echo "" >> "$custom_filepath"
+						echo -e "$extra_content" >> "$custom_filepath"
+				fi
+				# Return the path to the NEW custom file
+				echo "$custom_filepath"
+		else
+				# No customization requested, return the standard base file
+				echo "$base_filepath"
+		fi
+}
+
+ffmpeg_windows_patches() {
+	if iswindows; then
+		echo "INFO: Patching ffmpeg for qindows Mingw quirks..." >>"$LOG_FILE"
+		if [[ -f "$ffmpeg_source_dir/libavfilter/dnn/dnn_backend_tf.c" ]]; then
+			sed -i 's/ctx->options.async/ctx->async/g' "$ffmpeg_source_dir/libavfilter/dnn/dnn_backend_tf.c"
+		fi
+		echo "INFO: Done patching ffmpeg for qindows Mingw quirks." >>"$LOG_FILE"
+	fi
 }

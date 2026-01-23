@@ -2007,12 +2007,9 @@ build_libopenh264() {
   change_dir "$src_dir"
   do_git_checkout "$repo" "$src_dir/$lib" "$repo_ver"
   change_dir "$src_dir/$lib"
-  if [[ $bits_target == 32 ]]; then
-		local arch=i686 # or x86?
-	else
-		local arch=x86_64
-	fi
-  do_make "PREFIX=$dependency_install_prefix OS=linux ARCH=$arch ASM=yasm install-static"
+  local meson_options="-Dtests=disabled"
+  generic_meson "$meson_options"
+  do_ninja_and_ninja_install
     change_dir "$src_dir"
   fi
 }
@@ -4434,6 +4431,7 @@ build_cuda_llvm() {
   if ! truthy "$disable_cuda_llvm" && truthy "$enable_cuda_llvm"; then
   echo "WARNING: This is a non-gpl library." >>"$LOG_FILE"
   local lib="cuda_llvm"
+  install_missing_packages clang compiler-rt
   fi
 }
 # build_cuvid             # config_options+= --disable-cuvid              # disable Nvidia CUVID support [autodetect]

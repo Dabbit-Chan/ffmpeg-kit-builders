@@ -679,7 +679,7 @@ if truthy "$build_nonfree"; then
   truthy "$enable_video_ai" || truthy "$enable_full" && apply_preset "$CONFIG_VIDEO_AI_NON_FREE"
   truthy "$enable_ssh" || truthy "$enable_full" && apply_preset "$CONFIG_SSH_NON_FREE"
 
-  if [[ "${host_platform,,}" != "windows" ]]; then
+  if ! iswindows; then
     truthy "$enable_smb" || truthy "$enable_full" && apply_preset "$CONFIG_SMB_NON_FREE"
   fi
 
@@ -715,7 +715,7 @@ truthy "$enable_audio_ai" || truthy "$enable_full" && apply_preset "$CONFIG_AUDI
 truthy "$enable_video_ai" || truthy "$enable_full" && apply_preset "$CONFIG_VIDEO_AI"
 truthy "$enable_ssh" || truthy "$enable_full" && apply_preset "$CONFIG_SSH"
 
-if [[ "${host_platform,,}" != "windows" ]]; then
+if ! iswindows; then
   truthy "$enable_smb" || truthy "$enable_full" && apply_preset "$CONFIG_SMB"
 fi
 
