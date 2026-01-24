@@ -2349,7 +2349,7 @@ generic_cmake() {
   fi
 	[[ $extra_args != *"-DCMAKE_FIND_ROOT_PATH"* ]] && extra_args+=" -DCMAKE_FIND_ROOT_PATH=$dependency_install_prefix"
   [[ $extra_args != *"-DCMAKE_FIND_ROOT_PATH_MODE_PROGRAM"* ]] && extra_args+=" -DCMAKE_FIND_ROOT_PATH_MODE_PROGRAM=NEVER"
-  [[ $extra_args != *"-DCMAKE_INSTALL_LIBDIR"* ]] && extra_args+=" -DCMAKE_INSTALL_LIBDIR=$dependency_install_prefix/lib"
+  [[ $extra_args != *"-DCMAKE_INSTALL_LIBDIR"* ]] && extra_args+=" -DCMAKE_INSTALL_LIBDIR=lib"
   [[ $extra_args != *"-DCMAKE_INSTALL_PREFIX"* ]] && extra_args+=" -DCMAKE_INSTALL_PREFIX=$dependency_install_prefix"
   [[ $extra_args != *"-DCMAKE_FIND_ROOT_PATH_MODE_LIBRARY"* ]] && extra_args+=" -DCMAKE_FIND_ROOT_PATH_MODE_LIBRARY=ONLY"
   [[ $extra_args != *"-DCMAKE_FIND_ROOT_PATH_MODE_INCLUDE"* ]] && extra_args+=" -DCMAKE_FIND_ROOT_PATH_MODE_INCLUDE=ONLY"
