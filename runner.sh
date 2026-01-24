@@ -141,8 +141,8 @@ Build Options:
 	                                                              FFmpeg--can force a rebuild if changes are detected]
 	--prefer-stable=[y]                                           build a few libraries from releases instead of git master
   --release                                                     create release zip of ffmpeg-kit bundled binaries to be distributed
-                                                                (static or shared build only affects ffmpeg and ffmpeg-kit.
-                                                                dependencies are always built statically.)
+  --release-and-clean                                           create release zip of ffmpeg-kit bundled binaries to be distributed 
+                                                                and clean ffmpeg and ffmpeg-kit build artifacts (dependencies are not deleted)
 	--clean-builds=[shared]|static                                clean ffmpeg and ffmpeg-kit builds of type [shared] or static and exit
   --reset-and-clean[=ARG]                                       reset and clean all source directories of touch files and build artifacts
   --resume                                                      resume previously inturrupted run (based on ~run.state file)
@@ -151,10 +151,11 @@ Advanced Dependency Control:
 	--get-total-steps|--get-step-name=[*]                         get dependency steps and step name by index
 	--build-only={0..} OR [library_name]                          build only specific dependency (e.g. --build-only=libx264)
 	--build-from={0..} OR [library_name]                          start building dependencies from given step
-	--build-dependencies=[y]                                      builds the ffmpeg dependencies. Disable when dependencies
+	--build-deps=[y]                                              builds the ffmpeg dependencies. Disable when dependencies
 	                                                              are already built to reduce time.
-	--build-dependencies-only                                     Only build dependency binaries. Will not build ffmpeg or 
-                                                                ffmpeg-kit binaries.
+	--build-deps-only                                             Only build dependency binaries. Will not build ffmpeg or 
+                                                                ffmpeg-kit binaries. (static or shared build only affects 
+                                                                ffmpeg and ffmpeg-kit. Dependencies are always built statically.)
 	--build-ffmpeg-only=[shared]|static                           build ffmpeg binaries only of type [shared] or static. 
                                                                 Does not (re)build ext-library dependencies.
                                                                 By default ffmpeg-kit always needs a static build of ffmpeg 
@@ -217,6 +218,10 @@ while [ $# -gt 0 ]; do
     export create_release=y
     shift
     ;;
+  --release-and-clean)
+    export create_release_clean=y
+    shift
+    ;;
   --host-platform=*|--host=*)
     export host_platform="${1#*=}"
     pick_host_platform "$host_platform"
@@ -275,7 +280,7 @@ while [ $# -gt 0 ]; do
 		export build_nonfree=y
 		shift
 		;;
-	--build-dependencies=*)
+	--build-deps=*)
 		export build_dependencies="${1#*=}"
 		shift
 		;;
@@ -287,7 +292,7 @@ while [ $# -gt 0 ]; do
 		export build_from="${1#*=}"
 		shift
 		;;
-	--build-dependencies-only | --build-deps-only)
+	--build-deps-only)
 		export build_dependencies_only=y
 		shift
 		;;

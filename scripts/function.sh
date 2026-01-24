@@ -3691,13 +3691,13 @@ create_ffmpeg_kit_bundle() {
 		create_touch_file 0 "$touch_name"
     echo -e "INFO: Done creating bundle at $ffmpeg_kit_bundle" | tee -a "$LOG_FILE"
 	fi
-  if truthy "$create_release"; then
+  if truthy "$create_release" || truthy "$create_release_clean"; then
     echo -e "INFO: Creating release bundle" | tee -a "$LOG_FILE"
     create_dir "$work_dir/releases"
     local out_dir=$(basename "$ffmpeg_kit_bundle")
     zip_dir "$ffmpeg_kit_bundle" "$work_dir/releases/$out_dir"
     echo -e "INFO: Done creating release bundle at $work_dir/releases/$out_dir.zip" | tee -a "$LOG_FILE"
-    clean_builds "all"
+    truthy "$create_release_clean" && clean_builds "all"
   fi
   chmod -R a+rwx "$work_dir"
 }
