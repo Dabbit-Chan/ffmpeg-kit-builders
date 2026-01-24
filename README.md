@@ -212,6 +212,7 @@ prebuilt/
 | `--clean-builds`                      |   | Clean ffmpeg and ffmpeg-kit builds based on --enable-static/--enable-shared(default) and exit |
 | `--list-libraries`                    |   | Lists ffmpeg configuration including extra libraries and exit |
 | `--enable-[library name]`             |   | Enable extra ffmpeg libraries. Run --list-libraries and see under "External library support" |
+| `--ffmpeg-programs\|--programs`       |   | Enable ffmpeg programs. **By default these are disabled.** |
 | `--ff-*`                              |   | Pass additional ffmpeg parameters prefixed by ff-* to ffmpeg configure. No additional checks done |
 
 ## Bundle Matrix
