@@ -22,6 +22,7 @@ RUN dnf install -y --allowerasing --setopt=install_weak_deps=False \
     bzip2 \
     clang \
     cmake \
+    compiler-rt \
     coreutils \
     curl \
     cvs \
