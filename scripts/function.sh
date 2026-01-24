@@ -4528,8 +4528,7 @@ add_src_dir() {
     create_touch_file 0 "$dir/$host_touch"
     if iswindows; then
       find "$dependency_install_prefix/lib" -name "*.la" -delete
-      find "$install_pkgconfig_dir" -name "*.pc" -exec sed -i -E 's/[[:space:]]-lm\b//g' {} +
-      find "/workspaces/ffmpeg-kit-builders/prebuilt/windows-x86_64/libraries/lib/pkgconfig" -name "*.pc" -exec sed -i -E \
+      find "$install_pkgconfig_dir" -name "*.pc" -exec sed -i -E -e 's/[[:space:]]-lm\b//g' \
         -e 's|/usr/local/mingw-w64/[^ ]+/lib/lib([a-zA-Z0-9]+)\.a|-l\1|g' {} +
     fi
     if [[ -f "$dir_file" ]]; then
@@ -4989,23 +4988,23 @@ static_link_check() {
     # --------------------------------------------------------------------------
     # HELPER: Strip Windows Resource sections
     # --------------------------------------------------------------------------
-    _slc_strip_rsrc() {
-      local lib="$1"
-      local lib_dir="$(dirname "$lib")"
-      local strip_log="$lib_dir/.rsrc_stripped_log"
-      local ranlib_tool="${cross_prefix}ranlib"
-      if command -v "${cross_prefix}gcc-ranlib" >/dev/null 2>&1; then
-          ranlib_tool="${cross_prefix}gcc-ranlib"
-      fi
-      if iswindows; then
-          [[ ! -f "$strip_log" ]] && touch "$strip_log"
-          if [[ -f "$lib" ]] && ! grep -Fqx "$lib" "$strip_log"; then
-            "${cross_prefix}objcopy" --remove-section=.rsrc --enable-deterministic-archives "$lib" 2>/dev/null || true
-            "$ranlib_tool" "$lib" >/dev/null 2>&1
-            echo "$lib" >> "$strip_log"
-          fi
-      fi
-    }
+    # _slc_strip_rsrc() {
+    #   local lib="$1"
+    #   local lib_dir="$(dirname "$lib")"
+    #   local strip_log="$lib_dir/.rsrc_stripped_log"
+    #   local ranlib_tool="${cross_prefix}ranlib"
+    #   if command -v "${cross_prefix}gcc-ranlib" >/dev/null 2>&1; then
+    #       ranlib_tool="${cross_prefix}gcc-ranlib"
+    #   fi
+    #   if iswindows; then
+    #       [[ ! -f "$strip_log" ]] && touch "$strip_log"
+    #       if [[ -f "$lib" ]] && ! grep -Fqx "$lib" "$strip_log"; then
+    #         "${cross_prefix}objcopy" --remove-section=.rsrc --enable-deterministic-archives "$lib" 2>/dev/null || true
+    #         "$ranlib_tool" "$lib" >/dev/null 2>&1
+    #         echo "$lib" >> "$strip_log"
+    #       fi
+    #   fi
+    # }
     # --------------------------------------------------------------------------
     # HELPER: Find Targets (.pc and .a files)
     # --------------------------------------------------------------------------
@@ -5128,7 +5127,7 @@ static_link_check() {
                         res_stats[0]=$((res_stats[0] + 1))
                         found=true; break
                     elif [ -f "${path}/lib${lib}.a" ]; then
-                        _slc_strip_rsrc "${path}/lib${lib}.a"
+                        # _slc_strip_rsrc "${path}/lib${lib}.a"
                         final_libs="$final_libs ${path}/lib${lib}.a"
                         res_stats[0]=$((res_stats[0] + 1))
                         found=true; break
@@ -5141,7 +5140,7 @@ static_link_check() {
                         res_stats[0]=$((res_stats[0] + 1))
                         found=true; break
                     elif v_lib=$(find "${path}" -maxdepth 1 -name "lib${lib}.a.*" 2>/dev/null | sort -V | tail -n 1) && [ -n "$v_lib" ]; then
-                        _slc_strip_rsrc "$v_lib"
+                        # _slc_strip_rsrc "$v_lib"
                         final_libs="$final_libs $v_lib"
                         res_stats[0]=$((res_stats[0] + 1))
                         found=true; break

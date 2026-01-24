@@ -5,6 +5,8 @@ OUTPUT_LIB="$1"
 AR_CMD="$2"
 RANLIB_CMD="$3"
 FFMPEG_BUILD_DIR="$4"
+SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
+PROJECT_ROOT="$(realpath "$SCRIPT_DIR/../..")"
 
 echo "Generating monolithic static library: $OUTPUT_LIB"
 rm -f lib.mri bundle_manifest.txt
@@ -19,14 +21,27 @@ deps=$(cat libs.txt)
 search_paths=""
 
 # First pass: Collect search paths (-L)
+echo "  [STATIC MONOLITH GENERATOR]: Checking for dependency flags first pass..."
 for flag in $deps; do
   case "$flag" in
     -L*)
       path=${flag#-L}
+      # [FIX] Dynamic Path Sanitization
+      if [ ! -d "$path" ]; then
+          if [[ "$path" == *"/prebuilt/"* ]]; then
+              # shellcheck disable=2001
+              path_suffix="$(echo "$path" | sed 's|.*/prebuilt/|/prebuilt/|')"
+              fixed_path="${PROJECT_ROOT}${path_suffix}"
+              if [ -d "$fixed_path" ]; then
+                  path="$fixed_path"
+              fi
+          fi
+      fi
       search_paths="$search_paths $path"
       ;;
   esac
 done
+echo "  [STATIC MONOLITH GENERATOR]: Checking for dependency flags second pass..."
 # Second pass: Process libraries (-l)
 for flag in $deps; do
   case "$flag" in
@@ -69,7 +84,7 @@ for flag in $deps; do
             shared_lib=$(ls "$dir/lib$name.so" 2>/dev/null || \
                          ls "$dir/lib$name.dylib" 2>/dev/null || \
                          ls "$dir/$name.dll" 2>/dev/null || \
-                         ls "$dir/lib$name.dll" 2>/dev/null)
+                         ls "$dir/lib$name.dll" 2>/dev/null || true)
             if test -n "$shared_lib"; then
                 echo "	[FOUND SHARED] $shared_lib (Queued for bundle)"
                 echo "$shared_lib" >> bundle_manifest.txt

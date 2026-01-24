@@ -4010,7 +4010,7 @@ build_libopencv() {
     -e 's|-L[^ ]*opencv4/3rdparty|-L${libdir}/opencv4/3rdparty|g' \
     -e 's|-L${exec_prefix}//[^ ]*||g' \
     -e 's|-L/workspaces/[^ ]*||g' \
-    {} +
+    {} + # TODO: fix "workspaces" path
 	  change_dir "$src_dir"
     unset LIBS
     reset_ldflags
