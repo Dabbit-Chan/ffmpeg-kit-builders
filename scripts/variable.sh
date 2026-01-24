@@ -43,6 +43,7 @@ export PKG_CONFIG_LIBDIR= # disable pkg-config from finding [and using] normal l
 export original_path=$PATH
 export license_dir_list=()
 export extra_ffmpeg_c_flags=""
+export build_ffmpeg_programs=n
 
 declare -A seen_steps
 declare -A INSTALLED_LIBS

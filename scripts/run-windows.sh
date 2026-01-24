@@ -830,41 +830,31 @@ build_curl() {
   local repo_ver="curl-8_17_0"
 	change_dir "$src_dir"
 	do_git_checkout "$repo" "$src_dir/$lib" "$repo_ver"
-  export CPPFLAGS="$CPPFLAGS -DNGHTTP2_STATICLIB -DPSL_STATIC "
-  export CXXFLAGS="$CXXFLAGS -DNGHTTP2_STATICLIB -DPSL_STATIC "
-  export LIBS="-lpsl -lidn2 -lunistring -liconv -lbrotlidec -lbrotlicommon"
-	local config_options="--enable-static --disable-shared \
---with-libpsl=\"$dependency_install_prefix\" \
---with-nghttp2=\"$dependency_install_prefix\" \
---with-libidn2=\"$dependency_install_prefix\" \
---with-zlib==\"$dependency_install_prefix\" \
---with-ssl=\"$dependency_install_prefix\" \
---with-zstd=\"$dependency_install_prefix\" \
---disable-debug \
---disable-docs \
---enable-hsts \
---with-brotli=\"$dependency_install_prefix\" \
---enable-versioned-symbols \
---enable-sspi \
---with-schannel"
+  local cmake_options="-DBUILD_CURL_EXE=OFF \
+-DCURL_USE_PKGCONFIG=ON \
+-DBUILD_LIBCURL_DOCS=OFF \
+-DBUILD_MISC_DOCS=OFF \
+-DENABLE_CURL_MANUAL=OFF \
+-DBUILD_TESTING=OFF \
+-DBUILD_EXAMPLES=OFF"
   if ! truthy "$disable_libssh" && truthy "$enable_libssh"; then
 	run_valid_function "build_libssh" 1
-    config_options+=" --with-libssh=\"$dependency_install_prefix\" "
+    cmake_options+=" -DCURL_USE_LIBSSH=ON "
     export LIBS="$LIBS -lssh -lssl -lcrypto"
     export CPPFLAGS="$CPPFLAGS -DLIBSSH_STATIC"
   fi
   if ! truthy "$disable_librtmp" && truthy "$enable_librtmp"; then
 	run_valid_function "build_librtmp" 1
-    config_options+=" --with-librtmp=\"$dependency_install_prefix\" "
+    cmake_options+=" -DUSE_LIBRTMP=ON "
     export LIBS="$LIBS -lrtmp -lssl -lcrypto"
   fi
-  export LIBS="$LIBS -lws2_32 -lwinmm -lz -lcrypt32 -lbcrypt"
-  config_options+=" LDFLAGS=\"$LDFLAGS\" LIBS=\"$LIBS\""
-  change_dir "$src_dir/$lib"
-  generic_configure "$config_options"
-  disable_nonessential "$src_dir/$lib" "src"
+  export CPPFLAGS="$CPPFLAGS -DNGHTTP2_STATICLIB -DPSL_STATIC "
+  export CXXFLAGS="$CXXFLAGS -DNGHTTP2_STATICLIB -DPSL_STATIC "
+  export LIBS=" $LIBS -lpsl -lidn2 -lunistring -liconv -lbrotlidec -lbrotlicommon -lws2_32 -lwinmm -lz -lcrypt32 -lbcrypt"
+  change_dir "$src_dir/$lib/build" 1
+  do_cmake_from_build_dir "$src_dir/$lib" "$cmake_options"
   do_make_and_make_install
-	reset_allflags
+  reset_allflags
   unset LIBS
 	change_dir "$src_dir"
 }
@@ -1260,16 +1250,18 @@ build_libsoxr() {
   local repo_ver="0.1.3" 
 	change_dir "$src_dir"
   do_git_checkout "$repo" "$src_dir/$lib" "$repo_ver"
-	change_dir "$src_dir/$lib"
-	generic_cmake "-DCMAKE_BUILD_TYPE=Release \
+	sed -i 's/elseif (NOT WIN32)/elseif (WIN32)/g' "$src_dir/$lib/src/CMakeLists.txt"
+  change_dir "$src_dir/$lib/build" 1
+	do_cmake_from_build_dir "$src_dir/$lib" "-DCMAKE_BUILD_TYPE=Release \
 -DBUILD_SHARED_LIBS=OFF \
 -DWITH_OPENMP=0 \
 -DBUILD_TESTS=0 \
 -DCMAKE_POLICY_VERSION_MINIMUM=3.5 \
--DBUILD_EXAMPLES=0" "$src_dir/$lib"
+-DBUILD_EXAMPLES=0"
   disable_nonessential "$src_dir/$lib"
   do_make_and_make_install
 	change_dir "$src_dir"
+  add_libs_to_pkg -t="$install_pkgconfig_dir/soxr-lsr.pc" -l="-lsoxr -lsoxr-lsr"
 	fi
 }
 
@@ -3093,6 +3085,7 @@ build_opencl() {
 -DCMAKE_BUILD_TYPE=Release \
 -DBUILD_SHARED_LIBS=OFF \
 -DBUILD_TESTING=OFF \
+-DOPENCL_ICD_LOADER_BUILD_SHARED_LIBS=OFF \
 -DOPENCL_ICD_LOADER_BUILD_TESTING=OFF"
   do_cmake_from_build_dir "$src_dir/$parentlib/$lib" "$cmake_params"
   disable_nonessential "$src_dir/$parentlib/$lib/build"
@@ -4408,9 +4401,15 @@ build_libdeflate() {
   local repo_ver="v1.25"
 	change_dir "$src_dir"
   do_git_checkout "$repo" "$src_dir/$lib" "$repo_ver"
-  change_dir "$src_dir/$lib"
-  local cmake_params="-DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=OFF -DCMAKE_INSTALL_PREFIX=$dependency_install_prefix -DENABLE_SHARED=0"
-	generic_cmake "$cmake_params" "$src_dir/$lib"
+  change_dir "$src_dir/$lib/build" 1
+  local cmake_params="-DCMAKE_BUILD_TYPE=Release \
+-DLIBDEFLATE_BUILD_STATIC_LIB=ON \
+-DLIBDEFLATE_BUILD_SHARED_LIB=OFF \
+-DLIBDEFLATE_BUILD_GZIP=OFF \
+-DBUILD_SHARED_LIBS=OFF \
+-DCMAKE_INSTALL_PREFIX=$dependency_install_prefix \
+-DENABLE_SHARED=0"
+	do_cmake_from_build_dir "$src_dir/$lib" "$cmake_params"
   disable_nonessential "$src_dir/$lib"
   do_make_and_make_install
     change_dir "$src_dir"
@@ -4624,6 +4623,7 @@ build_libpsl() {
 	do_git_checkout "$repo" "$src_dir/$lib" "$repo_ver"
 	change_dir "$src_dir/$lib"
 	export CFLAGS="-DPSL_STATIC"
+  touch "no.autoreconf"
 	generic_configure "--disable-nls \
 --disable-rpath \
 --disable-gtk-doc-html \

@@ -1,8 +1,10 @@
 diff --git a/Makefile b/Makefile
-index 8327b4e..038da3d 100755
+old mode 100644
+new mode 100755
+index 8327b4e..706b2b6
 --- a/Makefile
 +++ b/Makefile
-@@ -15,8 +15,6 @@
+@@ -15,12 +15,13 @@
  
  CC ?= gcc
  PREFIX ?= /usr/local
@@ -11,7 +13,15 @@ index 8327b4e..038da3d 100755
  
  LIB_VERSION = 1.2
  
-@@ -29,62 +27,37 @@ else
+-ifeq ($(shell uname), Darwin)
++ifneq (,$(findstring mingw,$(CC)))
++    LIB_SUFFIX := dll
++    VERSIONED_LIB_SUFFIX := $(LIB_SUFFIX)
++else ifeq ($(shell uname), Darwin)
+     LIB_SUFFIX := dylib
+     VERSIONED_LIB_SUFFIX := $(LIB_VERSION).$(LIB_SUFFIX)
+ else
+@@ -29,62 +30,37 @@ else
  endif
  
  CFLAGS ?= -O3 -Wall -fPIC
@@ -92,7 +102,7 @@ index 8327b4e..038da3d 100755
  
  .c.o:
  	$(CC) $(QUIRC_CFLAGS) -o $@ -c $<
-@@ -93,32 +66,27 @@ libquirc.$(VERSIONED_LIB_SUFFIX): $(LIB_OBJ)
+@@ -93,32 +69,27 @@ libquirc.$(VERSIONED_LIB_SUFFIX): $(LIB_OBJ)
  .cxx.o:
  	$(CXX) $(QUIRC_CXXFLAGS) -o $@ -c $<
  

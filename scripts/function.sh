@@ -3089,6 +3089,7 @@ run_valid_function() {
 		return 1
 	fi
   set_run_state
+  reset_allflags
 }
 
 # shellcheck disable=SC2120
@@ -3172,7 +3173,7 @@ configure_ffmpeg() {
   config_options+=" --disable-txtpages"
 	config_options+=" --disable-outdev=fbdev"
   config_options+=" --disable-indev=fbdev"
-
+  ! truthy "$build_ffmpeg_programs" && config_options+=" --disable-programs"
   #------------------------------------------------------------------------------     
   # ----------------------------- android features ------------------------------     
   #------------------------------------------------------------------------------      
@@ -3554,17 +3555,6 @@ install_ffmpeg_pkg() {
 
     echo -e "INFO: Installing ffmpeg pkg-config" | tee -a "$LOG_FILE"
 
-    create_dir "$install_pkgconfig_dir"
-
-    # MANUALLY COPY PKG-CONFIG FILES
-    overwrite_file "${ffmpeg_install_prefix}"/lib/pkgconfig/libavformat.pc "${install_pkgconfig_dir}/libavformat.pc" || return 1
-    overwrite_file "${ffmpeg_install_prefix}"/lib/pkgconfig/libswresample.pc "${install_pkgconfig_dir}/libswresample.pc" || return 1
-    overwrite_file "${ffmpeg_install_prefix}"/lib/pkgconfig/libswscale.pc "${install_pkgconfig_dir}/libswscale.pc" || return 1
-    overwrite_file "${ffmpeg_install_prefix}"/lib/pkgconfig/libavdevice.pc "${install_pkgconfig_dir}/libavdevice.pc" || return 1
-    overwrite_file "${ffmpeg_install_prefix}"/lib/pkgconfig/libavfilter.pc "${install_pkgconfig_dir}/libavfilter.pc" || return 1
-    overwrite_file "${ffmpeg_install_prefix}"/lib/pkgconfig/libavcodec.pc "${install_pkgconfig_dir}/libavcodec.pc" || return 1
-    overwrite_file "${ffmpeg_install_prefix}"/lib/pkgconfig/libavutil.pc "${install_pkgconfig_dir}/libavutil.pc" || return 1
-
     # # MANUALLY ADD REQUIRED HEADERS
     {
       mkdir -p "${ffmpeg_install_prefix}"/include/libavutil/{x86,arm,aarch64}
@@ -3600,7 +3590,7 @@ install_ffmpeg_pkg() {
 install_ffmpeg_kit() {
 	echo -e "INFO: Installing ffmpeg kit to ${ffmpeg_kit_install}" | tee -a "$LOG_FILE"
   
-	change_dir "${ffmpeg_kit_src_dir}"
+	change_dir "${ffmpeg_kit_src_dir}/build"
 
   if truthy "$build_force"; then
     remove_path -rf "$ffmpeg_kit_install"
@@ -3684,10 +3674,11 @@ create_ffmpeg_kit_bundle() {
 			# [[ -d "${ffmpeg_kit_install}/bin" ]] && cp -rP "${ffmpeg_install_prefix}/bin/"* "${FFMPEG_KIT_BUNDLE_BIN_DIRECTORY}"
 		} >>"$LOG_FILE"
 
-    sed -i "s|prefix=.*|prefix=${ffmpeg_kit_bundle}|g" "${ffmpeg_kit_bundle}/lib/pkgconfig/"*.pc || return 1
-    sed -i "s|exec_prefix=.*|exec_prefix=\${prefix}|g" "${ffmpeg_kit_bundle}/lib/pkgconfig/"*.pc || return 1
-    sed -i "s|libdir=.*|libdir=\${prefix}/lib|g" "${ffmpeg_kit_bundle}/lib/pkgconfig/"*.pc || return 1
-    sed -i "s|includedir=.*|includedir=\${prefix}/include|g" "${ffmpeg_kit_bundle}/lib/pkgconfig/"*.pc || return 1
+    find "${ffmpeg_kit_bundle}/lib/pkgconfig" -type f -name "*.pc" -exec sed -i \
+    -e "s|prefix=.*|prefix=${ffmpeg_kit_bundle}|g" \
+    -e "s|exec_prefix=.*|exec_prefix=\${prefix}|g" \
+    -e "s|libdir=.*|libdir=\${prefix}/lib|g" \
+    -e "s|includedir=.*|includedir=\${prefix}/include|g" {} +
 
 		local LICENSE_BASEDIR="${ffmpeg_kit_bundle}/licenses"
 
@@ -5054,18 +5045,41 @@ static_link_check() {
         fi
         # B. Handle Pkg-Config
         local pcfg_dir=$(dirname "$target")
+        local pkg_basename=$(basename "$target" .pc)
         local fallback_base=$(dirname "$(dirname "$pcfg_dir")")
         local pkg_prefix=$(pkg-config --variable=prefix "$target" 2>/dev/null)
         local search_base="${pkg_prefix:-$fallback_base}"
-        export PKG_CONFIG_PATH="$pcfg_dir"
+        export PKG_CONFIG_PATH="$pcfg_dir:$PKG_CONFIG_PATH"
         local raw_flags
-        if ! raw_flags=$(pkg-config --static --libs "$target" 2>"$log_file"); then
+        if ! raw_flags=$(pkg-config --static --libs "$pkg_basename" 2>"$log_file"); then
             if ! raw_flags=$(_slc_check_system_pkg "$target" "$log_file"); then
                 return 1 
             fi
         fi
-        local search_paths=("${search_base}/lib")
+        local search_paths=()
         local final_libs=""
+
+        # If target is /abs/path/to/lib/pkgconfig/x.pc, we want /abs/path/to/lib
+        local derived_lib_dir="$(dirname "$pcfg_dir")"
+        if [ -d "$derived_lib_dir" ]; then
+            search_paths+=("$derived_lib_dir")
+            # Force linker to know this path in case resolution fails
+            final_libs="$final_libs -L$derived_lib_dir"
+        fi
+        
+        # Add default lib dir relative to prefix (Fallback)
+        local pkg_prefix=$(pkg-config --variable=prefix "$pkg_basename" 2>/dev/null)
+        if [ -n "$pkg_prefix" ]; then
+            search_paths+=("${pkg_prefix}/lib")
+        fi
+
+        # Add paths from -L flags
+        for flag in $raw_flags; do
+            if [[ "$flag" == -L* ]]; then
+                search_paths+=("${flag#-L}")
+                final_libs="$final_libs $flag"
+            fi
+        done
         for flag in $raw_flags; do
             if [[ "$flag" == -L* ]]; then
                 search_paths+=("${flag#-L}")
@@ -5148,7 +5162,7 @@ static_link_check() {
         return 0
     }
     # --------------------------------------------------------------------------
-    # HELPER: Verify Binary (GCC Link Test)
+    # HELPER: Verify Binary (GCC Link Test) [UPDATED]
     # --------------------------------------------------------------------------
     _slc_verify_binary() {
         local libs="$1" name="$2" tmp="$3" log="$4"
@@ -5157,31 +5171,35 @@ static_link_check() {
         local out_bin="${tmp}/${name}.${ext}"
         local gcc_bin=g++
         if truthy "$build_cross_compile"; then gcc_bin=${cross_prefix}g++; fi
-        # Determine if we have shared libs involved.
-        # If yes, we must NOT use --whole-archive globally, as it breaks shared linking.
-        local has_shared=false
-        if [[ "$libs" == *.dll* || "$libs" == *.so* ]]; then
-            has_shared=true
-        fi
         local cmd=($gcc_bin -shared -fPIC -o "$out_bin")
         cmd+=("-DGLIB_STATIC_COMPILATION")
-        # Logic Update: Only apply whole-archive to static .a files
-        if [ "$has_shared" = true ]; then
-            # Mixed Mode: Don't wrap everything. 
-            # We assume static libs are passed as full paths and shared as well.
-            # We rely on the order provided by pkg-config.
-            cmd+=($libs)
-        else
-            # Pure Static Mode (Strict)
-            cmd+=("-Wl,--whole-archive")
-            cmd+=($libs)
-            cmd+=("-Wl,--no-whole-archive")
-        fi
+        # We split the string $libs into an array of arguments
+        for lib in $libs; do
+            # 1. Check for Static Archive (.a)
+            if [[ "$lib" == *.a ]]; then
+                # EXCEPTION A: Windows Import Libraries (.dll.a)
+                # These are shared pointers, NOT static code. Do not merge.
+                if [[ "$lib" == *.dll.a ]]; then
+                    cmd+=("$lib")
+                else
+                    # It is a true static archive (Linux or Windows). Force merge it.
+                    cmd+=("-Wl,--whole-archive" "$lib" "-Wl,--no-whole-archive")
+                fi
+            # 2. Check for Shared Libraries explicitly
+            # Linux (.so, .so.1) or Windows (.dll)
+            elif [[ "$lib" == *.so || "$lib" == *.so.* || "$lib" == *.dll ]]; then
+                 cmd+=("$lib")
+            # 3. Pass everything else (Flags -l, -L, -pthread, etc.) as-is
+            else
+                cmd+=("$lib")
+            fi
+        done
         cmd+=("-static-libgcc" "-static-libstdc++")
         if [ "$use_map" = true ]; then
             cmd+=("-Wl,--version-script=$map_file" "-Wl,-Bsymbolic")
         fi
         cmd+=("-Wl,--allow-multiple-definition" "-Wl,--unresolved-symbols=ignore-all")
+        # Execute
         if "${cmd[@]}" > "$log" 2>&1 && [[ -f "$out_bin" ]]; then
             du -h "$out_bin" | cut -f1
             return 0

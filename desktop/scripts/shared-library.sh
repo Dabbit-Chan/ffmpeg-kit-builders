@@ -40,7 +40,16 @@ for flag in $deps; do
           raw_libs_to_keep="$raw_libs_to_keep -l$name"
           ;;
         # --- Category B: Windows System Libraries (Skip) ---
-        mingw*|moldname|kernel32|user32|gdi32|winmm|ws2_32|iphlpapi|advapi32|shell32|ole32|uuid|bcrypt|psapi|shlwapi|crypt32|secur32)
+        mingw*|ws2_32|gdi32|winmm|ole32|crypt32|advapi32|user32|kernel32|shell32|glu32)
+          raw_libs_to_keep="$raw_libs_to_keep -l$name"
+          ;;
+        iphlpapi|secur32|setupapi|mfuuid|strmiids|bcrypt|ncrypt|psapi|version|shlwapi)
+          raw_libs_to_keep="$raw_libs_to_keep -l$name"
+          ;;
+        wldap32|imagehlp|d3d11|dxgi|opengl32|imm32|oleaut32|mfplat|gomp|userenv)
+          raw_libs_to_keep="$raw_libs_to_keep -l$name"
+          ;;
+        mfreadwrite|mf|dsound|ksuser|uuid|comdlg32|avrt|dnsapi|msimg32|ntdll|dwrite)
           raw_libs_to_keep="$raw_libs_to_keep -l$name"
           ;;
         # --- Category C: Linux Utils (Skip) ---
@@ -51,21 +60,34 @@ for flag in $deps; do
         *)
           found=no
           for dir in $search_paths; do
-            # Look for Shared Library (.so)
-            # We look for the base .so, but we want the REAL file behind it
-            if [ -f "$dir/lib$name.so" ]; then
+            bin_dir="$(dirname "$dir")/bin"
+            target_lib=""
+            
+            # --- SEARCH LOGIC ---
+            # Priority 1: Windows DLLs (in bin/ or lib/)
+            if [ -f "$bin_dir/lib$name.dll" ]; then
+                target_lib="$bin_dir/lib$name.dll"
+            elif [ -f "$bin_dir/$name.dll" ]; then
+                target_lib="$bin_dir/$name.dll"
+            elif [ -f "$dir/lib$name.dll" ]; then
+                target_lib="$dir/lib$name.dll"
+            elif [ -f "$dir/$name.dll" ]; then
+                target_lib="$dir/$name.dll"
+            # Priority 2: Linux/macOS Shared Objects (if not on Windows)
+            elif [ -f "$dir/lib$name.so" ]; then
                 target_lib="$dir/lib$name.so"
             elif [ -f "$dir/lib$name.dylib" ]; then
                 target_lib="$dir/lib$name.dylib"
-            else
-                target_lib=""
             fi
 
             if [ -n "$target_lib" ]; then
-                # Resolve symlinks to get the actual library file (e.g., libssl.so -> libssl.so.3)
-                # This ensures we bundle the actual binary, not just a dead link.
                 real_lib=$(readlink -f "$target_lib")
-                
+                # STRICT CHECK: Do not bundle .a files as "Shared"
+                if [[ "$real_lib" == *.a ]]; then
+                    # It's a static lib (misidentified or symlinked). Ignore it.
+                    # This tells the linker to use it statically (merge it), not bundle it.
+                    continue
+                fi
                 echo "  [FOUND SHARED] $name -> $real_lib"
                 echo "$real_lib" >> bundle_manifest.txt
                 found=yes

@@ -38,7 +38,16 @@ for flag in $deps; do
           raw_libs_to_keep="$raw_libs_to_keep -l$name"
           ;;
         # --- Category B: Windows System Libraries (Skip) ---
-        mingw*|moldname|kernel32|user32|gdi32|winmm|ws2_32|iphlpapi|advapi32|shell32|ole32|uuid|bcrypt|psapi|shlwapi|crypt32|secur32)
+        mingw*|ws2_32|gdi32|winmm|ole32|crypt32|advapi32|user32|kernel32|shell32|glu32)
+          raw_libs_to_keep="$raw_libs_to_keep -l$name"
+          ;;
+        iphlpapi|secur32|setupapi|mfuuid|strmiids|bcrypt|ncrypt|psapi|version|shlwapi)
+          raw_libs_to_keep="$raw_libs_to_keep -l$name"
+          ;;
+        wldap32|imagehlp|d3d11|dxgi|opengl32|imm32|oleaut32|mfplat|gomp|userenv)
+          raw_libs_to_keep="$raw_libs_to_keep -l$name"
+          ;;
+        mfreadwrite|mf|dsound|ksuser|uuid|comdlg32|avrt|dnsapi|msimg32|ntdll|dwrite)
           raw_libs_to_keep="$raw_libs_to_keep -l$name"
           ;;
         # --- Category C: Linux Utils (Skip) ---
@@ -57,7 +66,10 @@ for flag in $deps; do
             fi
             # 2. If static not found, look for Shared Library (.so)
             # We use 'ls' inside $(...) to correctly expand wildcards in the shell
-            shared_lib=$(ls "$dir/lib$name.so" 2>/dev/null || ls "$dir/lib$name.dylib" 2>/dev/null)
+            shared_lib=$(ls "$dir/lib$name.so" 2>/dev/null || \
+                         ls "$dir/lib$name.dylib" 2>/dev/null || \
+                         ls "$dir/$name.dll" 2>/dev/null || \
+                         ls "$dir/lib$name.dll" 2>/dev/null)
             if test -n "$shared_lib"; then
                 echo "	[FOUND SHARED] $shared_lib (Queued for bundle)"
                 echo "$shared_lib" >> bundle_manifest.txt

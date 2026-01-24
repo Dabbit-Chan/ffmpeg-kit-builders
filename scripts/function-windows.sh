@@ -91,6 +91,7 @@ install_cross_compiler() {
 }
 
 configure_ffmpeg_kit() {
+	run_valid_function "build_libjsoncpp"
 	echo -e "INFO: Configuring ffmpeg kit" | tee -a "$LOG_FILE"
 	local type_postfix="$build_ffmpeg_kit_type"
 	local ffmpeg_kit_version=$(get_ffmpeg_kit_version)
@@ -105,11 +106,10 @@ configure_ffmpeg_kit() {
 	export PKG_CONFIG_PATH="${PKG_CONFIG_PATH}:${ffmpeg_install_prefix}/lib/pkgconfig"
 	set_toolchain_paths
 
-	reset_cflags
-	reset_cppflags
+	reset_allflags
 	local local_cflags="${CFLAGS} -I${ffmpeg_install_prefix}/include -L${ffmpeg_install_prefix}/lib -I${ffmpeg_source_dir} -I${ffmpeg_source_dir}/compat -DHAVE_W32PTHREADS_H=1"
 	local local_cxxfalgs="${CXXFLAGS} -I${ffmpeg_install_prefix}/include -L${ffmpeg_install_prefix}/lib -I${ffmpeg_source_dir} -I${ffmpeg_source_dir}/compat"
-
+	
 	change_dir "${ffmpeg_kit_src_dir}"
 	make distclean > >(redirect_output) 2>&1
 
@@ -122,20 +122,32 @@ configure_ffmpeg_kit() {
 	fi
 
 	local config_options="--prefix=${ffmpeg_kit_install} --with-ffmpeg-src=$ffmpeg_source_dir --with-ffmpeg-build=$ffmpeg_install_prefix"
+	local cmake_params="-DCMAKE_SYSTEM_NAME=Windows \
+-DCMAKE_C_COMPILER=$CC \
+-DCMAKE_CXX_COMPILER=$CXX \
+-DFFMPEG_SRC_DIR=\"$ffmpeg_source_dir\" \
+-DFFMPEG_BUILD_DIR=\"$ffmpeg_install_prefix\" \
+-DCMAKE_INSTALL_PREFIX=\"$ffmpeg_kit_install\""
 
 	config_options+=" --host=${host_target}"
 	if [[ "$build_ffmpeg_kit_type" == "static" ]]; then
 		config_options+=" --enable-static"
 		config_options+=" --disable-shared"
+		cmake_params+=" -DBUILD_SHARED_LIBS=OFF -DBUILD_STATIC_LIBS=ON"
 	else
 		config_options+=" --enable-shared"
 		config_options+=" --disable-static"
+		cmake_params+=" -DBUILD_SHARED_LIBS=ON -DBUILD_STATIC_LIBS=OFF"
 	fi
 	change_dir "${ffmpeg_kit_src_dir}"
 	export CFLAGS="${local_cflags}"
 	export CXXFLAGS="${local_cxxfalgs}"
-	export LDFLAGS="$LDFLAGS -lpthread"
-	do_configure "${config_options}" "./configure" "$(get_bundle_directory)" || exit_message 1 "unable to configure ffmpeg-kit. see $LOG_FILE for details."
+	export LDFLAGS="${LDFLAGS//-static /} -static-libgcc -static-libstdc++"
+	
+	change_dir "${ffmpeg_kit_src_dir}/build" 1
+	
+	do_cmake "$cmake_params" "$ffmpeg_kit_src_dir"
+	# do_configure "${config_options}" "./configure" "$(get_bundle_directory)" || exit_message 1 "unable to configure ffmpeg-kit. see $LOG_FILE for details."
 
 	echo -e "INFO: Done configuring ffmpeg kit" | tee -a "$LOG_FILE"
 }
@@ -264,123 +276,160 @@ fix_pkgconfig_flags() {
 # WARNING: For pure C libraries only. Anything else will result in seg fault due to ABI mismatch
 # Usage: install_msvc_binary -n="libname" -v="1.0" -s="src_dir" -p="Install prefix" -I="include_path" -L="lib_path" -B="bin_path" -d="Library desc" -m="Install manifest"
 install_msvc_binary() {
-		local lib_name="" version="" src_root="" inc_sub="" lib_sub="" bin_sub="" desc="Prebuilt MSVC Library"
-		local manifest=""
-		while [[ $# -gt 0 ]]; do
-				case "$1" in
-						-n=*) lib_name="${1#*=}"; shift ;;
-						-v=*) version="${1#*=}"; shift ;;
-						-s=*) src_root="${1#*=}"; shift ;;
-						-p=*) install_dir="${1#*=}"; shift ;;
-						-I=*) inc_sub="${1#*=}"; shift ;;
-						-L=*) lib_sub="${1#*=}"; shift ;;
-						-B=*) bin_sub="${1#*=}"; shift ;;
-						-d=*) desc="${1#*=}"; shift ;;
-						-m=*) manifest="${1#*=}"; shift ;;
-						*) shift ;;
-				esac
-		done
-		[[ -z "$install_dir" ]] && install_dir="$dependency_install_prefix"
-		create_dir "$install_dir/{lib,bin,include}"
-		local install_lib="$install_dir/lib"
-		local install_bin="$install_dir/bin"
-		local install_inc="$install_dir/include"
-		[[ -z "$manifest" ]] && manifest="$install_pkgconfig_dir/${lib_name}_manifest"
-		[[ ! -f "$manifest" ]] && touch "$manifest"
-		echo "INFO: Installing Prebuilt $lib_name ($version)..." >>"$LOG_FILE"
-		local gendef_tool="${cross_prefix}gendef"
-		local dll_tool="${cross_prefix}dlltool"
-		[[ ! -x "$(command -v "$gendef_tool")" ]] && gendef_tool="gendef"
-		[[ ! -x "$(command -v "$dll_tool")" ]] && dll_tool="dlltool"
-		local pkg_scan_dir=$(mktemp -d)
-		if [[ -d "$src_root/$inc_sub" && -n "$inc_sub" ]]; then
-				cp -rfv "$src_root/$inc_sub/"* "$install_inc/" >>"$LOG_FILE"
-				find "$src_root/$inc_sub" -mindepth 1 -print0 | while IFS= read -r -d '' f; do
-						local rel_path="${f#"$src_root/$inc_sub/"}"
-						mkdir -p "$(dirname "$install_inc/$rel_path")"
-						cp -rfv "$f" "$install_inc/$rel_path" >>"$LOG_FILE"
-						echo "$install_inc/$rel_path" >>"$manifest"
-						echo "  [Installed]: $install_inc/$rel_path" >>"$LOG_FILE"
-				done
-		fi
-		if [[ -n "$bin_sub" && -d "$src_root/$bin_sub" ]]; then
-				local tmp_def_dir=$(mktemp -d)
-				find "$src_root/$bin_sub" -name "*.dll" -print0 | while IFS= read -r -d '' f; do
-						local fname=$(basename "$f")
-						local libname="${fname%.dll}"
-						cp -rfv "$f" "$install_bin/" >>"$LOG_FILE"
-						echo "$install_bin/$fname" >> "$manifest"
-						echo "  [Installed]: $install_inc/$fname" >>"$LOG_FILE"
-						pushd "$tmp_def_dir" >/dev/null || return 1
-						local def_file="$tmp_def_dir/$libname.def"
-						if ("$gendef_tool" "$f" >/dev/null 2>&1) && [[ -f "$def_file" ]]; then
-								 echo "INFO: Generated MinGW import lib for $fname" >>"$LOG_FILE"
-								"$dll_tool" -d "$def_file" -D "$fname" -l "$install_lib/lib$libname.dll.a"
-								echo "$install_lib/lib$libname.dll.a" >> "$manifest"
-								cp -rfv "$install_lib/lib$libname.dll.a" "$pkg_scan_dir/" >>"$LOG_FILE"
-								rm -f "$install_lib/lib$libname.a"
-								echo "  [Installed]: $install_lib/lib$libname.dll.a" >>"$LOG_FILE"
-						else
-								echo "  [WARNING]: Failed to generate def file for $fname (Crash/Error). Using direct DLL linking." >>"$LOG_FILE"
-								cp -fv "$f" "$install_lib/lib$libname.dll" >>"$LOG_FILE"
-								echo "$install_lib/lib$libname.dll" >> "$manifest"
-								cp -fv "$f" "$pkg_scan_dir/lib$libname.dll" >>"$LOG_FILE"
-						fi
-						popd >/dev/null || return 1
-						# -------- Handle Gendef Failure by using DLL directly --------
-						if [[ -f "$def_file" ]]; then
-								echo "INFO: Generated MinGW import lib for $fname" >>"$LOG_FILE"
-								"$dll_tool" -d "$def_file" -D "$fname" -l "$install_lib/lib$libname.dll.a"
-								echo "$install_lib/lib$libname.dll.a" >> "$manifest"
-								cp -rfv "$install_lib/lib$libname.dll.a" "$pkg_scan_dir/" >>"$LOG_FILE"
-								rm -f "$install_lib/lib$libname.a"
-								echo "  [Installed]: $install_lib/lib$libname.dll.a" >>"$LOG_FILE"
-						else
-								echo "  [WARNING]: Failed to generate def file for $fname. Using direct DLL linking." >>"$LOG_FILE"
-								# Copy the DLL to lib/libNAME.dll. The linker will accept this.
-								cp -fv "$f" "$install_lib/lib$libname.dll" >>"$LOG_FILE"
-								echo "$install_lib/lib$libname.dll" >> "$manifest"
-								# Copy to pkg_scan_dir so the pkg-config generator picks it up
-								cp -fv "$f" "$pkg_scan_dir/lib$libname.dll" >>"$LOG_FILE"
-						fi
-						# -------------------------------------------------------------
-				done
-				rm -rf "$tmp_def_dir"
-				find "$src_root/$bin_sub" -type f \( -not -name "*.dll" \) -print0 | while IFS= read -r -d '' f; do
-						cp -rfv "$f" "$install_bin/" >>"$LOG_FILE"
-						echo "$install_bin/$(basename "$f")" >> "$manifest"
-						echo "  [Installed]: $install_bin/$(basename "$f")" >>"$LOG_FILE"
-				done
-		fi
-		if [[ -d "$src_root/$lib_sub" && -n "$lib_sub" ]]; then
-				find "$src_root/$lib_sub" \( -name "*.lib" -o -name "*.dll.a" \) -print0 | while IFS= read -r -d '' f; do
-						local fname=$(basename "$f")
-						local libname="${fname%.lib}"
-						cp -rfv "$f" "$install_lib/$fname" >>"$LOG_FILE"
-						echo "$install_lib/$fname" >> "$manifest"
-						echo "  [Installed]: $install_bin/$fname" >>"$LOG_FILE"
-						if [[ "$fname" == *.lib ]]; then
-								# -------- Check for either .dll.a OR .dll before overwriting --------
-								if [[ -f "$install_lib/lib$libname.dll.a" || -f "$install_lib/lib$libname.dll" ]]; then
-										: # We have a good import lib OR a direct linkable DLL, do nothing
-								else
-										echo "  [SKIP]: Skipping incompatible MSVC static library: $fname" >>"$LOG_FILE"
-										continue
-								fi
-								# --------------------------------------------------------------------
-
-						fi
-				done
-		fi
-		generate_pkg_config -t="$pkg_scan_dir" \
-				-o="$install_pkgconfig_dir/$lib_name.pc" \
-				-i="$install_dir" \
-				-v="$version" -n="$lib_name" -d="$desc" >/dev/null 2>&1
-		rm -rf "$pkg_scan_dir"
-
-		echo "$install_pkgconfig_dir/$lib_name.pc" >> "$manifest"
-		echo "  [Installed]: $install_pkgconfig_dir/$lib_name.pc" >>"$LOG_FILE"
-		return 0
+    local lib_name="" version="" src_root="" inc_sub="" lib_sub="" bin_sub="" desc="Prebuilt MSVC Library"
+    local manifest=""
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            -n=*) lib_name="${1#*=}"; shift ;;
+            -v=*) version="${1#*=}"; shift ;;
+            -s=*) src_root="${1#*=}"; shift ;;
+            -p=*) install_dir="${1#*=}"; shift ;;
+            -I=*) inc_sub="${1#*=}"; shift ;;
+            -L=*) lib_sub="${1#*=}"; shift ;;
+            -B=*) bin_sub="${1#*=}"; shift ;;
+            -d=*) desc="${1#*=}"; shift ;;
+            -m=*) manifest="${1#*=}"; shift ;;
+            *) shift ;;
+        esac
+    done
+    [[ -z "$install_dir" ]] && install_dir="$dependency_install_prefix"
+    create_dir "$install_dir/{lib,bin,include}"
+    local install_lib="$install_dir/lib"
+    local install_bin="$install_dir/bin"
+    local install_inc="$install_dir/include"
+    [[ -z "$manifest" ]] && manifest="$install_pkgconfig_dir/${lib_name}_manifest"
+    [[ ! -f "$manifest" ]] && touch "$manifest"
+    echo "INFO: Installing Prebuilt $lib_name ($version)..." >>"$LOG_FILE"
+    local gendef_tool="${cross_prefix}gendef"
+    local dll_tool="${cross_prefix}dlltool"
+    local objdump_tool="${cross_prefix}objdump"
+    [[ ! -x "$(command -v "$gendef_tool")" ]] && gendef_tool="gendef"
+    [[ ! -x "$(command -v "$dll_tool")" ]] && dll_tool="dlltool"
+    # Use cross-objdump if available, otherwise llvm-objdump, otherwise system objdump
+    if [[ ! -x "$(command -v "$objdump_tool")" ]]; then
+        if command -v llvm-objdump >/dev/null 2>&1; then
+            objdump_tool="llvm-objdump"
+        else
+            objdump_tool="objdump"
+        fi
+    fi
+    local pkg_scan_dir=$(mktemp -d)
+    # 1. Install Includes
+    if [[ -d "$src_root/$inc_sub" && -n "$inc_sub" ]]; then
+        cp -rfv "$src_root/$inc_sub/"* "$install_inc/" >>"$LOG_FILE"
+        find "$src_root/$inc_sub" -mindepth 1 -print0 | while IFS= read -r -d '' f; do
+            local rel_path="${f#"$src_root/$inc_sub/"}"
+            mkdir -p "$(dirname "$install_inc/$rel_path")"
+            cp -rfv "$f" "$install_inc/$rel_path" >>"$LOG_FILE"
+            echo "$install_inc/$rel_path" >>"$manifest"
+            echo "  [Installed]: $install_inc/$rel_path" >>"$LOG_FILE"
+        done
+    fi
+    # 2. Install Binaries and Generate Import Libs
+    if [[ -n "$bin_sub" && -d "$src_root/$bin_sub" ]]; then
+        local tmp_def_dir=$(mktemp -d)
+        find "$src_root/$bin_sub" -name "*.dll" -print0 | while IFS= read -r -d '' f; do
+            local fname=$(basename "$f")
+            local libname="${fname%.dll}"
+            # Install the DLL to bin/
+            cp -rfv "$f" "$install_bin/" >>"$LOG_FILE"
+            echo "$install_bin/$fname" >> "$manifest"
+            echo "  [Installed]: $install_bin/$fname" >>"$LOG_FILE"
+            pushd "$tmp_def_dir" >/dev/null || return 1
+            local def_file="$tmp_def_dir/$libname.def"
+            local def_generated=false
+            # --- STRATEGY SELECTION (FILE SIZE) ---
+            # gendef crashes on large files (>100MB). We check size safely.
+            local prefer_objdump=false
+            local fsize=0
+            if command -v stat >/dev/null 2>&1; then
+                fsize=$(stat -c%s "$f" 2>/dev/null || stat -f%z "$f" 2>/dev/null || echo 0)
+            else
+                fsize=$(wc -c < "$f" | tr -d ' ')
+            fi
+            # THRESHOLD: 50MB (52428800 bytes)
+            if [ "$fsize" -gt 52428800 ]; then
+                prefer_objdump=true
+            fi
+            # --- ATTEMPT 1: OBJDUMP (Prioritized for large libs) ---
+            if [ "$prefer_objdump" = true ] && command -v "$objdump_tool" >/dev/null 2>&1; then
+                echo "  [Warning]: File $fname is large ($((fsize/1024/1024)) MB). Skipping gendef to prevent crash. Using $objdump_tool..." >>"$LOG_FILE"
+                echo "LIBRARY \"$fname\"" > "$def_file"
+                echo "EXPORTS" >> "$def_file"
+                # FIXED PARSING LOGIC: Exclude "Export RVA" and "Ordinal Base" garbage lines
+                if "$objdump_tool" -p "$f" | grep "\[ *[0-9]*\]" | grep -v "Export RVA" | grep -v "Ordinal Base" | awk '{print $NF}' >> "$def_file"; then
+                    if [[ -s "$def_file" ]]; then def_generated=true; fi
+                fi
+            fi
+            # --- ATTEMPT 2: GENDEF (Standard) ---
+            if [ "$def_generated" = false ]; then
+                set +e
+                ("$gendef_tool" "$f" >/dev/null 2>&1)
+                local rc=$?
+                set -e
+                if [ $rc -eq 0 ] && [[ -f "$def_file" ]]; then
+                    def_generated=true
+                fi
+            fi
+            # --- ATTEMPT 3: OBJDUMP (Fallback) ---
+            if [ "$def_generated" = false ] && [ "$prefer_objdump" = false ] && command -v "$objdump_tool" >/dev/null 2>&1; then
+                echo "  [INFO]: gendef failed/crashed for $fname. Retrying with $objdump_tool..." >>"$LOG_FILE"
+                echo "LIBRARY \"$fname\"" > "$def_file"
+                echo "EXPORTS" >> "$def_file"
+                # FIXED PARSING LOGIC: Same as above
+                if "$objdump_tool" -p "$f" | grep "\[ *[0-9]*\]" | grep -v "Export RVA" | grep -v "Ordinal Base" | awk '{print $NF}' >> "$def_file"; then
+                    if [[ -s "$def_file" ]]; then def_generated=true; fi
+                fi
+            fi
+            # --- PROCESS RESULT ---
+            if [ "$def_generated" = true ]; then
+                echo "INFO: Generated MinGW import lib for $fname" >>"$LOG_FILE"
+                "$dll_tool" -d "$def_file" -D "$fname" -l "$install_lib/lib$libname.dll.a"
+                echo "$install_lib/lib$libname.dll.a" >> "$manifest"
+                cp -rfv "$install_lib/lib$libname.dll.a" "$pkg_scan_dir/" >>"$LOG_FILE"
+                rm -f "$install_lib/lib$libname.a"
+                echo "  [Installed]: $install_lib/lib$libname.dll.a" >>"$LOG_FILE"
+            else
+                echo "  [WARNING]: Failed to generate def file for $fname. Using direct DLL linking." >>"$LOG_FILE"
+                cp -fv "$f" "$install_lib/lib$libname.dll" >>"$LOG_FILE"
+                echo "$install_lib/lib$libname.dll" >> "$manifest"
+                cp -fv "$f" "$pkg_scan_dir/lib$libname.dll" >>"$LOG_FILE"
+            fi
+            popd >/dev/null || return 1
+        done
+        rm -rf "$tmp_def_dir"
+        find "$src_root/$bin_sub" -type f \( -not -name "*.dll" \) -print0 | while IFS= read -r -d '' f; do
+            cp -rfv "$f" "$install_bin/" >>"$LOG_FILE"
+            echo "$install_bin/$(basename "$f")" >> "$manifest"
+            echo "  [Installed]: $install_bin/$(basename "$f")" >>"$LOG_FILE"
+        done
+    fi
+    # 3. Install Existing Libs (if any)
+    if [[ -d "$src_root/$lib_sub" && -n "$lib_sub" ]]; then
+        find "$src_root/$lib_sub" \( -name "*.lib" -o -name "*.dll.a" \) -print0 | while IFS= read -r -d '' f; do
+            local fname=$(basename "$f")
+            local libname="${fname%.lib}"
+            cp -rfv "$f" "$install_lib/$fname" >>"$LOG_FILE"
+            echo "$install_lib/$fname" >> "$manifest"
+            echo "  [Installed]: $install_lib/$fname" >>"$LOG_FILE"
+            if [[ "$fname" == *.lib ]]; then
+                if [[ -f "$install_lib/lib$libname.dll.a" || -f "$install_lib/lib$libname.dll" ]]; then
+                    : 
+                else
+                    echo "  [SKIP]: Skipping incompatible MSVC static library: $fname" >>"$LOG_FILE"
+                    continue
+                fi
+            fi
+        done
+    fi
+    generate_pkg_config -t="$pkg_scan_dir" \
+        -o="$install_pkgconfig_dir/$lib_name.pc" \
+        -i="$install_dir" \
+        -v="$version" -n="$lib_name" -d="$desc" >/dev/null 2>&1
+    rm -rf "$pkg_scan_dir"
+    echo "$install_pkgconfig_dir/$lib_name.pc" >> "$manifest"
+    echo "  [Installed]: $install_pkgconfig_dir/$lib_name.pc" >>"$LOG_FILE"
+    return 0
 }
 
 # 1. variant

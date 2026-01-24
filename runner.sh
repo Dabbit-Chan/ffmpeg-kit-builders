@@ -168,6 +168,7 @@ Advanced Dependency Control:
 Dynamic Library Control:
 	--enable-[library name]                                       enable specific library (e.g. --enable-libx264)
 	--disable-[library name]                                      disable specific library (e.g. --disable-libxcb)
+  --ffmpeg-programs|--programs                                  enable ffmpeg programs. By default these are disabled.
 	--ff-*                                                        pass additional ffmpeg parameters directly to configure.
 	                                                              Example: --ff-disable-network passed as --disable-network
 "
@@ -499,6 +500,10 @@ while [ $# -gt 0 ]; do
     ;;
   --streaming-bundle)
     export streaming_bundle=y
+    shift
+    ;;
+  --ffmpeg-programs|--programs)
+    export build_ffmpeg_programs=y
     shift
     ;;
 	--enable-*)

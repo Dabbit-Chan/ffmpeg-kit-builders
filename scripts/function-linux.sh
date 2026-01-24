@@ -167,9 +167,9 @@ get_ldflags() {
 }
 
 configure_ffmpeg_kit() {
+  run_valid_function "build_libjsoncpp"
   echo -e "INFO: Configuring ffmpeg kit" | tee -a "$LOG_FILE"
-  reset_cflags
-	reset_cppflags
+  reset_allflags
   set_toolchain_paths
   
 	local type_postfix="$build_ffmpeg_kit_type"
