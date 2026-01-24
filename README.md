@@ -22,7 +22,7 @@ This repository provides a comprehensive build system for FFmpeg and FFmpegKit t
 ### Prerequisites
 
 - **OS**: Linux host or WSL2 (<a href="https://quay.io/organization/pypa">manylinux</a> recommended for maximum compatibility - use docker/devcontainer if unsure).
-- **RAM**: Minimum 600MB (Hard limit check in script), **4GB+ recommended** for linking static binaries.
+- **RAM**: 8GB+ recommended for linking static binaries.
 - **Disk Space**: ~285GB available disk space for a full build with all dependencies and intermediate object files.
 - **Custom Build**: bundle build sequence has already been organized in a way that accounts for dependencey tree. I have done my best to include dependencies in individual build steps but if you make a custom build with custom components enables/disabled you may run into dependency issues. You will have to troubleshoot those on your own.
 - **Dependencies**: you will need the following dependencies:
@@ -84,12 +84,6 @@ sudo ./runner.sh
 # Non-interactive mode: Build GPL version with audio libraries for Linux x86_64
 sudo ./runner.sh --host=linux --arch=x86_64 -y --enable-gpl --enable-audio
 
-# Cross-compile for Windows 64-bit (Shared Libs + Video Bundle)
-sudo ./runner.sh --host=windows --arch=x86_64 --enable-gpl --enable-shared --video-bundle
-
-# Build static libraries for Linux
-sudo ./runner.sh --host=linux --arch=x86_64 --enable-static
-
 # Build for Linux with specific additional libraries
 sudo ./runner.sh --host=linux --arch=x86_64 --enable-fontconfig --enable-freetype
 
@@ -98,6 +92,18 @@ sudo ./runner.sh --host=linux --arch=x86_64 -f --video-hw-bundle
 
 # Create a redistributable release zip
 sudo ./runner.sh --host=linux --arch=x86_64 --full-bundle --release
+
+# Force build Full non-free dependencies for windows 64 bit
+sudo ./runner.sh --host=windows --arch=x86_64 --enable-full --enable-nonfree -y --build-deps-only -f
+
+# Force build static Ffmpeg libraries and programs for windows 64 bit
+sudo ./runner.sh --host=windows --arch=x86_64 --enable-full --enable-nonfree -y --build-ffmpeg-only=static -f --programs
+
+# Force build shared Ffmpeg-kit library for windows 64 bit
+sudo ./runner.sh --host=windows --arch=x86_64 --enable-full --enable-nonfree -y --build-ffmpeg-kit-only=shared -f
+
+# resume previous failed run
+sudo ./runner.sh --resume
 ```
 
 ## Architecture
@@ -109,21 +115,39 @@ The build system implements a modular architecture:
 3. **Execution Primitives**: `scripts/function.sh` contains the core logic for downloading, configuring, and compiling generic C/C++ projects.
 4. **Library Recipes**: `scripts/run-linux.sh` and `scripts/run-windows.sh` contain specific build instructions for 100+ libraries.
 
-## Output Bundle Structure
+## Output Structure
 
 Artifacts are generated in the `prebuilt/` directory.
 
 ```text
 prebuilt/
-├── {platform}-{arch}/                                # e.g., linux-x86_64
-│   ├── bundle-{platform}-{arch}-{type}/              # Unpacked Bundle
-│   │       ├── include/                              # Headers
-│   │       ├── lib/                                  # .so/.dll/.a files
-│   │       ├── bin/                                  # ffmpeg/ffprobe executables
-│   │       ├── pkgconfig/                            # .pc files for linkage
-│   │       └── licenses/                             # Extracted licenses
-│   └── releases/
-│       └── bundle-{platform}-{arch}-{type}.zip       # Redistributable ZIP (if --release used)
+├── {platform}-{arch}/                                                     # e.g., linux-x86_64
+│   ├── pkgconfig/                                                         # build script install manifest and other tracking files
+│   ├── libraries
+│   │       ├── include/                                                   # dependency Headers
+│   │       ├── lib/                                                       # dependency .so/.dll/.a files
+│   │       ├── bin/                                                       # dependency executables
+│   │       ├── {other}/                                                   # other dependency aritfacts
+│   ├── ffmpeg-kit-{features}-{platform}-{arch}-{type}-{license}/          # ffmpeg-kit build artifacts
+│   │       ├── include/                                                   # Headers
+│   │       ├── lib/                                                       # .so/.dll/.a files
+│   │       ├── bin/                                                       # ffmpeg/ffprobe executables
+│   │       ├── pkgconfig/                                                 # .pc files for linkage
+│   │       └── licenses/                                                  # Extracted licenses
+│   ├── ffmpeg-{features}-{platform}-{arch}-{type}-{license}/              # ffmpeg build artifacts
+│   │       ├── include/                                                   # Headers
+│   │       ├── lib/                                                       # .so/.dll/.a files
+│   │       ├── bin/                                                       # ffmpeg/ffprobe executables
+│   │       ├── pkgconfig/                                                 # .pc files for linkage
+│   │       └── licenses/                                                  # Extracted licenses
+│   ├── bundle-{features}-{platform}-{arch}-{type}-{license}/              # Unpacked Bundle
+│   │       ├── include/                                                   # Headers
+│   │       ├── lib/                                                       # .so/.dll/.a files
+│   │       ├── bin/                                                       # ffmpeg/ffprobe executables
+│   │       ├── pkgconfig/                                                 # .pc files for linkage
+│   │       └── licenses/                                                  # Extracted licenses
+│   └── releases/                     
+│       └── bundle-{features}-{platform}-{arch}-{type}-{license}.zip       # Redistributable ZIP (if --release used)
 ```
 
 ## Build Phases
@@ -144,7 +168,7 @@ prebuilt/
 | `-d, --debug` | Build with debug symbols (`-g`) and no optimization |
 | `-f, --force` | Force rebuild of all dependencies (cleans `already_built` flags) |
 | `-y` | Non-interactive mode (accept defaults) |
-| `--release` | Create a ZIP archive of the final ffmpeg-kit bundle |
+| `--release` | create release zip of ffmpeg-kit bundled binaries to be distributed |
 | `--host=*` | Target platform: `linux` or `windows` |
 | `--arch=*` | Target architecture: `x86_64` or `i686` |
 
@@ -199,21 +223,24 @@ prebuilt/
 | `--ffmpeg-git-checkout=`              | `https://github.com/FFmpeg/FFmpeg.git` | Clone FFmpeg from other repositories |
 | `--ffmpeg-source-dir=`                | `[empty]` | Specify the directory of ffmpeg source code. When specified, git will not be used |
 | `--cflags=`                           | `-mtune=generic -O3 -pipe` | Compiler flags (default works on any CPU) |
+| `--cxxflags=`                         | `-ffunction-sections -fdata-sections -fPIC` | Compiler flags (default works on any CPU) |
+| `--cppflags=`                         |   | Compiler flags (default works on any CPU) |
+| `--ldflags=`                          |   | Compiler flags (default works on any CPU) |
 | `--git-get-latest=`                   |`y`| Do a git pull for latest code from repositories like FFmpeg |
 | `--prefer-stable=`                    |`y`| Build a few libraries from releases instead of git master |
 | `--build-only={0..} OR [library_name]`|   | Build only specific dependency (0.. or step/library name from get-all-steps) |
 | `--build-from={0..} OR [library_name]`|   | Start building dependencies from given step (0.. or step/library name) |
 | `--build-dependencies=[y]`            |`y`| Whether or not to skip building dependencies
-| `--build-dependencies-only`           |   | Only build dependency binaries. Will not build app binaries |
-| `--build-ffmpeg-only`                 |   | Build ffmpeg binaries only |
-| `--build-ffmpeg-kit-only`             |   | Build ffmpeg-kit binaries and bundle only |
-| `--enable-static\|--static`           |   | Build static ffmpeg and ffmpeg-kit binaries |
-| `--enable-shared\|--shared`           | `default` | Build shared ffmpeg and ffmpeg-kit binaries |
-| `--clean-builds`                      |   | Clean ffmpeg and ffmpeg-kit builds based on --enable-static/--enable-shared(default) and exit |
+| `--build-dependencies-only\|--build-deps-only`|   | Only build dependency binaries. Will not build app binaries. (static or shared build only affects ffmpeg and ffmpeg-kit. Dependencies are always built statically.) |
+|`--build-ffmpeg-only=[shared]\|static` |   | build ffmpeg binaries only of type [shared] or static. Does not (re)build ext-library dependencies. By default ffmpeg-kit always needs a static build of ffmpeg to be present already. Missing dependencies will cause a failure
+|`--build-ffmpeg-kit-only=[shared]\|static`|   | build ffmpeg-kit library and bundle only of type [shared] or static. By default ffmpeg-kit always needs a static build of ffmpeg to be present already. Does not (re)build ext-library dependencies. Missing dependencies will cause a failure.
+|`--clean-builds=[shared]\|static`      |   | clean ffmpeg and ffmpeg-kit builds of type [shared] or static and exit
+|`--reset-and-clean[=ARG]`              |   | reset and clean all source directories of touch files and build artifacts
 | `--list-libraries`                    |   | Lists ffmpeg configuration including extra libraries and exit |
 | `--enable-[library name]`             |   | Enable extra ffmpeg libraries. Run --list-libraries and see under "External library support" |
 | `--ffmpeg-programs\|--programs`       |   | Enable ffmpeg programs. **By default these are disabled.** |
 | `--ff-*`                              |   | Pass additional ffmpeg parameters prefixed by ff-* to ffmpeg configure. No additional checks done |
+|`--resume`                             |   | resume previously inturrupted run (based on ~run.state file)
 
 ## Bundle Matrix
 
@@ -431,10 +458,6 @@ The build scripts in this repository are licensed under GPL 3.0 license (refer t
 
 1.  **WSL Issues**:
     *   If using WSL, **WSL 2** is strongly recommended for build performance.
-    *   If cross-compiling, you may need to disable binfmt interop:
-        ```bash
-        sudo bash -c 'echo 0 > /proc/sys/fs/binfmt_misc/WSLInterop'
-        ```
 2.  **Insufficient Memory**:
     *   Linking static `libtensorflow` or `libtorch` requires significant RAM. If the build crashes during the final link step, increase swap space or allocated RAM to at least 8GB.
 3.  **Missing "Configure"**:
