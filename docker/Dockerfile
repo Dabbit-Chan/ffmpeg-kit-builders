@@ -100,10 +100,11 @@ ENV RUSTUP_HOME=/usr/local/rustup \
 RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --no-modify-path && \
     . /usr/local/cargo/env && \
     rustup target add x86_64-pc-windows-gnu && \
+    # Download and install cargo-c binary instead of compiling from source
+    # This avoids the OpenSSL 3.0 requirement during compilation
+    curl -L https://github.com/lu-zero/cargo-c/releases/download/v0.10.20/cargo-c-x86_64-unknown-linux-musl.tar.gz | tar -xz -C /usr/local/bin && \
     rustc --version && \
     cargo --version && \
-    cargo install cargo-c && \
-    ln -sf /usr/local/cargo/bin/* /usr/local/bin/ && \
     dnf clean all
 
 # Allow 'vscode' user to use Cargo
