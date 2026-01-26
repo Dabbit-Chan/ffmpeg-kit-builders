@@ -3105,8 +3105,8 @@ build_opencl() {
 # build_libtensorflow     # config_options+= --enable-libtensorflow       # enable TensorFlow as a DNN module backend for DNN based filters like sr [no]
 build_libtensorflow() {
   if ! truthy "$disable_libtensorflow" && truthy "$enable_libtensorflow" && [[ $bits_target == 64 ]]; then
-    local lib_name="libtensorflow"
-    local lib="$lib_name-$host_name"
+    local base_lib="libtensorflow"
+    local lib="$base_lib-$host_name"
     local repo_ver="2.18.0"
     local repo="https://storage.googleapis.com/tensorflow/versions/2.18.0/libtensorflow-cpu-windows-x86_64.zip"
     local subdir="cpu"
@@ -3121,7 +3121,7 @@ build_libtensorflow() {
       else
         local repo="https://storage.googleapis.com/tensorflow/libtensorflow/libtensorflow-gpu-windows-x86_64-2.10.0.zip"
         repo_ver="2.10.0"
-        echo "WARNING: uninstalling cpu $lib_name if installed." >> "$LOG_FILE"
+        echo "WARNING: uninstalling cpu $base_lib if installed." >> "$LOG_FILE"
         uninstall_manifest "$install_pkgconfig_dir/${lib}_cpu_manifest" > >(redirect_output) 2>&1
       fi
     fi
@@ -3143,14 +3143,14 @@ build_libtensorflow() {
     if [ ! -f "$src_dir/$lib/$subdir/$touch_name" ]; then
         download_and_unpack_file "$repo" "$src_dir/$lib/$subdir"
         
-        install_msvc_binary \
-            -n="$lib_name" -v="$repo_ver" \
+        install_prebuilt_binary \
+            -n="$base_lib" -v="$repo_ver" \
             -s="$src_dir/$lib/$subdir" \
             -I="include" \
             -L="lib" \
             -B="lib" \
             -m="$manifest" \
-            -d="TensorFlow C Library ($subdir)" || exit_message 1 "could not install $lib_name"
+            -d="TensorFlow C Library ($subdir)" || exit_message 1 "could not install $base_lib"
 
         change_dir "$src_dir/$lib/$subdir"
         create_touch_file 0 "$touch_name"
@@ -3165,8 +3165,8 @@ build_libopenvino() {
     local lib_name="libopenvino"
     local repo_ver="2025.4.0"
     local repo="https://storage.openvinotoolkit.org/repositories/openvino/packages/2025.4/windows/openvino_toolkit_windows_2025.4.0.20398.8fdad55727d_x86_64.zip"
-
     local lib="$lib_name-$host_name"
+
     local manifest="$work_dir/pkgconfig/${lib}_manifest"
     [[ ! -f "$manifest" ]] && touch "$manifest"
 
@@ -3184,7 +3184,7 @@ build_libopenvino() {
         download_and_unpack_file "$repo" "$lib"
         change_dir "$src_dir/$lib"
         # 1. Install Main OpenVINO
-        install_msvc_binary \
+        install_prebuilt_binary \
             -n="openvino" -v="$repo_ver" \
             -s="$src_dir/$lib" \
             -I="runtime/include" \
@@ -3193,7 +3193,7 @@ build_libopenvino() {
             -m="$manifest" \
             -d="OpenVINO Toolkit" || exit_message 1 "could not install $lib_name"
         # 2. Install TBB Dependency
-        install_msvc_binary \
+        install_prebuilt_binary \
             -n="tbb" -v="$repo_ver" \
             -s="$src_dir/$lib" \
             -I="runtime/3rdparty/tbb/include" \
@@ -3256,7 +3256,7 @@ build_libtorch() {
     if [ ! -f "$src_dir/$lib/$subdir/$touch_name" ]; then
         download_and_unpack_file "$repo" "$src_dir/$lib/$subdir"
         
-        install_msvc_binary \
+        install_prebuilt_binary \
             -n="$lib_name" -v="$repo_ver" \
             -s="$src_dir/$lib/$subdir" \
             -I="include" \
@@ -3745,6 +3745,7 @@ build_libnvvm() {
     local repo="https://developer.download.nvidia.com/compute/cuda/redist/libnvvm/windows-x86_64/libnvvm-windows-x86_64-13.1.80-archive.zip"
     local base_lib="libnvvm"
     local lib="$base_lib-$host_name"
+    local repo_ver="13.1.80"
 
     local manifest="$work_dir/pkgconfig/${lib}_manifest"
     [[ ! -f "$manifest" ]] && touch "$manifest"
@@ -3761,11 +3762,11 @@ build_libnvvm() {
     if [ ! -f "$src_dir/$lib/$touch_name" ]; then
         download_and_unpack_file "$repo" "$src_dir/$lib"
         change_dir "$src_dir/$lib"
-        install_msvc_binary -n="$base_lib" -v="13.1.80" \
+        install_prebuilt_binary -n="$base_lib" -v="$repo_ver" \
             -s="$src_dir/$lib/nvvm" \
             -m="$manifest" \
             -I="include" -L="lib" -B="bin" || exit_message 1 "could not install $base_lib"
-        install_msvc_binary -n="$base_lib" -v="13.1.80" \
+        install_prebuilt_binary -n="libdevice" -v="$repo_ver" \
             -s="$src_dir/$lib/nvvm" \
             -m="$manifest" \
             -L="libdevice" || exit_message 1 "could not install $base_lib"
@@ -3796,7 +3797,7 @@ build_cuda_cudart() {
         download_and_unpack_file "$repo" "$src_dir/$lib"
         change_dir "$src_dir/$lib"
         
-        install_msvc_binary -n="$base_lib" -v="13.1.80" \
+        install_prebuilt_binary -n="$base_lib" -v="13.1.80" \
             -s="$src_dir/$lib" \
             -m="$manifest" \
             -I="include" -L="lib" -B="bin" || exit_message 1 "could not install $base_lib"
@@ -3829,7 +3830,7 @@ build_cuda_crt() {
         download_and_unpack_file "$repo" "$src_dir/$lib"
         change_dir "$src_dir/$lib"
         # Only headers
-        install_msvc_binary -n="$base_lib" -v="13.1.80" \
+        install_prebuilt_binary -n="$base_lib" -v="13.1.80" \
             -m="$manifest" \
             -s="$src_dir/$lib" \
             -I="include" || exit_message 1 "could not install $base_lib"

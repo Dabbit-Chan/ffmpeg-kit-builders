@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# shellcheck disable=SC2317,SC2129,SC1091,SC2120,SC2035,SC2016
+# shellcheck disable=SC2317,SC2129,SC1091,SC2120,SC2035,SC2016,SC2310
 
 # 1. exit code
 # 2. message
@@ -458,6 +458,7 @@ setup_linux_environment() {
     export RANLIB=ranlib
     export LD=ld
     export STRIP=strip
+    export NASM=nasm
 
     create_dir "$install_pkgconfig_dir"
     create_dir "$work_dir/pkgconfig"
@@ -2780,24 +2781,15 @@ generate_pkg_config() {
     while IFS= read -r -d '' file_path; do
         local filename
         filename=$(basename "$file_path")
-        
-        # Remove extension using regex
-        # Covers .dll.a, .dll, and .a
-        local clean_name
-        if [[ "$filename" =~ ^lib(.*)\.(dll\.a|a|dll|so)$ ]]; then
-             clean_name="${BASH_REMATCH[1]}"
-        elif [[ "$filename" =~ ^(.*)\.(dll\.a|a|dll|so)$ ]]; then
-             clean_name="${BASH_REMATCH[1]}"
-        else
-             clean_name="$filename"
-        fi
-
+        local name=$(basename "$file_path")
+        name="${name#lib}"
+        name=$(echo "$name" | sed -E 's/\.(dll\.a|so|a|dll)(\.[0-9.]+)?$//')
         # Avoid duplicates in the list
         # shellcheck disable=2076
-        if [[ ! " ${libs_list[*]} " =~ " ${clean_name} " ]]; then
-            libs_list+=("-l${clean_name}")
+        if [[ ! " ${libs_list[*]} " =~ " ${name} " ]]; then
+            libs_list+=("-l${name}")
         fi
-    done < <(find "$TARGET_SCAN_DIR" -maxdepth 1 -type f \( -name "*.dll" -o -name "*.dll.a" -o -name "*.a" -o -name "*.so" \) -print0)
+    done < <(find "$TARGET_SCAN_DIR" -maxdepth 1 -type f \( -name "*.dll*" -o -name "*.dll.a*" -o -name "*.a*" -o -name "*.so*" \) -print0)
     [[ ! -d "$(dirname "$OUTPUT_FILE")" ]] && create_dir "$(dirname "$OUTPUT_FILE")"
     # ---------------------------------------------------------
     # Generate .pc File Content
@@ -3309,12 +3301,10 @@ configure_ffmpeg() {
   truthy "$enable_libdavs2" && config_options+=" --enable-libdavs2"                   # enable AVS2 decoding via libdavs2 [no]
   truthy "$enable_libdvdnav" && config_options+=" --enable-libdvdnav"                 # enable libdvdnav, needed for DVD demuxing [no]
   truthy "$enable_libdvdread" && config_options+=" --enable-libdvdread"               # enable libdvdread, needed for DVD demuxing [no]
-  truthy "$enable_libflite" && config_options+=" --enable-libflite"
-  # truthy "$enable_libflite" && config_options+=" --enable-libflite \
-  # --extra-libs=\"-lasound\""                                                          # enable flite (voice synthesis) support via libflite [no]
-  truthy "$enable_libfontconfig" && config_options+=" --enable-libfontconfig"
-  # truthy "$enable_libfontconfig" && config_options+=" --enable-libfontconfig \
-  # --extra-libs=\"-lxml2 -liconv\""                                                    # enable libfontconfig, useful for drawtext filter [no]
+  truthy "$enable_libflite" && config_options+=" --enable-libflite \
+  --extra-libs=\"-lasound\""                                                          # enable flite (voice synthesis) support via libflite [no]
+  truthy "$enable_libfontconfig" && config_options+=" --enable-libfontconfig \
+  --extra-libs=\"-lxml2 -liconv\""                                                    # enable libfontconfig, useful for drawtext filter [no]
   truthy "$enable_libfreetype" && config_options+=" --enable-libfreetype"             # enable libfreetype, needed for drawtext filter [no]
   truthy "$enable_libfribidi" && config_options+=" --enable-libfribidi"               # enable libfribidi, improves drawtext filter [no]
   truthy "$enable_libglslang" && config_options+=" --enable-libglslang"               # enable GLSL->SPIRV compilation via libglslang [no]
@@ -3331,9 +3321,8 @@ configure_ffmpeg() {
   truthy "$enable_libmp3lame" && config_options+=" --enable-libmp3lame"               # enable MP3 encoding via libmp3lame [no]
   truthy "$enable_libmysofa" && config_options+=" --enable-libmysofa"                 # enable libmysofa, needed for sofalizer filter [no]
   truthy "$enable_liboapv" && config_options+=" --enable-liboapv"                     # enable APV encoding via liboapv [no]
-  truthy "$enable_libopencv" && config_options+=" --enable-libopencv"
-  # truthy "$enable_libopencv" && config_options+=" --enable-libopencv \
-  # --extra-libs=\"-lsharpyuv\""                                                        # enable video filtering via libopencv [no]
+  truthy "$enable_libopencv" && config_options+=" --enable-libopencv \
+  --extra-libs=\"-lsharpyuv\""                                                        # enable video filtering via libopencv [no]
   truthy "$enable_libopenh264" && config_options+=" --enable-libopenh264"             # enable H.264 encoding via OpenH264 [no]
   truthy "$enable_libopenjpeg" && config_options+=" --enable-libopenjpeg"             # enable JPEG 2000 encoding via OpenJPEG [no]
   truthy "$enable_libopenmpt" && config_options+=" --enable-libopenmpt"               # enable decoding tracked files via libopenmpt [no]
@@ -3357,12 +3346,11 @@ configure_ffmpeg() {
   truthy "$enable_libssh" && config_options+=" --enable-libssh"                       # enable SFTP protocol via libssh [no]
   truthy "$enable_libsvtav1" && config_options+=" --enable-libsvtav1"                 # enable AV1 encoding via SVT [no]
   truthy "$enable_libtensorflow" && config_options+=" --enable-libtensorflow"         # enable TensorFlow as a DNN module backend for DNN based filters like sr [no]
-  truthy "$enable_libtesseract" && config_options+=" --enable-libtesseract"
-  # truthy "$enable_libtesseract" && config_options+=" --enable-libtesseract \
-  # --extra-libs=\"-Wl,--start-group -ltesseract -lleptonica -ltiff -lpng16 -ljpeg \
-  # -lopenjp2 -ljbig -lLerc -ldeflate -lzstd -llzma -lwebpmux -lwebp -lgif -lcurl \
-  # -lnghttp2 -lssl -lcrypto -lpsl -lbrotlidec -lbrotlicommon -larchive -lbz2 -lz \
-  # -lexpat -liconv -Wl,--end-group\""                                                # enable Tesseract, needed for ocr filter [no]
+  truthy "$enable_libtesseract" && config_options+=" --enable-libtesseract \
+  --extra-libs=\"-Wl,--start-group -ltesseract -lleptonica -ltiff -lpng16 -ljpeg \
+  -lopenjp2 -ljbig -lLerc -ldeflate -lzstd -llzma -lwebpmux -lwebp -lgif -lcurl \
+  -lnghttp2 -lssl -lcrypto -lpsl -lbrotlidec -lbrotlicommon -larchive -lbz2 -lz \
+  -lexpat -liconv -Wl,--end-group\""                                                  # enable Tesseract, needed for ocr filter [no]
   truthy "$enable_libtheora" && config_options+=" --enable-libtheora"                 # enable Theora encoding via libtheora [no]
   truthy "$enable_libtls" && config_options+=" --enable-libtls"                       # enable LibreSSL (via libtls), needed for https support if openssl, gnutls or mbedtls is not used [no]
   truthy "$enable_libtwolame" && config_options+=" --enable-libtwolame \
@@ -3384,10 +3372,9 @@ configure_ffmpeg() {
   truthy "$enable_libzimg" && config_options+=" --enable-libzimg"                     # enable z.lib, needed for zscale filter [no]
   truthy "$enable_libzmq" && config_options+=" --enable-libzmq"                       # enable message passing via libzmq [no]
   truthy "$enable_libzvbi" && config_options+=" --enable-libzvbi"                     # enable teletext support via libzvbi [no]
-  truthy "$enable_lv2" && config_options+=" --enable-lv2"
-  # truthy "$enable_lv2" && config_options+=" --enable-lv2 \
-  # --extra-libs=\"-Wl,--start-group -lsratom -lsord \
-  # -lzix -lserd -llilv -Wl,--end-group\""                                                 # enable LV2 audio filtering [no]
+  truthy "$enable_lv2" && config_options+=" --enable-lv2 \
+  --extra-libs=\"-Wl,--start-group -lsratom -lsord \
+  -lzix -lserd -llilv -Wl,--end-group\""                                              # enable LV2 audio filtering [no]
   truthy "$enable_mbedtls" && config_options+=" --enable-mbedtls"                     # enable mbedTLS, needed for https support if openssl, gnutls or libtls is not used [no]
   truthy "$enable_openal" && config_options+=" --enable-openal"                       # enable OpenAL 1.1 capture support [no]
   truthy "$enable_opencl" && config_options+=" --enable-opencl"                       # enable OpenCL processing [no]
@@ -3395,9 +3382,8 @@ configure_ffmpeg() {
   truthy "$enable_openssl" && config_options+=" --enable-openssl"                     # enable openssl, needed for https support if gnutls, libtls or mbedtls is not used [no]
   truthy "$enable_pocketsphinx" && config_options+=" --enable-pocketsphinx"           # enable PocketSphinx, needed for asr filter [no]
   truthy "$enable_vapoursynth" && config_options+=" --enable-vapoursynth"             # enable VapourSynth demuxer [no]
-  truthy "$enable_whisper" && config_options+=" --enable-whisper"
-  # truthy "$enable_whisper" && config_options+=" --enable-whisper \
-  # --extra-libs=\"-lwhisper -lggml -lggml-cpu -lggml-base -lgomp\""                    # enable whisper filter [no]
+  truthy "$enable_whisper" && config_options+=" --enable-whisper \
+  --extra-libs=\"-lwhisper -lggml -lggml-cpu -lggml-base -lgomp\""                    # enable whisper filter [no]
 
   # add any additional ff prefixed flags 
   if [[ -n $ff_flags_values ]]; then
@@ -5382,4 +5368,168 @@ add_libs_to_pkg() {
     _inject "Libs"             1 "${pub_l[@]}"
     _inject "Libs.private"     1 "${priv_l[@]}"
     _inject "Cflags"           0 "${cflags_l[@]}"
+}
+
+# Usage: install_prebuilt_binary -n="libname" -v="1.0" -s="src_dir" -p="Install prefix" -I="include_path" -L="lib_path" -B="bin_path" -d="Library desc" -m="Install manifest"
+install_prebuilt_binary() {
+    local lib_name="" version="" src_root="" inc_sub="" lib_sub="" bin_sub="" 
+    local desc="$lib_name Prebuilt Library"
+    local manifest=""
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            -n=*) lib_name="${1#*=}"; shift ;;
+            -v=*) version="${1#*=}"; shift ;;
+            -s=*) src_root="${1#*=}"; shift ;;
+            -p=*) install_dir="${1#*=}"; shift ;;
+            -I=*) inc_sub="${1#*=}"; shift ;;
+            -L=*) lib_sub="${1#*=}"; shift ;;
+            -B=*) bin_sub="${1#*=}"; shift ;;
+            -d=*) desc="${1#*=}"; shift ;;
+            -m=*) manifest="${1#*=}"; shift ;;
+            *) shift ;;
+        esac
+    done
+    [[ -z "$install_dir" ]] && install_dir="$dependency_install_prefix"
+    create_dir "$install_dir/{lib,bin,include}"
+    local install_lib="$install_dir/lib"
+    local install_bin="$install_dir/bin"
+    local install_inc="$install_dir/include"
+    [[ -z "$manifest" ]] && manifest="$install_pkgconfig_dir/${lib_name}_manifest"
+    [[ ! -f "$manifest" ]] && touch "$manifest"
+    echo "INFO: Installing Prebuilt $lib_name ($version)..." >>"$LOG_FILE"
+
+    local gendef_tool="${cross_prefix}gendef"
+    local dll_tool="${cross_prefix}dlltool"
+    local objdump_tool="${cross_prefix}objdump"
+    [[ ! -x "$(command -v "$gendef_tool")" ]] && gendef_tool="gendef"
+    [[ ! -x "$(command -v "$dll_tool")" ]] && dll_tool="dlltool"
+		
+    # Use cross-objdump if available, otherwise llvm-objdump, otherwise system objdump
+    if [[ ! -x "$(command -v "$objdump_tool")" ]]; then
+        if command -v llvm-objdump >/dev/null 2>&1; then
+            objdump_tool="llvm-objdump"
+        else
+            objdump_tool="objdump"
+        fi
+    fi
+    local pkg_scan_dir=$(mktemp -d)
+    # 1. Install Includes
+    if [[ -d "$src_root/$inc_sub" && -n "$inc_sub" ]]; then
+        cp -rf "$src_root/$inc_sub/"* "$install_inc/" 2>>"$LOG_FILE"
+        find "$src_root/$inc_sub" -mindepth 1 -print0 | while IFS= read -r -d '' f; do
+            local rel_path="${f#"$src_root/$inc_sub/"}"
+            mkdir -p "$(dirname "$install_inc/$rel_path")"
+            cp -rf "$f" "$install_inc/$rel_path" 2>>"$LOG_FILE"
+            echo "$install_inc/$rel_path" >>"$manifest"
+            echo "  [Installed]: $install_inc/$rel_path" >>"$LOG_FILE"
+        done
+    fi
+    # 2. Install Binaries and Generate Import Libs
+    if [[ -n "$bin_sub" && -d "$src_root/$bin_sub" ]]; then
+        local tmp_def_dir=$(mktemp -d)
+        find "$src_root/$bin_sub" -name "*.dll" -print0 | while IFS= read -r -d '' f; do
+            local fname=$(basename "$f")
+            local libname="${fname%.dll}"
+            # Install the DLL to bin/
+            cp -rf "$f" "$install_bin/" 2>>"$LOG_FILE"
+            echo "$install_bin/$fname" >> "$manifest"
+            echo "  [Installed]: $install_bin/$fname" >>"$LOG_FILE"
+            pushd "$tmp_def_dir" >/dev/null || return 1
+            local def_file="$tmp_def_dir/$libname.def"
+            local def_generated=false
+            # --- STRATEGY SELECTION (FILE SIZE) ---
+            # gendef crashes on large files (>100MB). We check size safely.
+            local prefer_objdump=false
+            local fsize=0
+            if command -v stat >/dev/null 2>&1; then
+                fsize=$(stat -c%s "$f" 2>/dev/null || stat -f%z "$f" 2>/dev/null || echo 0)
+            else
+                fsize=$(wc -c < "$f" | tr -d ' ')
+            fi
+            # THRESHOLD: 50MB (52428800 bytes)
+            if [ "$fsize" -gt 52428800 ]; then
+                prefer_objdump=true
+            fi
+            # --- ATTEMPT 1: OBJDUMP (Prioritized for large libs) ---
+            if [ "$prefer_objdump" = true ] && command -v "$objdump_tool" >/dev/null 2>&1; then
+                echo "  [Warning]: File $fname is large ($((fsize/1024/1024)) MB). Skipping gendef to prevent crash. Using $objdump_tool..." >>"$LOG_FILE"
+                echo "LIBRARY \"$fname\"" > "$def_file"
+                echo "EXPORTS" >> "$def_file"
+                # FIXED PARSING LOGIC: Exclude "Export RVA" and "Ordinal Base" garbage lines
+                if "$objdump_tool" -p "$f" | grep "\[ *[0-9]*\]" | grep -v "Export RVA" | grep -v "Ordinal Base" | awk '{print $NF}' >> "$def_file"; then
+                    if [[ -s "$def_file" ]]; then def_generated=true; fi
+                fi
+            fi
+            # --- ATTEMPT 2: GENDEF (Standard) ---
+            if [ "$def_generated" = false ]; then
+                set +e
+                ("$gendef_tool" "$f" >/dev/null 2>&1)
+                local rc=$?
+                set -e
+                if [ "$rc" -eq 0 ] && [[ -f "$def_file" ]]; then
+                    def_generated=true
+                fi
+            fi
+            # --- ATTEMPT 3: OBJDUMP (Fallback) ---
+            if [ "$def_generated" = false ] && [ "$prefer_objdump" = false ] && command -v "$objdump_tool" >/dev/null 2>&1; then
+                echo "  [INFO]: gendef failed/crashed for $fname. Retrying with $objdump_tool..." >>"$LOG_FILE"
+                echo "LIBRARY \"$fname\"" > "$def_file"
+                echo "EXPORTS" >> "$def_file"
+                # FIXED PARSING LOGIC: Same as above
+                if "$objdump_tool" -p "$f" | grep "\[ *[0-9]*\]" | grep -v "Export RVA" | grep -v "Ordinal Base" | awk '{print $NF}' >> "$def_file"; then
+                    if [[ -s "$def_file" ]]; then def_generated=true; fi
+                fi
+            fi
+            # --- PROCESS RESULT ---
+            if [ "$def_generated" = true ]; then
+                echo "INFO: Generated MinGW import lib for $fname" >>"$LOG_FILE"
+                "$dll_tool" -d "$def_file" -D "$fname" -l "$install_lib/lib$libname.dll.a"
+                echo "$install_lib/lib$libname.dll.a" >> "$manifest"
+                cp -rf "$install_lib/lib$libname.dll.a" "$pkg_scan_dir/" 2>>"$LOG_FILE"
+                rm -f "$install_lib/lib$libname.a"
+                echo "  [Installed]: $install_lib/lib$libname.dll.a" >>"$LOG_FILE"
+            else
+                echo "  [WARNING]: Failed to generate def file for $fname. Using direct DLL linking." >>"$LOG_FILE"
+                cp -f "$f" "$install_lib/lib$libname.dll" 2>>"$LOG_FILE"
+                echo "$install_lib/lib$libname.dll" >> "$manifest"
+                cp -f "$f" "$pkg_scan_dir/lib$libname.dll" 2>>"$LOG_FILE"
+            fi
+            popd >/dev/null || return 1
+        done
+        rm -rf "$tmp_def_dir"
+        find "$src_root/$bin_sub" -type f \( -not -name "*.dll" \) -print0 | while IFS= read -r -d '' f; do
+            cp -rf "$f" "$install_bin/" 2>>"$LOG_FILE"
+            echo "$install_bin/$(basename "$f")" >> "$manifest"
+            echo "  [Installed]: $install_bin/$(basename "$f")" >>"$LOG_FILE"
+        done
+    fi
+    # 3. Install Existing Libs (if any)
+    if [[ -d "$src_root/$lib_sub" && -n "$lib_sub" ]]; then
+        find "$src_root/$lib_sub" \( -name "*.lib" -o -name "*.dll.a" -o -name "*.a*" -o -name "*.so*" \) -print0 | while IFS= read -r -d '' f; do
+            local fname=$(basename "$f")
+            local libname="${fname%.lib}"
+            cp -rf "$f" "$install_lib/$fname" 2>>"$LOG_FILE"
+            echo "$install_lib/$fname" >> "$manifest"
+            echo "  [Installed]: $install_lib/$fname" >>"$LOG_FILE"
+            if [[ "$fname" == *.lib ]]; then
+                if [[ -f "$install_lib/lib$libname.dll.a" || -f "$install_lib/lib$libname.dll" ]]; then
+                    : 
+                else
+                    echo "  [SKIP]: Skipping incompatible MSVC static library: $fname" >>"$LOG_FILE"
+                    continue
+                fi
+            fi
+            if [[ "$fname" == *.a* || "$fname" == *.so* ]]; then
+              cp -f "$f" "$pkg_scan_dir/$fname" 2>>"$LOG_FILE"
+            fi
+        done
+    fi
+    generate_pkg_config -t="$pkg_scan_dir" \
+        -o="$install_pkgconfig_dir/$lib_name.pc" \
+        -i="$install_dir" \
+        -v="$version" -n="$lib_name" -d="$desc" >/dev/null 2>&1
+    rm -rf "$pkg_scan_dir"
+    echo "$install_pkgconfig_dir/$lib_name.pc" >> "$manifest"
+    echo "  [Installed]: $install_pkgconfig_dir/$lib_name.pc" >>"$LOG_FILE"
+    return 0
 }

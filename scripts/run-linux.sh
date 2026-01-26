@@ -130,6 +130,7 @@ build_libdc1394() {
   disable_nonessential "$src_dir/$lib"
   do_make_and_make_install
   change_dir "$src_dir"
+  add_libs_to_pkg -t="$install_pkgconfig_dir/libdc1394-2.pc" -l="-lusb-1.0"
   fi
 }
 # build_libdrm            # config_options+= --disable-libdrm             # disable DRM code (Linux) [autodetect]
@@ -189,6 +190,7 @@ build_libiec61883() {
   disable_nonessential "$src_dir/$lib"
   do_make_and_make_install
   change_dir "$src_dir"
+  add_libs_to_pkg -t="$install_pkgconfig_dir/libiec61883.pc" -l="-liec61883 -lavc1394 -lrom1394 -lraw1394"
   fi
 }
 build_libjsonc() {
@@ -493,12 +495,12 @@ build_x11() {
 # build_xlib              # config_options+= --disable-xlib               # disable xlib [autodetect]
 build_xlib() {
   if ! truthy "$disable_xlib" && truthy "$enable_xlib" || [[ -n "$1" ]]; then
-  run_valid_function "build_libxrender"
   run_valid_function "build_libfreetype" 1
   run_valid_function "build_libfontconfig" 1
-  run_valid_function "build_libxft"
-  run_valid_function "build_libxext"
   run_valid_function "build_x11"
+  run_valid_function "build_libxrender"
+  run_valid_function "build_libxext"
+  run_valid_function "build_libxft"
   fi
 }
 #endregion---------------------------------------------------------------------
@@ -740,6 +742,9 @@ build_liblcevc_dec() {
   disable_nonessential "$src_dir/$lib"
   do_make_and_make_install
   change_dir "$src_dir"
+  if [[ -f "$install_pkgconfig_dir/lcevc_dec_utility.pc" ]]; then
+    remove_path -f "$install_pkgconfig_dir/lcevc_dec_utility.pc"
+  fi
   fi
 }
 build_fftw() {
@@ -748,7 +753,7 @@ build_fftw() {
   change_dir "$src_dir"
   download_and_unpack_file "$repo" "$lib"
   change_dir "$src_dir/$lib"
-  generic_configure "--disable-doc --enable-static --disable-shared"
+  generic_configure "--disable-doc --enable-static --disable-shared --enable-pic"
   disable_nonessential "$src_dir/$lib"
   do_make_and_make_install
   change_dir "$src_dir"
@@ -772,6 +777,7 @@ build_chromaprint() {
   disable_nonessential "$src_dir/$lib"
   do_make_and_make_install
   change_dir "$src_dir"
+  add_libs_to_pkg -t="$install_pkgconfig_dir/libchromaprint.pc" -l="-lfftw3"
   fi
 }
 # build_frei0r            # config_options+= --enable-frei0r              # enable frei0r video filtering [no]
@@ -1181,11 +1187,13 @@ build_libdavs2() {
   do_git_checkout "$repo" "$src_dir/$lib" "$repo_ver"
   change_dir "$src_dir/$lib/build/linux"
   touch "no.autoreconf"
-  generic_configure "--enable-pic --disable-cli"
+  export AS=nasm
+  do_configure "--enable-pic --disable-cli --enable-static --disable-shared"
   disable_nonessential "$src_dir/$lib/build/linux"
   do_make_and_make_install
   sed -i "s/Version:.*/Version: ${repo_ver}.0/g" "$dependency_install_prefix"/lib/pkgconfig/davs2.pc
   change_dir "$src_dir"
+  export AS=as
   fi
 }
 # build_libdvdnav         # config_options+= --enable-libdvdnav           # enable libdvdnav, needed for DVD demuxing [no]
@@ -1578,6 +1586,7 @@ build_libjack() {
   do_python "" "./waf install -v"
   reset_cflags
   reset_cxxflags
+  add_libs_to_pkg -t="$install_pkgconfig_dir/jack.pc" -l="-lxcb -liconv"
     fi
 }
 # build_libjxl            # config_options+= --enable-libjxl              # enable JPEG XL de/encoding via libjxl [no]
@@ -1719,6 +1728,7 @@ build_iconv() {
   if ! truthy "$disable_iconv" && truthy "$enable_iconv" || [[ -n "$1" ]]; then
   
   # install gettext
+  run_valid_function "build_iconv_minimal"
   run_valid_function "build_gettext"
   # install full iconv
   local lib="libiconv"
@@ -2056,6 +2066,9 @@ build_libopenjpeg() {
   disable_nonessential "$src_dir/$lib"
   do_make_and_make_install
   change_dir "$src_dir"
+  if [[ -f "$install_pkgconfig_dir/libopenjp2.pc" ]]; then
+    sed -i 's/-l-lpthread/-lpthread/g' "$install_pkgconfig_dir/libopenjp2.pc"
+  fi
   fi
 }
 build_libogg() {
@@ -2335,6 +2348,7 @@ build_libpulse() {
   reset_cflags
   reset_cxxflags
   unset LIBS
+  add_libs_to_pkg -t="$install_pkgconfig_dir/libpulse.pc" -l="-lxcb -lXau -lX11 -liconv -lXdmcp"
     fi
 }
 # build_libqrencode       # config_options+= --enable-libqrencode         # enable QR encode generation via libqrencode [no]
@@ -2880,71 +2894,42 @@ build_libopenvino() {
   local base_lib="libopenvino"
   local lib="$base_lib-$host_target"
   local repo
-  repo=$(get_pip_download_link openvino) || exit_message 1 "build_libopenvino: could not find a download link for $lib"
+  repo=$(get_pip_download_link openvino) || exit_message 1 "build_libopenvino: could not find a download link for $base_lib"
   local repo_ver="2025.4.1"
   
-  local manifest="$install_pkgconfig_dir/${lib}_manifest"
-  [[ ! -f "$manifest" ]] && { touch "$manifest"; chmod -R a+rwx "$manifest"; }
-  
-  change_dir "$src_dir"
-  local touch_prefix="${host_name}_already"
-  local touch_name=$(get_small_touchfile_name "${touch_prefix}_installed" "$repo")
-  if truthy "$build_force"; then
-    [[ -d "$src_dir/$lib" ]] && reset_touch "$src_dir/$lib"
-    uninstall_manifest "$manifest" > >(redirect_output) 2>&1
-    remove_path -rf "${dependency_install_prefix}/$lib"
-    remove_path -rf "$src_dir/$lib"
-  fi
-  if [ ! -f "$src_dir/$lib/$touch_name" ]; then
-    remove_path -f "$src_dir/$lib/${touch_prefix}_installed"* # reset
-    download_and_unpack_file "$repo" "$src_dir/$lib"
-    change_dir "$src_dir/$lib"
+    local manifest="$work_dir/pkgconfig/${lib}_manifest"
+    [[ ! -f "$manifest" ]] && touch "$manifest"
+
+    change_dir "$src_dir"
     
-    cat > "$src_dir/$lib/openvino/libs/openvino.pc" << EOF
-# Copyright (C) 2018-2025 Intel Corporation
-# SPDX-License-Identifier: Apache-2.0
-#
-
-prefix=${dependency_install_prefix}/$lib
-exec_prefix=\${prefix}
-libdir=\${prefix}/libs
-includedir=\${prefix}/include
-
-Name: OpenVINO
-Description: OpenVINO™ Toolkit
-URL: https://docs.openvino.ai/latest/index.html
-Version: 2025.4.1
-Conflicts: openvino < 2025.4.1
-Cflags: -I\${includedir}  -D_GLIBCXX_USE_CXX11_ABI=1 -DOV_THREAD=OV_THREAD_TBB
-Libs: -L\${libdir} -lopenvino_jax_frontend -lopenvino_onnx_frontend -lopenvino_paddle_frontend -lopenvino_pytorch_frontend -lopenvino_tensorflow_frontend -lopenvino_tensorflow_lite_frontend -lopenvino_c -lopenvino -ltbb
-Libs.private: -ldl -lm -lpthread -lrt
-EOF
-    create_dir "$dependency_install_prefix/$lib/{libs,include}"
+    local touch_name=$(get_small_touchfile_name "${host_name}_installed" "$repo")
     
-    unversion_library "$src_dir/$lib/openvino/libs"
+    truthy "$build_force" && remove_path -rf "$src_dir/$lib"
+    if [[ -f "$manifest" && ! -f "$src_dir/$lib/$touch_name" ]]; then
+        [[ -d "$src_dir/$lib" ]] && reset_touch "$src_dir/$lib" "${host_name}_installed*.touch"
+        uninstall_manifest "$manifest" >>"$LOG_FILE" 2>&1
+    fi
 
-    copy_and_link "$dependency_install_prefix/$lib/libs" "$dependency_install_prefix/lib" "$src_dir/$lib/openvino/libs/"* 1>> "$manifest" 2>>"$LOG_FILE" || exit_message 1 "build_libopenvino: could not install $lib libs"
-    copy_and_link "$dependency_install_prefix/$lib/include" "$dependency_install_prefix/include" "$src_dir/$lib/openvino/include/"* 1>> "$manifest" 2>>"$LOG_FILE" || exit_message 1 "build_libopenvino: could not install $lib includes"
-    copy_and_link "$dependency_install_prefix/$lib/libs/cmake" "$dependency_install_prefix/lib/cmake" "$src_dir/$lib/openvino/cmake/"* 1>> "$manifest" 2>>"$LOG_FILE" || exit_message 1 "build_libopenvino: could not install $lib cmakes"
-
-    ( set -o pipefail; cp -rfv "$src_dir/$lib/openvino/libs/tbb.pc" "$install_pkgconfig_dir/" 2>&1 | sed -n "s/.*' -> '\(.*\)'/\1/p" ) >> "$manifest" || exit_message 1 "build_libopenvino: could not install $lib pkgconfig"
-    ( set -o pipefail; cp -rfv "$src_dir/$lib/openvino/libs/openvino.pc" "$install_pkgconfig_dir/" 2>&1 | sed -n "s/.*' -> '\(.*\)'/\1/p" ) >> "$manifest" || exit_message 1 "build_libopenvino: could not install $lib pkgconfig"
-
-    sed -i "s|^prefix=/usr/local|prefix=${dependency_install_prefix}/$lib|" "$install_pkgconfig_dir/tbb.pc"
-    sed -i "s|^libdir=.*|libdir=\${prefix}/libs|" "$install_pkgconfig_dir/tbb.pc"
-    sed -i "s|^includedir=.*|includedir=\${prefix}/include|" "$install_pkgconfig_dir/tbb.pc"
-
-    create_touch_file 0 "$touch_name"
-    
-    
-  change_dir "$src_dir"
-  fi
+    if [ ! -f "$src_dir/$lib/$touch_name" ]; then
+        download_and_unpack_file "$repo" "$lib"
+        change_dir "$src_dir/$lib"
+        install_prebuilt_binary \
+            -n="openvino" -v="$repo_ver" \
+            -s="$src_dir/$lib" \
+            -I="openvino/include" \
+            -L="openvino/libs" \
+            -m="$manifest" \
+            -d="OpenVINO Toolkit" || exit_message 1 "could not install $lib_name"
+        create_touch_file 0 "$touch_name"
+        echo "$src_dir/$lib/$touch_name" >>"$manifest"
+    fi
   fi
 }
 # build_libtorch          # config_options+= --enable-libtorch            # enable Torch as one DNN backend [no]
 build_libtorch() {
   if ! truthy "$disable_libtorch" && truthy "$enable_libtorch" && [[ "$bits_target" == "64" ]]; then
-  local lib="libtorch"
+  local base_lib="libtorch"
+  local lib="$base_lib-$host_target"
   local subdir=""
   local repo_ver="2.1.2" # last version compatible with 8.0  run_valid_function "build_cpuinfo"
   pick_gpu_support
@@ -2954,95 +2939,49 @@ build_libtorch() {
       if [[ $subdir == "rocm" ]]; then
         local repo="https://download.pytorch.org/libtorch/rocm5.7/libtorch-cxx11-abi-shared-with-deps-2.1.2%2Brocm5.7.zip"
         echo "WARNING: uninstalling cpu and cuda libtorch if installed." >> "$LOG_FILE"
-        uninstall_manifest "$install_pkgconfig_dir/${lib}_cpu_manifest" > >(redirect_output) 2>&1
-        uninstall_manifest "$install_pkgconfig_dir/${lib}_cuda_manifest" > >(redirect_output) 2>&1
+        uninstall_manifest "$install_pkgconfig_dir/${base_lib}_cpu_manifest" > >(redirect_output) 2>&1
+        uninstall_manifest "$install_pkgconfig_dir/${base_lib}_cuda_manifest" > >(redirect_output) 2>&1
       else
         local repo="https://download.pytorch.org/libtorch/cu121/libtorch-cxx11-abi-shared-with-deps-2.1.2%2Bcu121.zip"
         echo "WARNING: uninstalling cpu and rocm libtorch if installed." >> "$LOG_FILE"
-        uninstall_manifest "$install_pkgconfig_dir/${lib}_cpu_manifest" > >(redirect_output) 2>&1
-        uninstall_manifest "$install_pkgconfig_dir/${lib}_rocm_manifest" > >(redirect_output) 2>&1
+        uninstall_manifest "$install_pkgconfig_dir/${base_lib}_cpu_manifest" > >(redirect_output) 2>&1
+        uninstall_manifest "$install_pkgconfig_dir/${base_lib}_rocm_manifest" > >(redirect_output) 2>&1
       fi
   else
       local repo="https://download.pytorch.org/libtorch/cpu/libtorch-cxx11-abi-shared-with-deps-2.1.2%2Bcpu.zip"
       local subdir="cpu"
       echo "WARNING: uninstalling cuda and rocm libtorch if installed." >> "$LOG_FILE"
-      uninstall_manifest "$install_pkgconfig_dir/${lib}_cuda_manifest" > >(redirect_output) 2>&1
-      uninstall_manifest "$install_pkgconfig_dir/${lib}_rocm_manifest" > >(redirect_output) 2>&1
+      uninstall_manifest "$install_pkgconfig_dir/${base_lib}_cuda_manifest" > >(redirect_output) 2>&1
+      uninstall_manifest "$install_pkgconfig_dir/${base_lib}_rocm_manifest" > >(redirect_output) 2>&1
   fi
-
-  local manifest="$install_pkgconfig_dir/${lib}_${subdir}_manifest"
-  [[ ! -f "$manifest" ]] && { touch "$manifest"; chmod -R a+rwx "$manifest"; }
+  local manifest="$work_dir/pkgconfig/${lib}_${subdir}_manifest"
+  [[ ! -f "$manifest" ]] && touch "$manifest"
   
   change_dir "$src_dir"
-  local touch_prefix="${host_name}_already"
-  local touch_name=$(get_small_touchfile_name "${touch_prefix}_installed" "$repo")
-  if truthy "$build_force"; then
-    [[ -d "$src_dir/$lib/$subdir" ]] && reset_touch "$src_dir/$lib" 
-    uninstall_manifest "$manifest" > >(redirect_output) 2>&1
-    remove_path -rf "${dependency_install_prefix}/${lib}"
-    remove_path -rf "$src_dir/$lib/$subdir"
+  local touch_name=$(get_small_touchfile_name "${host_name}_installed" "$repo")
+  
+  truthy "$build_force" && remove_path -rf "$src_dir/$lib/$subdir"
+  if [[ -f "$manifest" && ! -f "$src_dir/$lib/$subdir/$touch_name" ]]; then
+    [[ -d "$src_dir/$lib" ]] && reset_touch "$src_dir/$lib" "${host_name}_installed*.touch"
+    uninstall_manifest "$manifest" >>"$LOG_FILE" 2>&1
   fi
+
+  change_dir "$src_dir/$lib" 1
+
   if [ ! -f "$src_dir/$lib/$subdir/$touch_name" ]; then
-    remove_path -f "$src_dir/$lib/$subdir/${touch_prefix}_installed"* # reset
-    echo "WARNING: sit tight, this may take a while due to the size of this library" >>"$LOG_FILE"
-    # https://github.com/pytorch/pytorch
-    change_dir "$src_dir/$lib" 1
-    download_and_unpack_file "$repo" "$src_dir/$lib/$subdir"
-    change_dir "$src_dir/$lib/$subdir"
-    touch "$manifest" && chmod -R a+rwx "$manifest"
-    create_dir "$dependency_install_prefix/${lib}/{bin,lib,include,share}"
-    
-    unversion_library "$src_dir/$lib/$subdir/lib"
-    
-    # we built static pic version of these already. delete to avoid replacing what we built
-    remove_path -f "$src_dir/$lib/$subdir/lib/libclog.a"
-    remove_path -f "$src_dir/$lib/$subdir/lib/libcpuinfo.a"
-    remove_path -f "$src_dir/$lib/$subdir/lib/libcpuinfo_internals.a"
-    # remove non-pic libs not needed
-    remove_path -f "$src_dir/$lib/$subdir/lib/libgmock.a"
-    remove_path -f "$src_dir/$lib/$subdir/lib/libgmock_main.a"
-    remove_path -f "$src_dir/$lib/$subdir/lib/libgtest.a"
-    remove_path -f "$src_dir/$lib/$subdir/lib/libgtest_main.a"
-    remove_path -f "$src_dir/$lib/$subdir/lib/libbenchmark.a"
-    remove_path -f "$src_dir/$lib/$subdir/lib/libbenchmark_main.a"
-    remove_path -f "$src_dir/$lib/$subdir/lib/libprotobuf-lite.a"
+      download_and_unpack_file "$repo" "$src_dir/$lib/$subdir"
+      
+      install_prebuilt_binary \
+          -n="$base_lib" -v="$repo_ver" \
+          -s="$src_dir/$lib/$subdir" \
+          -I="include" \
+          -L="lib" \
+          -m="$manifest" \
+          -d="PyTorch Library ($subdir)" || exit_message 1 "could not install libtensorflow"
 
-    copy_and_link "$dependency_install_prefix/${lib}/bin" "$dependency_install_prefix/bin" "$src_dir/$lib/$subdir/bin/"* 1>> "$manifest" 2>>"$LOG_FILE" || exit_message 1 "build_libtorch: could not install $lib bins"
-    copy_and_link "$dependency_install_prefix/${lib}/lib" "$dependency_install_prefix/lib" "$src_dir/$lib/$subdir/lib/"* 1>> "$manifest" 2>>"$LOG_FILE" || exit_message 1 "build_libtorch: could not install $lib libs"
-    copy_and_link "$dependency_install_prefix/${lib}/include" "$dependency_install_prefix/include" "$src_dir/$lib/$subdir/include/"* 1>> "$manifest" 2>>"$LOG_FILE" || exit_message 1 "build_libtorch: could not install $lib includes"
-    copy_and_link "$dependency_install_prefix/${lib}/share" "$dependency_install_prefix/share" "$src_dir/$lib/$subdir/share/"* 1>> "$manifest" 2>>"$LOG_FILE" || exit_message 1 "build_libtorch: could not install $lib shares"
-
-    local VERSION="unknown"
-    if [ -f "$src_dir/$lib/$subdir/build-version" ]; then
-        VERSION=$(cat "$src_dir/$lib/$subdir/build-version")
-    elif [ -f "$src_dir/$lib/$subdir/version.txt" ]; then
-        VERSION=$(cat "$src_dir/$lib/$subdir/version.txt")
-    else
-        VERSION="$repo_ver+$subdir"
-    fi
-    local backend_libs="-ltorch_cpu"
-    if [[ "$subdir" == "cuda" ]]; then
-        # For CUDA builds, we need both CPU and CUDA backends
-        backend_libs="-ltorch_cuda -ltorch_cpu"
-    elif [[ "$subdir" == "rocm" ]]; then
-        # For ROCm builds (verify the exact lib name in your extracted dir, usually torch_hip)
-        backend_libs="-ltorch_hip -ltorch_cpu"
-    fi
-    cat >> "$install_pkgconfig_dir/${lib}.pc" << EOF
-prefix=${dependency_install_prefix}/${lib}
-exec_prefix=\${prefix}
-libdir=\${exec_prefix}/lib
-includedir=\${prefix}/include
-
-Name: libtorch
-Description: The PyTorch C++ library
-Version: $VERSION
-Libs: -L\${libdir} -Wl,-rpath,\${libdir} -Wl,--no-as-needed ${backend_libs} -Wl,--as-needed -ltorch -lc10
-Cflags: -I\${includedir} -I\${includedir}/torch/csrc/api/include -D_GLIBCXX_USE_CXX11_ABI=1
-EOF
-    echo "$install_pkgconfig_dir/${lib}.pc" >> "$manifest"
-    create_touch_file 0 "$touch_name"
-      change_dir "$src_dir"
+      change_dir "$src_dir/$lib/$subdir"
+      create_touch_file 0 "$touch_name"
+      echo "$src_dir/$lib/$subdir/$touch_name" >>"$manifest"
   fi
   fi
 }
@@ -3062,68 +3001,52 @@ build_libtensorflow() {
         local repo=""
         local subdir="rocm"
         echo "WARNING: uninstalling cpu or cuda libtensorflow if installed." >> "$LOG_FILE"
-        uninstall_manifest "$install_pkgconfig_dir/${lib}_cpu_manifest" > >(redirect_output) 2>&1
-        uninstall_manifest "$install_pkgconfig_dir/${lib}_cuda_manifest" > >(redirect_output) 2>&1
+        uninstall_manifest "$install_pkgconfig_dir/${base_lib}_cpu_manifest" > >(redirect_output) 2>&1
+        uninstall_manifest "$install_pkgconfig_dir/${base_lib}_cuda_manifest" > >(redirect_output) 2>&1
         echo -e "WARNING: ROCm libtensorflow is currently not supported by this build script. Please build your own tensorflow ROCm C API and rebuild if you need it." | tee -a "$LOG_FILE"
         return
       else
         local repo="https://storage.googleapis.com/tensorflow/versions/2.18.0/libtensorflow-gpu-linux-x86_64.tar.gz"
         local subdir="cuda"
         echo "WARNING: uninstalling cpu or rocm libtensorflow if installed." >> "$LOG_FILE"
-        uninstall_manifest "$install_pkgconfig_dir/${lib}_cpu_manifest" > >(redirect_output) 2>&1
-        uninstall_manifest "$install_pkgconfig_dir/${lib}_rocm_manifest" > >(redirect_output) 2>&1
+        uninstall_manifest "$install_pkgconfig_dir/${base_lib}_cpu_manifest" > >(redirect_output) 2>&1
+        uninstall_manifest "$install_pkgconfig_dir/${base_lib}_rocm_manifest" > >(redirect_output) 2>&1
       fi
   else
       local repo="https://storage.googleapis.com/tensorflow/versions/2.18.0/libtensorflow-cpu-linux-x86_64.tar.gz"
       local subdir="cpu"
       echo "WARNING: uninstalling gpu libtensorflow if installed." >> "$LOG_FILE"
-      uninstall_manifest "$install_pkgconfig_dir/${lib}_gpu_manifest" > >(redirect_output) 2>&1
+      uninstall_manifest "$install_pkgconfig_dir/${base_lib}_gpu_manifest" > >(redirect_output) 2>&1
   fi
-  
-  local manifest="$install_pkgconfig_dir/${lib}_${subdir}_manifest"
-  [[ ! -f "$manifest" ]] && { touch "$manifest"; chmod -R a+rwx "$manifest"; }
+  local manifest="$work_dir/pkgconfig/${lib}_${subdir}_manifest"
+  [[ ! -f "$manifest" ]] && touch "$manifest"
   
   change_dir "$src_dir"
-  local touch_prefix="${host_name}_already"
-  local touch_name=$(get_small_touchfile_name "${touch_prefix}_installed" "$repo")
-  if truthy "$build_force"; then
-    [[ -d "$src_dir/$lib/$subdir" ]] && reset_touch "$src_dir/$lib" 
-    uninstall_manifest "$manifest" > >(redirect_output) 2>&1
-    remove_path -rf "${dependency_install_prefix}/${lib}"
-    remove_path -rf "$src_dir/$lib/$subdir"
+  local touch_name=$(get_small_touchfile_name "${host_name}_installed" "$repo")
+  
+  truthy "$build_force" && remove_path -rf "$src_dir/$lib/$subdir"
+  if [[ -f "$manifest" && ! -f "$src_dir/$lib/$subdir/$touch_name" ]]; then
+    [[ -d "$src_dir/$lib" ]] && reset_touch "$src_dir/$lib" "${host_name}_installed*.touch"
+    uninstall_manifest "$manifest" >>"$LOG_FILE" 2>&1
   fi
+
+  change_dir "$src_dir/$lib" 1
+
   if [ ! -f "$src_dir/$lib/$subdir/$touch_name" ]; then
-    remove_path -f "$src_dir/$lib/$subdir/${touch_prefix}_installed"* # reset
-    echo "WARNING: sit tight, this may take a while due to the size of this library" >>"$LOG_FILE"
-    # "https://github.com/tensorflow/tensorflow"
-    change_dir "$src_dir/$lib" 1
-    download_and_unpack_file "$repo" "$src_dir/$lib/$subdir"
-    change_dir "$src_dir/$lib/$subdir"
-    touch "$manifest" && chmod -R a+rwx "$manifest"
-    
-    create_dir "$dependency_install_prefix/${lib}/{lib,include}"
-    
-    unversion_library "$src_dir/$lib/$subdir/lib"
+      download_and_unpack_file "$repo" "$src_dir/$lib/$subdir"
+      
+      install_prebuilt_binary \
+          -n="$base_lib" -v="$repo_ver" \
+          -s="$src_dir/$lib/$subdir" \
+          -I="include" \
+          -L="lib" \
+          -m="$manifest" \
+          -d="TensorFlow C Library ($subdir)" || exit_message 1 "could not install $base_lib"
 
-    copy_and_link "${dependency_install_prefix}/${lib}/lib" "${dependency_install_prefix}/lib" "$src_dir/$lib/$subdir/lib/"* 1>> "$manifest" 2>>"$LOG_FILE" || exit_message 1 "build_libtensorflow: could not install $lib libs"
-    copy_and_link "${dependency_install_prefix}/${lib}/include" "${dependency_install_prefix}/include" "$src_dir/$lib/$subdir/include/"* 1>> "$manifest" 2>>"$LOG_FILE" || exit_message 1 "build_libtensorflow: could not install $lib includes"
-
-    cat >> "$install_pkgconfig_dir/tensorflow.pc" << EOF
-prefix=${dependency_install_prefix}/${lib}
-exec_prefix=\${prefix}
-libdir=\${exec_prefix}/lib
-includedir=\${prefix}/include
-
-Name: tensorflow
-Description: TensorFlow C Library (${subdir})
-Version: 2.18.0
-Libs: -L\${libdir} -ltensorflow -ltensorflow_framework
-Cflags: -I\${includedir}
-EOF
-    echo "$install_pkgconfig_dir/tensorflow.pc" >> "$manifest"
-    create_touch_file 0 "$touch_name"
-      change_dir "$src_dir"
-    fi
+      change_dir "$src_dir/$lib/$subdir"
+      create_touch_file 0 "$touch_name"
+      echo "$src_dir/$lib/$subdir/$touch_name" >>"$manifest"
+  fi
   fi
 }
 build_libdeflate() {
@@ -3449,6 +3372,7 @@ LIBLEPT_HEADERSDIR=$dependency_install_prefix/include \
   # https://github.com/tesseract-ocr/tessdata_fast
   change_dir "$src_dir"
     reset_cppflags
+    add_libs_to_pkg -t="$install_pkgconfig_dir/tesseract.pc" -l="-lbz2 -lz -liconv" -rp="lept libarchive liblzma libtiff-4"
   fi
 }
 # build_libtheora         # config_options+= --enable-libtheora           # enable Theora encoding via libtheora [no]
@@ -3595,6 +3519,7 @@ build_libvpx() {
   change_dir "$src_dir"
   do_git_checkout "$repo" "$src_dir/$lib" "$repo_ver"
   change_dir "$src_dir/$lib"
+  export AS=nasm
   do_configure "--target=$host_arch-linux-gcc \
 --enable-ssse3 \
 --enable-static \
@@ -3609,6 +3534,7 @@ build_libvpx() {
   # disable_nonessential "$src_dir/$lib"
   do_make_and_make_install
   change_dir "$src_dir"
+  export AS=as
   fi
 }
 # build_libvvenc          # config_options+= --enable-libvvenc            # enable H.266/VVC encoding via vvenc [no]
@@ -3653,10 +3579,12 @@ build_libx264() {
   change_dir "$src_dir"
   do_git_checkout "$repo" "$src_dir/$lib" "$repo_ver"
   change_dir "$src_dir/$lib"
+  export AS=nasm
   generic_configure "--enable-static --disable-shared --disable-cli"
   disable_nonessential "$src_dir/$lib"
   do_make_and_make_install
   change_dir "$src_dir"
+  export AS=as
   fi
 }
 # build_libx265           # config_options+= --enable-libx265             # enable HEVC encoding via x265 [no]
@@ -4322,8 +4250,8 @@ build_bison() {
 # build_pocketsphinx      # config_options+= --enable-pocketsphinx        # enable PocketSphinx, needed for asr filter [no]
 build_pocketsphinx() {
   if ! truthy "$disable_pocketsphinx" && truthy "$enable_pocketsphinx"; then
-# run_valid_function "build_alsa"
-# run_valid_function "build_libunwind"
+  run_valid_function "build_alsa"
+  run_valid_function "build_libunwind"
   local parent="pocketsphinx"
   local lib="swig"
   local repo="https://sourceforge.net/projects/swig/files/swig/swig-2.0.12/swig-2.0.12.tar.gz/download"
@@ -4465,9 +4393,9 @@ build_whisper() {
   do_cmake_from_build_dir "$src_dir/$lib" "$cmake_params"
   disable_nonessential "$src_dir/$lib/build"
   do_make_and_make_install
-  find "$install_pkgconfig_dir" -name "whisper*.pc" -exec sed -i -E \
-        -e "s/^Libs:.*/Libs: -L\${libdir} -lwhisper -lggml -lggml-base -lggml-cpu -lgomp/" \
-         {} +
+  while IFS= read -r -d '' file; do
+    add_libs_to_pkg -t="$file" -l="-lwhisper -lggml -lggml-base -lggml-cpu -lgomp -lpthread"
+  done < <(find "$install_pkgconfig_dir" -name "whisper*.pc" -print0)
   change_dir "$src_dir"
   fi
 }
@@ -4567,190 +4495,146 @@ build_vdpau() {
 }
 build_libnvvm() {
   echo "WARNING: This is a non-gpl library." >>"$LOG_FILE"
-    if [[ "$bits_target" != "32" ]]; then
+    [[ "$bits_target" == "32" ]] && return
       local base_lib="libnvvm"
       local lib="$base_lib-$host_target"
       # https://developer.download.nvidia.com/compute/cuda/redist/
       local repo_ver="13.1.80"
       local repo="https://developer.download.nvidia.com/compute/cuda/redist/libnvvm/linux-x86_64/libnvvm-linux-x86_64-13.1.80-archive.tar.xz"
-      
-      local manifest="$install_pkgconfig_dir/${lib}_manifest"
-      [[ ! -f "$manifest" ]] && { touch "$manifest"; chmod -R a+rwx "$manifest"; }
-      
-    change_dir "$src_dir"
-      local touch_prefix="${host_name}_already"
-      local touch_name=$(get_small_touchfile_name "${touch_prefix}_installed" "$repo")
-      if truthy "$build_force"; then
-        [[ -d "$src_dir/$lib" ]] && reset_touch "$src_dir/$lib"
-        uninstall_manifest "$manifest" > >(redirect_output) 2>&1
-        remove_path -rf "${dependency_install_prefix}/$lib"
-        remove_path -rf "$src_dir/$lib"
-      fi
-      if [ ! -f "$src_dir/$lib/$touch_name" ]; then
-        remove_path -f "$src_dir/$lib/${touch_prefix}_installed"* # reset
-        download_and_unpack_file "$repo" "$src_dir/$lib"
-        change_dir "$src_dir/$lib"
-        touch "$manifest" && chmod -R a+rwx "$manifest"
-        
-        copy_and_link "$dependency_install_prefix/nvvm/bin" "$dependency_install_prefix/bin" "$src_dir/$lib/nvvm/bin/"* 1>> "$manifest" 2>>"$LOG_FILE" || exit_message 1 "build_libnvvm: could not install $lib bins"
-        copy_and_link "$dependency_install_prefix/nvvm/lib" "$dependency_install_prefix/lib" "$src_dir/$lib/nvvm/lib64/"* 1>> "$manifest" 2>>"$LOG_FILE" || exit_message 1 "build_libnvvm: could not install $lib libs"
-        copy_and_link "$dependency_install_prefix/nvvm/lib" "$dependency_install_prefix/lib" "$src_dir/$lib/nvvm/libdevice/"* 1>> "$manifest" 2>>"$LOG_FILE" || exit_message 1 "build_libnvvm: could not install $lib libs"
-        copy_and_link "$dependency_install_prefix/nvvm/include" "$dependency_install_prefix/include" "$src_dir/$lib/nvvm/include/"* 1>> "$manifest" 2>>"$LOG_FILE" || exit_message 1 "build_libnvvm: could not install $lib includes"
-        
-        cat >> "$install_pkgconfig_dir/$lib.pc" << EOF
-prefix=${dependency_install_prefix}/nvvm
-exec_prefix=\${prefix}
-libdir=\${prefix}/lib
-includedir=\${prefix}/include
-bindir=\${prefix}/bin
 
-Name: Nvidia CUDA compiler
-Description: The NVIDIA CUDA Compiler Driver is a toolchain for compiling CUDA C/C++ programs
-Version: $repo_ver
-Libs: -L\${libdir} -lnvvm
-Cflags: -I\${includedir}
-EOF
-        echo "$install_pkgconfig_dir/$lib.pc" >> "$manifest"
-        create_touch_file 0 "$touch_name"
-    fi
-    else
-      echo -e "WARNING: 32bit not supported" >>"$LOG_FILE"
-    fi
+      local manifest="$work_dir/pkgconfig/${lib}_manifest"
+      [[ ! -f "$manifest" ]] && touch "$manifest"
+      
+      change_dir "$src_dir"
+      local touch_name=$(get_small_touchfile_name "${host_name}_installed" "$repo")
+      
+      truthy "$build_force" && remove_path -rf "$src_dir/$lib"
+      if [[ -f "$manifest" && ! -f "$src_dir/$lib/$touch_name" ]]; then
+        [[ -d "$src_dir/$lib" ]] && reset_touch "$src_dir/$lib" "${host_name}_installed*.touch"
+        uninstall_manifest "$manifest" >>"$LOG_FILE" 2>&1
+      fi
+
+      if [ ! -f "$src_dir/$lib/$touch_name" ]; then
+          download_and_unpack_file "$repo" "$src_dir/$lib"
+          change_dir "$src_dir/$lib"
+          install_prebuilt_binary -n="libdevice" -v="$repo_ver" \
+              -s="$src_dir/$lib/nvvm" \
+              -m="$manifest" \
+              -L="libdevice" || exit_message 1 "could not install $base_lib"
+          install_prebuilt_binary -n="$base_lib" -v="$repo_ver" \
+              -s="$src_dir/$lib/nvvm" \
+              -m="$manifest" \
+              -I="include" -L="lib64" -B="bin" || exit_message 1 "could not install $base_lib"
+          create_touch_file 0 "$touch_name"
+          echo "$src_dir/$lib/$touch_name" >>"$manifest"
+      fi
   change_dir "$src_dir"
 }
 build_cuda_crt() {
   echo "WARNING: This is a non-gpl library." >>"$LOG_FILE"
-    if [[ "$bits_target" != "32" ]]; then
+    [[ "$bits_target" == "32" ]] && return
       local base_lib="cuda-crt"
       local lib="$base_lib-$host_target"
       # https://developer.download.nvidia.com/compute/cuda/redist/
       local repo_ver="13.1.80"
       local repo="https://developer.download.nvidia.com/compute/cuda/redist/cuda_crt/linux-x86_64/cuda_crt-linux-x86_64-13.1.80-archive.tar.xz"
+
+      local manifest="$work_dir/pkgconfig/${lib}_manifest"
+      [[ ! -f "$manifest" ]] && touch "$manifest"
+
+      change_dir "$src_dir"
+      local touch_name=$(get_small_touchfile_name "${host_name}_installed" "$repo")
       
-      local manifest="$install_pkgconfig_dir/${lib}_manifest"
-      [[ ! -f "$manifest" ]] && { touch "$manifest"; chmod -R a+rwx "$manifest"; }
-      
-    change_dir "$src_dir"
-      local touch_prefix="${host_name}_already"
-      local touch_name=$(get_small_touchfile_name "${touch_prefix}_installed" "$repo")
-      if truthy "$build_force"; then
-        [[ -d "$src_dir/$lib" ]] && reset_touch "$src_dir/$lib"
-        uninstall_manifest "$manifest" > >(redirect_output) 2>&1
-        remove_path -rf "${dependency_install_prefix}/$lib"
-        remove_path -rf "$src_dir/$lib"
+      truthy "$build_force" && remove_path -rf "$src_dir/$lib"
+      if [[ -f "$manifest" && ! -f "$src_dir/$lib/$touch_name" ]]; then
+        [[ -d "$src_dir/$lib" ]] && reset_touch "$src_dir/$lib" "${host_name}_installed*.touch"
+        uninstall_manifest "$manifest" >>"$LOG_FILE" 2>&1
       fi
+
       if [ ! -f "$src_dir/$lib/$touch_name" ]; then
-        remove_path -f "$src_dir/$lib/${touch_prefix}_installed"* # reset
-        download_and_unpack_file "$repo" "$src_dir/$lib"
-        change_dir "$src_dir/$lib"
-        touch "$manifest" && chmod -R a+rwx "$manifest"
-        
-        copy_and_link "$dependency_install_prefix/cuda-cudart/include" "$dependency_install_prefix/include" "$src_dir/$lib/include/"* 1>> "$manifest" 2>>"$LOG_FILE" || exit_message 1 "build_cuda_crt: build_cuda_crt: could not install $lib includes"
-        
-                create_touch_file 0 "$touch_name"
-    fi
-    else
-      echo -e "WARNING: 32bit not supported" >>"$LOG_FILE"
-    fi
+          download_and_unpack_file "$repo" "$src_dir/$lib"
+          change_dir "$src_dir/$lib"
+          # Only headers
+          install_prebuilt_binary -n="$base_lib" -v="13.1.80" \
+              -m="$manifest" \
+              -s="$src_dir/$lib" \
+              -I="include" || exit_message 1 "could not install $base_lib"
+          create_touch_file 0 "$touch_name"
+          echo "$src_dir/$lib/$touch_name" >>"$manifest"
+      fi
   change_dir "$src_dir"
 }
 build_cuda_cudart() {
   echo "WARNING: This is a non-gpl library." >>"$LOG_FILE"
-    if [[ "$bits_target" != "32" ]]; then
+    [[ "$bits_target" == "32" ]] && return
       local base_lib="cuda-cudart"
       local lib="$base_lib-$host_target"
       # https://developer.download.nvidia.com/compute/cuda/redist/
       local repo_ver="13.1.80"
       local repo="https://developer.download.nvidia.com/compute/cuda/redist/cuda_cudart/linux-x86_64/cuda_cudart-linux-x86_64-13.1.80-archive.tar.xz"
       
-      local manifest="$install_pkgconfig_dir/${lib}_manifest"
-      [[ ! -f "$manifest" ]] && { touch "$manifest"; chmod -R a+rwx "$manifest"; }
+      local manifest="$work_dir/pkgconfig/${lib}_manifest"
+      [[ ! -f "$manifest" ]] && touch "$manifest"
+
+      change_dir "$src_dir"
+      local touch_name=$(get_small_touchfile_name "${host_name}_installed" "$repo")
       
-    change_dir "$src_dir"
-      local touch_prefix="${host_name}_already"
-      local touch_name=$(get_small_touchfile_name "${touch_prefix}_installed" "$repo")
-      if truthy "$build_force"; then
-        [[ -d "$src_dir/$lib" ]] && reset_touch "$src_dir/$lib"
-        uninstall_manifest "$manifest" > >(redirect_output) 2>&1
-        remove_path -rf "${dependency_install_prefix}/$lib"
-        remove_path -rf "$src_dir/$lib"
+      truthy "$build_force" && remove_path -rf "$src_dir/$lib"
+      if [[ -f "$manifest" && ! -f "$src_dir/$lib/$touch_name" ]]; then
+        [[ -d "$src_dir/$lib" ]] && reset_touch "$src_dir/$lib" "${host_name}_installed*.touch"
+        uninstall_manifest "$manifest" >>"$LOG_FILE" 2>&1
       fi
+
       if [ ! -f "$src_dir/$lib/$touch_name" ]; then
-        remove_path -f "$src_dir/$lib/${touch_prefix}_installed"* # reset
-        download_and_unpack_file "$repo" "$src_dir/$lib"
-        change_dir "$src_dir/$lib"
-        touch "$manifest" && chmod -R a+rwx "$manifest"
-        for file in "${src_dir}/${lib}/pkg-config/"*.pc; do
-          [[ -e "$file" ]] || continue
-          sed -i "s|cudaroot=.*|prefix=${dependency_install_prefix}/${lib}|g" "$file"
-          sed -i "s|libdir=.*|libdir=\${prefix}/lib|g" "$file"
-          sed -i "s|includedir=.*|includedir=\${prefix}/include|g" "$file"
-        done
-        
-        copy_and_link "$dependency_install_prefix/$lib/lib" "$dependency_install_prefix/lib" "$src_dir/$lib/lib/"* 1>> "$manifest" 2>>"$LOG_FILE" || exit_message 1 "build_cuda_cudart: could not install $lib libs"
-        copy_and_link "$dependency_install_prefix/$lib/include" "$dependency_install_prefix/include" "$src_dir/$lib/include/"* 1>> "$manifest" 2>>"$LOG_FILE" || exit_message 1 "build_cuda_cudart: could not install $lib includes"
-        copy_and_link "$dependency_install_prefix/$lib/pkgconfig" "$dependency_install_prefix/pkgconfig" "$src_dir/$lib/pkg-config/"* 1>> "$manifest" 2>>"$LOG_FILE" || exit_message 1 "build_cuda_cudart: could not install $lib pkgconfigs"
-        
-                create_touch_file 0 "$touch_name"
-    fi
-    else
-      echo -e "WARNING: 32bit not supported" >>"$LOG_FILE"
-    fi
+          download_and_unpack_file "$repo" "$src_dir/$lib"
+          change_dir "$src_dir/$lib"
+          
+          install_prebuilt_binary -n="$base_lib" -v="$repo_ver" \
+              -s="$src_dir/$lib" \
+              -m="$manifest" \
+              -I="include" -L="lib" -B="bin" || exit_message 1 "could not install $base_lib"
+
+          create_touch_file 0 "$touch_name"
+          echo "$src_dir/$lib/$touch_name" >>"$manifest"
+      fi
   change_dir "$src_dir"
 }
 # build_cuda_nvcc         # config_options+= --enable-cuda-nvcc           # enable Nvidia CUDA compiler [no]
 build_cuda_nvcc() {
   if ! truthy "$disable_cuda_nvcc" && truthy "$enable_cuda_nvcc"; then
-    echo "WARNING: This is a non-gpl library." >>"$LOG_FILE"
-    if [[ "$bits_target" != "32" ]]; then
-  run_valid_function "build_cuda_cudart"
-  run_valid_function "build_cuda_crt"
-  run_valid_function "build_libnvvm"
-      local lib="cuda-nvcc"
+#     echo "WARNING: This is a non-gpl library." >>"$LOG_FILE"
+      [[ "$bits_target" == "32" ]] && return
+      run_valid_function "build_cuda_cudart"
+      run_valid_function "build_cuda_crt"
+      run_valid_function "build_libnvvm"
+      local base_lib="cuda-nvcc"
+      local lib="$base_lib-$host_target"
       # https://developer.download.nvidia.com/compute/cuda/redist/
       local repo_ver="13.1.80"
       local repo="https://developer.download.nvidia.com/compute/cuda/redist/cuda_nvcc/linux-x86_64/cuda_nvcc-linux-x86_64-13.1.80-archive.tar.xz"
       
-      local manifest="$install_pkgconfig_dir/${lib}_manifest"
-      [[ ! -f "$manifest" ]] && { touch "$manifest"; chmod -R a+rwx "$manifest"; }
+      local manifest="$work_dir/pkgconfig/${lib}_manifest"
+      [[ ! -f "$manifest" ]] && touch "$manifest"
       
-    change_dir "$src_dir"
-      local touch_prefix="${host_name}_already"
-      local touch_name=$(get_small_touchfile_name "${touch_prefix}_installed" "$repo")
-      if truthy "$build_force"; then
-        [[ -d "$src_dir/$lib" ]] && reset_touch "$src_dir/$lib"
-        uninstall_manifest "$manifest" > >(redirect_output) 2>&1
-        remove_path -rf "${dependency_install_prefix}/$lib"
-        remove_path -rf "$src_dir/$lib"
+      change_dir "$src_dir"
+      local touch_name=$(get_small_touchfile_name "linux-${host_arch}_installed" "$repo")\
+
+      truthy "$build_force" && remove_path -rf "$src_dir/$lib"
+      # Force Rebuild Logic
+      if [[ -f "$manifest" && ! -f "$src_dir/$lib/$touch_name" ]]; then
+        [[ -d "$src_dir/$lib" ]] && reset_touch "$src_dir/$lib" "${host_name}_installed*.touch"
+        uninstall_manifest "$manifest" >>"$LOG_FILE" 2>&1
       fi
       if [ ! -f "$src_dir/$lib/$touch_name" ]; then
-        remove_path -f "$src_dir/$lib/${touch_prefix}_installed"* # reset
         download_and_unpack_file "$repo" "$src_dir/$lib"
+        install_prebuilt_binary -n="$base_lib" -v="$repo_ver" \
+            -s="$src_dir/$lib" \
+            -m="$manifest" \
+            -I="include" -B="bin" || exit_message 1 "could not install $base_lib"
         change_dir "$src_dir/$lib"
-        touch "$manifest" && chmod -R a+rwx "$manifest"
-        
-        copy_and_link "$dependency_install_prefix/$lib/bin" "$dependency_install_prefix/bin" "$src_dir/$lib/bin/"* 1>> "$manifest" 2>>"$LOG_FILE" || exit_message 1 "build_cuda_nvcc: could not install $lib bins"
-        copy_and_link "$dependency_install_prefix/$lib/lib" "$dependency_install_prefix/lib" "$src_dir/$lib/lib/"* 1>> "$manifest" 2>>"$LOG_FILE" || exit_message 1 "build_cuda_nvcc: could not install $lib libs"
-
-        cat >> "$install_pkgconfig_dir/$lib.pc" << EOF
-prefix=${dependency_install_prefix}/${lib}
-exec_prefix=\${prefix}
-libdir=\${prefix}/lib
-includedir=\${prefix}/include
-bindir=\${prefix}/bin
-
-Name: Nvidia CUDA compiler
-Description: The NVIDIA CUDA Compiler Driver is a toolchain for compiling CUDA C/C++ programs
-Version: $repo_ver
-Libs: -L\${libdir} -lcuda-nvcc
-Cflags: -I\${includedir}
-EOF
-            echo "$install_pkgconfig_dir/$lib.pc" >> "$manifest"
-      create_touch_file 0 "$touch_name"
-    fi
-    else
-      echo -e "WARNING: 32bit not supported" >>"$LOG_FILE"
-    fi
+        create_touch_file 0 "$touch_name"
+        echo "$src_dir/$lib/$touch_name" >>"$manifest"
+      fi
   change_dir "$src_dir"
   fi
 }
