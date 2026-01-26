@@ -431,7 +431,7 @@ setup_windows_environment() {
 
 setup_linux_environment() {
     export PATCHDIR="$SCRIPTDIR/linux/patches"
-    export host_target="$host_arch-$host_platform-gnu"
+    export host_target="$build_triple"
     export rust_target="$host_arch-unknown-linux-gnu"
     export dependency_install_prefix="$work_dir/libraries"
     export install_pkgconfig_dir="${dependency_install_prefix}/lib/pkgconfig"
@@ -450,6 +450,14 @@ setup_linux_environment() {
     export linux_ldflags="$original_ldflags -L${dependency_install_prefix}/lib -Wl,-rpath,${dependency_install_prefix}/lib "
     export LDFLAGS="$linux_ldflags"
     export LD_LIBRARY_PATH="${dependency_install_prefix}/lib:$LD_LIBRARY_PATH"
+
+    export CC=gcc
+    export CXX=g++
+    export AR=ar
+    export AS=as
+    export RANLIB=ranlib
+    export LD=ld
+    export STRIP=strip
 
     create_dir "$install_pkgconfig_dir"
     create_dir "$work_dir/pkgconfig"
@@ -1463,7 +1471,7 @@ get_valid_remote() {
   
   # Get all refs at once
   local all_refs
-  if ! all_refs=$(git ls-remote "$repo_url" 2>/dev/null); then
+  if ! all_refs=$(git ls-remote "$repo_url" 2>>"$LOG_FILE"); then
     echo -e "DEBUG: Cannot access repository: $repo_url" >>"$LOG_FILE"
     return 1
   fi
@@ -1531,7 +1539,11 @@ retry_git_or_die() { # originally from https://stackoverflow.com/a/76012343/3245
       create_dir "$to_dir.tmp"
       echo -e "DEBUG: Evaluating \"$git_command\"\n" >>"$LOG_FILE"
       # shellcheck disable=SC2086
-      eval "$git_command" > >(redirect_output) 2>&1 && chmod -R a+rwx "$to_dir.tmp" && break
+      if [[ -n "$git_command" ]]; then
+        eval "$git_command" > >(redirect_output) 2>&1 && chmod -R a+rwx "$to_dir.tmp" && break
+      else
+        exit_message 1 "could not determine git command $git_command"
+      fi
     else
       exit_message 1 "retry_git_or_die: Could not generate git command for $repo_url $remote_type $remote_name $to_dir"
     fi
@@ -2112,14 +2124,16 @@ generic_configure() {
 	local extra_configure_options="$1"
   local configure_name="$2"
   local touch_postfix="$3"
+  [[ $extra_configure_options != *--host=* ]] && extra_configure_options+=" --host=$host_target "
 	if [[ -n $build_triple ]]; then extra_configure_options+=" --build=$build_triple"; fi
-  [[ $extra_configure_options != *bindir* ]] && extra_configure_options+=" --bindir=\"$dependency_install_prefix/bin\" "
-  [[ $extra_configure_options != *libdir* ]] && extra_configure_options+=" --libdir=\"$dependency_install_prefix/lib\" "
-  [[ $extra_configure_options != *with-sysroot* ]] && extra_configure_options+=" --with-sysroot=\"$dependency_install_prefix\" "
+  [[ $extra_configure_options != *--prefix=* ]] && extra_configure_options+=" --prefix=\"$dependency_install_prefix\" "
+  [[ $extra_configure_options != *--bindir=* ]] && extra_configure_options+=" --bindir=\"$dependency_install_prefix/bin\" "
+  [[ $extra_configure_options != *--libdir=* ]] && extra_configure_options+=" --libdir=\"$dependency_install_prefix/lib\" "
+  [[ $extra_configure_options != *--with-sysroot=* ]] && extra_configure_options+=" --with-sysroot=\"$dependency_install_prefix\" "
   extra_configure_options+=" --disable-shared --enable-static "
   iswindows && extra_configure_options+=" --disable-windows-manifest --disable-win32-dll "
   # truthy "$build_cross_compile" && extra_configure_options+=" --cross-prefix=$cross_prefix"
-	do_configure "--host=$host_target --prefix=$dependency_install_prefix $extra_configure_options" "$configure_name" "$touch_postfix"
+	do_configure "$extra_configure_options" "$configure_name" "$touch_postfix"
 }
 # 1. extra_build_args
 # 2. touch_postfix
@@ -2483,6 +2497,7 @@ generic_meson() {
   [[ "$extra_configure_options" != *prefix* ]] && extra_configure_options+=" -Dprefix=${dependency_install_prefix}"
   [[ "$extra_configure_options" != *default-library* ]] && extra_configure_options+=" --default-library=static"
   [[ "$extra_configure_options" != *staticpic* ]] && extra_configure_options+=" -Db_staticpic=true"
+  [[ "$extra_configure_options" != *wrap-mode* ]] && extra_configure_options+=" --wrap-mode=nofallback"
 	do_meson "$extra_configure_options" "setup build" "$touch_postfix"
 }
 # 1. extra_args
@@ -3062,7 +3077,8 @@ run_valid_function() {
   local arg=()
   arg+=("$@")
   reset_allflags
-  export LDFLAGS=" -static $LDFLAGS -static-libgcc -static-libstdc++ "
+  export LDFLAGS=" $LDFLAGS -static-libgcc -static-libstdc++ "
+  iswindows && export LDFLAGS=" -static $LDFLAGS"
 	if [[ -n "$step" ]]; then
     [[ "$step" == build_* ]] && check_if_built "$step" && return 0
 		change_dir "$src_dir"
@@ -3841,15 +3857,19 @@ ts() {
 }
 
 intro() {
+  setup_build_environment
 	cat <<EOL
      ##################### Welcome ######################
   Welcome to the ffmpeg and ffmpeg-kit builder-helper script.
-  Downloads and builds will be installed to directories within $WORKDIR
-  If this is not ok, then exit now, and cd to the directory where you'd
-  like them installed, then run this script again from there.
+  Downloads and builds will be installed to directories within: 
+  Dependencies - $dependency_install_prefix
+  Ffmpeg - $ffmpeg_install_prefix
+  Ffmpeg-kit - $ffmpeg_kit_install
+  Bundle - $ffmpeg_kit_bundle
   Note that once you build your compilers, you can no longer rename/move
-  the $sandbox directory, since it will have some hard coded paths in there.
-  You can, of course, rebuild ffmpeg from within it, etc.
+  the $dependency_install_prefix directory, since it will have some 
+  hard coded paths in there. You can, of course, rebuild ffmpeg 
+  ffmpeg-kit and bundle.
 EOL
 	echo -e "$(ts)" | tee -a "$LOG_FILE"
 	if [[ ! -d $WORKDIR ]]; then
@@ -4530,6 +4550,8 @@ add_src_dir() {
       find "$dependency_install_prefix/lib" -name "*.la" -delete
       find "$install_pkgconfig_dir" -name "*.pc" -exec sed -i -E -e 's/[[:space:]]-lm\b//g' \
         -e 's|/usr/local/mingw-w64/[^ ]+/lib/lib([a-zA-Z0-9]+)\.a|-l\1|g' {} +
+    else
+      find "$dependency_install_prefix/lib" -type f -name "*.la" -exec sed -i 's|=\/|/|g' {} +
     fi
     if [[ -f "$dir_file" ]]; then
       if ! grep -q "$dir" "$dir_file"; then

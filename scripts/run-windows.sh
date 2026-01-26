@@ -276,8 +276,7 @@ CFLAGS=\"$CFLAGS\"" "" "full"
   disable_nonessential "$src_dir/$lib"
   sed -i 's/OBJECTS_RES_yes = libiconv.res.lo/OBJECTS_RES_yes = /g' "lib/Makefile"
   sed -i 's/OBJECTS_RES_yes = iconv.res/OBJECTS_RES_yes = /g' "src/Makefile"
-  do_make "" "full"
-  do_make_install "" "" "full"
+  do_make_and_make_install "" "" "full"
   cat > "$install_pkgconfig_dir/iconv.pc" << EOF
 prefix=$dependency_install_prefix
 exec_prefix=\${prefix}
@@ -1084,6 +1083,7 @@ build_libopenmpt() {
   download_and_unpack_file "$repo" "$lib"
   #do_git_checkout "$repo" "$src_dir/$lib" "$repo_ver"
   change_dir "$src_dir/$lib"
+  touch "no.autoreconf"
   generic_configure "--enable-shared=no \
 --enable-static=yes \
 --without-pulseaudio \
@@ -1536,22 +1536,27 @@ build_libzvbi() {
   change_dir "$src_dir/$lib"
   export LIBS="-lpng -lz -liconv"
   export LDFLAGS="$LDFLAGS $LIBS"
-	generic_configure "--enable-static \
---disable-shared \
---disable-dvb \
---disable-bktr \
---disable-proxy \
---disable-nls \
---without-doxygen \
---disable-examples \
---disable-tests \
---enable-pic \
---with-pic \
---with-libiconv-prefix=\"$dependency_install_prefix\""
-	disable_nonessential "$src_dir/$lib"
-  do_make_and_make_install
-	change_dir "$src_dir"
-  reset_ldflags
+  which autopoint
+  autopoint --version
+  # do_autogen
+# 	generic_configure "--enable-static \
+# --disable-shared \
+# --disable-dvb \
+# --disable-bktr \
+# --disable-proxy \
+# --disable-nls \
+# --without-doxygen \
+# --disable-examples \
+# --disable-tests \
+# --enable-pic \
+# --with-pic \
+# --with-libiconv-prefix=\"$dependency_install_prefix\""
+# 	disable_nonessential "$src_dir/$lib"
+#   do_make_and_make_install
+# 	change_dir "$src_dir"
+#   reset_ldflags
+  export PATH=$ORIG_PATH
+  export ACLOCAL_PATH=$ORIG_ACLOCAL_PATH
   unset LIBS
 	fi
 }
@@ -3057,8 +3062,8 @@ build_opencl() {
   local repo="https://github.com/KhronosGroup/OpenCL-Headers"
   local repo_ver="v2025.07.22"
 	change_dir "$src_dir"
-  change_dir "$src_dir/$parentlib"
-  do_git_checkout "$repo" "$src_dir/$parent_lib/$lib" "$repo_ver"
+  change_dir "$src_dir/$parentlib" 1
+  do_git_checkout "$repo" "$lib" "$repo_ver"
   change_dir "$src_dir/$parentlib/$lib/build" 1
   local cmake_params="-DCMAKE_INSTALL_PREFIX=${dependency_install_prefix} \
 -DCMAKE_BUILD_TYPE=Release \
@@ -3078,7 +3083,7 @@ build_opencl() {
   local repo="https://github.com/KhronosGroup/OpenCL-ICD-Loader"
   local repo_ver="v2025.07.22"
   change_dir "$src_dir/$parentlib"
-  do_git_checkout "$repo" "$src_dir/$parent_lib/$lib" "$repo_ver"
+  do_git_checkout "$repo" "$lib" "$repo_ver"
   change_dir "$src_dir/$parentlib/$lib/build" 1
   sed -i 's|loader/windows/OpenCL.rc)|)|g' "$src_dir/$parentlib/$lib/CMakeLists.txt"
   local cmake_params="-DCMAKE_INSTALL_PREFIX=${dependency_install_prefix} \
@@ -3285,32 +3290,31 @@ build_lcms2() {
 	fi
 }
 
-# build_libglslang        # config_options+= --enable-libglslang          # enable GLSL->SPIRV compilation via libglslang [no]
-build_libglslang() {
-  if ! truthy "$disable_libglslang" && truthy "$enable_libglslang"; then
-  # https://github.com/KhronosGroup/SPIRV-Headers
-  local parent_lib="libglslang"
-	change_dir "$src_dir"
+build_spirv_headers() {
   local lib="SPIRV-Headers"
   local repo="https://github.com/KhronosGroup/SPIRV-Headers"
   local repo_ver="vulkan-sdk-1.4.328.1"
-  change_dir "$src_dir/$parent_lib" 1
+  change_dir "$src_dir/$lib" 1
   do_git_checkout "$repo" "$src_dir/$lib" "$repo_ver"
-  change_dir "$src_dir/$parent_lib/$lib"
+  change_dir "$src_dir/$lib"
   local cmake_params="-DCMAKE_INSTALL_PREFIX=${dependency_install_prefix} \
 -DCMAKE_BUILD_TYPE=Release \
 -DBUILD_SHARED_LIBS=OFF \
 -DSPIRV_HEADERS_SKIP_EXAMPLES=ON"
-  change_dir "$src_dir/$parent_lib/$lib/build" 1
-  do_cmake_from_build_dir "$src_dir/$parent_lib/$lib" "$cmake_params"
+  change_dir "$src_dir/$lib/build" 1
+  do_cmake_from_build_dir "$src_dir/$lib" "$cmake_params"
+  disable_nonessential "$src_dir/$lib/build"
   do_make_and_make_install
-    # https://github.com/KhronosGroup/SPIRV-Tools
+  change_dir "$src_dir"
+}
+build_spirv_tools() {
+  run_valid_function "build_spirv_tools"
   local lib="SPIRV-Tools"
   local repo="https://github.com/KhronosGroup/SPIRV-Tools"
   local repo_ver="v2025.4"
-  change_dir "$src_dir/$parent_lib"
+  change_dir "$src_dir/$lib"
   do_git_checkout "$repo" "$src_dir/$lib" "$repo_ver"
-  change_dir "$src_dir/$parent_lib/$lib"
+  change_dir "$src_dir/$lib"
   local cmake_params="-DCMAKE_INSTALL_PREFIX=${dependency_install_prefix} \
 -DCMAKE_BUILD_TYPE=Release \
 -DBUILD_SHARED_LIBS=OFF \
@@ -3318,16 +3322,24 @@ build_libglslang() {
 -DSPIRV_WERROR=OFF \
 -DSPIRV_SKIP_EXECUTABLES=ON \
 -DSPIRV-Headers_SOURCE_DIR=${dependency_install_prefix}"
-  change_dir "$src_dir/$parent_lib/$lib/build" 1
-  do_cmake_from_build_dir "$src_dir/$parent_lib/$lib" "$cmake_params"
+  change_dir "$src_dir/$lib/build" 1
+  do_cmake_from_build_dir "$src_dir/$lib" "$cmake_params"
+  disable_nonessential "$src_dir/$lib/build"
   do_make_and_make_install
+  change_dir "$src_dir"
+}
+# build_libglslang        # config_options+= --enable-libglslang          # enable GLSL->SPIRV compilation via libglslang [no]
+build_libglslang() {
+  if ! truthy "$disable_libglslang" && truthy "$enable_libglslang"; then
+  # https://github.com/KhronosGroup/SPIRV-Headers
+  run_valid_function "build_spirv_tools"
+	change_dir "$src_dir"
   	# https://github.com/KhronosGroup/glslang
-	local lib="glslang"
+	local lib="libglslang"
   local repo="https://github.com/KhronosGroup/glslang"
   local repo_ver="Release 16.1.0"
-  change_dir "$src_dir/$parent_lib"
   do_git_checkout "$repo" "$src_dir/$lib" "$repo_ver"
-  change_dir "$src_dir/$parent_lib/$lib"
+  change_dir "$src_dir/$lib"
   local cmake_params="-DCMAKE_INSTALL_PREFIX=${dependency_install_prefix} \
 -DCMAKE_BUILD_TYPE=Release \
 -DBUILD_SHARED_LIBS=OFF \
@@ -3338,8 +3350,8 @@ build_libglslang() {
 -DGLSLANG_TESTS=OFF \
 -DALLOW_EXTERNAL_SPIRV_TOOLS=ON \
 -DCMAKE_PREFIX_PATH=${dependency_install_prefix}"
-  change_dir "$src_dir/$parent_lib/$lib/build" 1
-  do_cmake_from_build_dir "$src_dir/$parent_lib/$lib" "$cmake_params"
+  change_dir "$src_dir/$lib/build" 1
+  do_cmake_from_build_dir "$src_dir/$lib" "$cmake_params"
   do_make_and_make_install
   cat > "$install_pkgconfig_dir/glslang.pc" <<EOF
 prefix=${dependency_install_prefix}
@@ -4023,6 +4035,7 @@ build_libopencv() {
 # build_libshaderc        # config_options+= --enable-libshaderc          # enable GLSL->SPIRV compilation via libshaderc [no]
 build_libshaderc() {
   if ! truthy "$disable_libshaderc" && truthy "$enable_libshaderc" || [[ -n "$1" ]]; then
+  run_valid_function "build_spirv_tools"
 	local lib="libshaderc"
   local repo="https://github.com/google/shaderc"
   local repo_ver="v2025.5"
@@ -4180,7 +4193,6 @@ build_libexpat() {
 build_pango() {
   run_valid_function "build_dlfcn"
 	run_valid_function "build_libharfbuzz" 1
-	run_valid_function "build_libfreetype" 1
 	run_valid_function "build_libfontconfig" 1
   run_valid_function "build_libexpat"
  	# https://gitlab.gnome.org/GNOME/pango
@@ -4274,9 +4286,7 @@ build_cairo() {
     add_libs_to_pkg -t="$file" -l="-lstdc++" -p="-lole32 -lwindowscodecs -luuid"
   done < <(find "$install_pkgconfig_dir" -type f -name "cairo*.pc" -print0)
   unset LIBS
-  reset_cflags
-  reset_cxxflags
-  reset_ldflags
+  reset_allflags
 }
 
 build_libgpg_error() {

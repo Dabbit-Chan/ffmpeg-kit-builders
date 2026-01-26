@@ -620,8 +620,6 @@ else
 	gcc_cpu_count=y # compatible low RAM...
 fi
 
-setup_build_environment
-
 source "${SCRIPTDIR}/function-$host_platform.sh"
 source "${SCRIPTDIR}/run-$host_platform.sh"
 

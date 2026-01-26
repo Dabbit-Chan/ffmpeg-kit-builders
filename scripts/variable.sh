@@ -47,7 +47,7 @@ export build_ffmpeg_programs=n
 
 declare -A seen_steps
 declare -A INSTALLED_LIBS
-
+declare -A SUB_DEPENDENCIES
 export BUILD_STEPS=()
 
 # AI Video Focused
