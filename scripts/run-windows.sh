@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# shellcheck disable=SC2317,SC2129,SC1091,SC2120,SC2035,SC2016
+# shellcheck disable=SC2317,SC2129,SC1091,SC2120,SC2035,SC2016,SC2310,SC2155,SC2154,SC2034
 
 #region WINDOWS FFMPEG BUILD PRIMARY DEPENDENCIES
 
@@ -228,10 +228,8 @@ build_lzma() {
 	change_dir "$src_dir"
   fi
 }
-# build_iconv             # config_options+= --disable-iconv              # disable iconv [autodetect]
-build_iconv() {
-  if ! truthy "$disable_iconv" && truthy "$enable_iconv" || [[ -n "$1" ]]; then
-	local lib="libiconv"
+build_iconv_minimal() {
+  local lib="libiconv-minimal"
   local repo="https://ftp.gnu.org/gnu/libiconv/libiconv-1.18.tar.gz"
   local repo_ver="v1.18"
 	change_dir "$src_dir"
@@ -257,14 +255,65 @@ CFLAGS=\"$CFLAGS\"" "" "minimal"
   do_make "" "minimal"
   do_make_install "" "-C lib install" "minimal"
   if [[ -f "$src_dir/$lib/include/iconv.h.inst" ]]; then
-    copy_path "$src_dir/$lib/include/iconv.h.inst" "$dependency_install_prefix/include/iconv.h" "-fv" >>"$LOG_FILE" 2>&1
+    copy_path "$src_dir/$lib/include/iconv.h.inst" "$dependency_install_prefix/include/iconv.h" "-f" >>"$LOG_FILE"
   fi
-	change_dir "$src_dir"
-  reset_allflags
-	run_valid_function "build_gettext"
-  reset_allflags
-	local lib="libiconv"
+  change_dir "$src_dir"
+}
+build_gettext() {
+  run_valid_function "build_iconv_minimal"
+	local lib="gettext"
+  local repo="https://ftp.gnu.org/pub/gnu/gettext/gettext-0.26.tar.gz"
+  change_dir "$src_dir"
+  download_and_unpack_file "$repo" "$lib"
+  change_dir "$src_dir/$lib/gettext-runtime" 1
+  export LIBS="-liconv"
+	local config="--prefix=${dependency_install_prefix} \
+--with-sysroot=\"${dependency_install_prefix}\" \
+--with-libiconv-prefix=\"${dependency_install_prefix}\" \
+--with-included-gettext \
+--enable-static \
+--disable-shared \
+--disable-java \
+--disable-csharp \
+--disable-native-java \
+--disable-libasprintf \
+--disable-openmp \
+--disable-doc \
+CFLAGS=\"$CFLAGS -Dlibintl_STATIC -Wno-incompatible-pointer-types\" \
+LIBS=\"$LIBS\""
+  generic_configure "$config"
+  find . -name "Makefile*" -exec sed -i -E '/=/s/[^ ]+\.res(\.lo)?//g' {} + # otherwise causes issues with static linking
+  disable_nonessential "$src_dir/$lib"
+  do_make_and_make_install "CFLAGS=\"$CFLAGS -Dlibintl_STATIC -Wno-incompatible-pointer-types\"" "CFLAGS=\"$CFLAGS -Dlibintl_STATIC -Wno-incompatible-pointer-types\""
+  cat > "$install_pkgconfig_dir/intl.pc" <<EOF
+prefix=${dependency_install_prefix}
+exec_prefix=\${prefix}
+libdir=\${exec_prefix}/lib
+includedir=\${prefix}/include
+
+Name: intl
+Description: GNU gettext library
+Version: ${version}
+Libs: -L\${libdir} -lintl -liconv
+Cflags: -I\${includedir} -Dlibintl_STATIC
+EOF
   change_dir "$src_dir/$lib"
+  add_src_dir "$src_dir/$lib"
+	change_dir "$src_dir"
+  unset LIBS
+  reset_cflags
+}
+# build_iconv             # config_options+= --disable-iconv              # disable iconv [autodetect]
+build_iconv() {
+  if ! truthy "$disable_iconv" && truthy "$enable_iconv" || [[ -n "$1" ]]; then
+  run_valid_function "build_gettext"
+	local lib="libiconv"
+  local repo="https://ftp.gnu.org/gnu/libiconv/libiconv-1.18.tar.gz"
+  local repo_ver="v1.18"
+  change_dir "$src_dir"
+  download_and_unpack_file "$repo" "$lib"
+  change_dir "$src_dir/$lib"
+  touch "no.autoreconf"
   generic_configure "--prefix=${dependency_install_prefix} \
 --enable-static \
 --disable-shared \
@@ -1010,6 +1059,7 @@ build_libmp3lame() {
 	change_dir "$src_dir"
   download_and_unpack_file "$repo" "$lib" 
   change_dir "$src_dir/$lib"
+  touch "no.autoreconf"
   generic_configure "--enable-nasm --disable-frontend"
   disable_nonessential "$src_dir/$lib"
   do_make_and_make_install
@@ -1436,26 +1486,8 @@ build_frei0r() {
 -DWITHOUT_GAVL=ON"
   disable_nonessential "$src_dir/$lib/build"
   do_make_and_make_install
-	create_dir "$src_dir/redist" # Strip and pack shared libraries.
-	if [ "$bits_target" = 32 ]; then
-		local arch=x86
-	else
-		local arch=x86_64
-	fi
-	archive="$src_dir/redist/frei0r-plugins-${arch}-$(git describe --tags).7z"
-	if [[ ! -f "$archive.done" ]]; then
-		for sharedlib in "$dependency_install_prefix"/lib/frei0r-1/*.dll; do
-			# shellcheck disable=SC2086
-			"${cross_prefix}strip" $sharedlib
-		done
-		for doc in AUTHORS ChangeLog COPYING README.md; do
-			sed "s/$/\r/" "$doc" > "$dependency_install_prefix/lib/frei0r-1/$doc.txt"
-		done
-		7z a -mx=9 "$archive $dependency_install_prefix/lib/frei0r-1" && remove_path -f "$dependency_install_prefix/lib/frei0r-1/*.txt"
-		create_touch_file 0 "$archive.done" # for those with no 7z so it won't restrip every time
-	fi
 	change_dir "$src_dir"
-	fi
+  fi
 }
 # build_libsvtav1         # config_options+= --enable-libsvtav1           # enable AV1 encoding via SVT [no]
 build_libsvtav1() {
@@ -1525,9 +1557,12 @@ build_decklink() {
 	change_dir "$src_dir"
 	fi
 }
+
 # build_libzvbi           # config_options+= --enable-libzvbi             # enable teletext support via libzvbi [no]
 build_libzvbi() {
   if ! truthy "$disable_libzvbi" && truthy "$enable_libzvbi"; then
+  run_valid_function "build_gettext_native"
+  reset_cross_vars
 	local lib="libzvbi"
   local repo="https://github.com/zapping-vbi/zvbi"
   local repo_ver="v0.2.44"
@@ -1536,25 +1571,25 @@ build_libzvbi() {
   change_dir "$src_dir/$lib"
   export LIBS="-lpng -lz -liconv"
   export LDFLAGS="$LDFLAGS $LIBS"
-  which autopoint
-  autopoint --version
-  # do_autogen
-# 	generic_configure "--enable-static \
-# --disable-shared \
-# --disable-dvb \
-# --disable-bktr \
-# --disable-proxy \
-# --disable-nls \
-# --without-doxygen \
-# --disable-examples \
-# --disable-tests \
-# --enable-pic \
-# --with-pic \
-# --with-libiconv-prefix=\"$dependency_install_prefix\""
-# 	disable_nonessential "$src_dir/$lib"
-#   do_make_and_make_install
-# 	change_dir "$src_dir"
-#   reset_ldflags
+  do_autogen || exit_message 1 "There was an error running autogen.\n See $LOG_FILE for details"
+  change_dir "$src_dir/$lib"
+  touch "no.autoreconf"
+	generic_configure "--enable-static \
+--disable-shared \
+--disable-dvb \
+--disable-bktr \
+--disable-proxy \
+--disable-nls \
+--without-doxygen \
+--disable-examples \
+--disable-tests \
+--enable-pic \
+--with-pic \
+--with-libiconv-prefix=\"$dependency_install_prefix\""
+	disable_nonessential "$src_dir/$lib"
+  do_make_and_make_install
+	change_dir "$src_dir"
+  reset_ldflags
   export PATH=$ORIG_PATH
   export ACLOCAL_PATH=$ORIG_ACLOCAL_PATH
   unset LIBS
@@ -2466,18 +2501,15 @@ build_libcdio() {
 	change_dir "$src_dir"
   do_git_checkout "$repo" "$src_dir/$lib" "$repo_ver"
   change_dir "$src_dir/$lib"
-		if [[ ! -f "configure" ]]; then
-      autoreconf -fiv || exit_message 1 "build_libcdio: could not auto-reconfigure"
-    fi
-    generic_configure "--disable-vcd-info --disable-cddb --disable-example-progs MAKEINFO=true"
-    for prog in cd-drive cd-info cd-read iso-info iso-read mmc-tool; do
-      touch src/"$prog".1
-    done
-    disable_nonessential "$src_dir/$lib"
-    do_make_and_make_install
-	  change_dir "$src_dir"
-	  run_valid_function "build_libcdio_paranoia"
-    add_libs_to_pkg -t="$install_pkgconfig_dir/libcdio++.pc" -l="-liconv"
+  generic_configure "--disable-vcd-info --disable-cddb --disable-example-progs MAKEINFO=true"
+  for prog in cd-drive cd-info cd-read iso-info iso-read mmc-tool; do
+    touch src/"$prog".1
+  done
+  disable_nonessential "$src_dir/$lib"
+  do_make_and_make_install
+  change_dir "$src_dir"
+  run_valid_function "build_libcdio_paranoia"
+  add_libs_to_pkg -t="$install_pkgconfig_dir/libcdio++.pc" -l="-liconv"
 	fi
 }
 
@@ -3141,7 +3173,7 @@ build_libtensorflow() {
     change_dir "$src_dir/$lib" 1
 
     if [ ! -f "$src_dir/$lib/$subdir/$touch_name" ]; then
-        download_and_unpack_file "$repo" "$src_dir/$lib/$subdir"
+        download_and_unpack_file "$repo" "$subdir"
         
         install_prebuilt_binary \
             -n="$base_lib" -v="$repo_ver" \
@@ -3254,7 +3286,7 @@ build_libtorch() {
     change_dir "$src_dir/$lib" 1
 
     if [ ! -f "$src_dir/$lib/$subdir/$touch_name" ]; then
-        download_and_unpack_file "$repo" "$src_dir/$lib/$subdir"
+        download_and_unpack_file "$repo" "$subdir"
         
         install_prebuilt_binary \
             -n="$lib_name" -v="$repo_ver" \
@@ -3294,7 +3326,7 @@ build_spirv_headers() {
   local lib="SPIRV-Headers"
   local repo="https://github.com/KhronosGroup/SPIRV-Headers"
   local repo_ver="vulkan-sdk-1.4.328.1"
-  change_dir "$src_dir/$lib" 1
+  change_dir "$src_dir"
   do_git_checkout "$repo" "$src_dir/$lib" "$repo_ver"
   change_dir "$src_dir/$lib"
   local cmake_params="-DCMAKE_INSTALL_PREFIX=${dependency_install_prefix} \
@@ -3308,11 +3340,11 @@ build_spirv_headers() {
   change_dir "$src_dir"
 }
 build_spirv_tools() {
-  run_valid_function "build_spirv_tools"
+  run_valid_function "build_spirv_headers"
   local lib="SPIRV-Tools"
   local repo="https://github.com/KhronosGroup/SPIRV-Tools"
   local repo_ver="v2025.4"
-  change_dir "$src_dir/$lib"
+  change_dir "$src_dir"
   do_git_checkout "$repo" "$src_dir/$lib" "$repo_ver"
   change_dir "$src_dir/$lib"
   local cmake_params="-DCMAKE_INSTALL_PREFIX=${dependency_install_prefix} \
@@ -3760,7 +3792,7 @@ build_libnvvm() {
     fi
 
     if [ ! -f "$src_dir/$lib/$touch_name" ]; then
-        download_and_unpack_file "$repo" "$src_dir/$lib"
+        download_and_unpack_file "$repo" "$lib"
         change_dir "$src_dir/$lib"
         install_prebuilt_binary -n="$base_lib" -v="$repo_ver" \
             -s="$src_dir/$lib/nvvm" \
@@ -3794,7 +3826,7 @@ build_cuda_cudart() {
     fi
 
     if [ ! -f "$src_dir/$lib/$touch_name" ]; then
-        download_and_unpack_file "$repo" "$src_dir/$lib"
+        download_and_unpack_file "$repo" "$lib"
         change_dir "$src_dir/$lib"
         
         install_prebuilt_binary -n="$base_lib" -v="13.1.80" \
@@ -3827,7 +3859,7 @@ build_cuda_crt() {
     fi
 
     if [ ! -f "$src_dir/$lib/$touch_name" ]; then
-        download_and_unpack_file "$repo" "$src_dir/$lib"
+        download_and_unpack_file "$repo" "$lib"
         change_dir "$src_dir/$lib"
         # Only headers
         install_prebuilt_binary -n="$base_lib" -v="13.1.80" \
@@ -3860,7 +3892,7 @@ build_cuda_nvcc_native() {
         uninstall_manifest "$manifest" >>"$LOG_FILE" 2>&1
       fi
       if [ ! -f "$src_dir/$lib_native/$touch_name" ]; then
-        download_and_unpack_file "$repo" "$src_dir/$lib_native"
+        download_and_unpack_file "$repo" "$lib_native"
         change_dir "$src_dir/$lib_native"
         copy_and_link "$dependency_install_prefix/bin" "$dependency_install_prefix/bin" "$src_dir/$lib_native/bin/"* 1>> "$manifest" 2>>"$LOG_FILE" || exit_message 1 "build_cuda_nvcc: could not install $lib bins"
         create_touch_file 0 "$touch_name"
@@ -4043,7 +4075,7 @@ build_libshaderc() {
 	change_dir "$src_dir"
   do_git_checkout "$repo" "$src_dir/$lib" "$repo_ver"
   change_dir "$src_dir/$lib"
-	./utils/git-sync-deps > >(redirect_output) 2>&1
+	(./utils/git-sync-deps) > >(redirect_output) 2>&1
   sed -i 's/define_pkg_config_file(shaderc -lshaderc_shared)/define_pkg_config_file(shaderc -lshaderc -lshaderc_util)/' "$src_dir/$lib/CMakeLists.txt"
   change_dir "$src_dir/$lib/build" 1
 	local cmake_params="-DCMAKE_BUILD_TYPE=release \
@@ -4474,52 +4506,6 @@ LIBS=\"$LIBS\""
   reset_cppflags
   unset LIBS
 }
-
-build_gettext() {
-	local lib="gettext"
-  local repo="https://ftp.gnu.org/pub/gnu/gettext/gettext-0.26.tar.gz"
-  change_dir "$src_dir"
-  download_and_unpack_file "$repo" "$lib"
-	# download_and_unpack_file "$repo" "$lib" 
-  change_dir "$src_dir/$lib/gettext-runtime" 1
-  export LIBS="-liconv"
-	local config="--prefix=${dependency_install_prefix} \
---with-sysroot=\"${dependency_install_prefix}\" \
---with-libiconv-prefix=\"${dependency_install_prefix}\" \
---with-included-gettext \
---enable-static \
---disable-shared \
---disable-java \
---disable-csharp \
---disable-native-java \
---disable-libasprintf \
---disable-openmp \
---disable-doc \
-CFLAGS=\"$CFLAGS -Dlibintl_STATIC -Wno-incompatible-pointer-types\" \
-LIBS=\"$LIBS\""
-  generic_configure "$config"
-  find . -name "Makefile*" -exec sed -i -E '/=/s/[^ ]+\.res(\.lo)?//g' {} + # otherwise causes issues with static linking
-  #disable_nonessential "$src_dir/$lib"
-  do_make_and_make_install "CFLAGS=\"$CFLAGS -Dlibintl_STATIC -Wno-incompatible-pointer-types\"" "CFLAGS=\"$CFLAGS -Dlibintl_STATIC -Wno-incompatible-pointer-types\""
-  cat > "$install_pkgconfig_dir/intl.pc" <<EOF
-prefix=${dependency_install_prefix}
-exec_prefix=\${prefix}
-libdir=\${exec_prefix}/lib
-includedir=\${prefix}/include
-
-Name: intl
-Description: GNU gettext library
-Version: ${version}
-Libs: -L\${libdir} -lintl -liconv
-Cflags: -I\${includedir} -Dlibintl_STATIC
-EOF
-  change_dir "$src_dir/$lib"
-  add_src_dir "$src_dir/$lib"
-	change_dir "$src_dir"
-  unset LIBS
-  reset_cflags
-}
-
 build_libffi() {
 	local lib="libffi"
   local repo="https://github.com/libffi/libffi/releases/download/v3.5.2/libffi-3.5.2.tar.gz"
@@ -4875,6 +4861,96 @@ build_svt_vp9() {
 	fi
 }
 
+build_gettext_native() {
+  local min_ver="0.21"
+  if command -v gettext &>/dev/null; then
+    local installed_ver="$(gettext --version 2>/dev/null | head -n 1 | awk '{print $NF}')"
+  else
+    local installed_ver=0
+  fi
+  if [ "$(printf '%s\n' "$min_ver" "$installed_ver" | sort -V | head -n 1)" = "$installed_ver" ] && [ "$installed_ver" != "$min_ver" ]; then
+  run_valid_function "build_iconv_minimal_native"
+  clear_cross_vars
+  local lib="gettext-native"
+  local repo="https://ftp.gnu.org/pub/gnu/gettext/gettext-0.26.tar.gz"
+  change_dir "$src_dir"
+  download_and_unpack_file "$repo" "$lib" 
+  change_dir "$src_dir/$lib/gettext-runtime"
+  export LIBS="-liconv"
+  export CFLAGS=" -Wno-incompatible-pointer-types -ffunction-sections -fdata-sections -fstrict-aliasing -fPIC -I$src_dir/$lib -Dlibintl_STATIC"
+  export CXXFLAGS="-ffunction-sections -fdata-sections -fstrict-aliasing -fPIC -I$src_dir/$lib"
+  export CPPFLAGS=""
+  export LDFLAGS=""
+  export CC=gcc CXX=g++ AR=ar AS=as RANLIB=ranlib LD=ld STRIP=strip NASM=nasm
+  local config="--prefix=/usr \
+--with-sysroot=\"/usr\" \
+--with-libiconv-prefix=\"/usr\" \
+--libdir=/usr/lib \
+--with-included-gettext \
+--enable-static \
+--disable-doc"
+  do_configure "$config \
+CFLAGS=\"$CFLAGS\" \
+LIBS=\"$LIBS\""
+  do_make
+  do_make_install "PREFIX=\"/usr\""
+  change_dir "$src_dir/$lib/libtextstyle"
+  do_configure "$config \
+CFLAGS=\"$CFLAGS\" \
+LIBS=\"$LIBS\""
+  do_make
+  do_make_install "PREFIX=\"/usr\""
+  change_dir "$src_dir/$lib/gettext-tools"
+  config+="--disable-examples \
+--without-libtextstyle-prefix"
+  do_configure "$config \
+CFLAGS=\"$CFLAGS\" \
+LIBS=\"$LIBS\" \
+LDFLAGS=\"$LDFLAGS $LIBS\""
+  local make_config="LDFLAGS=\"-L$src_dir/$lib/gettext-tools/.libs -L$src_dir/$lib/gettext-tools/src/.libs ${LDFLAGS}\" LIBS=\"$LIBS\""
+  do_make
+  do_make_install "PREFIX=\"/usr\""
+  unset LIBS
+  reset_allflags
+  reset_cross_vars
+  fi
+}
+build_iconv_minimal_native() {
+  clear_cross_vars
+  local lib="libiconv-native"
+  local repo="https://ftp.gnu.org/gnu/libiconv/libiconv-1.18.tar.gz"
+  local repo_ver="v1.18"
+  change_dir "$src_dir"
+  download_and_unpack_file "$repo" "$lib"
+  change_dir "$src_dir/$lib"
+  touch "no.autoreconf"
+  export CFLAGS="-ffunction-sections -fdata-sections -fstrict-aliasing -fPIC -I$src_dir/$lib"
+  export CXXFLAGS="-ffunction-sections -fdata-sections -fstrict-aliasing -fPIC -I$src_dir/$lib"
+  export CPPFLAGS=""
+  export LDFLAGS=""
+  export CC=gcc CXX=g++ AR=ar AS=as RANLIB=ranlib LD=ld STRIP=strip NASM=nasm
+  do_configure "--enable-static \
+--prefix=/usr \
+--libdir=/usr/lib \
+--with-sysroot=/usr \
+--disable-shared \
+--disable-nls \
+--disable-rpath \
+--disable-tools \
+--disable-tests \
+--disable-examples \
+--disable-docs \
+--without-libintl-prefix \
+CFLAGS=\"$CFLAGS\"" "" "minimal"
+  disable_nonessential "$src_dir/$lib"
+  do_make "" "minimal"
+  do_make_install "PREFIX=\"/usr\"" "-C lib install" "minimal"
+  if [[ -f "$src_dir/$lib/include/iconv.h.inst" ]]; then
+    copy_path "$src_dir/$lib/include/iconv.h.inst" "/usr/include/iconv.h" "-fv" >>"$LOG_FILE" 2>&1
+  fi
+  change_dir "$src_dir"
+  reset_allflags
+}
 #endregion
 
 #region WINDOWS TOOLCHAIN FILES

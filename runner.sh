@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-# shellcheck disable=SC2317,SC1091,SC1090,SC2120,SC2250,SC2292
+# shellcheck disable=SC2317,SC2129,SC1091,SC2120,SC2035,SC2016,SC2310,SC2155,SC2154,SC2034,2250,2249,2312,2292,1090
 
 export BASEDIR="$(pwd)"
 export SCRIPTDIR="${BASEDIR}/scripts"
@@ -15,10 +15,10 @@ source "${SCRIPTDIR}/function.sh"
 
 require_sudo
 
-remove_path -f "$LOG_FILE"
-chmod -R a+rwx "$LOG_FILE" || true;
+[[ -f "$LOG_FILE" ]] && rm -f "$LOG_FILE"
 
 echo -e "INFO: Build options: ${RUN_ARGS[*]}\n" 1>>"$LOG_FILE" 2>&1
+[[ -f "$LOG_FILE" ]] && chmod -R a+rwx "$LOG_FILE" || true;
 
 # Loop through all arguments implicitly
 for arg; do
@@ -885,3 +885,5 @@ main() {
 }
 
 main
+
+[[ -f "$BUILT_STATE_FILE" ]] && rm -f "$BUILT_STATE_FILE"

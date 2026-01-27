@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# shellcheck disable=SC2317,SC2129,SC1091,SC2120,SC2035,SC2016,SC2310
+# shellcheck disable=SC2317,SC2129,SC1091,SC2120,SC2035,SC2016,SC2310,SC2155,SC2154,SC2034
 
 # 1. exit code
 # 2. message
@@ -364,7 +364,7 @@ setup_build_environment() {
         "linux") setup_linux_environment ;;
         *) exit_message 1 "setup_build_environment: Unknown host platform '$host_platform'" ;;
     esac
-    
+    create_dir "$src_dir"
     create_dir "$work_dir"
     change_dir "$work_dir" || exit
 }
@@ -2078,11 +2078,8 @@ do_configure() {
 		echo -e "INFO: configuring $english_name ($PWD) $configure_name $configure_options" >>"$LOG_FILE" # say it now in case bootstrap fails etc.
 		echo -e "INFO: all touch files ${touch_prefix}_configure* touchname= $touch_name" >>"$LOG_FILE"
 		echo -e "INFO: config options $configure_name $configure_options" >>"$LOG_FILE"
-    if [ -f bootstrap ]; then
-			./bootstrap > >(redirect_output) 2>&1 # some need this to create ./configure :|
-		fi
 		if [[ ! -f $configure_name && -f bootstrap.sh ]]; then # fftw wants to only run this if no configure :|
-			./bootstrap.sh > >(redirect_output) 2>&1
+			(./bootstrap.sh) > >(redirect_output) 2>&1
 		fi
     if [[ ! -f $configure_name && -f configure.ac ]] || needs_autoreconf > >(redirect_output) 2>&1 ; then
       echo -e "INFO: Configure not found. Running autoreconf with existing configure.ac..." >>"$LOG_FILE"
@@ -2095,11 +2092,11 @@ do_configure() {
 		if [[ ! -f $configure_name ]]; then
       if [[ -f gitsub.sh ]]; then
         echo "INFO: gitsub.sh found. Running gitsub.sh..."
-        ./gitsub.sh pull
+        (./gitsub.sh pull) > >(redirect_output) 2>&1
       fi
       if [ -f autogen.sh ]; then
         echo "INFO: autogen.sh found. Running autogen.sh..."
-			  ./autogen.sh > >(redirect_output) 2>&1 # some need this to create ./configure :|
+			  (./autogen.sh) > >(redirect_output) 2>&1 # some need this to create ./configure :|
 		  fi
 		fi
     if [[ ! -f config.h.in && -f configure.ac ]]; then
@@ -2155,7 +2152,7 @@ do_autogen() {
     echo "INFO: (Re-)do_autogen() because $touch_name not found with \"autogen $extra_build_args\"." >>"$LOG_FILE"
     remove_path -f "${touch_prefix}_autogen"*
 		echo -e "INFO: Running ./autogen.sh with:\n  DIR=$cur_dir2\n  \"./autogen.sh --build-"w$bits_target" $extra_build_args\"" >>"$LOG_FILE"
-		./autogen.sh --build-"w$bits_target" $extra_build_args > >(redirect_output) 2>&1 || {
+		(./autogen.sh --build-"w$bits_target" $extra_build_args) > >(redirect_output) 2>&1 || {
 			exit_message 1 "do_autogen: failed ./autogen.sh with $extra_build_args\n see $LOG_FILE for more details"
 		}
 		create_touch_file 0 "$touch_name"
@@ -2602,11 +2599,12 @@ download_and_unpack_file() {
     fi
     local touch_name="$(realpath "$dest_folder"/"$(get_small_touchfile_name "already_unpacked_successfully" "$url")")"
     local touch_file="$(realpath "$dest_folder/$host_touch")"
+    [[ -z "$touch_file" ]] && exit_message 1 "could not determine touch file: $touch_file"
     [[ ! -f "$touch_file" ]] && echo -e "INFO: $touch_file not found during download_and_unpack_file()" >>"$LOG_FILE"
     if [ ! -f "$touch_name" ] || truthy "$build_force"; then
-        remove_path -rf "$dest_folder"
-        create_dir "$dest_folder"
         echo "INFO: Downloading $url into $dest_folder" >>"$LOG_FILE"
+        remove_path -f "$dest_folder"
+        create_dir "$dest_folder"
         if [[ "$filename" == *.zst ]] && ! command -v zstd &> /dev/null; then
              exit_message 1 "download_and_unpack_file: zstd is not installed. Run: sudo $INSTALL_COMMAND install zstd"
         fi
@@ -2985,10 +2983,8 @@ run_valid_build_functions() {
 	local steps=0
 	local current_step=0
   create_dir "$dependency_install_prefix/{lib/pkgconfig,include,bin}"
-  if [[ -n "$start_from" && "$start_from" == build_* ]] && ! array_index_of "$start_from" "${BUILD_STEPS[@]}" >/dev/null; then
-    run_valid_function "$start_from"
-  elif [[ -n "$start_from" && "$start_from" == build_* ]] && truthy "$skip_mode"; then
-    run_valid_function "$start_from"
+  if [[ -n "$start_from" && "$start_from" == build_* ]] && truthy "$skip_mode"; then
+    run_valid_function "$start_from" || exit_message 1 "There was an error running $step.\n See $LOG_FILE for details"
   else
     # Count non-empty steps first
     for step_name in "${BUILD_STEPS[@]}"; do
@@ -3021,7 +3017,7 @@ run_valid_build_functions() {
       fi
       ((current_step++))
       print_progress "$current_step" "$steps" "$step_name"
-      run_valid_function "$step_name" || echo | tee -a "$LOG_FILE"
+      run_valid_function "$step_name" || exit_message 1 "There was an error running $step.\n See $LOG_FILE for details"
     done
     printf "\r\033[KAll dependencies built successfully!\n"
   fi
@@ -3038,7 +3034,6 @@ set_run_state() {
     echo "$step_name" >> "$RUN_STATE_FILE"
   else
     [[ -f "$RUN_STATE_FILE" ]] && remove_path -f "$RUN_STATE_FILE"
-    [[ -f "$BUILT_STATE_FILE" ]] && remove_path -f "$BUILT_STATE_FILE"
   fi
 }
 
@@ -3047,10 +3042,12 @@ check_if_built() {
   if [[ "${INSTALLED_LIBS[$step_name]}" == "1" ]]; then
     return 0
   fi
-  if [[ -f "$BUILT_STATE_FILE" ]] && grep -qFx "$step_name" "$BUILT_STATE_FILE"; then
-    # Sync memory so we don't grep again next time
-    INSTALLED_LIBS["$step_name"]="1"
-    return 0
+  if [[ -f "$BUILT_STATE_FILE" ]]; then
+    if grep -qFx "$step_name" "$BUILT_STATE_FILE" 2>>"$LOG_FILE"; then
+      # Sync memory so we don't grep again next time
+      INSTALLED_LIBS["$step_name"]="1"
+      return 0
+    fi
   fi
   return 1
 }
@@ -3060,7 +3057,7 @@ mark_as_built() {
   INSTALLED_LIBS["$step_name"]="1"
   [[ ! -f "$BUILT_STATE_FILE" ]] && touch "$BUILT_STATE_FILE"
   echo "$step_name" >> "$BUILT_STATE_FILE"
-  chmod -R a+rwx "$BUILT_STATE_FILE";
+  [[ -f "$BUILT_STATE_FILE" ]] && chmod -R a+rwx "$BUILT_STATE_FILE";
 }
 
 run_valid_function() {
@@ -3072,12 +3069,15 @@ run_valid_function() {
   export LDFLAGS=" $LDFLAGS -static-libgcc -static-libstdc++ "
   iswindows && export LDFLAGS=" -static $LDFLAGS"
 	if [[ -n "$step" ]]; then
-    [[ "$step" == build_* ]] && check_if_built "$step" && return 0
+    if [[ "$step" == build_* ]] && check_if_built "$step"; then
+      echo "INFO: $step already built. Skipping." >>"$LOG_FILE"
+      return 0
+    fi
 		change_dir "$src_dir"
 		if declare -F "$step" >/dev/null; then
 			echo -e "INFO: --- Executing step: $step ---" >>"$LOG_FILE"
       set_run_state "$step"
-			"$step" "${arg[@]}" # Execute the function
+			"$step" "${arg[@]}" || exit_message 1 "There was an error running $step.\n See $LOG_FILE for details"
       local status=$?
 			if [[ $status -eq 0 ]]; then
          echo -e "INFO: --- Finished executing step: $step ---" >>"$LOG_FILE"

@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# shellcheck disable=SC2317,SC1091,SC1090,SC2120
+# shellcheck disable=SC2317,SC2129,SC1091,SC2120,SC2035,SC2016,SC2310,SC2155,SC2154,SC2034
 
 get_common_cflags() {
   if [[ -n ${FFMPEG_KIT_LTS_BUILD} ]]; then

@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# shellcheck disable=SC2317,SC1091,SC1090,SC2120
+# shellcheck disable=SC2317,SC2129,SC1091,SC2120,SC2035,SC2016,SC2310,SC2155,SC2154,SC2034
 
 # required for ffmpeg-kit
 build_libjsoncpp() {
@@ -1542,7 +1542,7 @@ download_asiosdk() {
   local lib="$1"
   local DIR="$src_dir/$lib/opt/asiosdk/common"
   if [[ ! -d "$DIR" ]] || [[ -z "$(find "$DIR" -maxdepth 0 -type d -empty)" ]]; then
-    download_and_unpack_file "https://download.steinberg.net/sdk_downloads/ASIO-SDK_2.3.4_2025-10-15.zip" "$src_dir/ASIOSDK"
+    download_and_unpack_file "https://download.steinberg.net/sdk_downloads/ASIO-SDK_2.3.4_2025-10-15.zip" "ASIOSDK"
     touch "$src_dir/ASIOSDK/${host_name}_src_state.touch"
     copy_path "$src_dir/ASIOSDK" "$src_dir/$lib/opt/asiosdk" "-Rfv"
   fi
@@ -1695,7 +1695,7 @@ build_liblc3() {
   fi
 }
 build_iconv_minimal() {
-  local lib="libiconv"
+  local lib="libiconv-minimal"
   local repo="https://ftp.gnu.org/gnu/libiconv/libiconv-1.18.tar.gz"
   local repo_ver="v1.18"
   change_dir "$src_dir"
@@ -1726,15 +1726,19 @@ CFLAGS=\"$CFLAGS\"" "" "minimal"
 # build_iconv             # config_options+= --disable-iconv              # disable iconv [autodetect]
 build_iconv() {
   if ! truthy "$disable_iconv" && truthy "$enable_iconv" || [[ -n "$1" ]]; then
-  
   # install gettext
   run_valid_function "build_iconv_minimal"
   run_valid_function "build_gettext"
   # install full iconv
   local lib="libiconv"
+  local repo="https://ftp.gnu.org/gnu/libiconv/libiconv-1.18.tar.gz"
+  local repo_ver="v1.18"
+  change_dir "$src_dir"
+  download_and_unpack_file "$repo" "$lib"
   change_dir "$src_dir/$lib"
   export CFLAGS="$CFLAGS -fPIC"
   export CXXFLAGS="$CXXFLAGS -fPIC"
+  touch "no.autoreconf"
   generic_configure "--prefix=${dependency_install_prefix} \
 --enable-static \
 --disable-shared \
@@ -1937,6 +1941,7 @@ build_libmp3lame() {
   change_dir "$src_dir"
   download_and_unpack_file "$repo" "$lib" 
   change_dir "$src_dir/$lib"
+  touch "no.autoreconf"
   generic_configure "--enable-nasm --enable-libmpg123"
   disable_nonessential "$src_dir/$lib"
   do_make_and_make_install
@@ -2969,7 +2974,7 @@ build_libtorch() {
   change_dir "$src_dir/$lib" 1
 
   if [ ! -f "$src_dir/$lib/$subdir/$touch_name" ]; then
-      download_and_unpack_file "$repo" "$src_dir/$lib/$subdir"
+      download_and_unpack_file "$repo" "$subdir"
       
       install_prebuilt_binary \
           -n="$base_lib" -v="$repo_ver" \
@@ -3033,7 +3038,7 @@ build_libtensorflow() {
   change_dir "$src_dir/$lib" 1
 
   if [ ! -f "$src_dir/$lib/$subdir/$touch_name" ]; then
-      download_and_unpack_file "$repo" "$src_dir/$lib/$subdir"
+      download_and_unpack_file "$repo" "$subdir"
       
       install_prebuilt_binary \
           -n="$base_lib" -v="$repo_ver" \
@@ -3904,6 +3909,8 @@ build_libzvbi() {
   export ACLOCAL_PATH="$dependency_install_prefix/share/aclocal"
   export PATH="$dependency_install_prefix/bin:$PATH"
   do_autogen
+  change_dir "$src_dir/$lib"
+  touch "no.autoreconf"
   generic_configure "--enable-static \
 --disable-shared \
 --disable-dvb \
@@ -4515,7 +4522,7 @@ build_libnvvm() {
       fi
 
       if [ ! -f "$src_dir/$lib/$touch_name" ]; then
-          download_and_unpack_file "$repo" "$src_dir/$lib"
+          download_and_unpack_file "$repo" "$lib"
           change_dir "$src_dir/$lib"
           install_prebuilt_binary -n="libdevice" -v="$repo_ver" \
               -s="$src_dir/$lib/nvvm" \
@@ -4552,7 +4559,7 @@ build_cuda_crt() {
       fi
 
       if [ ! -f "$src_dir/$lib/$touch_name" ]; then
-          download_and_unpack_file "$repo" "$src_dir/$lib"
+          download_and_unpack_file "$repo" "$lib"
           change_dir "$src_dir/$lib"
           # Only headers
           install_prebuilt_binary -n="$base_lib" -v="13.1.80" \
@@ -4586,7 +4593,7 @@ build_cuda_cudart() {
       fi
 
       if [ ! -f "$src_dir/$lib/$touch_name" ]; then
-          download_and_unpack_file "$repo" "$src_dir/$lib"
+          download_and_unpack_file "$repo" "$lib"
           change_dir "$src_dir/$lib"
           
           install_prebuilt_binary -n="$base_lib" -v="$repo_ver" \
@@ -4626,7 +4633,7 @@ build_cuda_nvcc() {
         uninstall_manifest "$manifest" >>"$LOG_FILE" 2>&1
       fi
       if [ ! -f "$src_dir/$lib/$touch_name" ]; then
-        download_and_unpack_file "$repo" "$src_dir/$lib"
+        download_and_unpack_file "$repo" "$lib"
         install_prebuilt_binary -n="$base_lib" -v="$repo_ver" \
             -s="$src_dir/$lib" \
             -m="$manifest" \
