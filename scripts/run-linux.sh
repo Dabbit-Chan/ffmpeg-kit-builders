@@ -1191,7 +1191,10 @@ build_libdavs2() {
   do_configure "--enable-pic --disable-cli --enable-static --disable-shared"
   disable_nonessential "$src_dir/$lib/build/linux"
   do_make_and_make_install
-  sed -i "s/Version:.*/Version: ${repo_ver}.0/g" "$dependency_install_prefix"/lib/pkgconfig/davs2.pc
+  if [[ ! -f "$install_pkgconfig_dir/davs2.pc" && -f "$src_dir/$lib/build/linux/davs2.pc" ]]; then
+    copy_path "$src_dir/$lib/build/linux/davs2.pc" "$install_pkgconfig_dir/davs2.pc" "-f"
+  fi
+  sed -i "s/Version:.*/Version: ${repo_ver}.0/g" "$install_pkgconfig_dir/davs2.pc"
   change_dir "$src_dir"
   export AS=as
   fi
@@ -1542,7 +1545,9 @@ download_asiosdk() {
   local lib="$1"
   local DIR="$src_dir/$lib/opt/asiosdk/common"
   if [[ ! -d "$DIR" ]] || [[ -z "$(find "$DIR" -maxdepth 0 -type d -empty)" ]]; then
+    change_dir "$src_dir"
     download_and_unpack_file "https://download.steinberg.net/sdk_downloads/ASIO-SDK_2.3.4_2025-10-15.zip" "ASIOSDK"
+    change_dir "$src_dir/ASIOSDK"
     touch "$src_dir/ASIOSDK/${host_name}_src_state.touch"
     copy_path "$src_dir/ASIOSDK" "$src_dir/$lib/opt/asiosdk" "-Rfv"
   fi
@@ -2472,6 +2477,7 @@ build_pixman() {
   change_dir "$src_dir"
 }
 build_cairo() {
+  run_valid_function "build_libpng"
   run_valid_function "build_pixman"
   run_valid_function "build_libfontconfig" 1
    # https://gitlab.freedesktop.org/cairo/cairo
@@ -2495,6 +2501,7 @@ build_cairo() {
 -Dspectre=disabled \
 -Dsymbol-lookup=disabled \
 -Dlzo=disabled \
+-Dpng=enabled \
 -Dfontconfig=enabled \
 -Dfreetype=enabled \
 -Dtee=enabled \
@@ -2613,7 +2620,7 @@ build_librtmp() {
   # https://github.com/mirror/rtmpdump
   local lib="librtmp"
   local repo="git://git.ffmpeg.org/rtmpdump"
-  local repo_ver="2.6"
+  local repo_ver="v2.6"
   activate_meson
   change_dir "$src_dir"
   do_git_checkout "$repo" "$src_dir/$lib" "$repo_ver"
@@ -3311,7 +3318,7 @@ build_curl() {
   run_valid_function "build_openssl" 1
   local lib="curl"
   local repo="https://github.com/curl/curl"
-  local repo_ver="8.17.0"
+  local repo_ver="curl-8_17_0"
   change_dir "$src_dir"
   do_git_checkout "$repo" "$src_dir/$lib" "$repo_ver"
   export CPPFLAGS="$CPPFLAGS -DNGHTTP2_STATICLIB -DPSL_STATIC $config_options"

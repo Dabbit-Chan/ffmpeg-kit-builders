@@ -74,7 +74,10 @@ build_libdavs2() {
 	generic_configure "--enable-pic --disable-asm --disable-cli"
   disable_nonessential "$src_dir/$lib/build/linux"
 	do_make_and_make_install "AS= AR=\"$AR rc \" " "AS= AR=\"$AR rc \" "
-  sed -i "s/Version:.*/Version: ${repo_ver}.0/g" "$dependency_install_prefix"/lib/pkgconfig/davs2.pc
+  if [[ ! -f "$install_pkgconfig_dir/davs2.pc" && -f "$src_dir/$lib/build/linux/davs2.pc" ]]; then
+    copy_path "$src_dir/$lib/build/linux/davs2.pc" "$install_pkgconfig_dir/davs2.pc" "-f"
+  fi
+  sed -i "s/Version:.*/Version: ${repo_ver}.0/g" "$install_pkgconfig_dir/davs2.pc"
 	change_dir "$src_dir"
   reset_cross_vars
 	fi
@@ -4282,6 +4285,7 @@ build_pixman() {
 }
 
 build_cairo() {
+  run_valid_function "build_libpng"
   run_valid_function "build_dlfcn"
 	run_valid_function "build_pixman"
 	run_valid_function "build_libfontconfig" 1
@@ -4306,6 +4310,7 @@ build_cairo() {
 -Dspectre=disabled \
 -Dsymbol-lookup=disabled \
 -Dlzo=disabled \
+-Dpng=enabled \
 -Dfontconfig=enabled \
 -Dfreetype=enabled \
 -Dtee=enabled \
