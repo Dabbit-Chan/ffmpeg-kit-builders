@@ -896,6 +896,7 @@ build_curl() {
     cmake_options+=" -DUSE_LIBRTMP=ON "
     export LIBS="$LIBS -lrtmp -lssl -lcrypto"
   fi
+  export CFLAGS="$CFLAGS -DNGHTTP2_STATICLIB -DPSL_STATIC "
   export CPPFLAGS="$CPPFLAGS -DNGHTTP2_STATICLIB -DPSL_STATIC "
   export CXXFLAGS="$CXXFLAGS -DNGHTTP2_STATICLIB -DPSL_STATIC "
   export LIBS=" $LIBS -lpsl -lidn2 -lunistring -liconv -lbrotlidec -lbrotlicommon -lws2_32 -lwinmm -lz -lcrypt32 -lbcrypt"
