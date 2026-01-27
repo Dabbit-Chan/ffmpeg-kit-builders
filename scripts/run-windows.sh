@@ -1561,7 +1561,7 @@ build_decklink() {
 # build_libzvbi           # config_options+= --enable-libzvbi             # enable teletext support via libzvbi [no]
 build_libzvbi() {
   if ! truthy "$disable_libzvbi" && truthy "$enable_libzvbi"; then
-  run_valid_function "build_gettext_native"
+  # run_valid_function "build_gettext_native"
   reset_cross_vars
 	local lib="libzvbi"
   local repo="https://github.com/zapping-vbi/zvbi"
@@ -1588,11 +1588,9 @@ build_libzvbi() {
 --with-libiconv-prefix=\"$dependency_install_prefix\""
 	disable_nonessential "$src_dir/$lib"
   do_make_and_make_install
-	change_dir "$src_dir"
-  reset_ldflags
-  export PATH=$ORIG_PATH
-  export ACLOCAL_PATH=$ORIG_ACLOCAL_PATH
+  reset_allflags
   unset LIBS
+  change_dir "$src_dir"
 	fi
 }
 # build_libfribidi        # config_options+= --enable-libfribidi          # enable libfribidi, improves drawtext filter [no]
