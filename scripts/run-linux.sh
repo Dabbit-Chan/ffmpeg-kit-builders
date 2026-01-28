@@ -33,6 +33,7 @@ build_ladspa() {
   if ! truthy "$disable_ladspa" && truthy "$enable_ladspa" || [[ -n "$1" ]]; then
   run_valid_function "build_libsndfile"
   run_valid_function "build_libid3tag"
+  run_valid_function "build_libmp3lame"
   local lib="ladspa"
   local repo="http://www.ladspa.org/download/ladspa_sdk_1.17.tgz"
   change_dir "$src_dir"
@@ -136,20 +137,24 @@ build_libdc1394() {
 # build_libdrm            # config_options+= --disable-libdrm             # disable DRM code (Linux) [autodetect]
 build_libdrm() {
   if ! truthy "$disable_libdrm" && truthy "$enable_libdrm" || [[ -n "$1" ]]; then
+  install_missing_packages "valgrind-devel"
   activate_meson
   local repo="https://gitlab.freedesktop.org/mesa/libdrm"
   local lib="libdrm"
   local repo_ver="libdrm-2.4.129"
+  if [[ -d "/usr/include/valgrind" ]]; then
+    create_dir "$dependency_install_prefix/usr/include"
+    ln -sf /usr/include/valgrind "$dependency_install_prefix/usr/include"
+  fi
   change_dir "$src_dir"
   do_git_checkout "$repo" "$src_dir/$lib" "$repo_ver"
   change_dir "$src_dir/$lib"
   export LIBS="-ldl"
-  local meson_options="-Dc_link_args=\"-L${dependency_install_prefix}/lib $LIBS\""
+  local meson_options="-Dcairo-tests=disabled -Dc_link_args=\"-L${dependency_install_prefix}/lib $LIBS\""
   generic_meson "$meson_options"
   disable_nonessential "$src_dir/$lib"
   do_ninja_and_ninja_install
   unset LIBS
-  reset_ldflags
   change_dir "$src_dir"
   fi
 }
@@ -291,19 +296,20 @@ build_libxau() {
 # build_libxcb            # config_options+= --enable-libxcb              # enable X11 grabbing using XCB [autodetect]
 build_libxcb() {
   if ! truthy "$disable_libxcb" && truthy "$enable_libxcb" || [[ -n "$1" ]]; then
-  run_valid_function "build_xcbproto"
-  run_valid_function "build_libxau"
+  # run_valid_function "build_xcbproto"
+  # run_valid_function "build_libxau"
+  install_missing_packages "libxau-devel" "xorg-x11-proto-devel"
   # https://gitlab.freedesktop.org/xorg/lib/libxcb
-  local lib="libxcb"
-  local repo="https://gitlab.freedesktop.org/xorg/lib/libxcb"
-  local repo_ver="libxcb-1.17.0"
-  change_dir "$src_dir"
-  do_git_checkout "$repo" "$src_dir/$lib" "$repo_ver"
-  change_dir "$src_dir/$lib"
-  generic_configure "--enable-static --disable-shared"
-  disable_nonessential "$src_dir/$lib"
-  do_make_and_make_install
-  change_dir "$src_dir"
+  # local lib="libxcb"
+  # local repo="https://gitlab.freedesktop.org/xorg/lib/libxcb"
+  # local repo_ver="libxcb-1.17.0"
+  # change_dir "$src_dir"
+  # do_git_checkout "$repo" "$src_dir/$lib" "$repo_ver"
+  # change_dir "$src_dir/$lib"
+  # generic_configure "--enable-static --disable-shared"
+  # disable_nonessential "$src_dir/$lib"
+  # do_make_and_make_install
+  # change_dir "$src_dir"
   fi
 }
 # build_rkmpp             # config_options+= --enable-rkmpp               # enable Rockchip Media Process Platform code [no]
@@ -338,6 +344,8 @@ build_v4l2_m2m() {
 build_vaapi() {
   if ! truthy "$disable_vaapi" && truthy "$enable_vaapi" || [[ -n "$1" ]]; then
   run_valid_function "build_libdrm" 1
+  run_valid_function "build_xlib" 1
+  # local original_pkg_path=$PKG_CONFIG_PATH
   # https://github.com/intel/libva
   local lib="vaapi"
   local repo="https://github.com/intel/libva"
@@ -345,12 +353,11 @@ build_vaapi() {
   change_dir "$src_dir"
   do_git_checkout "$repo" "$src_dir/$lib" "$repo_ver"
   change_dir "$src_dir/$lib"
-  export CFLAGS="$CFLAGS -I${dependency_install_prefix}/include"
-  export CXXFLAGS="$CXXFLAGS -I${dependency_install_prefix}/include"
-  export CPPFLAGS="$CPPFLAGS -I${dependency_install_prefix}/include"
+  export CFLAGS="$CFLAGS -I${dependency_install_prefix}/include "
+  export CXXFLAGS="$CXXFLAGS -I${dependency_install_prefix}/include "
+  export CPPFLAGS="$CPPFLAGS -I${dependency_install_prefix}/include "
   export LDFLAGS="$LDFLAGS -L${dependency_install_prefix}/lib -lxcb -lXau -lXdmcp -lX11"
-  local original_pkg_path=$PKG_CONFIG_PATH
-  export PKG_CONFIG_PATH="$install_pkgconfig_dir"
+  # export PKG_CONFIG_PATH="$install_pkgconfig_dir"
   export gl_cv_have_ld_version_script=no
   sed -i 's/-Wl,-version-script[^ ]*//g' "$src_dir/$lib/va/Makefile.am"
   autoreconf_library # a handful of them require this to create ./configure :|
@@ -374,11 +381,8 @@ gl_cv_have_ld_version_script=no"
   disable_nonessential "$src_dir/$lib"
   do_make_and_make_install
   unset gl_cv_have_ld_version_script
-  reset_cflags
-  reset_cxxflags
-  reset_cppflags
-  reset_ldflags
-  export PKG_CONFIG_PATH=$original_pkg_path
+  reset_allflags
+  # export PKG_CONFIG_PATH=$original_pkg_path
   change_dir "$src_dir"
   fi
 }
@@ -495,12 +499,7 @@ build_x11() {
 # build_xlib              # config_options+= --disable-xlib               # disable xlib [autodetect]
 build_xlib() {
   if ! truthy "$disable_xlib" && truthy "$enable_xlib" || [[ -n "$1" ]]; then
-  run_valid_function "build_libfreetype" 1
-  run_valid_function "build_libfontconfig" 1
-  run_valid_function "build_x11"
-  run_valid_function "build_libxrender"
-  run_valid_function "build_libxext"
-  run_valid_function "build_libxft"
+  install_missing_packages "libxcb-devel" "libX11-devel" "libXrender-devel" "libXext-devel" "libXft-devel" "libXdmcp-devel" "xorg-x11-xtrans-devel" "xorg-x11-proto-devel" "xorg-x11-util-macros"
   fi
 }
 #endregion---------------------------------------------------------------------
@@ -654,6 +653,7 @@ build_sdl2() {
 # build_sndio             # config_options+= --disable-sndio              # disable sndio support [autodetect]
 build_sndio() {
   if ! truthy "$disable_sndio" && truthy "$enable_sndio"; then
+  run_valid_function "build_alsa"
   # https://github.com/ratchov/sndio
   local lib="sndio"
   local repo="https://github.com/ratchov/sndio"
@@ -866,11 +866,18 @@ build_brotli() {
 -DCMAKE_POSITION_INDEPENDENT_CODE=ON" "$src_dir/$lib"
   disable_nonessential "$src_dir/$lib"
   do_make_and_make_install
-  # Replace all instances of "-R" with "-Wl,-rpath," in all .pc files
-  sed -i.bak 's/Libs.*$/Libs: -L${libdir} -lbrotlicommon/' "$dependency_install_prefix"/lib/pkgconfig/libbrotlicommon.pc # remove rpaths not possible in conf
-  sed -i.bak 's/Libs.*$/Libs: -L${libdir} -lbrotlidec/' "$dependency_install_prefix"/lib/pkgconfig/libbrotlidec.pc
-  sed -i.bak 's/Libs.*$/Libs: -L${libdir} -lbrotlienc/' "$dependency_install_prefix"/lib/pkgconfig/libbrotlienc.pc
-  sed -i 's/-lbrotlidec/-lbrotlidec -lbrotlicommon/g' "$dependency_install_prefix"/lib/pkgconfig/libbrotlidec.pc
+  if [[ ! -f "$install_pkgconfig_dir/libbrotlicommon.pc" && -f "$src_dir/$lib/libbrotlicommon.pc" ]]; then
+    copy_path "$src_dir/$lib/libbrotlicommon.pc" "$install_pkgconfig_dir/libbrotlicommon.pc"
+    add_libs_to_pkg -t="$install_pkgconfig_dir/libbrotlicommon.pc" -l="-lbrotlicommon"
+  fi
+  if [[ ! -f "$install_pkgconfig_dir/libbrotlidec.pc" && -f "$src_dir/$lib/libbrotlidec.pc" ]]; then
+    copy_path "$src_dir/$lib/libbrotlidec.pc" "$install_pkgconfig_dir/libbrotlidec.pc"
+    add_libs_to_pkg -t="$install_pkgconfig_dir/libbrotlidec.pc" -l="-lbrotlidec -lbrotlicommon"
+  fi
+  if [[ ! -f "$install_pkgconfig_dir/libbrotlienc.pc" && -f "$src_dir/$lib/libbrotlienc.pc" ]]; then
+    copy_path "$src_dir/$lib/libbrotlienc.pc" "$install_pkgconfig_dir/libbrotlienc.pc"
+    add_libs_to_pkg -t="$install_pkgconfig_dir/libbrotlienc.pc" -l="-lbrotlienc -lbrotlicommon"
+  fi
   change_dir "$src_dir"
   reset_cflags
   reset_cxxflags
@@ -934,6 +941,10 @@ build_libaom() {
     do_git_checkout "$repo" "$src_dir/$lib" "$repo_ver"
     change_dir "$src_dir/$lib/build" 1
     local cmake_params="-DCMAKE_BUILD_TYPE=Release \
+-DCONFIG_HIGHWAY=0 \
+-DENABLE_EXAMPLES=0 \
+-DENABLE_TOOLS=0 \
+-DENABLE_TESTS=0 \
 -DBUILD_SHARED_LIBS=0 \
 -DENABLE_TESTS=0 \
 -DENABLE_EXAMPLES=0 \
@@ -1018,6 +1029,7 @@ build_libass() {
 # build_libbluray         # config_options+= --enable-libbluray           # enable BluRay reading using libbluray [no]
 build_libbluray() {
   if ! truthy "$disable_libbluray" && truthy "$enable_libbluray"; then
+  run_valid_function "build_lzma" 1
   local lib="libbluray"
   local repo="https://code.videolan.org/videolan/libbluray"
   local repo_ver="1.4.0"
@@ -1071,6 +1083,7 @@ build_libbs2b() {
 build_libcaca() {
   if ! truthy "$disable_libcaca" && truthy "$enable_libcaca"; then
   run_valid_function "build_brotli"
+  run_valid_function "build_libxml2" 1
   local lib="libcaca"
   local repo_ver="v0.99.beta20"
   local repo="https://github.com/cacalabs/libcaca"
@@ -1292,6 +1305,7 @@ build_libfontconfig() {
   if ! truthy "$disable_libfontconfig" && truthy "$enable_libfontconfig" || [[ -n "$1" ]]; then
   run_valid_function "build_libfreetype"
   run_valid_function "build_libxml2" 1
+  run_valid_function "build_lzma" 1
   activate_meson
   local lib="fontconfig"
   local repo="https://gitlab.freedesktop.org/fontconfig/fontconfig"
@@ -1313,6 +1327,7 @@ build_libfontconfig() {
 build_libfreetype() {
   if ! truthy "$disable_libfreetype" && truthy "$enable_libfreetype" || [[ -n "$1" ]]; then
   run_valid_function "build_brotli"
+  run_valid_function "build_libpng"
   local lib="freetype"
   local repo="https://github.com/freetype/freetype"
   local repo_ver="VER-2-14-1"
@@ -1485,7 +1500,6 @@ build_graphite() {
 build_libharfbuzz() {
   if ! truthy "$disable_libharfbuzz" && truthy "$enable_libharfbuzz" || [[ -n "$1" ]]; then
   run_valid_function "build_graphite"
-  run_valid_function "build_glib"
   run_valid_function "build_cairo"
   local lib="harfbuzz"
   local repo_ver="10.4.0"
@@ -1520,7 +1534,12 @@ build_libilbc() {
   local repo_ver="v3.0.4"
   do_git_checkout "$repo" "$src_dir/$lib" "$repo_ver"
   change_dir "$src_dir/$lib"
-  generic_cmake "-DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=OFF -DENABLE_UBSAN=0" "$src_dir/$lib"
+  generic_cmake "-DCMAKE_BUILD_TYPE=Release \
+-DABSL_USE_EXTERNAL_GOOGLETEST=ON \
+-DABSL_USE_GOOGLETEST_HEAD=OFF \
+-DABSL_RUN_TESTS=OFF \
+-DBUILD_SHARED_LIBS=OFF \
+-DENABLE_UBSAN=0" "$src_dir/$lib"
   disable_nonessential "$src_dir/$lib"
   do_make_and_make_install
   change_dir "$src_dir"
@@ -1589,8 +1608,7 @@ build_libjack() {
   disable_nonessential "$src_dir/$lib"
   do_python "" "./waf build -v"
   do_python "" "./waf install -v"
-  reset_cflags
-  reset_cxxflags
+  reset_allflags
   add_libs_to_pkg -t="$install_pkgconfig_dir/jack.pc" -l="-lxcb -liconv"
     fi
 }
@@ -1599,14 +1617,32 @@ build_libjxl() {
   if ! truthy "$disable_libjxl" && truthy "$enable_libjxl"; then
   run_valid_function "build_brotli"
   run_valid_function "build_lcms2" 1
+  run_valid_function "build_cpuinfo"
   local lib="libjxl"
   local repo="https://github.com/libjxl/libjxl"
   local repo_ver="v0.7.2"
   change_dir "$src_dir"
   do_git_checkout "$repo" "$src_dir/$lib" "$repo_ver"
   change_dir "$src_dir/$lib/build" 1
+  local cmake_params="-DCMAKE_BUILD_TYPE=Release \
+-DCMAKE_POLICY_VERSION_MINIMUM=3.5"
+  do_cmake_from_build_dir "$src_dir/$lib" "$cmake_params"
+  change_dir "$src_dir/$lib/third_party/highway/build" 1
+  local cmake_params="-DCMAKE_BUILD_TYPE=Release \
+-DCMAKE_POSITION_INDEPENDENT_CODE=ON \
+-DBUILD_TESTING=OFF \
+-DHWY_ENABLE_TESTS=OFF \
+-DHWY_ENABLE_EXAMPLES=OFF \
+-DCMAKE_POLICY_VERSION_MINIMUM=3.10 \
+-DBUILD_SHARED_LIBS=OFF"
+  do_cmake_from_build_dir "$src_dir/$lib/third_party/highway" "$cmake_params"
+  do_make_and_make_install
+  change_dir "$src_dir/$lib/build" 1
   export LDFLAGS="$LDFLAGS -lbrotlidec -lbrotlicommon"
   local cmake_params="-DCMAKE_BUILD_TYPE=Release \
+-DCMAKE_POLICY_VERSION_MINIMUM=3.5 \
+-DJPEGXL_FORCE_SYSTEM_GTEST=ON \
+-DJPEGXL_FORCE_SYSTEM_HWY=ON \
 -DBUILD_TESTING=OFF \
 -DJPEGXL_STATIC=ON \
 -DJPEGXL_ENABLE_TOOLS=OFF \
@@ -1874,8 +1910,8 @@ build_glib() {
 -Dglib_debug=disabled \
 -Dtests=false \
 --includedir=\"${dependency_install_prefix}/include\" \
--Dc_link_args=\"-L${dependency_install_prefix}/lib -lintl -liconv\" \
--Dcpp_link_args=\"-L${dependency_install_prefix}/lib -lintl -liconv\" \
+-Dc_link_args=\"-L${dependency_install_prefix}/lib -lintl -liconv \" \
+-Dcpp_link_args=\"-L${dependency_install_prefix}/lib -lintl -liconv \" \
 --wrap-mode=nofallback"
   generic_meson "$meson_options"
   do_ninja_and_ninja_install
@@ -1893,8 +1929,8 @@ build_liblensfun() {
   change_dir "$src_dir"
   do_git_checkout "$repo" "$src_dir/$lib" "$repo_ver"
   change_dir "$src_dir/$lib"
-  export CPPFLAGS="$CPPFLAGS -DGLIB_STATIC_COMPILATION -I$dependency_install_prefix/lib/glib-2.0/include"
-  export CXXFLAGS="$CXXLAGS -DGLIB_STATIC_COMPILATION -I$dependency_install_prefix/lib/glib-2.0/include"
+  export CPPFLAGS="$CFLAGS $CPPFLAGS -DGLIB_STATIC_COMPILATION -I$dependency_install_prefix/lib/glib-2.0/include "
+  export CXXFLAGS="$CFLAGS $CXXFLAGS -DGLIB_STATIC_COMPILATION -I$dependency_install_prefix/lib/glib-2.0/include "
   generic_cmake "-DCMAKE_BUILD_TYPE=Release \
 -DBUILD_STATIC=on \
 -DCMAKE_INSTALL_DATAROOTDIR=$dependency_install_prefix \
@@ -2051,6 +2087,7 @@ build_libopencv() {
 # build_libopenh264       # config_options+= --enable-libopenh264         # enable H.264 encoding via OpenH264 [no]
 build_libopenh264() {
   if ! truthy "$disable_libopenh264" && truthy "$enable_libopenh264"; then
+  activate_meson
   local lib="libopenh264"
   local repo="https://github.com/cisco/openh264.git"
   local repo_ver="v2.6.0" #75b9fcd2669c75a99791 # wels/codec_api.h weirdness
@@ -2133,9 +2170,9 @@ build_libopenmpt() {
   #do_git_checkout "$repo" "$src_dir/$lib" "$repo_ver"
   change_dir "$src_dir/$lib"
   touch "no.autoreconf"
-  export CFLAGS="$CFLAGS -I${dependency_install_prefix}/include"
-  export CXXFLAGS="$CXXFLAGS -I${dependency_install_prefix}/include"
-  export LDFLAGS="$LDFLAGS -L${dependency_install_prefix}/lib -L${dependency_install_prefix}/lib/${host_target}"
+  export CFLAGS="$CFLAGS -I${dependency_install_prefix}/include "
+  export CXXFLAGS="$CXXFLAGS -I${dependency_install_prefix}/include "
+  export LDFLAGS="$LDFLAGS -L${dependency_install_prefix}/lib -L${dependency_install_prefix}/lib/${host_target} "
   generic_configure "--enable-shared=no \
 --enable-static=yes \
 --without-pulseaudio \
@@ -2292,6 +2329,7 @@ build_libplacebo() {
     fi
 }
 build_libid3tag() {
+  run_valid_function "build_zlib" 1
   local lib="libid3tag"
   local repo="https://codeberg.org/tenacityteam/libid3tag"
   local repo_ver="0.16.3"
@@ -2321,6 +2359,11 @@ build_libpulse() {
   run_valid_function "build_libxcb" 1
   run_valid_function "build_xlib" 1
   run_valid_function "build_libspeexdsp" 1
+  install_missing_packages "dbus-devel"
+  if [[ -d "/usr/include/dbus-1.0" ]]; then
+    create_dir "$dependency_install_prefix/usr/include/dbus-1.0"
+    ln -sf /usr/include/dbus-1.0/dbus "$dependency_install_prefix/usr/include/dbus-1.0"
+  fi
   activate_meson
   local lib="libpulse"
   local repo="https://github.com/pulseaudio/pulseaudio"
@@ -2332,8 +2375,8 @@ build_libpulse() {
   if [[ ! -f "$src_dir/$lib/.tarball-version" ]]; then
     echo "17.0" > "$src_dir/$lib/.tarball-version"
   fi
-  export CFLAGS="$CFLAGS -I${dependency_install_prefix}/include"
-  export LDFLAGS="$LDFLAGS -L${dependency_install_prefix}/lib -L${dependency_install_prefix}/lib/${host_target}"
+  export CFLAGS="$CFLAGS -I/usr/include -I/usr/lib64/dbus-1.0/include -I${dependency_install_prefix}/include "
+  export LDFLAGS="-static $LDFLAGS -L${dependency_install_prefix}/lib -L${dependency_install_prefix}/lib/${host_target} "
   export LIBS="-lmpg123 -lmp3lame -lid3tag -lvorbisenc -lvorbis -logg -lFLAC -lopus -liconv -lintl"
   local meson_options="-Dtests=false \
 -Ddoxygen=false \
@@ -2480,6 +2523,7 @@ build_cairo() {
   run_valid_function "build_libpng"
   run_valid_function "build_pixman"
   run_valid_function "build_libfontconfig" 1
+  run_valid_function "build_glib"
    # https://gitlab.freedesktop.org/cairo/cairo
   local lib="cairo"
   local repo="https://gitlab.freedesktop.org/cairo/cairo"
@@ -2551,10 +2595,10 @@ build_libthai() {
 }
 build_pango() {
   run_valid_function "build_libharfbuzz" 1
-  run_valid_function "build_libfontconfig" 1
   run_valid_function "build_libthai"
   run_valid_function "build_libexpat"
   run_valid_function "build_xlib" 1
+  run_valid_function "build_libfribidi" 1
    # https://gitlab.gnome.org/GNOME/pango
   local lib="pango"
   local repo="https://gitlab.gnome.org/GNOME/pango"
@@ -2590,7 +2634,6 @@ build_pango() {
 # build_librsvg           # config_options+= --enable-librsvg             # enable SVG rasterization via librsvg [no]
 build_librsvg() {
   if ! truthy "$disable_librsvg" && truthy "$enable_librsvg"; then
-  run_valid_function "build_cairo"
   run_valid_function "build_pango"
   activate_meson
   local lib="librsvg"
@@ -2670,6 +2713,7 @@ build_libshaderc() {
   do_cmake_from_build_dir "$src_dir/$lib" "-DCMAKE_BUILD_TYPE=release \
 -DSHADERC_SKIP_EXAMPLES=ON \
 -DSHADERC_SKIP_TESTS=ON \
+-DSHADERC_SKIP_EXECUTABLES=ON \
 -DSPIRV_SKIP_TESTS=ON \
 -DSHADERC_SKIP_COPYRIGHT_CHECK=ON \
 -DENABLE_EXCEPTIONS=ON \
@@ -2832,6 +2876,7 @@ build_libsrt() {
 build_libssh() {
   if ! truthy "$disable_libssh" && truthy "$enable_libssh"; then
   run_valid_function "build_openssl" 1
+  run_valid_function "build_zlib" 1
   local lib="libssh"
   # https://github.com/canonical/libssh
   local repo="https://github.com/canonical/libssh"
@@ -2861,14 +2906,37 @@ build_cpuinfo() {
   local repo="https://github.com/pytorch/cpuinfo"
   change_dir "$src_dir"
   do_git_checkout "$repo" "$src_dir/$lib"
-  change_dir "$src_dir/$lib/deps/clog/build" 1
+  change_dir "$src_dir/$lib/build" 1
   do_cmake_from_build_dir "$src_dir/$lib" "-DCMAKE_BUILD_TYPE=Release \
+-DCPUINFO_LIBRARY_TYPE=static \
+-DCMAKE_POSITION_INDEPENDENT_CODE=ON \
+-DBUILD_SHARED_LIBS=OFF"
+  change_dir "$src_dir/$lib/deps/googletest/build" 1
+  do_cmake_from_build_dir "$src_dir/$lib/deps/googletest" "-DCMAKE_BUILD_TYPE=Release \
+-DCMAKE_POSITION_INDEPENDENT_CODE=ON \
+-DCMAKE_POLICY_VERSION_MINIMUM=3.5 \
+-DBUILD_SHARED_LIBS=OFF"
+  do_make_and_make_install
+  change_dir "$src_dir/$lib/deps/googlebenchmark/build" 1
+  do_cmake_from_build_dir "$src_dir/$lib/deps/googlebenchmark" "-DCMAKE_BUILD_TYPE=Release \
+-DCMAKE_POSITION_INDEPENDENT_CODE=ON \
+-DCMAKE_POLICY_VERSION_MINIMUM=3.5 \
+-DGOOGLETEST_PATH=\"$src_dir/$lib/deps/googletest\" \
+-DBENCHMARK_ENABLE_WERROR=OFF \
+-DBUILD_SHARED_LIBS=OFF"
+  do_make_and_make_install
+  change_dir "$src_dir/$lib/deps/clog/build" 1
+  do_cmake_from_build_dir "$src_dir/$lib/deps/clog" "-DCMAKE_BUILD_TYPE=Release \
 -DCLOG_BUILD_TESTS=OFF \
 -DCMAKE_POSITION_INDEPENDENT_CODE=ON \
+-DCMAKE_POLICY_VERSION_MINIMUM=3.5 \
 -DBUILD_SHARED_LIBS=OFF"
   do_make_and_make_install
   change_dir "$src_dir/$lib/build" 1
   do_cmake_from_build_dir "$src_dir/$lib" "-DCMAKE_BUILD_TYPE=Release \
+-DUSE_SYSTEM_LIBS=ON \
+-DUSE_SYSTEM_GOOGLEBENCHMARK=ON \
+-DUSE_SYSTEM_GOOGLETEST=ON \
 -DCPUINFO_BUILD_UNIT_TESTS=OFF \
 -DCPUINFO_BUILD_TOOLS=OFF \
 -DCPUINFO_BUILD_MOCK_TESTS=OFF \
@@ -2940,6 +3008,7 @@ build_libopenvino() {
 # build_libtorch          # config_options+= --enable-libtorch            # enable Torch as one DNN backend [no]
 build_libtorch() {
   if ! truthy "$disable_libtorch" && truthy "$enable_libtorch" && [[ "$bits_target" == "64" ]]; then
+  run_valid_function "build_cpuinfo"
   local base_lib="libtorch"
   local lib="$base_lib-$host_target"
   local subdir=""
@@ -2983,6 +3052,12 @@ build_libtorch() {
   if [ ! -f "$src_dir/$lib/$subdir/$touch_name" ]; then
       download_and_unpack_file "$repo" "$subdir"
       
+      find "$src_dir/$lib/$subdir/lib" -type f -name "libcpuinfo*" -delete
+      find "$src_dir/$lib/$subdir/lib" -type f -name "libgmock*" -delete
+      find "$src_dir/$lib/$subdir/lib" -type f -name "libgtest*" -delete
+      find "$src_dir/$lib/$subdir/lib" -type f -name "libbenchmark*" -delete
+      find "$src_dir/$lib/$subdir/lib" -type f -name "libhwy*" -delete
+
       install_prebuilt_binary \
           -n="$base_lib" -v="$repo_ver" \
           -s="$src_dir/$lib/$subdir" \
@@ -3202,8 +3277,8 @@ build_libarchive() {
   change_dir "$src_dir"
   do_git_checkout "$repo" "$src_dir/$lib" "$repo_ver"
   change_dir "$src_dir/$lib"
-  export CFLAGS="$CFLAGS -I${dependency_install_prefix}/include"
-  export LDFLAGS="$LDFLAGS -L${dependency_install_prefix}/lib -L${dependency_install_prefix}/lib/${host_target}"
+  export CFLAGS="$CFLAGS -I${dependency_install_prefix}/include "
+  export LDFLAGS="$LDFLAGS -L${dependency_install_prefix}/lib -L${dependency_install_prefix}/lib/${host_target} "
   generic_configure "--enable-static \
 --disable-shared \
 --bindir=$dependency_install_prefix/bin \
@@ -3390,6 +3465,7 @@ LIBLEPT_HEADERSDIR=$dependency_install_prefix/include \
 # build_libtheora         # config_options+= --enable-libtheora           # enable Theora encoding via libtheora [no]
 build_libtheora() {
   if ! truthy "$disable_libtheora" && truthy "$enable_libtheora"; then
+  run_valid_function "build_libogg"
   local lib="libtheora"
   local repo="https://github.com/xiph/theora"
   local repo_ver="v1.2.0"
@@ -4266,6 +4342,8 @@ build_pocketsphinx() {
   if ! truthy "$disable_pocketsphinx" && truthy "$enable_pocketsphinx"; then
   run_valid_function "build_alsa"
   run_valid_function "build_libunwind"
+  run_valid_function "build_lzma"
+  run_valid_function "build_glib"
   local parent="pocketsphinx"
   local lib="swig"
   local repo="https://sourceforge.net/projects/swig/files/swig/swig-2.0.12/swig-2.0.12.tar.gz/download"
@@ -4363,9 +4441,9 @@ build_vapoursynth() {
   ln -sf "$py_root/include/$py_ver" "$dependency_install_prefix/include/"
   find "$py_root/lib" -maxdepth 1 -name "lib$py_ver*" -exec ln -sf {} "$dependency_install_prefix/lib/" \;
   fi
-  export CXXFLAGS="$CXXFLAGS -I$dependency_install_prefix/include/$py_ver"
-  export CPPFLAGS="$CPPFLAGS -I$dependency_install_prefix/include/$py_ver"
-  export CFLAGS="$CFLAGS -I$dependency_install_prefix/include/$py_ver"
+  export CXXFLAGS="$CXXFLAGS -I$dependency_install_prefix/include/$py_ver "
+  export CPPFLAGS="$CPPFLAGS -I$dependency_install_prefix/include/$py_ver "
+  export CFLAGS="$CFLAGS -I$dependency_install_prefix/include/$py_ver "
   export LDFLAGS="$LDFLAGS -L/opt/_internal/cpython-3.12.12"
   generic_meson "-Denable_vspipe=false -Denable_python_module=false"
   disable_nonessential "$src_dir/$lib"
@@ -4490,6 +4568,7 @@ build_nvenc() {
 build_vdpau() {
   if ! truthy "$disable_vdpau" && truthy "$enable_vdpau"; then
   echo "WARNING: This is a non-gpl library. Binaries including this library are non-redistributable!" >>"$LOG_FILE"
+  run_valid_function "build_xlib" 1
   activate_meson
   local lib="vdpau"
   local repo="https://gitlab.freedesktop.org/vdpau/libvdpau"
@@ -4498,6 +4577,7 @@ build_vdpau() {
   do_git_checkout "$repo" "$src_dir/$lib" "$repo_ver"
   change_dir "$src_dir/$lib"
   export LIBS="-lX11 -lxcb -lXau -lXdmcp"
+  export LDFLAGS="-static $LDFLAGS"
   local meson_options="-Ddocumentation=false \
 -Dc_link_args=\"-L${dependency_install_prefix}/lib $LIBS\""
   generic_meson "$meson_options"
@@ -4505,6 +4585,7 @@ build_vdpau() {
   do_ninja_and_ninja_install
   unset LIBS
   change_dir "$src_dir"
+  reset_allflags
   fi
 }
 build_libnvvm() {

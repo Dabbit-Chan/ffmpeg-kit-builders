@@ -395,7 +395,7 @@ setup_windows_environment() {
     
     create_dir "$install_pkgconfig_dir"
     create_dir "$work_dir/pkgconfig"
-    create_dir "$dependency_install_prefix/{lib,include}"
+    create_dir "$dependency_install_prefix/{bin,lib/pkgconfig,include,usr/include}"
 
     # Common compiler flags for Windows    
     if [[ $bits_target == 64 ]]; then
@@ -436,7 +436,7 @@ setup_linux_environment() {
     export dependency_install_prefix="$work_dir/libraries"
     export install_pkgconfig_dir="${dependency_install_prefix}/lib/pkgconfig"
     
-    export PKG_CONFIG_PATH="$PKG_CONFIG_PATH:$dependency_install_prefix/share/pkgconfig:$install_pkgconfig_dir:$dependency_install_prefix/lib/$host_target/pkgconfig:$work_dir/pkgconfig:$ffmpeg_install_prefix/lib/pkgconfig:/usr/lib/$host_target/pkgconfig:/usr/lib/pkgconfig"
+    export PKG_CONFIG_PATH="$PKG_CONFIG_PATH:$dependency_install_prefix/share/pkgconfig:$install_pkgconfig_dir:$dependency_install_prefix/lib/$host_target/pkgconfig:$work_dir/pkgconfig:$ffmpeg_install_prefix/lib/pkgconfig:/usr/lib/$host_target/pkgconfig:/usr/lib/pkgconfig:/usr/lib64/pkgconfig:/usr/share/pkgconfig"
     export PKG_CONFIG_LIBDIR="$PKG_CONFIG_PATH"
     export PKG_CONFIG_SYSROOT_DIR="$dependency_install_prefix"
     export PATH="$ffmpeg_install_prefix/bin:$dependency_install_prefix/bin:$original_path"
@@ -462,7 +462,7 @@ setup_linux_environment() {
 
     create_dir "$install_pkgconfig_dir"
     create_dir "$work_dir/pkgconfig"
-    create_dir "$dependency_install_prefix/{lib,include}"
+    create_dir "$dependency_install_prefix/{bin,lib/pkgconfig,include,usr/include}"
 }
 
 iswindows() {
@@ -1082,7 +1082,7 @@ check_missing_packages() {
 	# libtool check is wonky...
 	check_packages+=('libtoolize') # the rest of the world
 	# Use hash to check if the packages exist or not. Type is a bash builtin which I'm told behaves differently between different versions of bash.
-	install_missing_packages=$(get_missing_packages "${check_packages[@]}")
+	! truthy "$skip_pkg_check" && mapfile -t missing_packages < <(get_missing_packages "${check_packages[@]}")
   # for package in "${check_packages[@]}"; do
 	# 	  check_package "$package" || missing_packages=("$package" "${missing_packages[@]}")
 	# done
@@ -4943,7 +4943,7 @@ copy_and_link() {
 # Helper: Define complex libs that require shared linking
 is_shared_library() {
   case "${1,,}" in
-    *pulse*|*jack*|*openvino*|*cuda*|*tensorflow*|*torch*|*vdpau*|*nvcc*|*python*) return 0 ;;
+    *jack*|*openvino*|*cuda*|*tensorflow*|*torch*|*vdpau*|*nvcc*|*python*) return 0 ;;
     *) return 1 ;;
   esac
 }

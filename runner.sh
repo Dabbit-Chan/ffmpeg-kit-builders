@@ -206,6 +206,10 @@ while [ $# -gt 0 ]; do
   --resume)
     shift
     ;;
+  --skip-pkg-check)
+    export skip_pkg_check=y
+    shift
+    ;;
   --skip-validation|--skip-val|--skip)
     export skip_validation=y
     shift
