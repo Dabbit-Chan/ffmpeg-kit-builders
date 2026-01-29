@@ -1082,20 +1082,16 @@ build_libbs2b() {
 # build_libcaca           # config_options+= --enable-libcaca             # enable textual display using libcaca [no]
 build_libcaca() {
   if ! truthy "$disable_libcaca" && truthy "$enable_libcaca"; then
-  run_valid_function "build_brotli"
-  run_valid_function "build_libxml2" 1
   local lib="libcaca"
   local repo_ver="v0.99.beta20"
   local repo="https://github.com/cacalabs/libcaca"
   change_dir "$src_dir"
   do_git_checkout "$repo" "$src_dir/$lib" "$repo_ver"
   change_dir "$src_dir/$lib"
-  export LDFLAGS="$LDFLAGS -lbrotlidec -lbrotlicommon -liconv -lxml2 -lglib-2.0 -lpcre2-8 -pthread -lffi -lz -lgraphite2"
   sed -i 's/AC_PREREQ([2.71])/# AC_PREREQ([2.71])/g' configure.ac
   generic_configure "--libdir=$dependency_install_prefix/lib \
 --disable-csharp \
 --disable-java  \
---disable-cxx \
 --disable-python \
 --disable-ruby \
 --disable-doc \

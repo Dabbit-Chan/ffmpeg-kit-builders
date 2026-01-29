@@ -146,26 +146,27 @@ CPPFLAGS=\"\"" #doesnt like host variable
 # build_libcaca           # config_options+= --enable-libcaca             # enable textual display using libcaca [no]
 build_libcaca() {
   if ! truthy "$disable_libcaca" && truthy "$enable_libcaca"; then
-	run_valid_function "build_brotli"
   local lib="libcaca"
   local repo_ver="v0.99.beta20"
   local repo="https://github.com/cacalabs/libcaca"
 	change_dir "$src_dir"
   do_git_checkout "$repo" "$src_dir/$lib" "$repo_ver"
   change_dir "$src_dir/$lib"
-  export LDFLAGS="$LDFLAGS -lbrotlidec -lbrotlicommon -liconv -lxml2 -lglib-2.0 -lpcre2-8 -pthread -lffi -lz -lgraphite2"
   [[ ! -f "caca/figfont.c.bak" ]] && copy_path "caca/figfont.c" "caca/figfont.c.bak" "-fv" >>"$LOG_FILE" 2>&1
   [[ ! -f "caca/string.c.bak" ]] && copy_path "caca/string.c" "caca/string.c.bak" "-fv" >>"$LOG_FILE" 2>&1
   apply_patch "$PATCHDIR/libcaca_git_stdio-cruft.diff"
   sed -i 's/AC_PREREQ([2.71])/# AC_PREREQ([2.71])/g' configure.ac
   generic_configure "--disable-csharp \
+--disable-csharp \
 --disable-java  \
 --disable-cxx \
 --disable-python \
 --disable-ruby \
 --disable-doc \
 --disable-cocoa \
+--disable-tools \
 --disable-ncurses \
+--disable-pango \
 --disable-x11 \
 --disable-gl"
   change_dir "$src_dir/$lib/caca"
@@ -473,7 +474,7 @@ build_libzimg() {
 }
 # build_libopenjpeg       # config_options+= --enable-libopenjpeg         # enable JPEG 2000 encoding via OpenJPEG [no]
 build_libopenjpeg() {
-  if ! truthy "$disable_libopenjpeg" && truthy "$enable_libopenjpeg"; then
+  if ! truthy "$disable_libopenjpeg" && truthy "$enable_libopenjpeg" || [[ -n "$1" ]]; then
 	local lib="libopenjpeg"
   local repo="https://github.com/uclouvain/openjpeg"
   local repo_ver="v2.5.4"
@@ -551,6 +552,7 @@ build_glfw() {
 
 build_libpng() {
 	run_valid_function "build_zlib" 1
+  reset_allflags
 	local lib="libpng"
   local repo_ver="v1.6.53"
   local repo="https://github.com/glennrp/libpng"
@@ -610,11 +612,18 @@ build_brotli() {
 -DCMAKE_POSITION_INDEPENDENT_CODE=ON" "$src_dir/$lib"
   disable_nonessential "$src_dir/$lib"
 	do_make_and_make_install
-  
-  add_libs_to_pkg -t="$install_pkgconfig_dir/libbrotlicommon.pc" -l="-lbrotlicommon"
-  add_libs_to_pkg -t="$install_pkgconfig_dir/libbrotlidec.pc" -l="-lbrotlidec -lbrotlicommon"
-  add_libs_to_pkg -t="$install_pkgconfig_dir/libbrotlienc.pc" -l="-lbrotlienc -lbrotlicommon"
-  
+  if [[ ! -f "$install_pkgconfig_dir/libbrotlicommon.pc" && -f "$src_dir/$lib/libbrotlicommon.pc" ]]; then
+    copy_path "$src_dir/$lib/libbrotlicommon.pc" "$install_pkgconfig_dir/libbrotlicommon.pc"
+    add_libs_to_pkg -t="$install_pkgconfig_dir/libbrotlicommon.pc" -l="-lbrotlicommon"
+  fi
+  if [[ ! -f "$install_pkgconfig_dir/libbrotlidec.pc" && -f "$src_dir/$lib/libbrotlidec.pc" ]]; then
+    copy_path "$src_dir/$lib/libbrotlidec.pc" "$install_pkgconfig_dir/libbrotlidec.pc"
+    add_libs_to_pkg -t="$install_pkgconfig_dir/libbrotlidec.pc" -l="-lbrotlidec -lbrotlicommon"
+  fi
+  if [[ ! -f "$install_pkgconfig_dir/libbrotlienc.pc" && -f "$src_dir/$lib/libbrotlienc.pc" ]]; then
+    copy_path "$src_dir/$lib/libbrotlienc.pc" "$install_pkgconfig_dir/libbrotlienc.pc"
+    add_libs_to_pkg -t="$install_pkgconfig_dir/libbrotlienc.pc" -l="-lbrotlienc -lbrotlicommon"
+  fi
 	change_dir "$src_dir"
   reset_cflags
   reset_cxxflags
@@ -664,7 +673,6 @@ build_graphite() {
 build_libharfbuzz() {
   if ! truthy "$disable_libharfbuzz" && truthy "$enable_libharfbuzz" || [[ -n "$1" ]]; then
 	run_valid_function "build_graphite"
-	run_valid_function "build_glib"
 	run_valid_function "build_cairo"
   activate_meson
 	local lib="harfbuzz"
@@ -718,6 +726,7 @@ build_libfontconfig() {
   if ! truthy "$disable_libfontconfig" && truthy "$enable_libfontconfig" || [[ -n "$1" ]]; then
 	run_valid_function "build_libfreetype"
 	run_valid_function "build_libxml2" 1
+  run_valid_function "build_lzma" 1
 	activate_meson
 	local lib="fontconfig"
   local repo_ver="2.17.1"
@@ -788,6 +797,7 @@ build_libunistring() {
 
 build_libidn2() {
 	run_valid_function "build_libunistring"
+  run_valid_function "build_iconv"
   local repo="https://ftp.gnu.org/gnu/libidn/libidn2-2.3.8.tar.gz"
   local lib="libidn2"
   local repo_ver="2.3.8"
@@ -991,6 +1001,7 @@ build_libspeexdsp() {
 # build_libtheora         # config_options+= --enable-libtheora           # enable Theora encoding via libtheora [no]
 build_libtheora() {
   if ! truthy "$disable_libtheora" && truthy "$enable_libtheora"; then
+  run_valid_function "build_libogg"
 	local lib="libtheora"
   local repo="https://github.com/xiph/theora"
   local repo_ver="v1.2.0"
@@ -1176,6 +1187,7 @@ EXAMPLES=0 \
 OPENMPT123=0 \
 TEST=0" # OPENMPT123=1 >>> fail
   add_libs_to_pkg -t="$install_pkgconfig_dir/libopenmpt.pc" -p="-lrpcrt4"
+  add_libs_to_pkg -t="$install_pkgconfig_dir/libout123.pc" -p="-lwinmm"
 	change_dir "$src_dir"
 	fi
 }
@@ -1209,7 +1221,12 @@ build_libilbc() {
   change_dir "$src_dir"
   do_git_checkout "$repo" "$src_dir/$lib" "$repo_ver"
   change_dir "$src_dir/$lib"
-	generic_cmake "-DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=OFF -DENABLE_UBSAN=0" "$src_dir/$lib"
+	  generic_cmake "-DCMAKE_BUILD_TYPE=Release \
+-DABSL_USE_EXTERNAL_GOOGLETEST=ON \
+-DABSL_USE_GOOGLETEST_HEAD=OFF \
+-DABSL_RUN_TESTS=OFF \
+-DBUILD_SHARED_LIBS=OFF \
+-DENABLE_UBSAN=0" "$src_dir/$lib"
 	disable_nonessential "$src_dir/$lib"
   do_make_and_make_install
 	change_dir "$src_dir"
@@ -1251,6 +1268,8 @@ build_libgme() {
 # build_libbluray         # config_options+= --enable-libbluray           # enable BluRay reading using libbluray [no]
 build_libbluray() {
   if ! truthy "$disable_libbluray" && truthy "$enable_libbluray"; then
+  run_valid_function "build_lzma" 1
+  run_valid_function "build_libxml2" 1
 	local lib="libbluray"
   local repo="https://code.videolan.org/videolan/libbluray"
   local repo_ver="1.4.0"
@@ -1376,12 +1395,6 @@ build_libsnappy() {
   do_make_and_make_install
   remove_path -f "$dependency_install_prefix/lib/libsnappy.dll.a" # unintall shared :|
 	change_dir "$src_dir"
-  while IFS= read -r -d '' file; do
-    add_libs_to_pkg -t="$file" -l="-lshlwapi"
-  done < <(find "$install_pkgconfig_dir" -name "benchmark*.pc" -print0)
-  if [[ -f "$install_pkgconfig_dir/libhwy-test.pc" ]]; then
-    remove_path -f "$install_pkgconfig_dir/libhwy-test.pc"
-  fi
 	fi
 }
 
@@ -1535,6 +1548,7 @@ build_libvidstab() {
 # build_libmysofa         # config_options+= --enable-libmysofa           # enable libmysofa, needed for sofalizer filter [no]
 build_libmysofa() {
   if ! truthy "$disable_libmysofa" && truthy "$enable_libmysofa"; then
+  run_valid_function "build_zlib" 1
 	local lib="libmysofa"
   local repo="https://github.com/hoene/libmysofa"
   local repo_ver="latest"
@@ -1565,8 +1579,10 @@ build_decklink() {
 # build_libzvbi           # config_options+= --enable-libzvbi             # enable teletext support via libzvbi [no]
 build_libzvbi() {
   if ! truthy "$disable_libzvbi" && truthy "$enable_libzvbi"; then
-  # run_valid_function "build_gettext_native"
+  run_valid_function "build_gettext_native"
   reset_cross_vars
+  run_valid_function "build_iconv"
+  run_valid_function "build_libpng"
 	local lib="libzvbi"
   local repo="https://github.com/zapping-vbi/zvbi"
   local repo_ver="v0.2.44"
@@ -1772,8 +1788,8 @@ build_liblensfun() {
 	change_dir "$src_dir"
   do_git_checkout "$repo" "$src_dir/$lib" "$repo_ver"
   change_dir "$src_dir/$lib"
-	export CPPFLAGS="$CPPFLAGS -DGLIB_STATIC_COMPILATION -I$dependency_install_prefix/lib/glib-2.0/include"
-	export CXXFLAGS="$CFLAGS -DGLIB_STATIC_COMPILATION -I$dependency_install_prefix/lib/glib-2.0/include"
+	export CPPFLAGS="$CFLAGS $CPPFLAGS -DGLIB_STATIC_COMPILATION -I$dependency_install_prefix/lib/glib-2.0/include"
+	export CXXFLAGS="$CFLAGS $CXXFLAGS -DGLIB_STATIC_COMPILATION -I$dependency_install_prefix/lib/glib-2.0/include"
 	generic_cmake "-DCMAKE_BUILD_TYPE=Release \
 -DBUILD_STATIC=on \
 -DCMAKE_INSTALL_DATAROOTDIR=$dependency_install_prefix \
@@ -1930,7 +1946,7 @@ build_libopenh264() {
 # build_libaom            # config_options+= --enable-libaom              # enable AV1 video encoding/decoding via libaom [no]
 build_libaom() {
   if ! truthy "$disable_libaom" && truthy "$enable_libaom"; then
-	local lib="aom"
+	local lib="libaom"
   local repo_ver="v3.13.1"
   local repo="https://aomedia.googlesource.com/aom"
 	change_dir "$src_dir"
@@ -1943,6 +1959,10 @@ build_libaom() {
 	fi
 	change_dir "$src_dir/$lib/build" 1
   local cmake_params="-DCMAKE_BUILD_TYPE=Release \
+-DCONFIG_HIGHWAY=0 \
+-DENABLE_EXAMPLES=0 \
+-DENABLE_TOOLS=0 \
+-DENABLE_TESTS=0 \
 -DBUILD_SHARED_LIBS=0 \
 -DENABLE_TESTS=0 \
 -DENABLE_EXAMPLES=0 \
@@ -2127,14 +2147,32 @@ build_libjxl() {
   if ! truthy "$disable_libjxl" && truthy "$enable_libjxl"; then
 	run_valid_function "build_brotli"
 	run_valid_function "build_lcms2" 1
+  run_valid_function "build_cpuinfo"
 	local lib="libjxl"
   local repo="https://github.com/libjxl/libjxl"
   local repo_ver="v0.7.2"
 	change_dir "$src_dir"
   do_git_checkout "$repo" "$src_dir/$lib" "$repo_ver"
   change_dir "$src_dir/$lib/build" 1
+  local cmake_params="-DCMAKE_BUILD_TYPE=Release \
+-DCMAKE_POLICY_VERSION_MINIMUM=3.5"
+  do_cmake_from_build_dir "$src_dir/$lib" "$cmake_params"
+  change_dir "$src_dir/$lib/third_party/highway/build" 1
+  local cmake_params="-DCMAKE_BUILD_TYPE=Release \
+-DCMAKE_POSITION_INDEPENDENT_CODE=ON \
+-DBUILD_TESTING=OFF \
+-DHWY_ENABLE_TESTS=OFF \
+-DHWY_ENABLE_EXAMPLES=OFF \
+-DCMAKE_POLICY_VERSION_MINIMUM=3.10 \
+-DBUILD_SHARED_LIBS=OFF"
+  do_cmake_from_build_dir "$src_dir/$lib/third_party/highway" "$cmake_params"
+  do_make_and_make_install
+  change_dir "$src_dir/$lib/build" 1
 	export LDFLAGS="$LDFLAGS -lbrotlidec -lbrotlicommon"
   local cmake_params="-DCMAKE_BUILD_TYPE=Release \
+-DCMAKE_POLICY_VERSION_MINIMUM=3.5 \
+-DJPEGXL_FORCE_SYSTEM_GTEST=ON \
+-DJPEGXL_FORCE_SYSTEM_HWY=ON \
 -DBUILD_TESTING=OFF \
 -DJPEGXL_STATIC=ON \
 -DJPEGXL_ENABLE_TOOLS=OFF \
@@ -2643,17 +2681,13 @@ CXX=g++ \
 CROSS_COMPILE="
   reset_cross_vars
 	change_dir "$src_dir"
-  while IFS= read -r -d '' file; do
-    add_libs_to_pkg -t="$file" -l="-lshlwapi"
-  done < <(find "$install_pkgconfig_dir" -name "benchmark*.pc" -print0)
-  if [[ -f "$install_pkgconfig_dir/libhwy-test.pc" ]]; then
-    remove_path -f "$install_pkgconfig_dir/libhwy-test.pc"
-  fi
 }
 # build_pocketsphinx      # config_options+= --enable-pocketsphinx        # enable PocketSphinx, needed for asr filter [no]
 build_pocketsphinx() {
   if ! truthy "$disable_pocketsphinx" && truthy "$enable_pocketsphinx"; then
   run_valid_function "build_dlfcn"
+  run_valid_function "build_lzma"
+  run_valid_function "build_glib"
   clear_cross_vars
   local parent="pocketsphinx"
   local lib="swig"
@@ -2822,6 +2856,8 @@ build_librist() {
 build_librtmp() {
   if ! truthy "$disable_librtmp" && truthy "$enable_librtmp" || [[ -n "$1" ]]; then
 	# https://github.com/mirror/rtmpdump
+  run_valid_function "build_zlib" 1
+  run_valid_function "build_openssl" 1
 	local lib="librtmp"
   local repo="git://git.ffmpeg.org/rtmpdump"
   local repo_ver="v2.6"
@@ -2911,6 +2947,7 @@ build_libsmbclient() {
 build_libssh() {
   if ! truthy "$disable_libssh" && truthy "$enable_libssh" || [[ -n "$1" ]]; then
 	run_valid_function "build_openssl" 1
+  run_valid_function "build_zlib" 1
 	# https://github.com/canonical/libssh
 	local lib="libssh"
   # https://github.com/canonical/libssh
@@ -2925,6 +2962,7 @@ build_libssh() {
 -DWITH_TESTING=OFF \
 -DWITH_SERVER=OFF \
 -DWITH_ZLIB=ON \
+-DZLIB_LIBRARY=\"$dependency_install_prefix\" \
 -DWITH_SFTP=ON \
 -DWITH_GSSAPI=OFF \
 -DWITH_NACL=OFF \
@@ -3195,7 +3233,6 @@ build_libtensorflow() {
 # build_libopenvino       # config_options+= --enable-libopenvino         # enable OpenVINO as a DNN module backend for DNN based filters like dnn_processing [no]
 build_libopenvino() {
   if ! truthy "$disable_libopenvino" && truthy "$enable_libopenvino" && [[ $bits_target == 64 ]]; then
-    run_valid_function "build_cpuinfo"
     local lib_name="libopenvino"
     local repo_ver="2025.4.0"
     local repo="https://storage.openvinotoolkit.org/repositories/openvino/packages/2025.4/windows/openvino_toolkit_windows_2025.4.0.20398.8fdad55727d_x86_64.zip"
@@ -3245,7 +3282,7 @@ build_libopenvino() {
         sed -i -E 's/^([[:space:]]*)BOOLEAN,/\1OV_BOOLEAN,/g' "$dependency_install_prefix/include/openvino/c/ov_common.h"
         fi
     fi
-    add_libs_to_pkg -t="$install_pkgconfig_dir/libout123.pc" -l="-lwinmm"
+    add_libs_to_pkg -t="$install_pkgconfig_dir/openvino.pc" -l="-lwinmm"
   fi
 }
 # build_libtorch          # config_options+= --enable-libtorch            # enable Torch as one DNN backend [no]
@@ -3253,6 +3290,7 @@ build_libtorch() {
   if ! truthy "$disable_libtorch" && truthy "$enable_libtorch" && [[ $bits_target == 64 ]]; then
     # https://github.com/pytorch/pytorch # compiling from source fails and is complicated. 
     # echo -e "WARNING: [disabled] Using $lib may cause segmentation faults due to ABI mismatch (mingw vs mscv)" >>"$LOG_FILE"
+    run_valid_function "build_cpuinfo"
     local lib_name="libtorch"
     local lib="$lib_name-$host_name"
     local repo_ver="2.9.1"
@@ -3289,6 +3327,12 @@ build_libtorch() {
 
     if [ ! -f "$src_dir/$lib/$subdir/$touch_name" ]; then
         download_and_unpack_file "$repo" "$subdir"
+
+        find "$src_dir/$lib/$subdir/lib" -type f -name "*cpuinfo*" -delete
+        find "$src_dir/$lib/$subdir/lib" -type f -name "*gmock*" -delete
+        find "$src_dir/$lib/$subdir/lib" -type f -name "*gtest*" -delete
+        find "$src_dir/$lib/$subdir/lib" -type f -name "*benchmark*" -delete
+        find "$src_dir/$lib/$subdir/lib" -type f -name "*hwy*" -delete
         
         install_prebuilt_binary \
             -n="$lib_name" -v="$repo_ver" \
@@ -3430,7 +3474,6 @@ Name: libklvanc
 Description: VANC processing library
 Version: 1.6.0
 Libs: -L\${libdir} -lklvanc
-Libs.private: -lz
 Cflags: -I\${includedir}
 EOF
     change_dir "$src_dir/$lib"
@@ -3556,7 +3599,6 @@ build_libquirc() {
 # build_librsvg           # config_options+= --enable-librsvg             # enable SVG rasterization via librsvg [no]
 build_librsvg() {
   if ! truthy "$disable_librsvg" && truthy "$enable_librsvg"; then
-	run_valid_function "build_cairo"
 	run_valid_function "build_pango"
   activate_meson
 # 	# https://github.com/GNOME/librsvg
@@ -4083,6 +4125,7 @@ build_libshaderc() {
 	local cmake_params="-DCMAKE_BUILD_TYPE=release \
 -DSHADERC_SKIP_EXAMPLES=ON \
 -DSHADERC_SKIP_TESTS=ON \
+-DSHADERC_SKIP_EXECUTABLES=ON \
 -DSPIRV_SKIP_TESTS=ON \
 -DSHADERC_SKIP_COPYRIGHT_CHECK=ON \
 -DENABLE_EXCEPTIONS=ON \
@@ -4101,12 +4144,6 @@ build_libshaderc() {
 	do_make_and_make_install
 	if [[ -f "$src_dir/$lib/build/libshaderc_util/libshaderc_util.a" ]] ; then
     copy_path "$src_dir/$lib/build/libshaderc_util/libshaderc_util.a" "$dependency_install_prefix/lib/libshaderc_util.a" "-fv" >>"$LOG_FILE" 2>&1
-  fi
-  while IFS= read -r -d '' file; do
-    add_libs_to_pkg -t="$file" -l="-lshlwapi" || true;
-  done < <(find "$install_pkgconfig_dir" -name "benchmark*.pc" -print0)
-  if [[ -f "$install_pkgconfig_dir/libhwy-test.pc" ]]; then
-    remove_path -f "$install_pkgconfig_dir/libhwy-test.pc"
   fi
   while IFS= read -r -d '' file; do
     add_libs_to_pkg -t="$file" -l="-lshaderc_util -lglslang -lMachineIndependent -lGenericCodeGen -lOSDependent -lSPIRV -lSPIRV-Tools-opt -lSPIRV-Tools -lstdc++" || true;
@@ -4228,8 +4265,8 @@ build_libexpat() {
 build_pango() {
   run_valid_function "build_dlfcn"
 	run_valid_function "build_libharfbuzz" 1
-	run_valid_function "build_libfontconfig" 1
   run_valid_function "build_libexpat"
+  run_valid_function "build_libfribidi" 1
  	# https://gitlab.gnome.org/GNOME/pango
 	local lib="pango"
   local repo="https://gitlab.gnome.org/GNOME/pango"
@@ -4289,6 +4326,7 @@ build_cairo() {
   run_valid_function "build_dlfcn"
 	run_valid_function "build_pixman"
 	run_valid_function "build_libfontconfig" 1
+  run_valid_function "build_glib"
  	# https://gitlab.freedesktop.org/cairo/cairo
 	local lib="cairo"
   local repo="https://gitlab.freedesktop.org/cairo/cairo"
@@ -4381,6 +4419,8 @@ build_libleptonica() {
 	run_valid_function "build_libwebp" 1
 	run_valid_function "build_libjpeg_turbo"
 	run_valid_function "build_giflib"
+  run_valid_function "build_libtiff"
+  run_valid_function "build_libopenjpeg" 1
   local lib="libleptonica"
   local repo="https://github.com/DanBloomberg/leptonica"
   local repo_ver="1.86.0"
@@ -4669,18 +4709,41 @@ build_libssh2() {
 }
 
 build_cpuinfo() {
-	local lib="cpuinfo"
+  local lib="cpuinfo"
   local repo="https://github.com/pytorch/cpuinfo"
-	change_dir "$src_dir"
-	do_git_checkout "$repo" "$src_dir/$lib"
-  change_dir "$src_dir/$lib/deps/clog/build" 1
+  change_dir "$src_dir"
+  do_git_checkout "$repo" "$src_dir/$lib"
+  change_dir "$src_dir/$lib/build" 1
   do_cmake_from_build_dir "$src_dir/$lib" "-DCMAKE_BUILD_TYPE=Release \
+-DCPUINFO_LIBRARY_TYPE=static \
+-DCMAKE_POSITION_INDEPENDENT_CODE=ON \
+-DBUILD_SHARED_LIBS=OFF"
+  change_dir "$src_dir/$lib/deps/googletest/build" 1
+  do_cmake_from_build_dir "$src_dir/$lib/deps/googletest" "-DCMAKE_BUILD_TYPE=Release \
+-DCMAKE_POSITION_INDEPENDENT_CODE=ON \
+-DCMAKE_POLICY_VERSION_MINIMUM=3.5 \
+-DBUILD_SHARED_LIBS=OFF"
+  do_make_and_make_install
+  change_dir "$src_dir/$lib/deps/googlebenchmark/build" 1
+  do_cmake_from_build_dir "$src_dir/$lib/deps/googlebenchmark" "-DCMAKE_BUILD_TYPE=Release \
+-DCMAKE_POSITION_INDEPENDENT_CODE=ON \
+-DCMAKE_POLICY_VERSION_MINIMUM=3.5 \
+-DGOOGLETEST_PATH=\"$src_dir/$lib/deps/googletest\" \
+-DBENCHMARK_ENABLE_WERROR=OFF \
+-DBUILD_SHARED_LIBS=OFF"
+  do_make_and_make_install
+  change_dir "$src_dir/$lib/deps/clog/build" 1
+  do_cmake_from_build_dir "$src_dir/$lib/deps/clog" "-DCMAKE_BUILD_TYPE=Release \
 -DCLOG_BUILD_TESTS=OFF \
 -DCMAKE_POSITION_INDEPENDENT_CODE=ON \
+-DCMAKE_POLICY_VERSION_MINIMUM=3.5 \
 -DBUILD_SHARED_LIBS=OFF"
   do_make_and_make_install
   change_dir "$src_dir/$lib/build" 1
-	do_cmake_from_build_dir "$src_dir/$lib" "-DCMAKE_BUILD_TYPE=Release \
+  do_cmake_from_build_dir "$src_dir/$lib" "-DCMAKE_BUILD_TYPE=Release \
+-DUSE_SYSTEM_LIBS=ON \
+-DUSE_SYSTEM_GOOGLEBENCHMARK=ON \
+-DUSE_SYSTEM_GOOGLETEST=ON \
 -DCPUINFO_BUILD_UNIT_TESTS=OFF \
 -DCPUINFO_BUILD_TOOLS=OFF \
 -DCPUINFO_BUILD_MOCK_TESTS=OFF \
@@ -4690,13 +4753,10 @@ build_cpuinfo() {
 -DBUILD_SHARED_LIBS=OFF"
   disable_nonessential "$src_dir/$lib/build"
   do_make_and_make_install
-	change_dir "$src_dir"
+  change_dir "$src_dir"
   while IFS= read -r -d '' file; do
     add_libs_to_pkg -t="$file" -l="-lshlwapi"
   done < <(find "$install_pkgconfig_dir" -name "benchmark*.pc" -print0)
-  if [[ -f "$install_pkgconfig_dir/libhwy-test.pc" ]]; then
-    remove_path -f "$install_pkgconfig_dir/libhwy-test.pc"
-  fi
 }
 
 build_vulkan_loader() {
