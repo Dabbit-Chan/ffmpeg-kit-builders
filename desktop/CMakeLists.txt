@@ -194,7 +194,14 @@ if(BUILD_SHARED_LIBS)
     endif()
 
     if(MINGW OR CMAKE_SYSTEM_NAME MATCHES "Linux")
-        target_link_options(ffmpegkit PRIVATE -Wl,--whole-archive)
+    target_link_libraries(ffmpegkit PRIVATE 
+            "-Wl,--whole-archive"
+            PkgConfig::FFMPEG
+            "-Wl,--no-whole-archive"
+        )
+    else()
+        # macOS / Standard fallback
+        target_link_libraries(ffmpegkit PRIVATE PkgConfig::FFMPEG)
     endif()
 
     # Linker Script
