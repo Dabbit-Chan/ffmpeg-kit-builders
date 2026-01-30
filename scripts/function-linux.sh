@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# shellcheck disable=SC2317,SC2129,SC1091,SC2120,SC2035,SC2016,SC2310,SC2155,SC2154,SC2034
+# shellcheck disable=SC2317,SC2129,SC1091,SC2120,SC2035,SC2016,SC2310,SC2155,SC2154,SC2034,2250,2249,2312,2292
 
 get_common_cflags() {
   if [[ -n ${FFMPEG_KIT_LTS_BUILD} ]]; then
@@ -195,18 +195,22 @@ configure_ffmpeg_kit() {
 		create_touch_file 0 "$touch_name"
 	fi
 
-	local config_options="--prefix=${ffmpeg_kit_install} --with-ffmpeg-src=$ffmpeg_source_dir --with-ffmpeg-build=$ffmpeg_install_prefix"
+  local cmake_params="-DCMAKE_SYSTEM_NAME=Linux \
+-DCMAKE_C_COMPILER=$CC \
+-DCMAKE_CXX_COMPILER=$CXX \
+-DFFMPEG_SRC_DIR=\"$ffmpeg_source_dir\" \
+-DFFMPEG_BUILD_DIR=\"$ffmpeg_install_prefix\" \
+-DCMAKE_INSTALL_PREFIX=\"$ffmpeg_kit_install\""
 
-	config_options+=" --host=${host_target}"
 	if [[ "$build_ffmpeg_kit_type" == "static" ]]; then
-		config_options+=" --enable-static"
-		config_options+=" --disable-shared"
+    cmake_params+=" -DBUILD_SHARED_LIBS=OFF -DBUILD_STATIC_LIBS=ON"
 	else
-		config_options+=" --enable-shared"
-		config_options+=" --disable-static"
+    cmake_params+=" -DBUILD_SHARED_LIBS=ON -DBUILD_STATIC_LIBS=OFF"
 	fi
-	change_dir "${ffmpeg_kit_src_dir}"
-	do_configure "${config_options}" "./configure" "$(get_bundle_directory)" || exit_message 1 "unable to configure ffmpeg-kit. see $LOG_FILE for details."
+
+	change_dir "${ffmpeg_kit_src_dir}/build" 1
+  
+  do_cmake "$cmake_params" "$ffmpeg_kit_src_dir"
 
 	echo -e "INFO: Done configuring ffmpeg kit" | tee -a "$LOG_FILE"
 }
@@ -217,28 +221,14 @@ detect_clang_version() {
 }
 
 set_toolchain_paths() {
-  #clang_version=$(detect_clang_version)
-
-  if [[ $clang_version != "none" ]]; then
-    local CLANG_POSTFIX="-$clang_version"
-    export LLVM_CONFIG_CFLAGS=$(llvm-config --cflags 2>>"$LOG_FILE")
-    export LLVM_CONFIG_INCLUDEDIR=$(llvm-config --includedir 2>>"$LOG_FILE")
-    export LLVM_CONFIG_LDFLAGS=$(llvm-config --ldflags 2>>"$LOG_FILE")
-  else
-    local CLANG_POSTFIX=""
-    export LLVM_CONFIG_CFLAGS=$(llvm-config --cflags 2>>"$LOG_FILE")
-    export LLVM_CONFIG_INCLUDEDIR=$(llvm-config --includedir 2>>"$LOG_FILE")
-    export LLVM_CONFIG_LDFLAGS=$(llvm-config --ldflags 2>>"$LOG_FILE")
-  fi
-
-  export CC=$(command -v "clang$CLANG_POSTFIX")
-  export CXX=$(command -v "clang++$CLANG_POSTFIX")
-  export AS=$(command -v "llvm-as$CLANG_POSTFIX")
-  export AR=$(command -v "llvm-ar$CLANG_POSTFIX")
-  export LD=$(command -v "ld.lld$CLANG_POSTFIX")
-  export RANLIB=$(command -v "llvm-ranlib$CLANG_POSTFIX")
-  export STRIP=$(command -v "llvm-strip$CLANG_POSTFIX")
-  export NM=$(command -v "llvm-nm$CLANG_POSTFIX")
+  export CC=gcc
+  export CXX=g++
+  export AS=as
+  export AR=ar
+  export LD=ld
+  export RANLIB=ranlib
+  export STRIP=strip
+  export NM=nm
   export CFLAGS="$CFLAGS -I${ffmpeg_install_prefix}/include -I/usr/include -I/usr/local/include -I${dependency_install_prefix}/include -I${ffmpeg_source_dir} -I${ffmpeg_source_dir}/compat"
   export CXXFLAGS="$(get_cxxflags ffmpeg-kit) $CXXFLAGS -I/usr/include -I/usr/local/include -I${ffmpeg_install_prefix}/include -I${dependency_install_prefix}/include -I${ffmpeg_source_dir} -I${ffmpeg_source_dir}/compat"
   export LDFLAGS="$LDFLAGS -ljsoncpp -L${ffmpeg_install_prefix}/lib -L${dependency_install_prefix}/lib -L${dependency_install_prefix}/lib/$host_target"
