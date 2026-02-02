@@ -91,7 +91,6 @@ install_cross_compiler() {
 }
 
 configure_ffmpeg_kit() {
-	run_valid_function "build_libjsoncpp"
 	echo -e "INFO: Configuring ffmpeg kit" | tee -a "$LOG_FILE"
 	local type_postfix="$build_ffmpeg_kit_type"
 	local ffmpeg_kit_version=$(get_ffmpeg_kit_version)
@@ -121,7 +120,6 @@ configure_ffmpeg_kit() {
 		create_touch_file 0 "$touch_name"
 	fi
 
-	local config_options="--prefix=${ffmpeg_kit_install} --with-ffmpeg-src=$ffmpeg_source_dir --with-ffmpeg-build=$ffmpeg_install_prefix"
 	local cmake_params="-DCMAKE_SYSTEM_NAME=Windows \
 -DCMAKE_C_COMPILER=$CC \
 -DCMAKE_CXX_COMPILER=$CXX \
@@ -129,14 +127,9 @@ configure_ffmpeg_kit() {
 -DFFMPEG_BUILD_DIR=\"$ffmpeg_install_prefix\" \
 -DCMAKE_INSTALL_PREFIX=\"$ffmpeg_kit_install\""
 
-	config_options+=" --host=${host_target}"
 	if [[ "$build_ffmpeg_kit_type" == "static" ]]; then
-		config_options+=" --enable-static"
-		config_options+=" --disable-shared"
 		cmake_params+=" -DBUILD_SHARED_LIBS=OFF -DBUILD_STATIC_LIBS=ON"
 	else
-		config_options+=" --enable-shared"
-		config_options+=" --disable-static"
 		cmake_params+=" -DBUILD_SHARED_LIBS=ON -DBUILD_STATIC_LIBS=OFF"
 	fi
 	change_dir "${ffmpeg_kit_src_dir}"
@@ -147,7 +140,6 @@ configure_ffmpeg_kit() {
 	change_dir "${ffmpeg_kit_src_dir}/build" 1
 	
 	do_cmake "$cmake_params" "$ffmpeg_kit_src_dir"
-	# do_configure "${config_options}" "./configure" "$(get_bundle_directory)" || exit_message 1 "unable to configure ffmpeg-kit. see $LOG_FILE for details."
 
 	echo -e "INFO: Done configuring ffmpeg kit" | tee -a "$LOG_FILE"
 }
@@ -382,7 +374,6 @@ endian = 'little'
 
 [properties]
 sys_root = '$dependency_install_prefix'
-pkg_config_sysroot_dir = '$dependency_install_prefix'
 pkg_config_libdir = '$pkg_config_sysroot_dir/lib/pkgconfig'
 needs_exe_wrapper = true
 EOF

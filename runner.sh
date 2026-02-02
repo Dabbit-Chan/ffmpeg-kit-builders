@@ -20,52 +20,6 @@ require_sudo
 echo -e "INFO: Build options: ${RUN_ARGS[*]}\n" 1>>"$LOG_FILE" 2>&1
 [[ -f "$LOG_FILE" ]] && chmod -R a+rwx "$LOG_FILE" || true;
 
-# Loop through all arguments implicitly
-for arg; do
-  case "$arg" in
-    --reset-and-clean=*)
-      path="${arg#*=}"
-      [[ -n $path ]] && reset_and_clean "$(validate_path "prebuilt/src/$path")"
-      [[ -z $path ]] && exit_message 1 "Valid folder not provided."
-      echo "INFO: Attempting to clean prebuilt/src/$path..." | tee -a "$LOG_FILE"
-      exit 0
-      ;;
-    --reset-and-clean)
-      reset_and_clean
-      exit 0
-      ;;
-    --get-all-steps)
-      print_build_steps
-      exit 0
-      ;;
-    --get-total-steps)
-      echo "${#BUILD_STEPS[@]}"
-      exit 0
-      ;;
-    --get-step-name=*)
-      index="${arg#*=}"
-      echo "${BUILD_STEPS[$index]}"
-      exit 0
-      ;;
-  esac
-done
-
-if [[ "$*" == *"--get-all-steps"* ]]; then
-  print_build_steps
-  exit 0
-fi
-
-if [[ "$*" == *"--get-total-steps"* ]]; then
-  echo "${#BUILD_STEPS[@]}"
-  exit 0
-fi
-
-if [[ "$*" =~ --get-step-name=([0-9]+) ]]; then
-  index="${BASH_REMATCH[1]}"
-  echo "${BUILD_STEPS[$index]}"
-  exit 0
-fi
-
 ff_flags_raw=()    # Original arguments: --ff-something
 ff_flags_values=() # Extracted values: something
 
@@ -144,11 +98,12 @@ Build Options:
   --release-and-clean                                           create release zip of ffmpeg-kit bundled binaries to be distributed 
                                                                 and clean ffmpeg and ffmpeg-kit build artifacts (dependencies are not deleted)
 	--clean-builds=[shared]|static                                clean ffmpeg and ffmpeg-kit builds of type [shared] or static and exit
-  --reset-and-clean[=ARG]                                       reset and clean all source directories of touch files and build artifacts
+  --reset-and-clean(=ARG)                                       reset and clean all source directories of touch files and build artifacts
+                                                                ARG=library src dir name
   --resume                                                      resume previously inturrupted run (based on ~run.state file)
 
 Advanced Dependency Control:
-	--get-total-steps|--get-step-name=[*]                         get dependency steps and step name by index
+	--print-total-steps|--print-all-steps                         print dependency steps and list all step names by index
 	--build-only={0..} OR [library_name]                          build only specific dependency (e.g. --build-only=libx264)
 	--build-from={0..} OR [library_name]                          start building dependencies from given step
 	--build-deps=[y]                                              builds the ffmpeg dependencies. Disable when dependencies
@@ -280,6 +235,10 @@ while [ $# -gt 0 ]; do
 		export build_gpl=y
 		shift
 		;;
+  --enable-gpl-all | --gpl-all)
+    export build_all_gpl=y
+    shift
+    ;;
   --enable-nonfree | --nonfree)
 		export build_nonfree=y
 		shift
@@ -332,7 +291,7 @@ while [ $# -gt 0 ]; do
     export build_ffmpeg_kit_only=y
 		shift
 		;;
-	--get-total-steps | --get-all-steps | --get-step-name=*) exit 0 ;; # Handled above, just consume and ignore here
+	--print-total-steps | --print-all-steps | --reset-and-clean=* | --reset-and-clean) shift ;; # Handled below, just consume and ignore here
 	--clean-builds=*)
     build_type="${1#*=}"
     case "$build_type" in
@@ -597,7 +556,9 @@ fi
 
 truthy "$enable_clean_builds" && { clean_ffmpeg_builds; exit 0; }
 
+if ! truthy "$build_dependencies_only"; then
 truthy "$build_gpl" && truthy "$build_nonfree" && echo -e "ERROR: --enable-gpl is not compatible with --enable-nonfree. Remove one and run again" | tee -a "$LOG_FILE"
+fi
 
 check_missing_packages # do this first since it's annoying to go through prompts then be rejected
 intro                  # remember to always run the intro, since it adjust pwd
@@ -626,6 +587,7 @@ fi
 
 source "${SCRIPTDIR}/function-$host_platform.sh"
 source "${SCRIPTDIR}/run-$host_platform.sh"
+source "${SCRIPTDIR}/deps-$host_platform.sh"
 
 # Setup config variables
 
@@ -678,10 +640,10 @@ if truthy "$streaming_bundle" || truthy "$enable_full"; then
 fi
 
 if truthy "$build_nonfree"; then
-  echo "WARNING: Non-free licensing selected. Binaries will be 
-  non-redistributable without proper licensing. You are responsible 
-  for making sure you have the appropriate licensing to distribute 
-  the binaries!" | tee -a "$LOG_FILE"
+  echo "WARNING: Non-free licensing selected. Ffmpeg and ffmpeg-kit 
+  Binaries will be non-redistributable without proper licensing. You 
+  are responsible for making sure you have the appropriate licensing 
+  to distribute the binaries!" | tee -a "$LOG_FILE"
 
   truthy "$enable_audio" || truthy "$enable_full" && apply_preset "$CONFIG_AUDIO_NON_FREE"
   truthy "$enable_video" || truthy "$enable_full" && apply_preset "$CONFIG_VIDEO_NON_FREE"
@@ -812,7 +774,10 @@ fi
 # disable deprecated libraries
 echo -e "\n  [CONFIG] Disabling deprecated libraries..." >>"$LOG_FILE"
 disable_library "libnpp"
+if ! truthy "$disable_libcelt" && truthy "$enable_libcelt"; then
+enable_library "libopus"
 disable_library "libcelt"
+fi
 
 resolve_collisions
 
@@ -823,43 +788,51 @@ main() {
   if [[ -n $run_only ]]; then
     echo -e "INFO: --- Executing single function: $run_only ---" | tee -a "$LOG_FILE"
     if [[ "$run_only" == build_* ]]; then
-      run_valid_build_functions "$run_only" true
+      if ! declare -F "$run_only" >/dev/null; then
+        exit_message 1 "DEBUG: Invalid function: $run_only (not defined on $host_platform)"
+      fi
+      run_valid_function "$run_only"
     else
       eval "$run_only" || exit_message 1 "unable to run $run_only"
     fi
     echo | tee -a "$LOG_FILE"
     echo -e "INFO: --- Done executing single function: $run_only ---" | tee -a "$LOG_FILE"
   elif [[ -n "$build_only" ]]; then
-    if [[ $(is_integer "$build_only") == 0 ]]; then
-      index=$build_only
+    if [[ "$build_only" == build_* ]]; then
+      if ! declare -F "$build_only" >/dev/null; then
+        exit_message 1 "DEBUG: Invalid function: $build_only (not defined on $host_platform)"
+      fi
+      declare -A BUILD_STEPS
+      add_step "$build_only"
+      optimize_dependencies
+    else
+      exit_message 1 "Invalid build function $build_only"
     fi
-    index=$(array_index_of "$build_only" "${BUILD_STEPS[@]}") || exit_message 1 "Invalid build function $build_only"
-    # Now, call the single requested build function by its index
-    step_name="${BUILD_STEPS[$index]}"
     echo -e "INFO: --- Executing single build step: $step_name ---" | tee -a "$LOG_FILE"
     echo -e "WARNING: This may fail if previous dependencies havent been built yet." | tee -a "$LOG_FILE"
-    run_valid_build_functions "$step_name" true
+    run_valid_build_functions
     echo | tee -a "$LOG_FILE"
     echo -e "INFO: --- Done building single build step: $step_name ---" | tee -a "$LOG_FILE"
   elif [[ -n "$build_from" ]]; then
-    if [[ $(is_integer "$build_from") != 0 ]]; then
-      index=$(array_index_of "$build_from" "${BUILD_STEPS[@]}")
-    else
-      index=$build_from
+    if ! declare -F "$build_from" >/dev/null; then
+      exit_message 1 "DEBUG: Invalid function: $build_from (not defined on $host_platform)"
     fi
-    # Now, call the single requested build function by its index
-    step_name="${BUILD_STEPS[$index]}"
-    echo -e "INFO: --- Building dependencies from step: $step_name ---" | tee -a "$LOG_FILE"
-    echo -e "WARNING: This may fail if previous dependencies havent been built yet." | tee -a "$LOG_FILE"
-    run_valid_build_functions "$step_name"
-    echo | tee -a "$LOG_FILE"
-    echo -e "INFO: --- Done building dependencies from step: $step_name ---" | tee -a "$LOG_FILE"
+    optimize_dependencies
+    if step_name=$(find_build_step "$build_from"); then
+      echo -e "INFO: --- Building dependencies from step: $step_name ---" | tee -a "$LOG_FILE"
+      echo -e "WARNING: This may fail if previous dependencies havent been built yet." | tee -a "$LOG_FILE"
+      run_valid_build_functions
+      echo | tee -a "$LOG_FILE"
+      echo -e "INFO: --- Done building dependencies from step: $step_name ---" | tee -a "$LOG_FILE"
+    else
+      exit_message 1 "Invalid step $build_from"
+    fi
   else
     change_dir "$work_dir" || exit 1
-
     if truthy "$build_dependencies_only"; then
       echo -e "INFO: Building dependencies only..." | tee -a "$LOG_FILE"
       echo -e "WARNING: This may fail if previous dependencies havent been built yet." | tee -a "$LOG_FILE"
+      optimize_dependencies
       run_valid_build_functions
     elif truthy "$build_ffmpeg_only"; then
       echo -e "INFO: Building ffmpeg only..." | tee -a "$LOG_FILE"
@@ -875,6 +848,7 @@ main() {
       create_ffmpeg_kit_bundle
     else
       echo -e "INFO: Building all..." | tee -a "$LOG_FILE"
+      optimize_dependencies
       run_valid_build_functions
       download_ffmpeg
       build_exists || configure_ffmpeg
@@ -884,10 +858,27 @@ main() {
       create_ffmpeg_kit_bundle
     fi
   fi
-  echo -e "$(ts)" | tee -a "$LOG_FILE"
-  exit 0
 }
+
+for arg; do
+  case "$arg" in
+    --reset-and-clean=*)
+      path="${arg#*=}"
+      [[ -n $path ]] && reset_and_clean "$(validate_path "prebuilt/src/$path")"
+      [[ -z $path ]] && exit_message 1 "Valid folder not provided."
+      echo "INFO: Attempting to clean prebuilt/src/$path..." | tee -a "$LOG_FILE"
+      exit 0
+      ;;
+    --reset-and-clean)
+      reset_and_clean
+      exit 0
+      ;;
+  esac
+done
 
 main
 
 [[ -f "$BUILT_STATE_FILE" ]] && rm -f "$BUILT_STATE_FILE"
+
+echo -e "Ffmpeg-kit-builders finished successfully: $(ts)" | tee -a "$LOG_FILE"
+exit 0

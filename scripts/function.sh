@@ -272,7 +272,16 @@ is_alpha() {
 		echo "1" # Not integer
 	fi
 }
-
+find_build_step() {
+  local search="$1"
+  for key in "${OPTIMIZED_BUILD_STEPS[@]}"; do
+    if [[ "$key" == *"$search"* ]]; then
+      echo "$key"
+      return 0
+    fi
+  done
+  return 1
+}
 array_index_of() {
 	local search_string="$1"
 	shift
@@ -284,7 +293,7 @@ array_index_of() {
 			return 0
 		fi
 	done
-	exit_message 0 "array_index_of: $search_string could not be found in array.\n $(print_build_steps)" | tee -a "$LOG_FILE"
+	exit_message 0 "array_index_of: $search_string could not be found in array.\n ${array[*]}" | tee -a "$LOG_FILE"
 	return 1
 }
 
@@ -382,14 +391,14 @@ setup_windows_environment() {
     export host_target="$host_arch-w64-mingw32"
     export rust_target="$host_arch-pc-windows-gnu"
     export toolchain_root="mingw-w64-$host_arch"
-    export dependency_install_prefix="$work_dir/libraries"
+    export dependency_install_prefix="$work_dir/libraries" # dependencies
     export toolchain_root_dir="/usr/"
     export toolchain_bin_path="/usr/bin/"
     export install_pkgconfig_dir="${dependency_install_prefix}/lib/pkgconfig"
 
     export PKG_CONFIG_PATH="$install_pkgconfig_dir:$ffmpeg_install_prefix/lib/pkgconfig"
     export PKG_CONFIG_LIBDIR="$PKG_CONFIG_PATH"
-    export PKG_CONFIG_SYSROOT_DIR="$dependency_install_prefix"
+    # export PKG_CONFIG_SYSROOT_DIR="$dependency_install_prefix"
     export PATH="$original_path:$toolchain_bin_path:$ffmpeg_install_prefix/bin"
     export cross_prefix="/usr/local/mingw-w64/bin/$host_target-"
     
@@ -433,12 +442,10 @@ setup_linux_environment() {
     export PATCHDIR="$SCRIPTDIR/linux/patches"
     export host_target="$build_triple"
     export rust_target="$host_arch-unknown-linux-gnu"
-    export dependency_install_prefix="$work_dir/libraries"
+    export dependency_install_prefix="$work_dir/libraries" # dependencies
     export install_pkgconfig_dir="${dependency_install_prefix}/lib/pkgconfig"
     
     export PKG_CONFIG_PATH="$PKG_CONFIG_PATH:$dependency_install_prefix/share/pkgconfig:$install_pkgconfig_dir:$dependency_install_prefix/lib/$host_target/pkgconfig:$work_dir/pkgconfig:$ffmpeg_install_prefix/lib/pkgconfig:/usr/lib/$host_target/pkgconfig:/usr/lib/pkgconfig:/usr/lib64/pkgconfig:/usr/share/pkgconfig"
-    export PKG_CONFIG_LIBDIR="$PKG_CONFIG_PATH"
-    export PKG_CONFIG_SYSROOT_DIR="$dependency_install_prefix"
     export PATH="$ffmpeg_install_prefix/bin:$dependency_install_prefix/bin:$original_path"
     
     export linux_cflags="$original_cflags -I${dependency_install_prefix}/include "
@@ -702,7 +709,7 @@ get_cpu_count() {
 
 get_concurrent_proc() {
   # shellcheck disable=2046
-  echo -e $(( $(get_cpu_count) / 3 ))
+  echo $(( ( $(get_cpu_count) / 3 ) + 1 ))
 }
 
 display_version() {
@@ -2983,44 +2990,40 @@ run_valid_build_functions() {
 	local steps=0
 	local current_step=0
   create_dir "$dependency_install_prefix/{lib/pkgconfig,include,bin}"
-  if [[ -n "$start_from" && "$start_from" == build_* ]] && truthy "$skip_mode"; then
-    run_valid_function "$start_from" || exit_message 1 "There was an error running $step.\n See $LOG_FILE for details"
-  else
-    # Count non-empty steps first
-    for step_name in "${BUILD_STEPS[@]}"; do
-      if [[ -n "${step_name// /}" ]]; then
-        ((steps++))
-      fi
-    done
-
-    # If start_from is empty, start from beginning
-    if [[ -z "$start_from" ]]; then
-      skip_mode=false
-    else
-      echo -e "INFO: Starting from step: $start_from" | tee -a "$LOG_FILE"
-      skip_mode=true
+  # Count non-empty steps first
+  for step_name in "${OPTIMIZED_BUILD_STEPS[@]}"; do
+    if [[ -n "${step_name// /}" ]]; then
+      ((steps++))
     fi
+  done
 
-    for step_name in "${BUILD_STEPS[@]}"; do
-      if [[ -z "${step_name// /}" ]]; then
+  # If start_from is empty, start from beginning
+  if [[ -z "$start_from" ]]; then
+    skip_mode=false
+  else
+    echo -e "INFO: Starting from step: $start_from" | tee -a "$LOG_FILE"
+    skip_mode=true
+  fi
+
+  for step_name in "${OPTIMIZED_BUILD_STEPS[@]}"; do
+    if [[ -z "${step_name// /}" ]]; then
+      continue
+    fi
+    # Handle skip mode
+    if [[ "$skip_mode" == true ]]; then
+      if [[ "$step_name" == "$start_from" ]]; then
+        skip_mode=false
+        echo -e "INFO: Building dependencies from: $step_name" | tee -a "$LOG_FILE"
+      else
+        ((current_step++))
         continue
       fi
-      # Handle skip mode
-      if [[ "$skip_mode" == true ]]; then
-        if [[ "$step_name" == "$start_from" ]]; then
-          skip_mode=false
-          echo -e "INFO: Building dependencies from: $step_name" | tee -a "$LOG_FILE"
-        else
-          ((current_step++))
-          continue
-        fi
-      fi
-      ((current_step++))
-      print_progress "$current_step" "$steps" "$step_name"
-      run_valid_function "$step_name" || exit_message 1 "There was an error running $step.\n See $LOG_FILE for details"
-    done
-    printf "\r\033[KAll dependencies built successfully!\n"
-  fi
+    fi
+    ((current_step++))
+    print_progress "$current_step" "$steps" "$step_name"
+    run_valid_function "$step_name" || exit_message 1 "There was an error running $step.\n See $LOG_FILE for details"
+  done
+  printf "\r\033[KAll dependencies built successfully!\n"
   static_link_check "$install_pkgconfig_dir"
   reset_ldflags
 }
@@ -3134,7 +3137,7 @@ configure_ffmpeg() {
   init_options+=" --extra-ldflags=\" -Wl,--allow-multiple-definition \""
 	init_options+=" --enable-pic"
 	init_options+=" --enable-swscale"
-  init_options+=" --extra-libs=\"-ldl -lstdc++\""
+  init_options+=" --extra-libs=\"-lstdc++\""
   init_options+=" --extra-cflags=\" -ffunction-sections -fdata-sections \""
   init_options+=" --extra-cxxflags=\" -ffunction-sections -fdata-sections \""
 	truthy "$enable_lto" && init_options+=" --enable-optimizations"
@@ -3145,6 +3148,7 @@ configure_ffmpeg() {
     init_options+=" --cross-prefix=$cross_prefix"
   else
     init_options+=" --extra-libs=\"-lpthread -lrt -lm\""
+    init_options+=" --extra-libs=\"-ldl\""
   fi
 
   if iswindows; then
@@ -3161,6 +3165,7 @@ configure_ffmpeg() {
     init_options+=" --extra-cflags=\" $extra_ffmpeg_c_flags \""
     init_options+=" --extra-libs=\" -static \""
     init_options+=" --extra-cflags=\" -Wno-pedantic -Wno-cpp \""
+    # init_options+=" --extra-libs=\"-ldl_s\""
   fi
 
 	# can't mix and match --enable-static --enable-shared unfortunately, or the final executable seems to just use shared if the're both present
@@ -3218,13 +3223,8 @@ configure_ffmpeg() {
   truthy "$disable_sndio" && config_options+=" --disable-sndio"                       # disable sndio support [autodetect]
                                                                                       # XXX --enable-libtorch ABI mismatch on windows
   truthy "$enable_libtorch" && config_options+=" --enable-libtorch \
-  --extra-cflags=\" \
-  -I${dependency_install_prefix}/libtorch/include/torch/csrc/api/include \
-  -I${dependency_install_prefix}/libtorch/include\" \
-  --extra-cxxflags=\" \
-  -I${dependency_install_prefix}/libtorch/include/torch/csrc/api/include \
-  -I${dependency_install_prefix}/libtorch/include\" \
-  --extra-ldflags=\"-L${dependency_install_prefix}/libtorch/lib\""
+  --extra-cflags=\"-I${dependency_install_prefix}/include/torch/csrc/api/include\" \
+  --extra-cxxflags=\"-I${dependency_install_prefix}/include/torch/csrc/api/include\""
                                                                                       # enable Torch as one DNN backend [no]
   truthy "$disable_ladspa" && config_options+=" --disable-ladspa"                     # enable LADSPA audio filtering [no]
   truthy "$enable_libxvid" && config_options+=" --enable-libxvid"                     # enable Xvid encoding via xvidcore, native MPEG-4/Xvid encoder exists [no]
@@ -3301,10 +3301,9 @@ configure_ffmpeg() {
   truthy "$enable_libdavs2" && config_options+=" --enable-libdavs2"                   # enable AVS2 decoding via libdavs2 [no]
   truthy "$enable_libdvdnav" && config_options+=" --enable-libdvdnav"                 # enable libdvdnav, needed for DVD demuxing [no]
   truthy "$enable_libdvdread" && config_options+=" --enable-libdvdread"               # enable libdvdread, needed for DVD demuxing [no]
-  truthy "$enable_libflite" && config_options+=" --enable-libflite \
-  --extra-libs=\"-lasound\""                                                          # enable flite (voice synthesis) support via libflite [no]
-  truthy "$enable_libfontconfig" && config_options+=" --enable-libfontconfig \
-  --extra-libs=\"-lxml2 -liconv\""                                                    # enable libfontconfig, useful for drawtext filter [no]
+  truthy "$enable_libflite" && config_options+=" --enable-libflite"                   # enable flite (voice synthesis) support via libflite [no]
+  islinux && truthy "$enable_libflite" && config_options+=" --extra-libs=-lasound"    # extra libs for libflite on linux linux 
+  truthy "$enable_libfontconfig" && config_options+=" --enable-libfontconfig"         # enable libfontconfig, useful for drawtext filter [no]
   truthy "$enable_libfreetype" && config_options+=" --enable-libfreetype"             # enable libfreetype, needed for drawtext filter [no]
   truthy "$enable_libfribidi" && config_options+=" --enable-libfribidi"               # enable libfribidi, improves drawtext filter [no]
   truthy "$enable_libglslang" && config_options+=" --enable-libglslang"               # enable GLSL->SPIRV compilation via libglslang [no]
@@ -3347,10 +3346,9 @@ configure_ffmpeg() {
   truthy "$enable_libsvtav1" && config_options+=" --enable-libsvtav1"                 # enable AV1 encoding via SVT [no]
   truthy "$enable_libtensorflow" && config_options+=" --enable-libtensorflow"         # enable TensorFlow as a DNN module backend for DNN based filters like sr [no]
   truthy "$enable_libtesseract" && config_options+=" --enable-libtesseract \
-  --extra-libs=\"-Wl,--start-group -ltesseract -lleptonica -ltiff -lpng16 -ljpeg \
-  -lopenjp2 -ljbig -lLerc -ldeflate -lzstd -llzma -lwebpmux -lwebp -lgif -lcurl \
-  -lnghttp2 -lssl -lcrypto -lpsl -lbrotlidec -lbrotlicommon -larchive -lbz2 -lz \
-  -lexpat -liconv -Wl,--end-group\""                                                  # enable Tesseract, needed for ocr filter [no]
+   --extra-libs=\"-ltesseract -lleptonica -lz -larchive -ltiff -lpng16 \
+   -ljpeg -lgif -lwebpmux -lwebp -lopenjp2 -ljbig -lLerc -lsharpyuv \
+   -llzma -lzstd -ldeflate\""                                                         # enable Tesseract, needed for ocr filter [no]
   truthy "$enable_libtheora" && config_options+=" --enable-libtheora"                 # enable Theora encoding via libtheora [no]
   truthy "$enable_libtls" && config_options+=" --enable-libtls"                       # enable LibreSSL (via libtls), needed for https support if openssl, gnutls or mbedtls is not used [no]
   truthy "$enable_libtwolame" && config_options+=" --enable-libtwolame \
@@ -3509,7 +3507,7 @@ install_ffmpeg() {
   
   cross_windres y
   unset RC
-  ffmpeg_windows_patches
+  iswindows && ffmpeg_windows_patches
 
 	do_make_and_make_install "" "" "$(get_ffmpeg_directory)"
   
@@ -3641,14 +3639,14 @@ get_ffmpeg_kit_version() {
 
 create_ffmpeg_kit_bundle() {
 	echo -e "INFO: Creating bundle" | tee -a "$LOG_FILE"
-	local touch_postfix="$(get_bundle_directory)"
+	local touch_postfix="$host_name"
 	local FFMPEG_KIT_VERSION=$(get_ffmpeg_kit_version)
 
   local touch_prefix="${touch_postfix}_already"
 	local touch_name=$(get_small_touchfile_name "${touch_prefix}_bundled" "ffmpeg-kit-bundle $(get_bundle_directory)")
 	
   if truthy "$build_force"; then
-		remove_path -rf "${ffmpeg_kit_src_dir}/${touch_prefix}_bundled"*.touch
+		reset_touch "${ffmpeg_kit_src_dir}" "${touch_prefix}_bundled"*.touch
     remove_path -rf "${ffmpeg_kit_bundle}"
 	fi
 	if [ ! -f "$touch_name" ]; then
@@ -3657,22 +3655,19 @@ create_ffmpeg_kit_bundle() {
 		export FFMPEG_KIT_BUNDLE_LIB_DIRECTORY="${ffmpeg_kit_bundle}/lib"
 		export FFMPEG_KIT_BUNDLE_BIN_DIRECTORY="${ffmpeg_kit_bundle}/bin"
 		
-		create_dir "${ffmpeg_kit_bundle}"
-		create_dir "${FFMPEG_KIT_BUNDLE_INCLUDE_DIRECTORY}"
-		create_dir "${FFMPEG_KIT_BUNDLE_LIB_DIRECTORY}"
-		create_dir "${FFMPEG_KIT_BUNDLE_BIN_DIRECTORY}"
+		create_dir "${ffmpeg_kit_bundle}/{include,lib/pkgconfig,bin}"
 		
 		{
 			# COPY HEADERS
-			[[ -d "${ffmpeg_kit_install}/include" ]] && cp -rP "${ffmpeg_kit_install}/include/"* "${FFMPEG_KIT_BUNDLE_INCLUDE_DIRECTORY}"
+			[[ -d "${ffmpeg_kit_install}/include" ]] && cp -rP "${ffmpeg_kit_install}/include/"* "${ffmpeg_kit_bundle}/include"
 			# [[ -d "${ffmpeg_kit_install}/include" ]] && cp -rP "${ffmpeg_install_prefix}/include/"* "${FFMPEG_KIT_BUNDLE_INCLUDE_DIRECTORY}"
 
 			# COPY LIBS
-			[[ -d "${ffmpeg_kit_install}/lib" ]] && cp -rP "${ffmpeg_kit_install}/lib/"* "${FFMPEG_KIT_BUNDLE_LIB_DIRECTORY}"
+			[[ -d "${ffmpeg_kit_install}/lib" ]] && cp -rP "${ffmpeg_kit_install}/lib/"* "${ffmpeg_kit_bundle}/lib"
 			# [[ -d "${ffmpeg_kit_install}/lib" ]] && cp -rP "${ffmpeg_install_prefix}/lib/"* "${FFMPEG_KIT_BUNDLE_LIB_DIRECTORY}"
 
 			# COPY BINARIES
-			[[ -d "${ffmpeg_kit_install}/bin" ]] && cp -rP "${ffmpeg_kit_install}/bin/"* "${FFMPEG_KIT_BUNDLE_BIN_DIRECTORY}"
+			[[ -d "${ffmpeg_kit_install}/bin" ]] && cp -rP "${ffmpeg_kit_install}/bin/"* "${ffmpeg_kit_bundle}/bin"
 			# [[ -d "${ffmpeg_kit_install}/bin" ]] && cp -rP "${ffmpeg_install_prefix}/bin/"* "${FFMPEG_KIT_BUNDLE_BIN_DIRECTORY}"
 		} >>"$LOG_FILE"
 
@@ -3791,7 +3786,7 @@ zip_dir() {
     
     # Validate input folder exists
     if [[ ! -d "$input_folder" ]]; then
-        echo "Error: Input folder '$input_folder' not found" | tee -a "$LOG_FILE"
+        exit_message 1 "Input folder '$input_folder' not found"
         return 1
     fi
     
@@ -3870,34 +3865,25 @@ EOL
 # Only adds step if it is UNIQUE and EXISTS
 add_step() {
   local func="$1"
-  # 1. Validation: Check if function is defined in current scope
-  if ! declare -F "$func" >/dev/null; then
-      echo "DEBUG: Skipping $func (not defined on $host_platform)" >>"$LOG_FILE"
-      return
+  if [[ "$1" != build_* ]]; then
+    func="build_${1/-/_}"
   fi
-  # 2. Duplication Check
-  if [[ -z "${seen_steps[$func]}" ]]; then
-    BUILD_STEPS+=("$func")
-    seen_steps["$func"]=1
+  # Duplication Check
+  if [[ -z "${BUILD_STEPS[$func]}" ]]; then
+    BUILD_STEPS["$func"]=1
   fi
 }
 
 # Removes a step from the build order and uniqueness tracker if it exists
 remove_step() {
   local func="$1"
+  if [[ "$1" != build_* ]]; then
+    func="build_${1/-/_}"
+  fi
   # 1. Check if the step is currently in the build list
-  if [[ -n "${seen_steps[$func]}" ]]; then
+  if [[ -n "${BUILD_STEPS[$func]}" ]]; then
     # Remove from uniqueness tracker
-    unset "seen_steps[$func]"
-    # 2. Rebuild the array to remove the specific element while preserving order
-    local new_steps=()
-    for step in "${BUILD_STEPS[@]}"; do
-      if [[ "$step" != "$func" ]]; then
-        new_steps+=("$step")
-      fi
-    done
-    # Overwrite original array
-    BUILD_STEPS=("${new_steps[@]}")
+    unset "BUILD_STEPS[$func]"
   fi
 }
 
@@ -3907,6 +3893,7 @@ enable_library() {
   export "$VAR_NAME"=y
   VAR_NAME="disable_${LIBRARY_NAME//-/_}"
   export "$VAR_NAME"=n
+  add_step "$LIBRARY_NAME"
   if iswindows && ! is_shared_library "$LIBRARY_NAME" ; then 
     sanitized="${LIBRARY_NAME//-/_}"
     export extra_ffmpeg_c_flags="$extra_ffmpeg_c_flags -D${sanitized^^}_NODLL "
@@ -3920,6 +3907,7 @@ disable_library() {
   export "$VAR_NAME"=n
   VAR_NAME="disable_${LIBRARY_NAME//-/_}"
   export "$VAR_NAME"=y
+  remove_step "$LIBRARY_NAME"
   echo "  [CONFIG] Disabling: $LIBRARY_NAME" >>"$LOG_FILE"
 }
 
@@ -3937,6 +3925,30 @@ is_library_enabled() {
   fi
 }
 
+enable_preset() {
+  local PRESET_STRING="$1"
+  # Split string by space into array
+  # This handles multiline strings correctly if they are unquoted or space-separated
+  if [[ -n "$PRESET_STRING" ]]; then
+    for FLAG in $PRESET_STRING; do
+      local lib="${FLAG#--*-}"
+      enable_library "$lib"
+    done
+  fi
+}
+
+disable_preset() {
+  local PRESET_STRING="$1"
+  # Split string by space into array
+  # This handles multiline strings correctly if they are unquoted or space-separated
+  if [[ -n "$PRESET_STRING" ]]; then
+    for FLAG in $PRESET_STRING; do
+      local lib="${FLAG#--*-}"
+      disable_library "$lib"
+    done
+  fi
+}
+
 apply_preset() {
     local PRESET_STRING="$1"
     # Split string by space into array
@@ -3945,14 +3957,11 @@ apply_preset() {
       for FLAG in $PRESET_STRING; do
           if [[ "$FLAG" == --enable-* ]]; then
               local lib="${FLAG#--enable-}"
-              local step="build_${lib/-/_}"
-              enable_library "${FLAG#--enable-}"
-              add_step "$step"
+              enable_library "$lib"
           elif [[ "$FLAG" == --disable-* ]]; then
               local lib="${FLAG#--disable-}"
               local step="build_${lib/-/_}"
               disable_library "${FLAG#--disable-}"
-              remove_step "$step"
           fi
       done
     fi
@@ -4311,6 +4320,7 @@ pick_mq_lib() {
       export mq_type="both"
       enable_library "librabbitmq"
       enable_library "libzmq"
+      apply_preset "$CONFIG_MQ"
       return 0
     fi
     export mq_type=${1:-mq_type}
@@ -4349,6 +4359,7 @@ EOF
             echo "No input received within 10 seconds. Defaulting to 'gcrypt'."
             enable_library "librabbitmq"
             enable_library "libzmq"
+            apply_preset "$CONFIG_MQ"
         fi
     done
     case "${crypto_type,,}" in
@@ -4363,6 +4374,7 @@ EOF
         3|both|"")
             enable_library "librabbitmq"
             enable_library "libzmq"
+            apply_preset "$CONFIG_MQ"
             ;;
         *)
             echo -e 'Your choice was not valid, please try again.'
@@ -4372,9 +4384,9 @@ EOF
 }
 
 print_build_steps() {
-	echo -e "Avaliable build steps: ${#BUILD_STEPS[@]}"
-	for i in "${!BUILD_STEPS[@]}"; do
-		echo "Index $i: ${BUILD_STEPS[i]}"
+	echo -e "Avaliable build steps: ${#OPTIMIZED_BUILD_STEPS[@]}"
+	for i in "${!OPTIMIZED_BUILD_STEPS[@]}"; do
+		echo "Index $i: ${OPTIMIZED_BUILD_STEPS[i]}"
 	done
 }
 
@@ -4443,7 +4455,9 @@ TARGET_DIR="$1"
 
 check_gpl_libraries() {
   echo -e "\n  [CONFIG] Checling libraries for GPL conflicts..." >>"$LOG_FILE"
-  if truthy "$build_gpl"; then
+  if truthy "$build_all_gpl"; then
+    enable_preset "$CONFIG_GPL"
+  elif truthy "$build_gpl"; then
     truthy "$enable_libx264" && enable_library "libx264"
     truthy "$enable_libx265" && enable_library "libx265"
     truthy "$enable_libxvid" && enable_library "libxvid"
@@ -4463,66 +4477,14 @@ check_gpl_libraries() {
     truthy "$enable_libxavs2" && enable_library "libxavs2"
     truthy "$enable_libaribb24" && enable_library "libaribb24"
   else
-    disable_library "libx264"
-    disable_library "libx265"
-    disable_library "libxvid"
-    disable_library "frei0r"
-    disable_library "libdvdread"
-    disable_library "v4l2-m2m"
-    disable_library "avisynth"
-    disable_library "libjack"
-    disable_library "libbs2b"
-    disable_library "libcdio"
-    disable_library "libdvdnav"
-    disable_library "librubberband"
-    disable_library "libsmbclient"
-    disable_library "libvidstab"
-    disable_library "libdavs2"
-    disable_library "libxavs"
-    disable_library "libxavs2"
-    disable_library "libaribb24"
+    disable_preset "$CONFIG_GPL"
   fi
 }
 
 # disable libraries autodetected by default to prevent inadvertent bundling
 disable_autodetected() {
   echo -e "\n  [CONFIG] Disabling libraries autodetected by default to prevent inadvertent bundling..." >>"$LOG_FILE"
-  disable_library "alsa"
-  disable_library "libdc1394"
-  disable_library "libdrm"
-  disable_library "libxcb-shape"
-  disable_library "libxcb-shm"
-  disable_library "libxcb-xfixes"
-  disable_library "cuda-llvm"
-  disable_library "v4l2-m2m"
-  disable_library "libxcb"
-  disable_library "vaapi"
-  disable_library "xlib"
-  disable_library "amf"
-  disable_library "vulkan"
-  disable_library "bzlib"
-  disable_library "iconv"
-  disable_library "lzma"
-  disable_library "sdl2"
-  disable_library "sndio"
-  disable_library "zlib"
-  disable_library "cuvid"
-  disable_library "ffnvcodec"
-  disable_library "nvdec"
-  disable_library "nvenc"
-  disable_library "vdpau"
-  disable_library "d3d11va"
-  disable_library "d3d12va"
-  disable_library "dxva2"
-  disable_library "schannel"
-  disable_library "mediafoundation"
-  disable_library "avfoundation"
-  disable_library "appkit"
-  disable_library "audiotoolbox"
-  disable_library "coreimage"
-  disable_library "metal"
-  disable_library "securetransport"
-  disable_library "videotoolbox"
+  disable_preset "$CONFIG_AUTODETECT"
 }
 
 add_src_dir() {
@@ -5532,4 +5494,58 @@ install_prebuilt_binary() {
     echo "$install_pkgconfig_dir/$lib_name.pc" >> "$manifest"
     echo "  [Installed]: $install_pkgconfig_dir/$lib_name.pc" >>"$LOG_FILE"
     return 0
+}
+
+# Function to resolve dependencies into an optimized build order
+# Arguments: An array of requested build steps (e.g., "build_libtesseract" "build_ffmpeg")
+# Output: A space-separated list of build steps in the correct order
+optimize_dependencies() {
+    local -a sorted_order=()
+    local -A visited
+    local -A processing
+    # Helper function for recursive Topological Sort (DFS)
+    visit() {
+        local node=$1
+        # If already fully processed and added to sorted_order, skip
+        if [[ -n "${visited[$node]}" ]]; then
+            return
+        fi
+        # Detect Circular Dependencies
+        if [[ -n "${processing[$node]}" ]]; then
+            echo "DEBUG: Circular dependency detected at $node" | tee -a "$LOG_FILE"
+            exit 1
+        fi
+        # Validation: Check if function is defined in current scope
+        if ! declare -F "$node" >/dev/null; then
+            echo "DEBUG: Skipping $node (not defined on $host_platform)" >>"$LOG_FILE"
+            return
+        fi
+        # Mark as currently being processed (for cycle detection)
+        processing[$node]=1
+        # Retrieve sub-dependencies from the global SUB_DEPENDENCIES array
+        local deps="${SUB_DEPENDENCIES[$node]}"
+        # Recurse into sub-dependencies first
+        for dep in $deps; do
+            visit "$dep"
+        done
+        # Mark as finished and add to the final output array
+        # shellcheck disable=2184,2086
+        unset processing[$node]
+        visited[$node]=1
+        sorted_order+=("$node")
+    }
+    # Iterate through each initial requested build step
+    for step in "${!BUILD_STEPS[@]}"; do
+        if [[ -n "$step" ]]; then
+            visit "$step"
+        fi
+    done
+    # Output the final ordered array
+    OPTIMIZED_BUILD_STEPS=("${sorted_order[@]}")
+    if [[ " ${RUN_ARGS[*]} " =~ (^|[[:space:]])"--print-all-steps"($|[[:space:]]) ]]; then
+      print_build_steps | tee -a "$LOG_FILE"
+    fi
+    if [[ " ${RUN_ARGS[*]} " =~ (^|[[:space:]])"--print-total-steps"($|[[:space:]]) ]]; then
+      echo "INFO: Number of build steps: ${#OPTIMIZED_BUILD_STEPS[@]}" | tee -a "$LOG_FILE"
+    fi
 }

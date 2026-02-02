@@ -167,7 +167,6 @@ get_ldflags() {
 }
 
 configure_ffmpeg_kit() {
-  run_valid_function "build_libjsoncpp"
   echo -e "INFO: Configuring ffmpeg kit" | tee -a "$LOG_FILE"
   reset_allflags
   set_toolchain_paths
@@ -229,7 +228,7 @@ set_toolchain_paths() {
   export RANLIB=ranlib
   export STRIP=strip
   export NM=nm
-  export CFLAGS="$CFLAGS -I${ffmpeg_install_prefix}/include -I/usr/include -I/usr/local/include -I${dependency_install_prefix}/include -I${ffmpeg_source_dir} -I${ffmpeg_source_dir}/compat"
-  export CXXFLAGS="$(get_cxxflags ffmpeg-kit) $CXXFLAGS -I/usr/include -I/usr/local/include -I${ffmpeg_install_prefix}/include -I${dependency_install_prefix}/include -I${ffmpeg_source_dir} -I${ffmpeg_source_dir}/compat"
-  export LDFLAGS="$LDFLAGS -ljsoncpp -L${ffmpeg_install_prefix}/lib -L${dependency_install_prefix}/lib -L${dependency_install_prefix}/lib/$host_target"
+  export CFLAGS="$CFLAGS -Wl,--allow-multiple-definition,--warn-once -I${ffmpeg_source_dir} -I${ffmpeg_source_dir}/compat"
+  export CXXFLAGS="$CXXFLAGS -I${ffmpeg_source_dir} -I${ffmpeg_source_dir}/compat"
+  export LDFLAGS="$LDFLAGS -Wl,--allow-multiple-definition,--warn-once -ljsoncpp -L${ffmpeg_install_prefix}/lib"
 }
