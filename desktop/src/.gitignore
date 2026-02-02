@@ -50,7 +50,9 @@ graph/graphprint.c
 graph/graphprint.h
 resources/.gitignore
 resources/graph.css
+resources/graph.css.c
 resources/graph.html
+resources/graph.html.c
 resources/Makefile
 resources/resman.c
 resources/resman.h
