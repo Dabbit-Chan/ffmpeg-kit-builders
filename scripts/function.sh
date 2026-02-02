@@ -425,7 +425,7 @@ setup_windows_environment() {
 --strip=${cross_prefix}strip \
 --cxx=${cross_prefix}g++"
     
-    export windows_cflags="$original_cflags -std=gnu11 -mtune=generic -O3 -pipe -D__NO_WINDRES__ "
+    export windows_cflags="$original_cflags -std=gnu11 -mtune=generic -O3 -pipe -Wno-pedantic "
     export CFLAGS="$windows_cflags"
     export windows_cxxflags="$original_cxxflags -I${dependency_install_prefix}/include "
     export CXXFLAGS="$windows_cxxflags"
@@ -433,9 +433,8 @@ setup_windows_environment() {
     export CPPFLAGS="$windows_cppflags"
     export windows_ldflags="$original_ldflags -L${dependency_install_prefix}/lib "
     export LDFLAGS="$windows_ldflags"
-    if [[ -f "${cross_prefix}windres" ]]; then
-      mv -f "${cross_prefix}windres" "${cross_prefix}windres.bak"
-    fi
+    # disable windres by default
+    cross_windres
 }
 
 setup_linux_environment() {
@@ -448,7 +447,7 @@ setup_linux_environment() {
     export PKG_CONFIG_PATH="$PKG_CONFIG_PATH:$dependency_install_prefix/share/pkgconfig:$install_pkgconfig_dir:$dependency_install_prefix/lib/$host_target/pkgconfig:$work_dir/pkgconfig:$ffmpeg_install_prefix/lib/pkgconfig:/usr/lib/$host_target/pkgconfig:/usr/lib/pkgconfig:/usr/lib64/pkgconfig:/usr/share/pkgconfig"
     export PATH="$ffmpeg_install_prefix/bin:$dependency_install_prefix/bin:$original_path"
     
-    export linux_cflags="$original_cflags -I${dependency_install_prefix}/include "
+    export linux_cflags="$original_cflags -Wno-pedantic -I${dependency_install_prefix}/include "
     export CFLAGS="$linux_cflags"
     export linux_cppflags="$original_cppflags -I${dependency_install_prefix}/include -DLINUX "
     export CPPFLAGS="$linux_cppflags"
@@ -487,16 +486,20 @@ islinux() {
 }
 
 cross_windres() {
-  if iswindows && truthy "$1"; then
-    if [[ -f "${cross_prefix}windres.bak" ]]; then
-      mv -f "${cross_prefix}windres.bak" "${cross_prefix}windres"
+  if iswindows; then
+    if truthy "$1"; then
+      if [[ -f "${cross_prefix}windres.bak" ]]; then
+        mv -f "${cross_prefix}windres.bak" "${cross_prefix}windres"
+      fi
+      export WINDRES=${cross_prefix}windres
+      reset_cflags
+    else
+      if [[ -f "${cross_prefix}windres" ]]; then
+        mv -f "${cross_prefix}windres" "${cross_prefix}windres.bak"
+      fi
+      export CFLAGS="$CFLAGS -D__NO_WINDRES__"
+      export WINDRES=
     fi
-    export WINDRES=${cross_prefix}windres
-  else
-    if [[ -f "${cross_prefix}windres" ]]; then
-      mv -f "${cross_prefix}windres" "${cross_prefix}windres.bak"
-    fi
-    export WINDRES=
   fi
 }
 
@@ -3115,8 +3118,7 @@ configure_ffmpeg() {
 
 	change_dir "$ffmpeg_source_dir" || exit
 	# iswindows && apply_patch "$PATCHDIR"/frei0r_load-shared-libraries-dynamically.diff
-
-	local postpend_configure_opts=""
+  local postpend_configure_opts=""
 	local init_options=""
 
   if iswindows; then
@@ -3140,7 +3142,6 @@ configure_ffmpeg() {
   init_options+=" --extra-libs=\"-lstdc++\""
   init_options+=" --extra-cflags=\" -ffunction-sections -fdata-sections \""
   init_options+=" --extra-cxxflags=\" -ffunction-sections -fdata-sections \""
-	truthy "$enable_lto" && init_options+=" --enable-optimizations"
 	truthy "$build_small" && init_options+=" --enable-small"
 
 	if ! islinux; then
@@ -3185,7 +3186,6 @@ configure_ffmpeg() {
   config_options+=" --disable-txtpages"
 	config_options+=" --disable-outdev=fbdev"
   config_options+=" --disable-indev=fbdev"
-  ! truthy "$build_ffmpeg_programs" && config_options+=" --disable-programs"
   #------------------------------------------------------------------------------     
   # ----------------------------- android features ------------------------------     
   #------------------------------------------------------------------------------      
@@ -3427,9 +3427,12 @@ configure_ffmpeg() {
 	if truthy "$do_debug_build"; then
 		postpend_configure_opts+=" --disable-stripping --disable-optimizations --extra-cflags=\" -Og \" --extra-cflags=\" -fno-omit-frame-pointer \" --enable-debug=3 --extra-cflags=\" -fno-inline \""
 	else
-		postpend_configure_opts+=" --disable-debug"
+		postpend_configure_opts+=" --disable-debug --enable-stripping --enable-optimizations"
 	fi
   postpend_configure_opts+=" --extra-cflags=\"-std=gnu17\""
+  
+  cross_windres y
+  unset RC
 
 	do_configure "$init_options$config_options$postpend_configure_opts" "./configure" "$(get_ffmpeg_directory)" || exit_message 1 "configure_ffmpeg: unable to configure ffmpeg. see $LOG_FILE for details."
 
@@ -3589,7 +3592,10 @@ install_ffmpeg_pkg() {
 install_ffmpeg_kit() {
 	echo -e "INFO: Installing ffmpeg kit to ${ffmpeg_kit_install}" | tee -a "$LOG_FILE"
   
-	change_dir "${ffmpeg_kit_src_dir}/build"
+  cross_windres y
+  unset RC
+	
+  change_dir "${ffmpeg_kit_src_dir}/build"
 
   if truthy "$build_force"; then
     remove_path -rf "$ffmpeg_kit_install"

@@ -79,7 +79,6 @@ Bundle Presets (pre-defined collections of libraries to include in ffmpeg-kit bu
 Build Options:
 	--host-platform=|--host=(linux|windows)                       where the compiled program will run
 	--host-arch=|--arch=(i686|x86_64)                             host cpu architecture (32-bit or 64-bit)
-	--lto                                                         enable Linktime optimization
 	--ffmpeg-git-checkout-version=[release/8.0]                   if you want to build a particular version of FFmpeg, 
 	                                                              ex: n3.1.1 or a specific git hash
                                                                 WARNING: This will most likely break ffmpeg-kit libraries
@@ -124,7 +123,6 @@ Advanced Dependency Control:
 Dynamic Library Control:
 	--enable-[library name]                                       enable specific library (e.g. --enable-libx264)
 	--disable-[library name]                                      disable specific library (e.g. --disable-libxcb)
-  --ffmpeg-programs|--programs                                  enable ffmpeg programs. By default these are disabled.
 	--ff-*                                                        pass additional ffmpeg parameters directly to configure.
 	                                                              Example: --ff-disable-network passed as --disable-network
 "
@@ -169,10 +167,6 @@ while [ $# -gt 0 ]; do
     export skip_validation=y
     shift
     ;;
-  --lto)
-    export enable_lto=y
-    shift
-		;;
   --release)
     export create_release=y
     shift
@@ -468,10 +462,6 @@ while [ $# -gt 0 ]; do
     ;;
   --streaming-bundle)
     export streaming_bundle=y
-    shift
-    ;;
-  --ffmpeg-programs|--programs)
-    export build_ffmpeg_programs=y
     shift
     ;;
 	--enable-*)

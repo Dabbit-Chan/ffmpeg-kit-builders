@@ -20,18 +20,12 @@ get_common_cxxflags() {
 }
 
 get_size_optimization_cflags() {
-  if truthy "$enable_lto"; then
-    local LINK_TIME_OPTIMIZATION_FLAGS="-flto"
-  else
-    local LINK_TIME_OPTIMIZATION_FLAGS=""
-  fi
-
   local ARCH_OPTIMIZATION=""
   case $host_arch in
   x86_64)
     case $1 in
     ffmpeg)
-      ARCH_OPTIMIZATION="${LINK_TIME_OPTIMIZATION_FLAGS} -Os -ffunction-sections -fdata-sections"
+      ARCH_OPTIMIZATION="-flto -Os -ffunction-sections -fdata-sections"
       ;;
     *)
       ARCH_OPTIMIZATION="-Os -ffunction-sections -fdata-sections"
@@ -46,17 +40,11 @@ get_size_optimization_cflags() {
 }
 
 get_size_optimization_ldflags() {
-  if truthy "$enable_lto"; then
-    local LINK_TIME_OPTIMIZATION_FLAGS="-flto"
-  else
-    local LINK_TIME_OPTIMIZATION_FLAGS=""
-  fi
-
   case $host_arch in
   x86_64)
     case $1 in
     ffmpeg)
-      echo "${LINK_TIME_OPTIMIZATION_FLAGS} -O2 -ffunction-sections -fdata-sections -finline-functions"
+      echo "-flto -O2 -ffunction-sections -fdata-sections -finline-functions"
       ;;
     *)
       echo "-Os -ffunction-sections -fdata-sections"
@@ -123,11 +111,6 @@ get_cflags() {
 
 get_cxxflags() {
   local ARCH_FLAGS="$(get_arch_specific_cflags)"
-  if truthy "$enable_lto"; then
-    local LINK_TIME_OPTIMIZATION_FLAGS="-flto"
-  else
-    local LINK_TIME_OPTIMIZATION_FLAGS=""
-  fi
 
   if truthy "$do_debug_build"; then
     local OPTIMIZATION_FLAGS="-g"
@@ -140,9 +123,9 @@ get_cxxflags() {
   case $1 in
   ffmpeg)
     if truthy "$do_debug_build"; then
-      echo "-g $(get_common_cxxflags)"
+      echo " -g $(get_common_cxxflags)"
     else
-      echo "${LINK_TIME_OPTIMIZATION_FLAGS} $(get_common_cxxflags) -O2 -ffunction-sections -fdata-sections"
+      echo " -flto $(get_common_cxxflags) -O2 -ffunction-sections -fdata-sections"
     fi
     ;;
   ffmpeg-kit)
