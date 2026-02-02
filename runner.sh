@@ -821,7 +821,7 @@ main() {
     if step_name=$(find_build_step "$build_from"); then
       echo -e "INFO: --- Building dependencies from step: $step_name ---" | tee -a "$LOG_FILE"
       echo -e "WARNING: This may fail if previous dependencies havent been built yet." | tee -a "$LOG_FILE"
-      run_valid_build_functions
+      run_valid_build_functions "$step_name"
       echo | tee -a "$LOG_FILE"
       echo -e "INFO: --- Done building dependencies from step: $step_name ---" | tee -a "$LOG_FILE"
     else

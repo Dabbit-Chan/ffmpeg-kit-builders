@@ -22,9 +22,8 @@ build_dlfcn() {
 	fi
 	do_configure "--prefix=$dependency_install_prefix --cross-prefix=$cross_prefix" # rejects some normal cross compile options so custom here
 	do_make_and_make_install
-	gen_ld_script libdl.a dl_s -lpsapi # dlfcn-win32's 'README.md': "If you are linking to the static 'dl.lib' or 'libdl.a', then you would need to explicitly add 'psapi.lib' or '-lpsapi' to your linking command, depending on if MinGW is used."
+	# gen_ld_script libdl.a dl_s -lpsapi # dlfcn-win32's 'README.md': "If you are linking to the static 'dl.lib' or 'libdl.a', then you would need to explicitly add 'psapi.lib' or '-lpsapi' to your linking command, depending on if MinGW is used."
 	change_dir "$src_dir"
-  export RUSTFLAGS="-L $dependency_install_prefix/lib -l dl_s -l psapi"
 }
 # build_libxavs           # config_options+= --enable-libxavs             # enable AVS encoding via xavs [no]
 build_libxavs() {
@@ -948,32 +947,54 @@ build_libtheora() {
 # build_libgsm            # config_options+= --enable-libgsm              # enable GSM de/encoding via libgsm [no]
 build_libgsm() {
   # run_valid_function "build_libsndfile"
-  local lib="libsndfile"
-  local repo="https://github.com/libsndfile/libsndfile"
-  local repo_ver="1.2.2"
+  # local lib="libsndfile"
+  # local repo="https://github.com/libsndfile/libsndfile"
+  # local repo_ver="1.2.2"
+  # change_dir "$src_dir/$lib"
+  # if [[ -f "src/GSM610/gsm.h" ]]; then
+  #   copy_path "$src_dir/$lib/src/GSM610/gsm.h" "$dependency_install_prefix/include/gsm.h" "-fv" >>"$LOG_FILE" 2>&1
+  # fi
+  # if [[ -f "src/GSM610/.libs/libgsm.a" ]]; then 
+  #   copy_path "$src_dir/$lib/src/GSM610/.libs/libgsm.a" "$dependency_install_prefix/lib/libgsm.a" "-fv" >>"$LOG_FILE" 2>&1
+  # fi
+	# change_dir "$src_dir"
+  local lib="libgsm"
+  local repo="https://www.quut.com/gsm/gsm-1.0.23.tar.gz"
+  local repo_ver="1.0.23"
+  change_dir "$src_dir"
+  download_and_unpack_file "$repo" "$lib"
   change_dir "$src_dir/$lib"
-  if [[ -f "src/GSM610/gsm.h" ]]; then
-    copy_path "$src_dir/$lib/src/GSM610/gsm.h" "$dependency_install_prefix/include/gsm.h" "-fv" >>"$LOG_FILE" 2>&1
-  fi
-  if [[ -f "src/GSM610/.libs/libgsm.a" ]]; then 
-    copy_path "$src_dir/$lib/src/GSM610/.libs/libgsm.a" "$dependency_install_prefix/lib/libgsm.a" "-fv" >>"$LOG_FILE" 2>&1
-  fi
-	change_dir "$src_dir"
+  sed -i -e "s|^INSTALL_ROOT.*|INSTALL_ROOT = $dependency_install_prefix|g" \
+  -e "s|^GSM_INSTALL_LIB.*|GSM_INSTALL_LIB = $dependency_install_prefix/lib|g" \
+  -e "s|^GSM_INSTALL_INC.*|GSM_INSTALL_INC = $dependency_install_prefix/include|g" \
+  -e "s|^GSM_INSTALL_MAN.*|GSM_INSTALL_MAN = $dependency_install_prefix/man|g" \
+  Makefile
+  generic_make "lib/libgsm.a" "make"
+  generic_make "gsminstall" "install"
 }
 build_libsndfile() {
-  # run_valid_function "build_libmp3lame"
 	local lib="libsndfile"
   local repo="https://github.com/libsndfile/libsndfile"
   local repo_ver="1.2.2"
 	change_dir "$src_dir"
 	do_git_checkout "$repo" "$src_dir/$lib" "$repo_ver"
-	change_dir "$src_dir/$lib"
-	generic_configure "--disable-sqlite --disable-external-libs --disable-full-suite"
+	change_dir "$src_dir/$lib/build" 1
+  local cmake_options="-DENABLE_EXTERNAL_LIBS=OFF \
+-DENABLE_MPEG=OFF \
+-DBUILD_PROGRAMS=OFF \
+-DBUILD_EXAMPLES=OFF \
+-DBUILD_TESTING=OFF \
+-DENABLE_PACKAGE_CONFIG=ON \
+-DINSTALL_PKGCONFIG_MODULE=ON \
+-DINSTALL_MANPAGES=OFF \
+-DCMAKE_POLICY_VERSION_MINIMUM=3.5"
+  do_cmake_from_build_dir "$src_dir/$lib" "$cmake_options"
+	#generic_configure "--disable-sqlite --disable-external-libs --disable-full-suite --disable-mpeg --disable-alsa"
   sed -i -E 's|=[[:space:]]*src/version-metadata\.lo|=|g' "Makefile"
-	disable_nonessential "$src_dir/$lib"
+	#disable_nonessential "$src_dir/$lib"
   do_make_and_make_install
 	change_dir "$src_dir"
-  add_libs_to_pkg -t="$install_pkgconfig_dir/sndfile.pc" -l="-lsndfile -lmp3lame -lmpg123 -lshlwapi"
+  add_libs_to_pkg -t="$install_pkgconfig_dir/sndfile.pc" -l="-lsndfile -lshlwapi"
 }
 
 build_mpg123() {
@@ -1609,7 +1630,6 @@ build_libaribb24() {
 # build_libtesseract      # config_options+= --enable-libtesseract        # enable Tesseract, needed for ocr filter [no]
 build_libtesseract() {
   # run_valid_function "build_libleptonica"
-	# run_valid_function "build_libarchive"
   # run_valid_function "build_pango"
 	local lib="libtesseract"
   local repo="https://github.com/tesseract-ocr/tesseract"
@@ -1619,13 +1639,14 @@ build_libtesseract() {
 	change_dir "$src_dir/$lib"
 	export CPPFLAGS="$CPPFLAGS -DJBG_STATIC "
   export CXXFLAGS="$CXXFLAGS -DJBG_STATIC "
-  export LIBS="-lleptonica -ltiff -larchive -lgif -lwebp -lwebpmux -lLerc -lsharpyuv -lopenjp2 -lpng -ljpeg -ljbig -lzstd -ldeflate -larchive -llzma -lz -lwinmm -lcrypt32 -lws2_32"
+  export LIBS="-lleptonica -lz -larchive -ltiff -lpng16 -ljpeg -lgif -lwebpmux -lwebp -lopenjp2 -ljbig -lLerc -lsharpyuv -llzma -lzstd -ldeflate -lwinmm -lcrypt32 -lws2_32" 
   export LDFLAGS=" -static -Wl,--allow-multiple-definition $LDFLAGS -static-libgcc -static-libstdc++ "
 	generic_configure "--disable-openmp \
 --with-archive \
 --disable-graphics \
 --disable-tessdata-prefix \
 --without-curl \
+--without-archive \
 --disable-training \
 --disable-doc \
 --with-extra-libraries=\"$dependency_install_prefix/lib\" \
@@ -1637,14 +1658,13 @@ CXXFLAGS=\"$CXXFLAGS\" \
 LIBS=\"$LIBS\" \
 --datadir=\"$dependency_install_prefix/bin\""
 	disable_nonessential "$src_dir/$lib"
-  do_make_and_make_install "LDFLAGS=\"$LDFLAGS\" LIBS=\"$LIBS\" CXXFLAGS=\"$CXXFLAGS\"" "LDFLAGS=\"$LDFLAGS\" LIBS=\"$LIBS\" CXXFLAGS=\"$CXXFLAGS\""
-  add_libs_to_pkg -t="$install_pkgconfig_dir/tesseract.pc" -l="-lz -lstdc++ -lws2_32 -lgdi32 -lcrypt32" -rp="lept libarchive liblzma libtiff-4"
+  do_make_and_make_install
+  add_libs_to_pkg -t="$install_pkgconfig_dir/tesseract.pc" -l="-ltesseract $LIBS -lstdc++ -lws2_32 -lgdi32" -rp="lept libarchive liblzma libtiff-4"
 	# TODO: add ability to download tessdata
   # https://github.com/tesseract-ocr/tessdata
   # https://github.com/tesseract-ocr/tessdata_best
   # https://github.com/tesseract-ocr/tessdata_fast
-	reset_cppflags
-  reset_ldflags
+	reset_allflags
   unset LIBS
 	change_dir "$src_dir"
 }
@@ -2542,12 +2562,12 @@ build_pocketsphinx() {
 -Dbenchmarks=disabled \
 -Dgst_debug=false \
 -Dnls=disabled \
--Dc_link_args=\"-L${dependency_install_prefix}/lib -llzma -ldl_s\""
+-Dc_link_args=\"-L${dependency_install_prefix}/lib -ldl -lpsapi\""
   generic_meson "$meson_options"
   disable_nonessential "$src_dir/$parent/$lib"
   do_ninja_and_ninja_install
   while IFS= read -r -d '' file; do
-    add_libs_to_pkg -t="$file" -l="-llzma -ldl_s"
+    add_libs_to_pkg -t="$file" -l="-llzma -ldl -lpsapi"
   done < <(find "$install_pkgconfig_dir" -name "gstreamer*.pc" -print0)
   reset_ldflags
 	change_dir "$src_dir"
@@ -3047,7 +3067,7 @@ build_libopenvino() {
         sed -i -E 's/^([[:space:]]*)BOOLEAN,/\1OV_BOOLEAN,/g' "$dependency_install_prefix/include/openvino/c/ov_common.h"
         fi
     fi
-    add_libs_to_pkg -t="$install_pkgconfig_dir/openvino.pc" -l="-lwinmm"
+    sed -i 's/^Libs:.*/Libs: -L${libdir} -lopenvino -lopenvino_c -lwinmm/g' "$install_pkgconfig_dir/openvino.pc"
 }
 # build_libtorch          # config_options+= --enable-libtorch            # enable Torch as one DNN backend [no]
 build_libtorch() {
@@ -3353,7 +3373,6 @@ build_librsvg() {
 	change_dir "$src_dir"
 	do_git_checkout "$repo" "$src_dir/$lib" "$repo_ver"
 	change_dir "$src_dir/$lib"
-  export RUSTFLAGS="-L $dependency_install_prefix/lib -l dl_s -l psapi"
 	local meson_options="-Ddocs=disabled \
 -Dintrospection=disabled \
 -Dvala=disabled \
@@ -3363,8 +3382,8 @@ build_librsvg() {
 -Drsvg-convert=disabled \
 -Dc_args=\"-DCAIRO_WIN32_STATIC_BUILD -DGLIB_STATIC_COMPILATION\" \
 -Dcpp_args=\"-DCAIRO_WIN32_STATIC_BUILD -DGLIB_STATIC_COMPILATION\" \
--Dc_link_args=\"-lssp -lmsvcrt -lstdc++\" \
--Dcpp_link_args=\"-lssp -lmsvcrt -lstdc++\""
+-Dc_link_args=\"-L$dependency_install_prefix/lib -lssp -lmsvcrt -lstdc++\" \
+-Dcpp_link_args=\"-L$dependency_install_prefix/lib -lssp -lmsvcrt -lstdc++\""
   if [[ $bits_target == 64 ]]; then
     meson_options+=" -Dtriplet=x86_64-pc-windows-gnu"
   else
@@ -3946,7 +3965,7 @@ build_pango() {
 	change_dir "$src_dir"
 	do_git_checkout "$repo" "$src_dir/$lib" "$repo_ver"
 	change_dir "$src_dir/$lib"
-  export LIBS="-lfontconfig -lexpat -lfreetype -lbrotlidec -lbrotlicommon -lpng -lz -lbz2 -lintl -liconv -ldl_s -lstdc++"
+  export LIBS="-lfontconfig -lexpat -lfreetype -lbrotlidec -lbrotlicommon -lpng -lz -lbz2 -lintl -liconv -ldl -lpsapi -lstdc++"
   export LDFLAGS="$LDFLAGS $LIBS"
 	local meson_options="-Ddocumentation=false \
 -Dgtk_doc=false \
@@ -4009,7 +4028,7 @@ build_cairo() {
   export CFLAGS="$CFLAGS -lpthread"
   export CXXFLAGS="$CXXFLAGS -lpthread"
   export LDFLAGS="$LDFLAGS -lpthread"
-  export LIBS="-lpng -lpthread -llzma -lbrotlidec -lbrotlicommon -ldl_s -lstdc++"
+  export LIBS="-lpng -lpthread -lbrotlidec -lbrotlicommon -ldl -lpsapi -lstdc++"
 	local meson_options="-Dtests=disabled \
 -Dgtk_doc=false \
 -Dglib=enabled \
@@ -4734,8 +4753,6 @@ cpu = '$cpu_family'
 endian = 'little'
 
 [properties]
-sys_root = '$dependency_install_prefix'
-pkg_config_sysroot_dir = '$dependency_install_prefix'
 pkg_config_libdir = '$pkg_config_sysroot_dir/lib/pkgconfig'
 needs_exe_wrapper = true
 EOF
@@ -4778,7 +4795,6 @@ cpu = '$cpu_family'
 endian = 'little'
 
 [properties]
-sys_root = '$dependency_install_prefix'
 pkg_config_libdir = '$install_pkgconfig_dir'
 needs_exe_wrapper = true
 EOF
@@ -4826,8 +4842,6 @@ cpu = '$cpu_family'
 endian = 'little'
 
 [properties]
-sys_root = '$dependency_install_prefix'
-pkg_config_sysroot_dir = '$dependency_install_prefix'
 pkg_config_libdir = '$pkg_config_sysroot_dir/lib/pkgconfig'
 needs_exe_wrapper = true
 EOF

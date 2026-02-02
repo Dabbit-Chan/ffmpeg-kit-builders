@@ -373,7 +373,6 @@ cpu = '$cpu_family'
 endian = 'little'
 
 [properties]
-sys_root = '$dependency_install_prefix'
 pkg_config_libdir = '$pkg_config_sysroot_dir/lib/pkgconfig'
 needs_exe_wrapper = true
 EOF

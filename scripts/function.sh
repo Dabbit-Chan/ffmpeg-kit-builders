@@ -397,7 +397,7 @@ setup_windows_environment() {
     export install_pkgconfig_dir="${dependency_install_prefix}/lib/pkgconfig"
 
     export PKG_CONFIG_PATH="$install_pkgconfig_dir:$ffmpeg_install_prefix/lib/pkgconfig"
-    export PKG_CONFIG_LIBDIR="$PKG_CONFIG_PATH"
+    # export PKG_CONFIG_LIBDIR="$PKG_CONFIG_PATH"
     # export PKG_CONFIG_SYSROOT_DIR="$dependency_install_prefix"
     export PATH="$original_path:$toolchain_bin_path:$ffmpeg_install_prefix/bin"
     export cross_prefix="/usr/local/mingw-w64/bin/$host_target-"
@@ -3165,7 +3165,6 @@ configure_ffmpeg() {
     init_options+=" --extra-cflags=\" $extra_ffmpeg_c_flags \""
     init_options+=" --extra-libs=\" -static \""
     init_options+=" --extra-cflags=\" -Wno-pedantic -Wno-cpp \""
-    # init_options+=" --extra-libs=\"-ldl_s\""
   fi
 
 	# can't mix and match --enable-static --enable-shared unfortunately, or the final executable seems to just use shared if the're both present
