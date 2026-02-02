@@ -1349,26 +1349,49 @@ build_libsndfile() {
   local repo_ver="1.2.2"
   change_dir "$src_dir"
   do_git_checkout "$repo" "$src_dir/$lib" "$repo_ver"
-  change_dir "$src_dir/$lib"
-  generic_configure "--disable-sqlite --disable-external-libs --disable-full-suite"
-  disable_nonessential "$src_dir/$lib"
+	change_dir "$src_dir/$lib/build" 1
+  local cmake_options="-DENABLE_EXTERNAL_LIBS=OFF \
+-DENABLE_MPEG=OFF \
+-DBUILD_PROGRAMS=OFF \
+-DBUILD_EXAMPLES=OFF \
+-DBUILD_TESTING=OFF \
+-DENABLE_PACKAGE_CONFIG=ON \
+-DINSTALL_PKGCONFIG_MODULE=ON \
+-DINSTALL_MANPAGES=OFF \
+-DCMAKE_POLICY_VERSION_MINIMUM=3.5"
+  do_cmake_from_build_dir "$src_dir/$lib" "$cmake_options"
+  #generic_configure "--disable-sqlite --disable-external-libs --disable-full-suite --disable-mpeg --disable-alsa"
+  #disable_nonessential "$src_dir/$lib"
   do_make_and_make_install
   change_dir "$src_dir"
 }
 # build_libgsm            # config_options+= --enable-libgsm              # enable GSM de/encoding via libgsm [no]
 build_libgsm() {
   # run_valid_function "build_libsndfile"
-  local lib="libsndfile"
-  local repo="https://github.com/libsndfile/libsndfile"
-  local repo_ver="1.2.2"
-  change_dir "$src_dir/$lib"
-  if [[ ! -f $dependency_install_prefix/lib/libgsm.a ]]; then
-    [[ -f "src/GSM610/gsm.h" ]] && { install -m644 src/GSM610/gsm.h "$dependency_install_prefix/include/gsm.h" || exit_message 1 "build_libgsm: could not install src/GSM610/gsm.h"; }
-    [[ -f "src/GSM610/.libs/libgsm.a" ]] && { install -m644 src/GSM610/.libs/libgsm.a "$dependency_install_prefix/lib/libgsm.a" || exit_message 1 "build_libgsm: could not install src/GSM610/.libs/libgsm.a"; }
-  else
-    echo -e "already installed GSM 6.10 ..." >>"$LOG_FILE"
-  fi
+  # local lib="libsndfile"
+  # local repo="https://github.com/libsndfile/libsndfile"
+  # local repo_ver="1.2.2"
+  # change_dir "$src_dir/$lib"
+  # if [[ ! -f $dependency_install_prefix/lib/libgsm.a ]]; then
+  #   [[ -f "src/GSM610/gsm.h" ]] && { install -m644 src/GSM610/gsm.h "$dependency_install_prefix/include/gsm.h" || exit_message 1 "build_libgsm: could not install src/GSM610/gsm.h"; }
+  #   [[ -f "src/GSM610/.libs/libgsm.a" ]] && { install -m644 src/GSM610/.libs/libgsm.a "$dependency_install_prefix/lib/libgsm.a" || exit_message 1 "build_libgsm: could not install src/GSM610/.libs/libgsm.a"; }
+  # else
+  #   echo -e "already installed GSM 6.10 ..." >>"$LOG_FILE"
+  # fi
+  # change_dir "$src_dir"
+  local lib="libgsm"
+  local repo="https://www.quut.com/gsm/gsm-1.0.23.tar.gz"
+  local repo_ver="1.0.23"
   change_dir "$src_dir"
+  download_and_unpack_file "$repo" "$lib"
+  change_dir "$src_dir/$lib"
+  sed -i -e "s|^INSTALL_ROOT.*|INSTALL_ROOT = $dependency_install_prefix|g" \
+  -e "s|^GSM_INSTALL_LIB.*|GSM_INSTALL_LIB = $dependency_install_prefix/lib|g" \
+  -e "s|^GSM_INSTALL_INC.*|GSM_INSTALL_INC = $dependency_install_prefix/include|g" \
+  -e "s|^GSM_INSTALL_MAN.*|GSM_INSTALL_MAN = $dependency_install_prefix/man|g" \
+  Makefile
+  generic_make "lib/libgsm.a" "make"
+  generic_make "gsminstall" "install"
 }
 build_graphite() {
   local lib="graphite"
@@ -3236,6 +3259,7 @@ build_libtesseract() {
 --disable-graphics \
 --disable-tessdata-prefix \
 --without-curl \
+--without-archive \
 --disable-training \
 --disable-doc \
 LIBLEPT_HEADERSDIR=$dependency_install_prefix/include \
