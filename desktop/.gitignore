@@ -24,3 +24,4 @@ stamp-h1
 *.a
 *.pc
 build/
+*.touch
