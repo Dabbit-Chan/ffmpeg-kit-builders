@@ -220,28 +220,29 @@ prebuilt/
 
 | Option | Default | Description |
 |--------|---------|-------------|
-| `--ffmpeg-git-checkout-version=`      | `release/8.0` | Build a particular version of FFmpeg (e.g., n3.1.1 or a specific git hash) |
-| `--ffmpeg-git-checkout=`              | `https://github.com/FFmpeg/FFmpeg.git` | Clone FFmpeg from other repositories |
-| `--ffmpeg-source-dir=`                | `[empty]` | Specify the directory of ffmpeg source code. When specified, git will not be used |
-| `--cflags=`                           | `-mtune=generic -O3 -pipe` | Compiler flags (default works on any CPU) |
-| `--cxxflags=`                         | `-ffunction-sections -fdata-sections -fPIC` | Compiler flags (default works on any CPU) |
-| `--cppflags=`                         |   | Compiler flags (default works on any CPU) |
-| `--ldflags=`                          |   | Compiler flags (default works on any CPU) |
-| `--git-get-latest=`                   |`y`| Do a git pull for latest code from repositories like FFmpeg |
-| `--prefer-stable=`                    |`y`| Build a few libraries from releases instead of git master |
-| `--build-only={0..} OR [library_name]`|   | Build only specific dependency (0.. or step/library name from get-all-steps) |
-| `--build-from={0..} OR [library_name]`|   | Start building dependencies from given step (0.. or step/library name) |
-| `--build-deps=[y]`                    |`y`| Whether or not to skip building dependencies
-| `--build-deps-only`                   |   | Only build dependency binaries. Will not build app binaries. (static or shared build only affects ffmpeg and ffmpeg-kit. Dependencies are always built statically.) |
-|`--build-ffmpeg-only=[shared]\|static` |   | build ffmpeg binaries only of type [shared] or static. Does not (re)build ext-library dependencies. By default ffmpeg-kit always needs a static build of ffmpeg to be present already. Missing dependencies will cause a failure
+| `--ffmpeg-git-checkout-version=`         | `release/8.0` | Build a particular version of FFmpeg (e.g., n3.1.1 or a specific git hash) |
+| `--ffmpeg-git-checkout=`                 | `https://github.com/FFmpeg/FFmpeg.git` | Clone FFmpeg from other repositories |
+| `--ffmpeg-source-dir=`                   | `[empty]` | Specify the directory of ffmpeg source code. When specified, git will not be used |
+| `--cflags=`                              | `-mtune=generic -O3 -pipe` | Compiler flags (default works on any CPU) |
+| `--cxxflags=`                            | `-ffunction-sections -fdata-sections -fPIC` | Compiler flags (default works on any CPU) |
+| `--cppflags=`                            |   | Compiler flags (default works on any CPU) |
+| `--ldflags=`                             |   | Compiler flags (default works on any CPU) |
+| `--git-get-latest=`                      |`y`| Do a git pull for latest code from repositories like FFmpeg |
+| `--prefer-stable=`                       |`y`| Build a few libraries from releases instead of git master |
+|`--print-total-steps\|--print-all-steps`  |  | print dependency steps and list all step names by index |
+| `--build-only={0..} OR [library_name]`   |   | Build only specific dependency (0.. or step/library name from get-all-steps) |
+| `--build-from={0..} OR [library_name]`   |   | Start building dependencies from given step (0.. or step/library name) |
+| `--build-deps=[y]`                       |`y`| Whether or not to skip building dependencies
+| `--build-deps-only`                      |   | Only build dependency binaries. Will not build app binaries. (static or shared build only affects ffmpeg and ffmpeg-kit. Dependencies are always built statically.) |
+|`--build-ffmpeg-only=[shared]\|static`    |   | build ffmpeg binaries only of type [shared] or static. Does not (re)build ext-library dependencies. By default ffmpeg-kit always needs a static build of ffmpeg to be present already. Missing dependencies will cause a failure
 |`--build-ffmpeg-kit-only=[shared]\|static`|   | build ffmpeg-kit library and bundle only of type [shared] or static. By default ffmpeg-kit always needs a static build of ffmpeg to be present already. Does not (re)build ext-library dependencies. Missing dependencies will cause a failure.
-|`--clean-builds=[shared]\|static`      |   | clean ffmpeg and ffmpeg-kit builds of type [shared] or static and exit
-|`--reset-and-clean[=ARG]`              |   | reset and clean all source directories of touch files and build artifacts
-| `--list-libraries`                    |   | Lists ffmpeg configuration including extra libraries and exit |
-| `--enable-[library name]`             |   | Enable extra ffmpeg libraries. Run --list-libraries and see under "External library support" |
-| `--ffmpeg-programs\|--programs`       |   | Enable ffmpeg programs. **By default these are disabled.** |
-| `--ff-*`                              |   | Pass additional ffmpeg parameters prefixed by ff-* to ffmpeg configure. No additional checks done |
-|`--resume`                             |   | resume previously inturrupted run (based on ~run.state file)
+|`--clean-builds=[shared]\|static`         |   | clean ffmpeg and ffmpeg-kit builds of type [shared] or static and exit
+|`--reset-and-clean(=ARG)`                 |   | reset and clean all source directories of touch files and build artifacts. ARG=library src dir name
+| `--list-libraries`                       |   | Lists ffmpeg configuration including extra libraries and exit |
+| `--enable-[library name]`                |   | Enable extra ffmpeg libraries. Run --list-libraries and see under "External library support" |
+| `--ffmpeg-programs\|--programs`          |   | Enable ffmpeg programs. **By default these are disabled.** |
+| `--ff-*`                                 |   | Pass additional ffmpeg parameters prefixed by ff-* to ffmpeg configure. No additional checks done |
+|`--resume`                                |   | resume previously inturrupted run (based on ~run.state file)
 
 ## Bundle Matrix
 
