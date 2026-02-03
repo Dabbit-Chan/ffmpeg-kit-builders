@@ -1,8 +1,0 @@
-
-import 'ffmpeg_kit_flutter_platform_interface.dart';
-
-class FfmpegKitFlutter {
-  Future<String?> getPlatformVersion() {
-    return FfmpegKitFlutterPlatform.instance.getPlatformVersion();
-  }
-}
