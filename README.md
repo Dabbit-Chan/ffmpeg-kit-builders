@@ -188,6 +188,7 @@ prebuilt/
 ### Feature presets
 | Option | Description |
 |--------|-------------|
+|`--enable-base`|enable only base built-in ffmpeg libraries (cannot be combined with other presets)
 |`--enable-full`|enable all available external libraries (based on gpl/non-gpl selection)
 |`--enable-small`|exclude certain extra libraries from presets to reduce size (see --list-excluded)
 |`--enable-https`|enable https libraries
