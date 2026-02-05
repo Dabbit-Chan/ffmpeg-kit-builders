@@ -337,9 +337,9 @@ falsey() {
 # 2. destination file
 #
 overwrite_file() {
-	copy_path "$2" "$2.bak" # backup
+	copy_path "$2" "$2.bak" "-rf" # backup
 	remove_path -f "$2" 2>>"$LOG_FILE"
-	copy_path "$1" "$2" 2>>"$LOG_FILE"
+	copy_path "$1" "$2" "-rf" 2>>"$LOG_FILE"
 }
 
 prepare_inline_sed() {
@@ -682,7 +682,9 @@ get_bundle_directory() {
 }
 
 get_bundle_type() {
-  if truthy "$audio_bundle"; then
+  if truthy "$enable_base"; then
+    echo "base"
+  elif truthy "$audio_bundle"; then
     echo "audio"
   elif truthy "$video_bundle"; then
     echo "video"
@@ -2215,6 +2217,7 @@ do_make() {
       [[ "$extra_make_options" != *"CROSS_COMPILE="* ]] && extra_make_options+=" CROSS_COMPILE=$CROSS_COMPILE"
     fi
     echo -e "INFO: do_make()with:\n  DIR=$cur_dir2\n  PATH=$PATH\n  PKG_CONFIG_PATH=$PKG_CONFIG_PATH\n  CFLAGS:$CFLAGS\n  CXXFLAGS:$CXXFLAGS\n  CPPFLAGS:$CPPFLAGS\n  LDFLAGS:$LDFLAGS\n  nice running: \"make $extra_make_options\"\n  $(get_compiler_flags)" >>"$LOG_FILE"
+    # eval "bear -o "$ffmpeg_kit_src_dir/compile_commands.json nice make $extra_make_options"  > >(redirect_output) 2>&1 || exit_message 1 "do_make: could not make with $extra_make_options"
     eval "nice make $extra_make_options" > >(redirect_output) 2>&1 || exit_message 1 "do_make: could not make with $extra_make_options"
 		create_touch_file 0 "$touch_name" # only touch if the build was OK
     add_src_dir "$(pwd)"
@@ -3564,8 +3567,8 @@ install_ffmpeg_pkg() {
 
     # # MANUALLY ADD REQUIRED HEADERS
     {
-      mkdir -p "${ffmpeg_install_prefix}"/include/libavutil/{x86,arm,aarch64}
-      mkdir -p "${ffmpeg_install_prefix}"/include/libavcodec/{x86,arm}
+      create_dir "${ffmpeg_install_prefix}"/include/libavutil/{x86,arm,aarch64}
+      create_dir "${ffmpeg_install_prefix}"/include/libavcodec/{x86,arm}
       overwrite_file "${ffmpeg_source_dir}"/config.h "${ffmpeg_install_prefix}"/include/config.h
       overwrite_file "${ffmpeg_source_dir}"/libavcodec/mathops.h "${ffmpeg_install_prefix}"/include/libavcodec/mathops.h
       overwrite_file "${ffmpeg_source_dir}"/libavcodec/x86/mathops.h "${ffmpeg_install_prefix}"/include/libavcodec/x86/mathops.h
@@ -3670,15 +3673,13 @@ create_ffmpeg_kit_bundle() {
 		{
 			# COPY HEADERS
 			[[ -d "${ffmpeg_kit_install}/include" ]] && cp -rP "${ffmpeg_kit_install}/include/"* "${ffmpeg_kit_bundle}/include"
-			# [[ -d "${ffmpeg_kit_install}/include" ]] && cp -rP "${ffmpeg_install_prefix}/include/"* "${FFMPEG_KIT_BUNDLE_INCLUDE_DIRECTORY}"
+      [[ -d "${dependency_install_prefix}/include/json" ]] && cp -rP "${dependency_install_prefix}/include/json" "${ffmpeg_kit_bundle}/include/json"
 
 			# COPY LIBS
 			[[ -d "${ffmpeg_kit_install}/lib" ]] && cp -rP "${ffmpeg_kit_install}/lib/"* "${ffmpeg_kit_bundle}/lib"
-			# [[ -d "${ffmpeg_kit_install}/lib" ]] && cp -rP "${ffmpeg_install_prefix}/lib/"* "${FFMPEG_KIT_BUNDLE_LIB_DIRECTORY}"
 
 			# COPY BINARIES
 			[[ -d "${ffmpeg_kit_install}/bin" ]] && cp -rP "${ffmpeg_kit_install}/bin/"* "${ffmpeg_kit_bundle}/bin"
-			# [[ -d "${ffmpeg_kit_install}/bin" ]] && cp -rP "${ffmpeg_install_prefix}/bin/"* "${FFMPEG_KIT_BUNDLE_BIN_DIRECTORY}"
 		} >>"$LOG_FILE"
 
     find "${ffmpeg_kit_bundle}/lib/pkgconfig" -type f -name "*.pc" -exec sed -i \

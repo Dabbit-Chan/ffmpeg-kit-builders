@@ -14,7 +14,7 @@ for arg; do
   esac
 done
 
-sudo ./"${arg}"-64-full.sh 1 gfy
+sudo ./scripts/builds/"${arg}"-64-full.sh 1 gfy
 
 sudo ./scripts/builds/"${arg}"-64-full.sh 2 gfy
 sudo ./scripts/builds/"${arg}"-64-full.sh 3 gfy
