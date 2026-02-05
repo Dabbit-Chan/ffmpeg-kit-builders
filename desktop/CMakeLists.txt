@@ -7,6 +7,11 @@ endif()
 # Initialize Project
 project(ffmpeg-kit VERSION 8.0 LANGUAGES C CXX)
 
+# Export compile_commands.json for Clangd
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
+set(CMAKE_EXPORT_COMPILE_COMMANDS_DEBUG ON)
+set(CMAKE_EXPORT_COMPILE_COMMANDS_RELEASE ON)
+
 # ==============================================================================
 # 1. Options & Configuration
 # ==============================================================================
@@ -177,7 +182,7 @@ if(MINGW)
     )
 else()
     target_compile_definitions(ffmpegkit PRIVATE TARGET_OS_LINUX)
-    target_compile_options(ffmpegkit PRIVATE -fvisibility=hidden)
+    target_compile_options(ffmpegkit PRIVATE -fvisibility=default)
 endif()
 
 # ==============================================================================
@@ -188,10 +193,7 @@ target_link_libraries(ffmpegkit PRIVATE PkgConfig::FFMPEG)
 if(BUILD_SHARED_LIBS)
     target_compile_definitions(ffmpegkit PRIVATE DLL_EXPORT PIC)
     
-    if(MINGW)
-        # [CRITICAL FIX 2] MinGW Shared Libs require no undefined symbols
-        target_link_options(ffmpegkit PRIVATE -Wl,--no-undefined)
-    endif()
+    target_link_options(ffmpegkit PRIVATE -Wl,--no-undefined)
 
     if(MINGW OR CMAKE_SYSTEM_NAME MATCHES "Linux")
     target_link_libraries(ffmpegkit PRIVATE 
