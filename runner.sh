@@ -590,6 +590,8 @@ source "${SCRIPTDIR}/deps-$host_platform.sh"
 # disable libraries autodetected by default to prevent inadvertent bundling
 disable_autodetected
 
+apply_preset "$CONFIG_BASE"
+
 if ! truthy "$enable_base"; then
   echo -e "\n  [CONFIG] Enabling selected libraries..." >>"$LOG_FILE"
   apply_preset "$CONFIG_GENERAL"

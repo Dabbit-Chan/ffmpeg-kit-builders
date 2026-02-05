@@ -77,8 +77,9 @@ CONFIG_GENERAL="\
 --enable-bzlib \
 --enable-iconv \
 --enable-lzma \
---enable-zlib \
---enable-libjsoncpp"
+--enable-zlib"
+
+CONFIG_BASE="--enable-libjsoncpp"
 
 # must pick crypto type for streaming support
 CONFIG_STREAMING="\
