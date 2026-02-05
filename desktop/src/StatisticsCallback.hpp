@@ -1,5 +1,4 @@
 /*
- * Copyright (c) 2018-2022 Taner Sener
  * Copyright (c) 2025 Akash Patel
  *
  * This file is part of FFmpegKit.
@@ -18,13 +17,25 @@
  * along with FFmpegKit.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef FFMPEG_KIT_EXCEPTION_H
-#define FFMPEG_KIT_EXCEPTION_H
+#ifndef FFMPEG_KIT_STATISTICS_CALLBACK_H
+#define FFMPEG_KIT_STATISTICS_CALLBACK_H
 
-#include <stdio.h>
-#include <setjmp.h>
+#include "Statistics.hpp"
+#include <functional>
+#include <memory>
 
-/** Holds information to implement exception handling. */
-extern __thread jmp_buf ex_buf__;
+namespace ffmpegkit {
 
-#endif // FFMPEG_KIT_EXCEPTION_H
+/**
+ * <p>Callback that receives statistics generated for <code>FFmpegKit</code>
+ * sessions.
+ *
+ * @param statistics statistics entry
+ */
+typedef std::function<void(
+    const std::shared_ptr<ffmpegkit::Statistics> statistics)>
+    StatisticsCallback;
+
+} // namespace ffmpegkit
+
+#endif // FFMPEG_KIT_STATISTICS_CALLBACK_H

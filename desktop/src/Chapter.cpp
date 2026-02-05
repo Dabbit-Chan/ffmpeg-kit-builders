@@ -17,71 +17,73 @@
  * along with FFmpegKit.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include "Chapter.h"
+#include "Chapter.hpp"
 
-ffmpegkit::Chapter::Chapter(std::shared_ptr<Json::Value> chapterValue) : _chapterValue{chapterValue} {
-}
+ffmpegkit::Chapter::Chapter(std::shared_ptr<Json::Value> chapterValue)
+    : _chapterValue{chapterValue} {}
 
 std::shared_ptr<int64_t> ffmpegkit::Chapter::getId() {
-    return getNumberProperty(KeyId);
+  return getNumberProperty(KeyId);
 }
 
 std::shared_ptr<std::string> ffmpegkit::Chapter::getTimeBase() {
-    return getStringProperty(KeyTimeBase);
+  return getStringProperty(KeyTimeBase);
 }
 
 std::shared_ptr<int64_t> ffmpegkit::Chapter::getStart() {
-    return getNumberProperty(KeyStart);
+  return getNumberProperty(KeyStart);
 }
 
 std::shared_ptr<std::string> ffmpegkit::Chapter::getStartTime() {
-    return getStringProperty(KeyStartTime);
+  return getStringProperty(KeyStartTime);
 }
 
 std::shared_ptr<int64_t> ffmpegkit::Chapter::getEnd() {
-    return getNumberProperty(KeyEnd);
+  return getNumberProperty(KeyEnd);
 }
 
 std::shared_ptr<std::string> ffmpegkit::Chapter::getEndTime() {
-    return getStringProperty(KeyEndTime);
+  return getStringProperty(KeyEndTime);
 }
 
 std::shared_ptr<Json::Value> ffmpegkit::Chapter::getTags() {
-    return getProperty(KeyTags);
+  return getProperty(KeyTags);
 }
 
-std::shared_ptr<std::string> ffmpegkit::Chapter::getStringProperty(const char* key) {
-    if (_chapterValue->isMember(key)) {
-        return std::make_shared<std::string>((*_chapterValue)[key].asString());
-    } else {
-        return nullptr;
-    }
+std::shared_ptr<std::string>
+ffmpegkit::Chapter::getStringProperty(const char *key) {
+  if (_chapterValue->isMember(key)) {
+    return std::make_shared<std::string>((*_chapterValue)[key].asString());
+  } else {
+    return nullptr;
+  }
 }
 
-std::shared_ptr<int64_t> ffmpegkit::Chapter::getNumberProperty(const char* key) {
-    if (_chapterValue->isMember(key)) {
-        return std::make_shared<int64_t>((*_chapterValue)[key].asInt64());
-    } else {
-        return nullptr;
-    }
+std::shared_ptr<int64_t>
+ffmpegkit::Chapter::getNumberProperty(const char *key) {
+  if (_chapterValue->isMember(key)) {
+    return std::make_shared<int64_t>((*_chapterValue)[key].asInt64());
+  } else {
+    return nullptr;
+  }
 }
 
-std::shared_ptr<Json::Value> ffmpegkit::Chapter::getProperty(const char* key) {
-    if (_chapterValue->isMember(key)) {
-        auto value = std::make_shared<Json::Value>();
-        *value = (*_chapterValue)[key];
-        return value;
-    } else {
-        return nullptr;
-    }
+std::shared_ptr<Json::Value> ffmpegkit::Chapter::getProperty(const char *key) {
+  if (_chapterValue->isMember(key)) {
+    auto value = std::make_shared<Json::Value>();
+    *value = (*_chapterValue)[key];
+    return value;
+  } else {
+    return nullptr;
+  }
 }
 
 std::shared_ptr<Json::Value> ffmpegkit::Chapter::getAllProperties() {
-    if (_chapterValue != nullptr) {
-        auto all = std::make_shared<Json::Value>();
-        *all = (*_chapterValue);
-        return all;
-    } else {
-        return nullptr;
-    }
+  if (_chapterValue != nullptr) {
+    auto all = std::make_shared<Json::Value>();
+    *all = (*_chapterValue);
+    return all;
+  } else {
+    return nullptr;
+  }
 }

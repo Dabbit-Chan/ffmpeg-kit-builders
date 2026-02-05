@@ -20,58 +20,53 @@
 #include "ffmpeg_lib.h"
 #include "ffmpeg.h"
 #include "ffmpeg_sched.h"
-#include "libavutil/mem.h"
-#include "libavutil/avstring.h"
 #include "libavformat/avformat.h"
-#include <string.h>
+#include "libavutil/avstring.h"
+#include "libavutil/mem.h"
 #include <stdlib.h>
+#include <string.h>
 #ifdef _WIN32
-  #include <windows.h>
-  #include <io.h>
+#include <io.h>
+#include <windows.h>
 #else
-  #include <pthread.h>
-  #include <unistd.h>
+#include <pthread.h>
+#include <unistd.h>
 #endif
 
 // Global lock to protect ffmpeg.c global variables
-    
+
 // --- MUTEX ABSTRACTION START ---
 #ifdef _WIN32
-  static CRITICAL_SECTION ffmpeg_lock;
-  static volatile long ffmpeg_lock_initialized = 0;
+static CRITICAL_SECTION ffmpeg_lock;
+static volatile long ffmpeg_lock_initialized = 0;
 
-  static void lock_init(void) {
-      // Thread-safe one-time initialization
-      if (InterlockedCompareExchange(&ffmpeg_lock_initialized, 1, 0) == 0) {
-          InitializeCriticalSection(&ffmpeg_lock);
-          InterlockedExchange(&ffmpeg_lock_initialized, 2);
-      } else {
-          // Wait for initialization to complete if another thread is doing it
-          while (InterlockedCompareExchange(&ffmpeg_lock_initialized, 2, 2) != 2) {
-              Sleep(1);
-          }
-      }
+static void lock_init(void) {
+  // Thread-safe one-time initialization
+  if (InterlockedCompareExchange(&ffmpeg_lock_initialized, 1, 0) == 0) {
+    InitializeCriticalSection(&ffmpeg_lock);
+    InterlockedExchange(&ffmpeg_lock_initialized, 2);
+  } else {
+    // Wait for initialization to complete if another thread is doing it
+    while (InterlockedCompareExchange(&ffmpeg_lock_initialized, 2, 2) != 2) {
+      Sleep(1);
+    }
   }
+}
 
-  static void lib_mutex_lock(void) {
-      if (ffmpeg_lock_initialized != 2) lock_init();
-      EnterCriticalSection(&ffmpeg_lock);
-  }
+static void lib_mutex_lock(void) {
+  if (ffmpeg_lock_initialized != 2)
+    lock_init();
+  EnterCriticalSection(&ffmpeg_lock);
+}
 
-  static void lib_mutex_unlock(void) {
-      LeaveCriticalSection(&ffmpeg_lock);
-  }
+static void lib_mutex_unlock(void) { LeaveCriticalSection(&ffmpeg_lock); }
 #else
-  // POSIX Implementation
-  static pthread_mutex_t ffmpeg_lock = PTHREAD_MUTEX_INITIALIZER;
+// POSIX Implementation
+static pthread_mutex_t ffmpeg_lock = PTHREAD_MUTEX_INITIALIZER;
 
-  static void lib_mutex_lock(void) {
-      pthread_mutex_lock(&ffmpeg_lock);
-  }
+static void lib_mutex_lock(void) { pthread_mutex_lock(&ffmpeg_lock); }
 
-  static void lib_mutex_unlock(void) {
-      pthread_mutex_unlock(&ffmpeg_lock);
-  }
+static void lib_mutex_unlock(void) { pthread_mutex_unlock(&ffmpeg_lock); }
 #endif
 // --- MUTEX ABSTRACTION END ---
 
@@ -79,8 +74,7 @@
 extern int ffmpeg_run_internal(int argc, char **argv);
 extern void ffmpeg_reset_internal_state(void);
 
-struct FFmpegContext
-{
+struct FFmpegContext {
   Scheduler *sch;
   int ret;
   int argc;
@@ -89,8 +83,7 @@ struct FFmpegContext
   int files_parsed;
 };
 
-static int split_args(const char *args, char ***argv_out)
-{
+static int split_args(const char *args, char ***argv_out) {
   if (!args || !argv_out)
     return -1;
 
@@ -103,15 +96,13 @@ static int split_args(const char *args, char ***argv_out)
   int in_quotes = 0;
 
   // First pass: count arguments
-  while (*p)
-  {
+  while (*p) {
     while (*p && !in_quotes && (*p == ' ' || *p == '\t' || *p == '\n'))
       p++;
     if (!*p)
       break;
     argc++;
-    if (*p == '"')
-    {
+    if (*p == '"') {
       in_quotes = 1;
       p++;
       while (*p && *p != '"')
@@ -119,17 +110,14 @@ static int split_args(const char *args, char ***argv_out)
       if (*p)
         p++;
       in_quotes = 0;
-    }
-    else
-    {
+    } else {
       while (*p && *p != ' ' && *p != '\t' && *p != '\n')
         p++;
     }
   }
 
   char **argv = av_mallocz(sizeof(char *) * (argc + 1));
-  if (!argv)
-  {
+  if (!argv) {
     av_free(args_copy);
     return -1;
   }
@@ -139,33 +127,28 @@ static int split_args(const char *args, char ***argv_out)
   p = args_copy;
   int idx = 0;
 
-  while (*p && idx < argc)
-  {
+  while (*p && idx < argc) {
     while (*p && (*p == ' ' || *p == '\t' || *p == '\n'))
       p++;
     if (!*p)
       break;
 
     char *start = p;
-    if (*p == '"')
-    {
+    if (*p == '"') {
       p++;
       start = p;
       while (*p && *p != '"')
         p++;
       if (*p)
         *p++ = '\0';
-    }
-    else
-    {
+    } else {
       while (*p && *p != ' ' && *p != '\t' && *p != '\n')
         p++;
       if (*p)
         *p++ = '\0';
     }
     argv[idx] = av_strdup(start);
-    if (!argv[idx])
-    {
+    if (!argv[idx]) {
       // Memory allocation failure; clean up
       for (int i = 0; i < idx; i++)
         av_free(argv[i]);
@@ -181,8 +164,7 @@ static int split_args(const char *args, char ***argv_out)
   return argc;
 }
 
-FFmpegContext *ffmpeg_init(const char *args_string)
-{
+FFmpegContext *ffmpeg_init(const char *args_string) {
   if (!args_string)
     return NULL;
 
@@ -192,8 +174,7 @@ FFmpegContext *ffmpeg_init(const char *args_string)
 
   // Only parse arguments here. Logic happens in run() to be atomic.
   ctx->argc = split_args(args_string, &ctx->argv);
-  if (ctx->argc < 0)
-  {
+  if (ctx->argc < 0) {
     av_free(ctx);
     return NULL;
   }
@@ -201,66 +182,59 @@ FFmpegContext *ffmpeg_init(const char *args_string)
   return ctx;
 }
 
-int ffmpeg_run(FFmpegContext *ctx)
-{
-    if (!ctx) return AVERROR(EINVAL);
+int ffmpeg_run(FFmpegContext *ctx) {
+  if (!ctx)
+    return AVERROR(EINVAL);
 
-    // CRITICAL: Acquire lock
-    lib_mutex_lock();
+  // CRITICAL: Acquire lock
+  lib_mutex_lock();
 
-    // This handles sch_alloc, parse, transcode, and cleanup internally.
-    ctx->ret = ffmpeg_run_internal(ctx->argc, ctx->argv);
+  // This handles sch_alloc, parse, transcode, and cleanup internally.
+  ctx->ret = ffmpeg_run_internal(ctx->argc, ctx->argv);
 
-    // If internal run succeeded, we assume files were parsed. 
-    // However, since cleanup happened inside run_internal, accessing
-    // globals like nb_output_files for progress AFTER this returns is risky
-    // unless you modified cleanup to NOT zero them out immediately.
-    ctx->files_parsed = (ctx->ret >= 0);
+  // If internal run succeeded, we assume files were parsed.
+  // However, since cleanup happened inside run_internal, accessing
+  // globals like nb_output_files for progress AFTER this returns is risky
+  // unless you modified cleanup to NOT zero them out immediately.
+  ctx->files_parsed = (ctx->ret >= 0);
 
-    // Release lock
-    lib_mutex_unlock();
+  // Release lock
+  lib_mutex_unlock();
 
-    return ctx->ret;
+  return ctx->ret;
 }
 
-float ffmpeg_get_progress(FFmpegContext *ctx)
-{
+float ffmpeg_get_progress(FFmpegContext *ctx) {
   if (!ctx || !ctx->files_parsed)
     return 0.0f;
 
   // nb_output_dumped and nb_output_files are globals in ffmpeg.c
   // strictly speaking, we should lock to read these if they change,
   // but for a simple progress bar, a torn read is usually acceptable risk.
-  if (nb_output_files > 0)
-  {
+  if (nb_output_files > 0) {
     return (float)nb_output_dumped / nb_output_files;
   }
   return 0.0f;
 }
 
-void ffmpeg_cancel(FFmpegContext *ctx)
-{
+void ffmpeg_cancel(FFmpegContext *ctx) {
   if (!ctx)
     return;
   ctx->cancelled = 1;
 
   // Signal scheduler if it exists
-  if (ctx->sch)
-  {
+  if (ctx->sch) {
     sch_stop(ctx->sch, NULL);
   }
 }
 
-void ffmpeg_free(FFmpegContext *ctx)
-{
+void ffmpeg_free(FFmpegContext *ctx) {
   if (!ctx)
     return;
 
   // Wrapper context cleanup
-  if (ctx->argv)
-  {
-    for (int i = 0; i < ctx->argc; i++)
-    {
+  if (ctx->argv) {
+    for (int i = 0; i < ctx->argc; i++) {
       av_free(ctx->argv[i]);
     }
     av_free(ctx->argv);

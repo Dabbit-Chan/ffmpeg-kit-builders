@@ -17,30 +17,19 @@
  *  along with FFmpegKit.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef FFMPEG_KIT_LOG_H
-#define FFMPEG_KIT_LOG_H
-
-#include "Level.h"
-#include <string>
+#ifndef FFMPEG_KIT_LOG_REDIRECTION_STRATEGY_H
+#define FFMPEG_KIT_LOG_REDIRECTION_STRATEGY_H
 
 namespace ffmpegkit {
 
-    /**
-     * <p>Log entry for an <code>FFmpegKit</code> session.
-     */
-    class Log {
-        public:
-            Log(const long sessionId, const ffmpegkit::Level level, const char* message);
-            long getSessionId() const;
-            ffmpegkit::Level getLevel() const;
-            std::string getMessage() const;
-
-        private:
-            long _sessionId;
-            ffmpegkit::Level _level;
-            std::string _message;
-    };
+enum LogRedirectionStrategy {
+  LogRedirectionStrategyAlwaysPrintLogs = 0,
+  LogRedirectionStrategyPrintLogsWhenNoCallbacksDefined = 1,
+  LogRedirectionStrategyPrintLogsWhenGlobalCallbackNotDefined = 2,
+  LogRedirectionStrategyPrintLogsWhenSessionCallbackNotDefined = 3,
+  LogRedirectionStrategyNeverPrintLogs = 4
+};
 
 }
 
-#endif // FFMPEG_KIT_LOG_H
+#endif // FFMPEG_KIT_LOG_REDIRECTION_STRATEGY_H

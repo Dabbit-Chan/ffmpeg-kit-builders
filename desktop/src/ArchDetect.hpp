@@ -17,23 +17,26 @@
  * along with FFmpegKit.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef FFMPEG_KIT_STATISTICS_CALLBACK_H
-#define FFMPEG_KIT_STATISTICS_CALLBACK_H
+#ifndef FFMPEG_KIT_ARCH_DETECT_H
+#define FFMPEG_KIT_ARCH_DETECT_H
 
-#include "Statistics.h"
-#include <iostream>
-#include <memory>
-#include <functional>
+#include <string>
 
 namespace ffmpegkit {
 
-    /**
-     * <p>Callback that receives statistics generated for <code>FFmpegKit</code> sessions.
-     *
-     * @param statistics statistics entry
-     */
-    typedef std::function<void(const std::shared_ptr<ffmpegkit::Statistics> statistics)> StatisticsCallback;
+/**
+ * Detects the running architecture.
+ */
+class ArchDetect {
+public:
+  /**
+   * Returns architecture name loaded.
+   *
+   * @return architecture name loaded
+   */
+  static std::string getArch();
+};
 
-}
+} // namespace ffmpegkit
 
-#endif // FFMPEG_KIT_STATISTICS_CALLBACK_H
+#endif // FFMPEG_KIT_ARCH_DETECT_H

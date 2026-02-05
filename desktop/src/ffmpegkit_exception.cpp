@@ -18,7 +18,7 @@
  * along with FFmpegKit.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include "ffmpegkit_exception.h"
+#include "ffmpegkit_exception.hpp"
 
 /** Holds information to implement exception handling. */
 __thread jmp_buf ex_buf__;

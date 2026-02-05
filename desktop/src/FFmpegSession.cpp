@@ -17,10 +17,10 @@
  *  along with FFmpegKit.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include "FFmpegSession.h"
-#include "FFmpegKitConfig.h"
-#include "LogCallback.h"
-#include "StatisticsCallback.h"
+#include "FFmpegSession.hpp"
+#include "FFmpegKitConfig.hpp"
+#include "LogCallback.hpp"
+#include "StatisticsCallback.hpp"
 
 extern void addSessionToSessionHistory(const std::shared_ptr<ffmpegkit::Session> session);
 

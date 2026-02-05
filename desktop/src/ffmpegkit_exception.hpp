@@ -1,4 +1,5 @@
 /*
+ * Copyright (c) 2018-2022 Taner Sener
  * Copyright (c) 2025 Akash Patel
  *
  * This file is part of FFmpegKit.
@@ -17,27 +18,12 @@
  * along with FFmpegKit.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef FFMPEG_KIT_ARCH_DETECT_H
-#define FFMPEG_KIT_ARCH_DETECT_H
+#ifndef FFMPEG_KIT_EXCEPTION_H
+#define FFMPEG_KIT_EXCEPTION_H
 
-#include <string>
+#include <setjmp.h>
 
-namespace ffmpegkit {
+/** Holds information to implement exception handling. */
+extern __thread jmp_buf ex_buf__;
 
-    /**
-     * Detects the running architecture.
-     */
-    class ArchDetect {
-        public:
-
-            /**
-             * Returns architecture name loaded.
-             *
-             * @return architecture name loaded
-             */
-            static std::string getArch();
-    };
-
-}
-
-#endif // FFMPEG_KIT_ARCH_DETECT_H
+#endif // FFMPEG_KIT_EXCEPTION_H

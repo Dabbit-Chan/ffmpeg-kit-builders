@@ -20,8 +20,8 @@
 #ifndef FFMPEG_KIT_FFPROBE_SESSION_H
 #define FFMPEG_KIT_FFPROBE_SESSION_H
 
-#include "AbstractSession.h"
-#include "FFprobeSessionCompleteCallback.h"
+#include "AbstractSession.hpp"
+#include "FFprobeSessionCompleteCallback.hpp"
 
 namespace ffmpegkit {
 

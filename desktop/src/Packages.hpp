@@ -17,19 +17,35 @@
  *  along with FFmpegKit.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef FFMPEG_KIT_LOG_REDIRECTION_STRATEGY_H
-#define FFMPEG_KIT_LOG_REDIRECTION_STRATEGY_H
+#ifndef FFMPEG_KIT_PACKAGES_H
+#define FFMPEG_KIT_PACKAGES_H
+
+#include <memory>
+#include <set>
+#include <string>
 
 namespace ffmpegkit {
 
-    enum LogRedirectionStrategy {
-        LogRedirectionStrategyAlwaysPrintLogs = 0,
-        LogRedirectionStrategyPrintLogsWhenNoCallbacksDefined = 1,
-        LogRedirectionStrategyPrintLogsWhenGlobalCallbackNotDefined = 2,
-        LogRedirectionStrategyPrintLogsWhenSessionCallbackNotDefined = 3,
-        LogRedirectionStrategyNeverPrintLogs = 4
-    };
+/**
+ * <p>Helper class to extract binary package information.
+ */
+class Packages {
+public:
+  /**
+   * Returns the FFmpegKit binary package name.
+   *
+   * @return predicted FFmpegKit binary package name
+   */
+  static std::string getPackageName();
 
-}
+  /**
+   * Returns enabled external libraries by FFmpeg.
+   *
+   * @return enabled external libraries
+   */
+  static std::shared_ptr<std::set<std::string>> getExternalLibraries();
+};
 
-#endif // FFMPEG_KIT_LOG_REDIRECTION_STRATEGY_H
+} // namespace ffmpegkit
+
+#endif // FFMPEG_KIT_PACKAGES_H

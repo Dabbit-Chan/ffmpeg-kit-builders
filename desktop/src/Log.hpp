@@ -17,37 +17,30 @@
  *  along with FFmpegKit.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef FFMPEG_KIT_PACKAGES_H
-#define FFMPEG_KIT_PACKAGES_H
+#ifndef FFMPEG_KIT_LOG_H
+#define FFMPEG_KIT_LOG_H
 
-#include <set>
-#include <iostream>
-#include <memory>
+#include "Level.hpp"
 #include <string>
 
 namespace ffmpegkit {
 
-    /**
-     * <p>Helper class to extract binary package information.
-     */
-    class Packages {
-        public:
+/**
+ * <p>Log entry for an <code>FFmpegKit</code> session.
+ */
+class Log {
+public:
+  Log(const long sessionId, const ffmpegkit::Level level, const char *message);
+  long getSessionId() const;
+  ffmpegkit::Level getLevel() const;
+  std::string getMessage() const;
 
-            /**
-             * Returns the FFmpegKit binary package name.
-             *
-             * @return predicted FFmpegKit binary package name
-             */
-            static std::string getPackageName();
+private:
+  long _sessionId;
+  ffmpegkit::Level _level;
+  std::string _message;
+};
 
-            /**
-             * Returns enabled external libraries by FFmpeg.
-             *
-             * @return enabled external libraries
-             */
-            static std::shared_ptr<std::set<std::string>> getExternalLibraries();
-    };
+} // namespace ffmpegkit
 
-}
-
-#endif // FFMPEG_KIT_PACKAGES_H
+#endif // FFMPEG_KIT_LOG_H
