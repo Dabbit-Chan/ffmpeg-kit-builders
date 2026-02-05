@@ -4057,6 +4057,7 @@ build_openssl() {
   do_git_checkout "$repo" "$src_dir/$lib" "$repo_ver"
   change_dir "$src_dir/$lib"
   install_missing_packages perl-IPC-Cmd perl-Time-Piece
+  touch "no.autoreconf"
   do_configure "$host_name --release --prefix=$dependency_install_prefix --openssldir=$dependency_install_prefix/ssl --libdir=lib no-shared no-tests no-docs no-demos no-legacy"
   disable_nonessential "$src_dir/$lib"
   do_make_and_make_install

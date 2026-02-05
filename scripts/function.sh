@@ -2095,7 +2095,7 @@ do_configure() {
       echo -e "INFO: Configure not found. Running autoreconf with existing configure.ac..." >>"$LOG_FILE"
 			autoreconf_library # a handful of them require this to create ./configure :|
     fi
-    if [[ ! -f Makefile.in && ! -f Makefile && -f Makefile.am ]] || needs_autoreconf > >(redirect_output) 2>&1 ; then
+    if [[ ! -f Makefile.in && ! -f Makefile && -f Makefile.am ]]; then
       echo -e "INFO: Makefile and Makefile.in not found. running autoreconf and automake..." >>"$LOG_FILE"
       automake --force-missing --add-missing > >(redirect_output) 2>&1
     fi

@@ -2091,10 +2091,11 @@ build_openssl() {
 	change_dir "$src_dir/$lib"
   install_missing_packages perl-IPC-Cmd perl-Time-Piece
   clear_cross_vars
+  touch "no.autoreconf"
   do_configure "mingw64 \
 --release \
 --prefix=$dependency_install_prefix \
---cross-compile-prefix=$host_target- \
+--cross-compile-prefix=${cross_prefix} \
 --openssldir=$dependency_install_prefix/ssl \
 --libdir=lib \
 no-apps \
@@ -2102,20 +2103,20 @@ no-shared \
 no-tests \
 no-docs \
 no-demos \
-no-legacy"
+no-legacy" || exit_message 1 "Failed to configure $lib"
 	# disable_nonessential "$src_dir/$lib"
   # uses different build process and doesnt respect cross variables correctly
   local touch_make=$(get_small_touchfile_name "${host_name}_already_make_make" "make")
   local touch_install=$(get_small_touchfile_name "${host_name}_already_make_install" "make install")
   if truthy "$build_force"; then
     remove_path -f "$touch_make"
-    { nice make clean -j"$(get_concurrent_proc)" > >(redirect_output) 2>&1 || true; }
+    { nice make clean -j"$(get_concurrent_proc)" > >(redirect_output) 2>&1 || exit_message 1 "Failed to clean $lib"; }
     remove_path -f "$touch_install"
-    { nice make uninstall > >(redirect_output) 2>&1 || true; }
+    { nice make uninstall > >(redirect_output) 2>&1 || exit_message 1 "Failed to uninstall $lib"; }
   fi
-  [[ ! -f "$touch_make" ]] && make -j"$(get_concurrent_proc)" > >(redirect_output) 2>&1
+  [[ ! -f "$touch_make" ]] && make -j"$(get_concurrent_proc)" > >(redirect_output) 2>&1 || exit_message 1 "Failed to make $lib"
   create_touch_file 0 "$touch_make"
-  [[ ! -f "$touch_install" ]] && make install > >(redirect_output) 2>&1
+  [[ ! -f "$touch_install" ]] && make install > >(redirect_output) 2>&1 || exit_message 1 "Failed to install $lib"
   create_touch_file 0 "$touch_install"
   reset_cross_vars
 	change_dir "$src_dir"
