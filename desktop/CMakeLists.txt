@@ -258,7 +258,7 @@ install(TARGETS ffmpegkit
 
 install(DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/src/" 
     DESTINATION include
-    FILES_MATCHING PATTERN "*.h"
+    FILES_MATCHING PATTERN "*.h*"
 )
 
 configure_file("src/ffmpeg-kit.pc.in" "ffmpeg-kit.pc" @ONLY)
