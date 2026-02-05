@@ -456,14 +456,19 @@ setup_linux_environment() {
     export linux_ldflags="$original_ldflags -L${dependency_install_prefix}/lib -Wl,-rpath,${dependency_install_prefix}/lib "
     export LDFLAGS="$linux_ldflags"
     export LD_LIBRARY_PATH="${dependency_install_prefix}/lib:$LD_LIBRARY_PATH"
+    
+    source /opt/rh/gcc-toolset-14/enable
 
-    export CC=gcc
-    export CXX=g++
-    export AR=ar
-    export AS=as
-    export RANLIB=ranlib
-    export LD=ld
-    export STRIP=strip
+    # export toolchain_root_dir="/opt/rh/gcc-toolset-14/root/usr/"
+    # export toolchain_bin_path="/opt/rh/gcc-toolset-14/root/usr/bin/"
+    # export CC="${toolchain_bin_path}gcc"
+    # export CXX="${toolchain_bin_path}g++"
+    # export AR="${toolchain_bin_path}ar"
+    # export AS="${toolchain_bin_path}as"
+    # export RANLIB="${toolchain_bin_path}ranlib"
+    # export LD="${toolchain_bin_path}ld"
+    # export STRIP="${toolchain_bin_path}strip"
+    
     export NASM=nasm
 
     create_dir "$install_pkgconfig_dir"

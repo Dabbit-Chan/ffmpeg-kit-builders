@@ -2452,9 +2452,9 @@ build_openal() {
 -DALSOFT_STATIC_STDCXX=ON \
 -DALSOFT_REQUIRE_WASAPI=ON \
 -DALSOFT_BACKEND_DSOUND=ON \
--DALSOFT_BACKEND_ALSA=ON \
--DALSOFT_BACKEND_PULSEAUDIO=ON \
--DALSOFT_BACKEND_PIPEWIRE=ON"
+-DALSOFT_BACKEND_ALSA=OFF \
+-DALSOFT_BACKEND_PULSEAUDIO=OFF \
+-DALSOFT_BACKEND_PIPEWIRE=OFF"
 	do_cmake_from_build_dir "$src_dir/$lib" "$cmake_params"
 	disable_nonessential "$src_dir/$lib/build"
   do_make_and_make_install

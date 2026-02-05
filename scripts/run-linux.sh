@@ -387,7 +387,7 @@ build_xorgproto() {
   # change_dir "$src_dir"
 }
 build_xorg_macros() {
-  install_missing_packages "xorg-x11-util-macros"
+  local lib="xorg-macros"
   # local lib="xorg-macros"
   # local repo="https://gitlab.freedesktop.org/xorg/util/macros"
   # local repo_ver="util-macros-1.20.2"
@@ -474,7 +474,7 @@ build_x11() {
 }
 # build_xlib              # config_options+= --disable-xlib               # disable xlib [autodetect]
 build_xlib() {
-  install_missing_packages "libxcb-devel" "libX11-devel" "libXrender-devel" "libXext-devel" "libXft-devel" "libXdmcp-devel" "xorg-x11-xtrans-devel" "xorg-x11-proto-devel" "xorg-x11-util-macros"
+  install_missing_packages "libxcb-devel" "libX11-devel" "libXrender-devel" "libXext-devel" "libXft-devel" "libXdmcp-devel" "xorg-x11-xtrans-devel" "xorg-x11-proto-devel"
 }
 #endregion---------------------------------------------------------------------
 #region------------------------ hardware features ----------------------------- 
@@ -1513,8 +1513,8 @@ build_libjack() {
   sed -i "/conf.load('xcode6')/d" wscript
   do_python '--prefix="$dependency_install_prefix" --platform="$host_name" --db="no" --check-c-compiler=gcc --check-cxx-compiler=g++ --static'
   disable_nonessential "$src_dir/$lib"
-  do_python "" "./waf build -v"
-  do_python "" "./waf install -v"
+  do_python "" "./waf build"
+  do_python "" "./waf install"
   reset_allflags
   add_libs_to_pkg -t="$install_pkgconfig_dir/jack.pc" -l="-lxcb -liconv"
 }
@@ -3951,9 +3951,9 @@ build_openal() {
 -DALSOFT_STATIC_STDCXX=ON \
 -DALSOFT_REQUIRE_DSOUND=OFF \
 -DALSOFT_REQUIRE_WASAPI=OFF \
--DALSOFT_BACKEND_ALSA=ON \
--DALSOFT_BACKEND_PULSEAUDIO=ON \
--DALSOFT_BACKEND_PIPEWIRE=ON"
+-DALSOFT_BACKEND_ALSA=OFF \
+-DALSOFT_BACKEND_PULSEAUDIO=OFF \
+-DALSOFT_BACKEND_PIPEWIRE=OFF"
   do_cmake_from_build_dir "$src_dir/$lib" "$cmake_params"
   disable_nonessential "$src_dir/$lib/build"
   do_make_and_make_install
