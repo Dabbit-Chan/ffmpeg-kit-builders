@@ -165,21 +165,23 @@ target_compile_definitions(ffmpegkit PRIVATE
     FFMPEG_KIT_BUILD_DATE=${FFMPEG_KIT_BUILD_DATE}
 )
 
-if(MINGW)
+if(WIN32)
     target_compile_definitions(ffmpegkit PRIVATE
         _WIN32 WIN32 TARGET_OS_WINDOWS FFMPEG_KIT_WINDOWS
-        _WIN32_WINNT=0x0600
-        __NO_WINDRES__
+        FFMPEG_KIT_BUILDING_DLL
     )
 
-    target_compile_definitions(ffmpegkit PRIVATE FFMPEG_KIT_BUILDING_DLL)
-
-    target_link_options(ffmpegkit PRIVATE 
-        -static-libgcc 
-        -static-libstdc++ 
-        -Wl,--enable-auto-import 
-        -Wl,--allow-multiple-definition
-    )
+    if(MINGW)
+        target_compile_definitions(ffmpegkit PRIVATE
+            _WIN32_WINNT=0x0600
+        )
+        target_link_options(ffmpegkit PRIVATE 
+            -static-libgcc 
+            -static-libstdc++ 
+            -Wl,--enable-auto-import 
+            -Wl,--allow-multiple-definition
+        )
+    endif()
 else()
     target_compile_definitions(ffmpegkit PRIVATE TARGET_OS_LINUX)
     target_compile_options(ffmpegkit PRIVATE -fvisibility=default)
@@ -208,7 +210,7 @@ if(BUILD_SHARED_LIBS)
 
     # Linker Script
     set(LINKER_SCRIPT "${CMAKE_CURRENT_BINARY_DIR}/ffmpeg-linker-script.map")
-    file(WRITE ${LINKER_SCRIPT} "{\n    global:\n        av*;\n        swr*;\n        sws*;\n    local:\n        *;\n};\n")
+    file(WRITE ${LINKER_SCRIPT} "{\n    global:\n        av*;\n        swr*;\n        sws*;\n        ffmpeg_kit*;\n        ffprobe_kit*;\n        media_information*;\n        stream_information*;\n        chapter*;\n    local:\n        *;\n};\n")
     target_link_options(ffmpegkit PRIVATE "-Wl,--version-script=${LINKER_SCRIPT}")
 
     # Bundling Manifest (Requires shared-library.sh)
