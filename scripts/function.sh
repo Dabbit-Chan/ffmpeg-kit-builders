@@ -2083,9 +2083,9 @@ do_configure() {
 	if truthy "$build_force" || [[ ! -f "$src_touch" ]]; then
     echo -e "INFO: Force requested in do_configure(): build_force: $build_force" >>"$LOG_FILE"
 		reset_touch "$cur_dir2" "${touch_prefix}*.touch"
-    [[ -f Makefile ]] && { nice make clean -j"$(get_concurrent_proc)" > >(redirect_output) 2>&1 || true; }
-    [[ -f ninja.build ]] && { nice ninja uninstall > >(redirect_output) 2>&1 || true; }
-    [[ -f Makefile ]] && { nice make uninstall > >(redirect_output) 2>&1 || true; }
+    [[ -f Makefile && "$cur_dir2" != "$ffmpeg_source_dir" ]] && { nice make clean -j"$(get_concurrent_proc)" > >(redirect_output) 2>&1 || true; }
+    [[ -f ninja.build && "$cur_dir2" != "$ffmpeg_source_dir" ]] && { nice ninja uninstall > >(redirect_output) 2>&1 || true; }
+    [[ -f Makefile && "$cur_dir2" != "$ffmpeg_source_dir" ]] && { nice make uninstall > >(redirect_output) 2>&1 || true; }
 	fi
 	if [ ! -f "$touch_name" ]; then
     echo "INFO: (Re-)do_configure() because $touch_name not found with \"$configure_options $configure_name\"." >>"$LOG_FILE"
@@ -2194,9 +2194,9 @@ do_make() {
 	if truthy "$build_force" || [[ ! -f "$src_touch" ]]; then
     echo -e "INFO: Force requested in do_make(): build_force: $build_force" >>"$LOG_FILE"
 		reset_touch "$cur_dir2" "${touch_prefix}*.touch"
-    [[ -f Makefile ]] && { nice make clean -j"$(get_concurrent_proc)" > >(redirect_output) 2>&1 || true; }
-    [[ -f ninja.build ]] && { nice ninja uninstall > >(redirect_output) 2>&1 || true; }
-    [[ -f Makefile ]] && { nice make uninstall > >(redirect_output) 2>&1 || true; }
+    [[ -f Makefile && "$cur_dir2" != "$ffmpeg_source_dir" ]] && { nice make clean -j"$(get_concurrent_proc)" > >(redirect_output) 2>&1 || true; }
+    [[ -f ninja.build && "$cur_dir2" != "$ffmpeg_source_dir" ]] && { nice ninja uninstall > >(redirect_output) 2>&1 || true; }
+    [[ -f Makefile && "$cur_dir2" != "$ffmpeg_source_dir" ]] && { nice make uninstall > >(redirect_output) 2>&1 || true; }
 	fi
 	if [ ! -f "$touch_name" ]; then
     echo "INFO: (Re-)do_make() because $touch_name not found with \"make $extra_make_options\"." >>"$LOG_FILE"
@@ -2266,8 +2266,8 @@ do_make_install() {
 	if truthy "$build_force" || [[ ! -f "$src_touch" ]]; then
     echo -e "INFO: Force requested in do_make_install(): build_force: $build_force" >>"$LOG_FILE"
 		reset_touch "$cur_dir2" "${touch_prefix}_install*.touch"
-    [[ -f ninja.build ]] && { nice ninja uninstall > >(redirect_output) 2>&1 || true; }
-    [[ -f Makefile ]] && { nice make uninstall > >(redirect_output) 2>&1 || true; }
+    [[ -f ninja.build && "$cur_dir2" != "$ffmpeg_source_dir" ]] && { nice ninja uninstall > >(redirect_output) 2>&1 || true; }
+    [[ -f Makefile && "$cur_dir2" != "$ffmpeg_source_dir" ]] && { nice make uninstall > >(redirect_output) 2>&1 || true; }
 	fi
 	if [ ! -f "$touch_name" ]; then
     echo "INFO: (Re-)do_make_install() because $touch_name not found with \"make install $make_install_options\"." >>"$LOG_FILE"
@@ -2338,16 +2338,16 @@ do_cmake() {
     echo -e "INFO: Force requested in do_cmake(): build_force: $build_force" >>"$LOG_FILE"
 		reset_touch "$cur_dir2" "${touch_prefix}*.touch"
     reset_touch "$source_dir" "${touch_prefix}*.touch"
-    [[ -f ninja.build ]] && { nice ninja uninstall > >(redirect_output) 2>&1 || true; }
-    [[ -f Makefile ]] && { nice make uninstall > >(redirect_output) 2>&1 || true; }
+    [[ -f ninja.build && "$cur_dir2" != "$ffmpeg_kit_src_dir/build" ]] && { nice ninja uninstall > >(redirect_output) 2>&1 || true; }
+    [[ -f Makefile && "$cur_dir2" != "$ffmpeg_kit_src_dir/build" ]] && { nice make uninstall > >(redirect_output) 2>&1 || true; }
     { clean_cmake_cache "$cur_dir2" "$(validate_path "$source_dir")" || true; }
 	fi
 	if [ ! -f "$touch_name" ]; then
     echo "INFO: (Re-)do_cmake() because $touch_name not found with \"cmake $extra_args\"." >>"$LOG_FILE"
     reset_touch "$cur_dir2" "${touch_prefix}*.touch"
     reset_touch "$source_dir" "${touch_prefix}*.touch"
-    [[ -f ninja.build ]] && { nice ninja uninstall > >(redirect_output) 2>&1 || true; }
-    [[ -f Makefile ]] && { nice make uninstall > >(redirect_output) 2>&1 || true; }
+    [[ -f ninja.build && "$cur_dir2" != "$ffmpeg_kit_src_dir/build" ]] && { nice ninja uninstall > >(redirect_output) 2>&1 || true; }
+    [[ -f Makefile && "$cur_dir2" != "$ffmpeg_kit_src_dir/build" ]] && { nice make uninstall > >(redirect_output) 2>&1 || true; }
     { clean_cmake_cache "$cur_dir2" "$(validate_path "$source_dir")" || true; }
     [[ ! -d "$cur_dir2" ]] && create_dir "$cur_dir2"
 		local config_options=""
@@ -3525,8 +3525,8 @@ install_ffmpeg() {
 
 	{	
     shopt -s nullglob
-    mv -v -- */*.dylib */*.dll *.exe "${ffmpeg_install_prefix}/bin" > >(redirect_output) 2>&1 || true
-    mv -v -- */*.a */*.lib *.so "${ffmpeg_install_prefix}/lib" > >(redirect_output) 2>&1 || true
+    cp -v -- */*.dylib */*.dll *.exe "${ffmpeg_install_prefix}/bin" > >(redirect_output) 2>&1 || true
+    cp -v -- */*.a */*.lib *.so "${ffmpeg_install_prefix}/lib" > >(redirect_output) 2>&1 || true
 	} >>"$LOG_FILE"
 
 	echo -e "INFO: Done installing ffmpeg" | tee -a "$LOG_FILE"
