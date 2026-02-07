@@ -20,6 +20,8 @@ cmdutils.c
 cmdutils.h
 config.c
 config.h
+config_components.c
+config_components.h
 dummy.c
 ffmpeg_dec.c
 ffmpeg_demux.c
@@ -35,6 +37,10 @@ ffmpeg_sched.h
 ffmpeg_utils.h
 ffmpeg.c
 ffmpeg.h
+ffplay.h
+ffplay.c
+ffplay_renderer.h
+ffplay_renderer.c
 ffprobe.c
 fftools.manifest
 fftoolsres.rc

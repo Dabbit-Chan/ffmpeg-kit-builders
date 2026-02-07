@@ -260,6 +260,13 @@ public:
   virtual bool isMediaInformation() const = 0;
 
   /**
+   * Returns whether it is an <code>FFplay</code> session or not.
+   *
+   * @return true if it is an <code>FFplay</code> session, false otherwise
+   */
+  virtual bool isFFplay() const = 0;
+
+  /**
    * Cancels running the session.
    */
   virtual void cancel() = 0;

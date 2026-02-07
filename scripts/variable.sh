@@ -79,7 +79,8 @@ CONFIG_GENERAL="\
 --enable-lzma \
 --enable-zlib"
 
-CONFIG_BASE="--enable-libjsoncpp"
+CONFIG_BASE="--enable-libjsoncpp \
+--enable-sdl2"
 
 # must pick crypto type for streaming support
 CONFIG_STREAMING="\

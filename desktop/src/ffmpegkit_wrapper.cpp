@@ -21,6 +21,7 @@
 #include "Chapter.hpp"
 #include "FFmpegKit.hpp"
 #include "FFmpegKitConfig.hpp"
+#include "FFplayKit.hpp"
 #include "FFprobeKit.hpp"
 #include "MediaInformation.hpp"
 #include "MediaInformationSession.hpp"
@@ -341,6 +342,54 @@ MediaInformationSessionHandle ffprobe_kit_get_media_information_async(
   return create_handle(session);
 }
 
+/* FFplayKit */
+
+FFplaySessionHandle ffplay_kit_execute(const char *command) {
+  if (!command)
+    return nullptr;
+  auto session = FFplayKit::execute(std::string(command));
+  return create_handle(session);
+}
+
+FFplaySessionHandle
+ffplay_kit_execute_async(const char *command,
+                         FFplayKitCompleteCallback complete_cb,
+                         void *user_data) {
+  if (!command)
+    return nullptr;
+  auto lambda = [complete_cb, user_data](std::shared_ptr<Session> s) {
+    if (complete_cb) {
+      auto handle = create_handle(std::dynamic_pointer_cast<FFplaySession>(s));
+      complete_cb(handle, user_data);
+      ffmpeg_kit_handle_release(handle);
+    }
+  };
+  auto session = FFplayKit::executeAsync(std::string(command), lambda);
+  return create_handle(session);
+}
+
+FFplaySessionHandle ffplay_kit_create_session(const char *command) {
+  if (!command)
+    return nullptr;
+  auto arguments = FFmpegKitConfig::parseArguments(command);
+  auto session = FFplaySession::create(arguments);
+  return create_handle(session);
+}
+
+void ffplay_kit_session_execute(FFplaySessionHandle session) {
+  auto ptr = get_ptr<FFplaySession>(session);
+  if (ptr) {
+    FFmpegKitConfig::ffplayExecute(ptr);
+  }
+}
+
+void ffplay_kit_session_execute_async(FFplaySessionHandle session) {
+  auto ptr = get_ptr<FFplaySession>(session);
+  if (ptr) {
+    FFmpegKitConfig::asyncFFplayExecute(ptr);
+  }
+}
+
 /* Config */
 
 void ffmpeg_kit_config_enable_redirection(void) {
@@ -644,6 +693,11 @@ FFprobeSessionHandle *ffmpeg_kit_get_ffprobe_sessions(void) {
       FFmpegKitConfig::getFFprobeSessions());
 }
 
+FFplaySessionHandle *ffmpeg_kit_get_ffplay_sessions(void) {
+  return (FFplaySessionHandle *)list_to_handle_array(
+      FFmpegKitConfig::getFFplaySessions());
+}
+
 MediaInformationSessionHandle *ffmpeg_kit_get_media_information_sessions(void) {
   return (MediaInformationSessionHandle *)list_to_handle_array(
       FFmpegKitConfig::getMediaInformationSessions());
@@ -686,6 +740,9 @@ static void *g_ffmpeg_complete_user_data = nullptr;
 
 static FFprobeKitCompleteCallback g_ffprobe_complete_callback = nullptr;
 static void *g_ffprobe_complete_user_data = nullptr;
+
+static FFplayKitCompleteCallback g_ffplay_complete_callback = nullptr;
+static void *g_ffplay_complete_user_data = nullptr;
 
 static ::MediaInformationSessionCompleteCallback g_media_complete_callback =
     nullptr;
@@ -759,6 +816,24 @@ void ffmpeg_kit_config_enable_ffprobe_session_complete_callback(
         });
   } else {
     FFmpegKitConfig::enableFFprobeSessionCompleteCallback(nullptr);
+  }
+}
+
+void ffmpeg_kit_config_enable_ffplay_session_complete_callback(
+    FFplayKitCompleteCallback complete_cb, void *user_data) {
+  g_ffplay_complete_callback = complete_cb;
+  g_ffplay_complete_user_data = user_data;
+  if (complete_cb) {
+    FFmpegKitConfig::enableFFplaySessionCompleteCallback(
+        [](std::shared_ptr<FFplaySession> title) {
+          if (g_ffplay_complete_callback) {
+            auto handle = create_handle(title);
+            g_ffplay_complete_callback(handle, g_ffplay_complete_user_data);
+            ffmpeg_kit_handle_release(handle);
+          }
+        });
+  } else {
+    FFmpegKitConfig::enableFFplaySessionCompleteCallback(nullptr);
   }
 }
 

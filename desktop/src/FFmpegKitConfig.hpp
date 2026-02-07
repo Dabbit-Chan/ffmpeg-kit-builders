@@ -32,6 +32,7 @@
 #endif
 
 #include "FFmpegSession.hpp"
+#include "FFplaySession.hpp"
 #include "FFprobeSession.hpp"
 #include "Level.hpp"
 #include "LogCallback.hpp"
@@ -207,6 +208,15 @@ public:
       const std::shared_ptr<ffmpegkit::FFprobeSession> ffprobeSession);
 
   /**
+   * <p>Synchronously executes the FFplay session provided.
+   *
+   * @param ffplaySession FFplay session which includes command
+   * options/arguments
+   */
+  static void ffplayExecute(
+      const std::shared_ptr<ffmpegkit::FFplaySession> ffplaySession);
+
+  /**
    * <p>Synchronously executes the media information session provided.
    *
    * @param mediaInformationSession media information session which includes
@@ -244,6 +254,19 @@ public:
    */
   static void asyncFFprobeExecute(
       const std::shared_ptr<ffmpegkit::FFprobeSession> ffprobeSession);
+
+  /**
+   * <p>Starts an asynchronous FFplay execution for the given session.
+   *
+   * <p>Note that this method returns immediately and does not wait the
+   * execution to complete. You must use an FFplaySessionCompleteCallback if
+   * you want to be notified about the result.
+   *
+   * @param ffplaySession FFplay session which includes command
+   * options/arguments
+   */
+  static void asyncFFplayExecute(
+      const std::shared_ptr<ffmpegkit::FFplaySession> ffplaySession);
 
   /**
    * <p>Starts an asynchronous FFprobe execution for the given media information
@@ -314,6 +337,23 @@ public:
    * @return global FFprobeSessionCompleteCallback or nullptr if it is not set
    */
   static FFprobeSessionCompleteCallback getFFprobeSessionCompleteCallback();
+
+  /**
+   * <p>Sets a global FFplaySessionCompleteCallback to receive execution
+   * results for FFplay sessions.
+   *
+   * @param ffplaySessionCompleteCallback complete callback or nullptr to
+   * disable a previously defined callback
+   */
+  static void enableFFplaySessionCompleteCallback(
+      const FFplaySessionCompleteCallback ffplaySessionCompleteCallback);
+
+  /**
+   * <p>Returns the global FFplaySessionCompleteCallback set.
+   *
+   * @return global FFplaySessionCompleteCallback or nullptr if it is not set
+   */
+  static FFplaySessionCompleteCallback getFFplaySessionCompleteCallback();
 
   /**
    * <p>Sets a global MediaInformationSessionCompleteCallback to receive
@@ -425,6 +465,14 @@ public:
    */
   static std::shared_ptr<std::list<std::shared_ptr<ffmpegkit::FFprobeSession>>>
   getFFprobeSessions();
+
+  /**
+   * <p>Returns all FFplay sessions in the session history.
+   *
+   * @return all FFplay sessions in the session history
+   */
+  static std::shared_ptr<std::list<std::shared_ptr<ffmpegkit::FFplaySession>>>
+  getFFplaySessions();
 
   /**
    * <p>Returns all MediaInformation sessions in the session history.

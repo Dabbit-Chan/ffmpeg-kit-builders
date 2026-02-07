@@ -222,6 +222,11 @@ bool ffmpegkit::AbstractSession::isMediaInformation() const {
   return false;
 }
 
+bool ffmpegkit::AbstractSession::isFFplay() const {
+  // IMPLEMENTED IN SUBCLASSES
+  return false;
+}
+
 void ffmpegkit::AbstractSession::cancel() {
   if (_state == SessionStateRunning) {
     FFmpegKit::cancel(_sessionId);

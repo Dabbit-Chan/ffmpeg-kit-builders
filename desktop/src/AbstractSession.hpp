@@ -280,6 +280,13 @@ public:
   virtual bool isMediaInformation() const override;
 
   /**
+   * Returns whether it is an <code>FFplay</code> session or not.
+   *
+   * @return true if it is an <code>FFplay</code> session, false otherwise
+   */
+  virtual bool isFFplay() const override;
+
+  /**
    * Cancels running the session.
    */
   void cancel() override;

@@ -39,6 +39,7 @@ extern "C" {
 // Opaque handles
 typedef void *FFmpegSessionHandle;
 typedef void *FFprobeSessionHandle;
+typedef void *FFplaySessionHandle;
 typedef void *MediaInformationSessionHandle;
 typedef void *MediaInformationHandle;
 typedef void *StreamInformationHandle;
@@ -58,6 +59,8 @@ typedef void (*FFmpegKitStatisticsCallback)(FFmpegSessionHandle session,
                                             void *user_data);
 typedef void (*FFprobeKitCompleteCallback)(FFprobeSessionHandle session,
                                            void *user_data);
+typedef void (*FFplayKitCompleteCallback)(FFplaySessionHandle session,
+                                          void *user_data);
 typedef void (*MediaInformationSessionCompleteCallback)(
     MediaInformationSessionHandle session, void *user_data);
 
@@ -146,6 +149,22 @@ FFMPEG_KIT_C_EXPORT MediaInformationSessionHandle
 ffprobe_kit_get_media_information_async(
     const char *path, MediaInformationSessionCompleteCallback complete_cb,
     void *user_data);
+
+/* FFplayKit (FFplay Execution) */
+
+FFMPEG_KIT_C_EXPORT FFplaySessionHandle
+ffplay_kit_execute(const char *command);
+FFMPEG_KIT_C_EXPORT FFplaySessionHandle ffplay_kit_execute_async(
+    const char *command, FFplayKitCompleteCallback complete_cb,
+    void *user_data);
+
+// FFplay Session Creation and Execution Separation
+FFMPEG_KIT_C_EXPORT FFplaySessionHandle
+ffplay_kit_create_session(const char *command);
+FFMPEG_KIT_C_EXPORT void
+ffplay_kit_session_execute(FFplaySessionHandle session);
+FFMPEG_KIT_C_EXPORT void
+ffplay_kit_session_execute_async(FFplaySessionHandle session);
 
 /* Config & Global Functions */
 
@@ -264,7 +283,9 @@ FFMPEG_KIT_C_EXPORT char *chapter_get_tags_json(ChapterHandle handle);
 /* Session History */
 FFMPEG_KIT_C_EXPORT FFmpegSessionHandle *ffmpeg_kit_get_sessions(void);
 FFMPEG_KIT_C_EXPORT FFmpegSessionHandle *ffmpeg_kit_get_ffmpeg_sessions(void);
+FFMPEG_KIT_C_EXPORT FFmpegSessionHandle *ffmpeg_kit_get_ffmpeg_sessions(void);
 FFMPEG_KIT_C_EXPORT FFprobeSessionHandle *ffmpeg_kit_get_ffprobe_sessions(void);
+FFMPEG_KIT_C_EXPORT FFplaySessionHandle *ffmpeg_kit_get_ffplay_sessions(void);
 FFMPEG_KIT_C_EXPORT MediaInformationSessionHandle *
 ffmpeg_kit_get_media_information_sessions(void);
 FFMPEG_KIT_C_EXPORT FFmpegSessionHandle ffmpeg_kit_get_session(long session_id);
@@ -287,6 +308,9 @@ ffmpeg_kit_config_enable_ffmpeg_session_complete_callback(
 FFMPEG_KIT_C_EXPORT void
 ffmpeg_kit_config_enable_ffprobe_session_complete_callback(
     FFprobeKitCompleteCallback complete_cb, void *user_data);
+FFMPEG_KIT_C_EXPORT void
+ffmpeg_kit_config_enable_ffplay_session_complete_callback(
+    FFplayKitCompleteCallback complete_cb, void *user_data);
 FFMPEG_KIT_C_EXPORT void
 ffmpeg_kit_config_enable_media_information_session_complete_callback(
     MediaInformationSessionCompleteCallback complete_cb, void *user_data);

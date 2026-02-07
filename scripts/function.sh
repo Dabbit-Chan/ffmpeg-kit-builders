@@ -3570,6 +3570,7 @@ install_ffmpeg_pkg() {
       create_dir "${ffmpeg_install_prefix}"/include/libavutil/{x86,arm,aarch64}
       create_dir "${ffmpeg_install_prefix}"/include/libavcodec/{x86,arm}
       overwrite_file "${ffmpeg_source_dir}"/config.h "${ffmpeg_install_prefix}"/include/config.h
+      overwrite_file "${ffmpeg_source_dir}"/config_components.h "${ffmpeg_install_prefix}"/include/config_components.h
       overwrite_file "${ffmpeg_source_dir}"/libavcodec/mathops.h "${ffmpeg_install_prefix}"/include/libavcodec/mathops.h
       overwrite_file "${ffmpeg_source_dir}"/libavcodec/x86/mathops.h "${ffmpeg_install_prefix}"/include/libavcodec/x86/mathops.h
       overwrite_file "${ffmpeg_source_dir}"/libavcodec/arm/mathops.h "${ffmpeg_install_prefix}"/include/libavcodec/arm/mathops.h
