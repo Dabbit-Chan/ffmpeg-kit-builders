@@ -26,7 +26,7 @@ Building FFmpegKit for Desktop is performed using the unified `runner.sh` script
 #### 2.1 Pragmatic Guide
 
 1.  **Environment Setup**: Follow the prerequisites and toolchain installation steps outlined in the [Main Repository README](../README.md#quick-start).
-2.  **Basic Build**: Execute the runner script to build a base bones ffmpeg build with built-in functionality only. This build will not have any external libraries.
+2.  **Basic Build**: Execute the runner script to build a bare bones ffmpeg build with built-in functionality only. This build will not have any external libraries.
 
     ```bash
     # Build for Linux x86_64
