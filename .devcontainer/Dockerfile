@@ -61,7 +61,10 @@ RUN dnf install -y --allowerasing --setopt=install_weak_deps=False \
     xorg-x11-util-macros \
     xz \
     yasm \
-    zlib-devel
+    zlib-devel && \
+    sudo ln -sf /usr/local/bin/autoconf /usr/bin/autoconf && \
+    sudo ln -sf /usr/local/bin/autoheader /usr/bin/autoheader && \
+    sudo ln -sf /usr/local/bin/autoreconf /usr/bin/autoreconf
 
 ENV PATH="/opt/python/cp312-cp312/bin:${PATH}"
 
@@ -89,6 +92,15 @@ RUN wget https://github.com/xpack-dev-tools/mingw-w64-gcc-xpack/releases/downloa
 ENV RUSTUP_HOME=/usr/local/rustup \
     CARGO_HOME=/usr/local/cargo \
     PATH=/usr/local/cargo/bin:$PATH
+
+RUN echo 'export RUSTUP_HOME=/usr/local/rustup' >> /etc/profile.d/rust.sh && \
+    echo 'export CARGO_HOME=/usr/local/cargo' >> /etc/profile.d/rust.sh && \
+    echo 'export PATH=/usr/local/cargo/bin:$PATH' >> /etc/profile.d/rust.sh && \
+    chmod +x /etc/profile.d/rust.sh && \
+    /usr/local/cargo/bin/rustup default stable && \
+    /usr/local/cargo/bin/cargo --version
+
+RUN echo 'source /etc/profile.d/rust.sh' >> /home/vscode/.bashrc || true
 
 RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --no-modify-path && \
     . /usr/local/cargo/env && \
