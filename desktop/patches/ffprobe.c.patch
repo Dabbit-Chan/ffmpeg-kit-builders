@@ -1,8 +1,6 @@
-diff --git a/src/ffprobe.c b/src/ffprobe.c
-index 7e2950a..2b028fb 100755
 --- a/src/ffprobe.c
 +++ b/src/ffprobe.c
-@@ -88,8 +88,8 @@ typedef struct InputFile {
+@@ -88,8 +88,8 @@
      int       nb_streams;
  } InputFile;
  
@@ -13,7 +11,7 @@ index 7e2950a..2b028fb 100755
  
  static int do_analyze_frames = 0;
  static int do_bitexact = 0;
-@@ -2339,7 +2339,7 @@ static int open_input_file(InputFile *ifile, const char *filename,
+@@ -2339,7 +2339,7 @@
  
      ifile->streams = av_calloc(fmt_ctx->nb_streams, sizeof(*ifile->streams));
      if (!ifile->streams)
@@ -22,7 +20,7 @@ index 7e2950a..2b028fb 100755
      ifile->nb_streams = fmt_ctx->nb_streams;
  
      /* bind a decoder to each input stream */
-@@ -2370,15 +2370,15 @@ static int open_input_file(InputFile *ifile, const char *filename,
+@@ -2370,15 +2370,15 @@
              err = filter_codec_opts(codec_opts, stream->codecpar->codec_id,
                                      fmt_ctx, stream, codec, &opts, NULL);
              if (err < 0)
@@ -41,7 +39,7 @@ index 7e2950a..2b028fb 100755
  
              if (do_show_log) {
                  // For logging it is needed to disable at least frame threads as otherwise
-@@ -2394,7 +2394,7 @@ static int open_input_file(InputFile *ifile, const char *filename,
+@@ -2394,7 +2394,7 @@
              if (avcodec_open2(ist->dec_ctx, codec, &opts) < 0) {
                  av_log(NULL, AV_LOG_WARNING, "Could not open codec for input stream %d\n",
                         stream->index);
@@ -50,7 +48,7 @@ index 7e2950a..2b028fb 100755
              }
  
              if ((t = av_dict_iterate(opts, NULL))) {
-@@ -2773,7 +2773,7 @@ static int opt_print_filename(void *optctx, const char *opt, const char *arg)
+@@ -2773,7 +2773,7 @@
      return print_input_filename ? 0 : AVERROR(ENOMEM);
  }
  
@@ -59,12 +57,13 @@ index 7e2950a..2b028fb 100755
  {
      av_log_set_callback(log_callback_help);
      show_usage();
-@@ -3058,18 +3058,57 @@ static inline int check_section_show_entries(int section_id)
+@@ -3058,18 +3058,58 @@
              do_show_##varname = 1;                                      \
      } while (0)
  
 -int main(int argc, char **argv)
 +static int write_buffer_packet(void *opaque, const uint8_t *buf, int buf_size)  {
++    fprintf(stderr, "DEBUG: write_buffer_packet called with size %d\n", buf_size);
 +    AVBPrint *bp = (AVBPrint *)opaque;
 +    av_bprint_append_data(bp, (const char *)buf, buf_size);
 +    return buf_size;
@@ -122,7 +121,7 @@ index 7e2950a..2b028fb 100755
  
      av_log_set_flags(AV_LOG_SKIP_REPEATED);
  
-@@ -3150,7 +3189,28 @@ int main(int argc, char **argv)
+@@ -3150,7 +3190,30 @@
          goto end;
      }
  
@@ -135,6 +134,7 @@ index 7e2950a..2b028fb 100755
 +            ret = AVERROR(ENOMEM);
 +            goto end;
 +        }
++        fprintf(stderr, "DEBUG: Using output_buf in ffprobe_run_internal\n");
 +        
 +        // Create a custom AVIOContext that writes to our AVBPrint
 +        avio_buf = avio_alloc_context(avio_ptr, avio_ctx_buffer_size, 1, 
@@ -147,17 +147,19 @@ index 7e2950a..2b028fb 100755
 +        
 +        // Use avtextwriter_create_avio (Available in modern fftools)
 +        ret = avtextwriter_create_avio(&wctx, avio_buf, 0);
++        fprintf(stderr, "DEBUG: avtextwriter_create_avio ret=%d\n", ret);
 +    } 
 +    else if (output_filename) {
          ret = avtextwriter_create_file(&wctx, output_filename);
      } else
          ret = avtextwriter_create_stdout(&wctx);
-@@ -3208,6 +3268,14 @@ int main(int argc, char **argv)
+@@ -3208,6 +3271,15 @@
      }
  
  end:
 +    // Cleanup custom AVIO
 +    if (avio_buf) {
++        avio_flush(avio_buf);
 +        // avio_close calls close_buffer which we don't want, or frees buffer?
 +        // avio_context_free handles the struct.
 +        // We allocated avio_ptr with av_malloc, avio_context_free frees the internal buffer 

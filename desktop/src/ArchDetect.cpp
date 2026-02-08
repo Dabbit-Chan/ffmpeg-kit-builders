@@ -17,20 +17,20 @@
  * along with FFmpegKit.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include "ArchDetect.h"
+#include "ArchDetect.hpp"
 
-extern void* ffmpegKitInitialize();
+extern void *ffmpegKitInitialize();
 
-const void* _archDetectInitializer{ffmpegKitInitialize()};
+const void *_archDetectInitializer{ffmpegKitInitialize()};
 
 std::string ffmpegkit::ArchDetect::getArch() {
 #ifdef FFMPEG_KIT_ARM64
-    return "arm64";
+  return "arm64";
 #elif FFMPEG_KIT_I386
-    return "i386";
+  return "i386";
 #elif FFMPEG_KIT_X86_64
-    return "x86_64";
+  return "x86_64";
 #else
-    return "";
+  return "";
 #endif
 }

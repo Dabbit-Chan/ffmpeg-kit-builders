@@ -24,3 +24,7 @@ stamp-h1
 *.a
 *.pc
 build/
+*.touch
+.cache/
+compile_commands.json
+compile_flags.txt

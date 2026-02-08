@@ -10,18 +10,14 @@ RUN dnf install -y epel-release && \
 
 # 2. Install System Packages
 # Added '--allowerasing' to resolve the coreutils conflict.
-# Removed packages that logs showed were already installed (make, autoconf, gcc, etc.) to speed up build.
 RUN dnf install -y --allowerasing --setopt=install_weak_deps=False \
-    autoconf \
     autoconf-archive \
     autogen \
-    automake \
     bc \
     binutils \
     bison \
     bzip2 \
     clang \
-    cmake \
     compiler-rt \
     coreutils \
     curl \
@@ -33,7 +29,6 @@ RUN dnf install -y --allowerasing --setopt=install_weak_deps=False \
     gcc-gfortran \
     gettext \
     gettext-devel \
-    git \
     glib2-devel \
     glibc-static \
     gperf \
@@ -41,7 +36,6 @@ RUN dnf install -y --allowerasing --setopt=install_weak_deps=False \
     help2man \
     java-17-openjdk-devel \
     libstdc++-static \
-    libtool \
     libzstd-devel \
     lld \
     llvm \
@@ -53,10 +47,9 @@ RUN dnf install -y --allowerasing --setopt=install_weak_deps=False \
     patch \
     pax \
     perl-IPC-Cmd \
+    perl-Thread-Queue \
     perl-Time-Piece \
     pkgconf-pkg-config \
-    python3-Cython \
-    python3-setuptools \
     ragel \
     SDL2-devel \
     subversion \
@@ -79,7 +72,9 @@ RUN python3 --version && pip3 --version && \
 # Manylinux images are root-only by default. We must recreate the vscode user 
 # to match the Dev Container standard.
 RUN useradd -m -s /bin/bash vscode && \
-    echo "vscode ALL=(ALL) NOPASSWD:ALL" >> /etc/sudoers
+    echo "vscode ALL=(ALL) NOPASSWD:ALL" >> /etc/sudoers && \
+    echo 'Defaults secure_path = /usr/local/bin:/sbin:/bin:/usr/sbin:/usr/bin' > /etc/sudoers.d/secure_path_override && \
+    chmod 0440 /etc/sudoers.d/secure_path_override
 
 ENV PATH="/usr/local/mingw-w64/bin:${PATH}"
 
@@ -154,9 +149,9 @@ RUN curl -Lo /tmp/arm-toolchain.tar.xz "https://developer.arm.com/-/media/Files/
     # Create compatibility symlinks (e.g., aarch64-linux-gnu-gcc -> aarch64-none-linux-gnu-gcc)
     mkdir -p ${ARM_TOOLCHAIN_PATH}/sys-bin && \
     for tool in gcc g++ ar as ld nm objcopy objdump ranlib strip; do \
-        ln -sf ${ARM_TOOLCHAIN_PATH}/bin/aarch64-none-linux-gnu-$tool ${ARM_TOOLCHAIN_PATH}/sys-bin/aarch64-linux-gnu-$tool; \
+    ln -sf ${ARM_TOOLCHAIN_PATH}/bin/aarch64-none-linux-gnu-$tool ${ARM_TOOLCHAIN_PATH}/sys-bin/aarch64-linux-gnu-$tool; \
     done
-    
+
 # Accept Licenses & Install Basics
 USER vscode
 RUN yes | sdkmanager --licenses && \

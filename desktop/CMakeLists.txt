@@ -7,6 +7,11 @@ endif()
 # Initialize Project
 project(ffmpeg-kit VERSION 8.0 LANGUAGES C CXX)
 
+# Export compile_commands.json for Clangd
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
+set(CMAKE_EXPORT_COMPILE_COMMANDS_DEBUG ON)
+set(CMAKE_EXPORT_COMPILE_COMMANDS_RELEASE ON)
+
 # ==============================================================================
 # 1. Options & Configuration
 # ==============================================================================
@@ -33,6 +38,7 @@ file(MAKE_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/src")
 
 # Copy config.h
 file(COPY "${FFMPEG_BUILD_DIR}/include/config.h" DESTINATION "${CMAKE_CURRENT_SOURCE_DIR}/src/")
+file(COPY "${FFMPEG_BUILD_DIR}/include/config_components.h" DESTINATION "${CMAKE_CURRENT_SOURCE_DIR}/src/")
 
 if(MINGW)
     message(STATUS "Patching config.h for MinGW compatibility...")
@@ -54,10 +60,10 @@ file(COPY "${FFMPEG_SRC_DIR}/fftools/"
 file(COPY "${FFMPEG_SRC_DIR}/compat/stdbit/stdbit.h" DESTINATION "${CMAKE_CURRENT_SOURCE_DIR}/src/")
 
 # Remove unwanted ffplay files
-file(GLOB REMOVE_FILES "${CMAKE_CURRENT_SOURCE_DIR}/src/ffplay*")
-if(REMOVE_FILES)
-    file(REMOVE ${REMOVE_FILES})
-endif()
+# file(GLOB REMOVE_FILES "${CMAKE_CURRENT_SOURCE_DIR}/src/ffplay*")
+# if(REMOVE_FILES)
+#     file(REMOVE ${REMOVE_FILES})
+# endif()
 
 # ==============================================================================
 # 3. Patch Application
@@ -121,7 +127,7 @@ find_package(PkgConfig REQUIRED)
 set(ENV{PKG_CONFIG_PATH} "${FFMPEG_BUILD_DIR}/lib/pkgconfig:$ENV{PKG_CONFIG_PATH}")
 
 pkg_check_modules(FFMPEG REQUIRED IMPORTED_TARGET 
-    libavdevice libavfilter libavformat libavcodec libswresample libswscale libavutil jsoncpp
+    libavdevice libavfilter libavformat libavcodec libswresample libswscale libavutil jsoncpp sdl2
 )
 
 # Fix for broken include paths in generated .pc files
@@ -160,24 +166,26 @@ target_compile_definitions(ffmpegkit PRIVATE
     FFMPEG_KIT_BUILD_DATE=${FFMPEG_KIT_BUILD_DATE}
 )
 
-if(MINGW)
+if(WIN32)
     target_compile_definitions(ffmpegkit PRIVATE
         _WIN32 WIN32 TARGET_OS_WINDOWS FFMPEG_KIT_WINDOWS
-        _WIN32_WINNT=0x0600
-        __NO_WINDRES__
+        FFMPEG_KIT_BUILDING_DLL
     )
 
-    target_compile_definitions(ffmpegkit PRIVATE FFMPEG_KIT_BUILDING_DLL)
-
-    target_link_options(ffmpegkit PRIVATE 
-        -static-libgcc 
-        -static-libstdc++ 
-        -Wl,--enable-auto-import 
-        -Wl,--allow-multiple-definition
-    )
+    if(MINGW)
+        target_compile_definitions(ffmpegkit PRIVATE
+            _WIN32_WINNT=0x0600
+        )
+        target_link_options(ffmpegkit PRIVATE 
+            -static-libgcc 
+            -static-libstdc++ 
+            -Wl,--enable-auto-import 
+            -Wl,--allow-multiple-definition
+        )
+    endif()
 else()
     target_compile_definitions(ffmpegkit PRIVATE TARGET_OS_LINUX)
-    target_compile_options(ffmpegkit PRIVATE -fvisibility=hidden)
+    target_compile_options(ffmpegkit PRIVATE -fvisibility=default)
 endif()
 
 # ==============================================================================
@@ -188,18 +196,22 @@ target_link_libraries(ffmpegkit PRIVATE PkgConfig::FFMPEG)
 if(BUILD_SHARED_LIBS)
     target_compile_definitions(ffmpegkit PRIVATE DLL_EXPORT PIC)
     
-    if(MINGW)
-        # [CRITICAL FIX 2] MinGW Shared Libs require no undefined symbols
-        target_link_options(ffmpegkit PRIVATE -Wl,--no-undefined)
-    endif()
+    target_link_options(ffmpegkit PRIVATE -Wl,--no-undefined)
 
     if(MINGW OR CMAKE_SYSTEM_NAME MATCHES "Linux")
-        target_link_options(ffmpegkit PRIVATE -Wl,--whole-archive)
+    target_link_libraries(ffmpegkit PRIVATE 
+            "-Wl,--whole-archive"
+            PkgConfig::FFMPEG
+            "-Wl,--no-whole-archive"
+        )
+    else()
+        # macOS / Standard fallback
+        target_link_libraries(ffmpegkit PRIVATE PkgConfig::FFMPEG)
     endif()
 
     # Linker Script
     set(LINKER_SCRIPT "${CMAKE_CURRENT_BINARY_DIR}/ffmpeg-linker-script.map")
-    file(WRITE ${LINKER_SCRIPT} "{\n    global:\n        av*;\n        swr*;\n        sws*;\n    local:\n        *;\n};\n")
+    file(WRITE ${LINKER_SCRIPT} "{\n    global:\n        av*;\n        swr*;\n        sws*;\n        ffmpeg*;\n        ffprobe*;\n        ffplay*;\n        media_information*;\n        stream_information*;\n        chapter*;\n        extern \"C++\" {\n            ffmpegkit::*;\n            typeinfo*for*ffmpegkit::*;\n            typeinfo*name*for*ffmpegkit::*;\n            vtable*for*ffmpegkit::*;\n            Json::*;\n            typeinfo*for*Json::*;\n            typeinfo*name*for*Json::*;\n            vtable*for*Json::*;\n        };\n    local:\n        *;\n};\n")
     target_link_options(ffmpegkit PRIVATE "-Wl,--version-script=${LINKER_SCRIPT}")
 
     # Bundling Manifest (Requires shared-library.sh)
@@ -249,8 +261,24 @@ install(TARGETS ffmpegkit
 
 install(DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/src/" 
     DESTINATION include
-    FILES_MATCHING PATTERN "*.h"
+    FILES_MATCHING PATTERN "*.h*"
 )
 
 configure_file("src/ffmpeg-kit.pc.in" "ffmpeg-kit.pc" @ONLY)
 install(FILES "${CMAKE_CURRENT_BINARY_DIR}/ffmpeg-kit.pc" DESTINATION lib/pkgconfig)
+
+# ==============================================================================
+# 9. Testing
+# ==============================================================================
+enable_testing()
+
+include(FetchContent)
+FetchContent_Declare(
+  googletest
+  URL https://github.com/google/googletest/archive/refs/tags/v1.14.0.zip
+)
+# For Windows: Prevent overriding the parent project's compiler/linker settings
+set(gtest_force_shared_crt ON CACHE BOOL "" FORCE)
+FetchContent_MakeAvailable(googletest)
+
+add_subdirectory(tests)

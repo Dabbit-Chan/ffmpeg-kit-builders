@@ -1,0 +1,209 @@
+diff --git a/src/ffplay.c b/src/ffplay.c
+index 2a572fc..1464a35 100755
+--- a/src/ffplay.c
++++ b/src/ffplay.c
+@@ -58,8 +58,8 @@
+ #include "ffplay_renderer.h"
+ #include "opt_common.h"
+ 
+-const char program_name[] = "ffplay";
+-const int program_birth_year = 2003;
++//const char program_name[] = "ffplay";
++//const int program_birth_year = 2003;
+ 
+ #define MAX_QUEUE_SIZE (15 * 1024 * 1024)
+ #define MIN_FRAMES 25
+@@ -83,6 +83,8 @@ const int program_birth_year = 2003;
+ /* no AV correction is done if too big error */
+ #define AV_NOSYNC_THRESHOLD 10.0
+ 
++extern void (*ffplay_on_show_help)(void);
++
+ /* maximum audio speed change to get correct sync */
+ #define SAMPLE_CORRECTION_PERCENT_MAX 10
+ 
+@@ -1322,12 +1324,13 @@ static void do_exit(VideoState *is)
+         printf("\n");
+     SDL_Quit();
+     av_log(NULL, AV_LOG_QUIET, "%s", "");
+-    exit(0);
++    //exit(0);
+ }
+ 
+ static void sigterm_handler(int sig)
+ {
+-    exit(123);
++    //exit(123);
++
+ }
+ 
+ static void set_default_window_size(int width, int height, AVRational sar)
+@@ -3594,7 +3597,7 @@ static int opt_sync(void *optctx, const char *opt, const char *arg)
+         av_sync_type = AV_SYNC_EXTERNAL_CLOCK;
+     else {
+         av_log(NULL, AV_LOG_ERROR, "Unknown value for %s: %s\n", opt, arg);
+-        exit(1);
++        //exit(1);
+     }
+     return 0;
+ }
+@@ -3722,12 +3725,13 @@ static void show_usage(void)
+     av_log(NULL, AV_LOG_INFO, "\n");
+ }
+ 
+-void show_help_default(const char *opt, const char *arg)
++void ffplay_show_help_default(const char *opt, const char *arg)
+ {
+     av_log_set_callback(log_callback_help);
+     show_usage();
+     show_help_options(options, "Main options:", 0, OPT_EXPERT);
+     show_help_options(options, "Advanced options:", OPT_EXPERT, 0);
++    if (ffplay_on_show_help) ffplay_on_show_help();
+     printf("\n");
+     show_help_children(avcodec_get_class(), AV_OPT_FLAG_DECODING_PARAM);
+     show_help_children(avformat_get_class(), AV_OPT_FLAG_DECODING_PARAM);
+@@ -3753,8 +3757,10 @@ void show_help_default(const char *opt, const char *arg)
+            );
+ }
+ 
++void (*ffplay_on_show_help)(void) = NULL;
++
+ /* Called from the main */
+-int main(int argc, char **argv)
++VideoState *ffplay_init_internal(int argc, char **argv)
+ {
+     int flags, ret;
+     VideoState *is;
+@@ -3777,14 +3783,14 @@ int main(int argc, char **argv)
+ 
+     ret = parse_options(NULL, argc, argv, options, opt_input_file);
+     if (ret < 0)
+-        exit(ret == AVERROR_EXIT ? 0 : 1);
++        return NULL; //exit(ret == AVERROR_EXIT ? 0 : 1);
+ 
+     if (!input_filename) {
+         show_usage();
+         av_log(NULL, AV_LOG_FATAL, "An input file must be specified\n");
+         av_log(NULL, AV_LOG_FATAL,
+                "Use -h to get full help or, even better, run 'man %s'\n", program_name);
+-        exit(1);
++        return NULL; //exit(1);
+     }
+ 
+     if (display_disable) {
+@@ -3804,7 +3810,7 @@ int main(int argc, char **argv)
+     if (SDL_Init (flags)) {
+         av_log(NULL, AV_LOG_FATAL, "Could not initialize SDL - %s\n", SDL_GetError());
+         av_log(NULL, AV_LOG_FATAL, "(Did you set the DISPLAY variable?)\n");
+-        exit(1);
++        return NULL; //exit(1);
+     }
+ 
+     SDL_EventState(SDL_SYSWMEVENT, SDL_IGNORE);
+@@ -3846,6 +3852,7 @@ int main(int argc, char **argv)
+         if (!window) {
+             av_log(NULL, AV_LOG_FATAL, "Failed to create window: %s", SDL_GetError());
+             do_exit(NULL);
++            return NULL;
+         }
+ 
+         if (vk_renderer) {
+@@ -3856,6 +3863,7 @@ int main(int argc, char **argv)
+                 if (ret < 0) {
+                     av_log(NULL, AV_LOG_FATAL, "Failed to parse, %s\n", vulkan_params);
+                     do_exit(NULL);
++                    return NULL;
+                 }
+             }
+             ret = vk_renderer_create(vk_renderer, window, dict);
+@@ -3863,6 +3871,7 @@ int main(int argc, char **argv)
+             if (ret < 0) {
+                 av_log(NULL, AV_LOG_FATAL, "Failed to create vulkan renderer, %s\n", av_err2str(ret));
+                 do_exit(NULL);
++                return NULL;
+             }
+         } else {
+             renderer = SDL_CreateRenderer(window, -1, SDL_RENDERER_ACCELERATED | SDL_RENDERER_PRESENTVSYNC);
+@@ -3877,6 +3886,7 @@ int main(int argc, char **argv)
+             if (!renderer || !renderer_info.num_texture_formats) {
+                 av_log(NULL, AV_LOG_FATAL, "Failed to create window or renderer: %s", SDL_GetError());
+                 do_exit(NULL);
++                return NULL;
+             }
+         }
+     }
+@@ -3885,11 +3895,70 @@ int main(int argc, char **argv)
+     if (!is) {
+         av_log(NULL, AV_LOG_FATAL, "Failed to initialize VideoState!\n");
+         do_exit(NULL);
++        return NULL;
+     }
+ 
+-    event_loop(is);
+-
+-    /* never returns */
++    return is;
++}
+ 
+-    return 0;
++// Global state reset (simplified for now, mimicking other libs)
++void ffplay_reset_internal_state(void) {
++    // Reset statics if possible or necessary.
++    // For ffplay, much state is in VideoState, but options are static.
++    // We can reset options via uninit_opts() which is called in do_exit.
++    // However, static ints like startup_volume, etc. persist.
++    // We should reset them:
++    input_filename = NULL;
++    window_title = NULL;
++    default_width  = 640;
++    default_height = 480;
++    screen_width  = 0;
++    screen_height = 0;
++    audio_disable = 0;
++    video_disable = 0;
++    subtitle_disable = 0;
++    seek_by_bytes = -1;
++    seek_interval = 10;
++    display_disable = 0;
++    borderless = 0;
++    alwaysontop = 0;
++    startup_volume = 100;
++    show_status = -1;
++    av_sync_type = AV_SYNC_AUDIO_MASTER;
++    start_time = AV_NOPTS_VALUE;
++    duration = AV_NOPTS_VALUE;
++    fast = 0;
++    genpts = 0;
++    lowres = 0;
++    decoder_reorder_pts = -1;
++    autoexit = 0;
++    exit_on_keydown = 0;
++    exit_on_mousedown = 0;
++    loop = 1;
++    framedrop = -1;
++    infinite_buffer = -1;
++    show_mode = SHOW_MODE_NONE;
++    audio_codec_name = NULL;
++    subtitle_codec_name = NULL;
++    video_codec_name = NULL;
++    rdftspeed = 0.02;
++    // cursor_last_shown // timestamp, doesn't matter much
++    cursor_hidden = 0;
++    // vfilters_list reset in do_exit
++    nb_vfilters = 0;
++    afilters = NULL;
++    autorotate = 1;
++    find_stream_info = 1;
++    filter_nbthreads = 0;
++    enable_vulkan = 0;
++    vulkan_params = NULL;
++    hwaccel = NULL;
++    
++    is_full_screen = 0;
++    
++    // window, renderer usually cleaned in do_exit/stream_close
++    window = NULL;
++    renderer = NULL;
++    vk_renderer = NULL;
+ }
++

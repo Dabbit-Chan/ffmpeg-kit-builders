@@ -17,19 +17,14 @@
  *  along with FFmpegKit.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include "Log.h"
+#include "Log.hpp"
 
-ffmpegkit::Log::Log(const long sessionId, const ffmpegkit::Level level, const char* message) : _sessionId{sessionId}, _level{level}, _message{message} {
-}
+ffmpegkit::Log::Log(const long sessionId, const ffmpegkit::Level level,
+                    const char *message)
+    : _sessionId{sessionId}, _level{level}, _message{message} {}
 
-long ffmpegkit::Log::getSessionId() const {
-    return _sessionId;
-}
+long ffmpegkit::Log::getSessionId() const { return _sessionId; }
 
-ffmpegkit::Level ffmpegkit::Log::getLevel() const {
-    return _level;
-}
+ffmpegkit::Level ffmpegkit::Log::getLevel() const { return _level; }
 
-std::string ffmpegkit::Log::getMessage() const {
-    return _message;
-}
+std::string ffmpegkit::Log::getMessage() const { return _message; }

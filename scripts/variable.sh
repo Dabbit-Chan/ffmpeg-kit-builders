@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# shellcheck disable=SC2317,SC2129,SC1091,SC2120,SC2035,SC2016,SC2310,SC2155,SC2154,SC2034
+# shellcheck disable=SC2317,SC2129,SC1091,SC2120,SC2035,SC2016,SC2310,SC2155,SC2154,SC2034,2250
 
 # DIRECTORY DEFINITIONS
 export FFMPEG_KIT_TMPDIR="${BASEDIR}/.tmp"
@@ -43,12 +43,12 @@ export PKG_CONFIG_LIBDIR= # disable pkg-config from finding [and using] normal l
 export original_path=$PATH
 export license_dir_list=()
 export extra_ffmpeg_c_flags=""
-export build_ffmpeg_programs=n
 
 declare -A seen_steps
 declare -A INSTALLED_LIBS
-declare -A SUB_DEPENDENCIES
-export BUILD_STEPS=()
+
+declare -A BUILD_STEPS
+export OPTIMIZED_BUILD_STEPS=()
 
 # AI Video Focused
 CONFIG_VIDEO_AI="\
@@ -78,6 +78,9 @@ CONFIG_GENERAL="\
 --enable-iconv \
 --enable-lzma \
 --enable-zlib"
+
+CONFIG_BASE="--enable-libjsoncpp \
+--enable-sdl2"
 
 # must pick crypto type for streaming support
 CONFIG_STREAMING="\
@@ -255,18 +258,67 @@ CONFIG_SMB="--enable-libsmbclient"
 
 CONFIG_SSH="--enable-libssh"
 
-#------------------------------------------------------------------------------     
-# ----------------------------- android features ------------------------------     
-#------------------------------------------------------------------------------      
+CONFIG_GPL="\
+--enable-libx264 \
+--enable-libx265 \
+--enable-libxvid \
+--enable-frei0r \
+--enable-libdvdread \
+--enable-v4l2-m2m \
+--enable-avisynth \
+--enable-libjack \
+--enable-libbs2b \
+--enable-libcdio \
+--enable-libdvdnav \
+--enable-librubberband \
+--enable-libsmbclient \
+--enable-libvidstab \
+--enable-libdavs2 \
+--enable-libxavs \
+--enable-libxavs2 \
+--enable-libaribb24"
+
+CONFIG_AUTODETECT="\
+--disable-alsa \
+--disable-libdc1394 \
+--disable-libdrm \
+--disable-libxcb-shape \
+--disable-libxcb-shm \
+--disable-libxcb-xfixes \
+--disable-cuda-llvm \
+--disable-v4l2-m2m \
+--disable-libxcb \
+--disable-vaapi \
+--disable-xlib \
+--disable-amf \
+--disable-vulkan \
+--disable-bzlib \
+--disable-iconv \
+--disable-lzma \
+--disable-sdl2 \
+--disable-sndio \
+--disable-zlib \
+--disable-cuvid \
+--disable-ffnvcodec \
+--disable-nvdec \
+--disable-nvenc \
+--disable-vdpau \
+--disable-d3d11va \
+--disable-d3d12va \
+--disable-dxva2 \
+--disable-schannel \
+--disable-mediafoundation \
+--disable-avfoundation \
+--disable-appkit \
+--disable-audiotoolbox \
+--disable-coreimage \
+--disable-metal \
+--disable-securetransport \
+--disable-videotoolbox"
+
 # build_jni               # config_options+= --disable-jni                # System # enable JNI support [no]
 # build_mediacodec        # config_options+= --disable-mediacodec         # Video  # enable Android MediaCodec support [no]
-#------------------------------------------------------------------------------    
-# --------------------------- OpenHarmony features ----------------------------     
-#------------------------------------------------------------------------------    
 # build_ohcodec           # config_options+= --disable-ohcodec            # Video  # enable OpenHarmony Codec support [no]
-#------------------------------------------------------------------------------    
-# --------------------------- linux/unix features -----------------------------     
-#------------------------------------------------------------------------------    
 # build_alsa              # config_options+= --disable-alsa               # Audio  # disable ALSA support [autodetect]
 # build_libdc1394         # config_options+= --enable-libdc1394           # Video  # enable IIDC-1394 grabbing using libdc1394 and libraw1394 [no]
 # build_libdrm            # config_options+= --disable-libdrm             # Video  # disable DRM code (Linux) [autodetect]
@@ -281,22 +333,13 @@ CONFIG_SSH="--enable-libssh"
 # build_vaapi             # config_options+= --disable-vaapi              # Video  # disable Video Acceleration API (mainly Unix/Intel) code [autodetect]
 # build_xlib              # config_options+= --disable-xlib               # Video  # disable xlib [autodetect]
 # build_ladspa            # config_options+= --disable-ladspa             # Audio  # enable LADSPA audio filtering [no]
-#------------------------------------------------------------------------------
-# ----------------------------- hardware features ----------------------------- 
-#------------------------------------------------------------------------------
 # build_amf               # config_options+= --disable-amf                # Video  # disable AMF video encoding code [autodetect]
 # build_vulkan            # config_options+= --disable-vulkan             # Video  # disable Vulkan code [autodetect]
 # build_libmfx            # config_options+= --enable-libmfx              # Video  # enable Intel MediaSDK (AKA Quick Sync Video) code via libmfx [no]
 # build_libvpl            # config_options+= --enable-libvpl              # Video  # enable Intel oneVPL code via libvpl if libmfx is not used [no]
 # build_omx               # config_options+= --enable-omx                 # Video  # enable OpenMAX IL code [no]
 # build_vulkan_static     # config_options+= --enable-vulkan-static       # Video  # enable statically link to libvulkan [no]
-#------------------------------------------------------------------------------
-# ----------------------------- windows features ------------------------------ 
-#------------------------------------------------------------------------------
 # build_avisynth          # config_options+= --enable-avisynth            # Video  # enable reading of AviSynth script files [no]
-#------------------------------------------------------------------------------
-# -------------------------- cross-platform features --------------------------
-#------------------------------------------------------------------------------ 
 # build_bzlib             # config_options+= --disable-bzlib              # System # disable bzlib [autodetect]
 # build_iconv             # config_options+= --disable-iconv              # System # disable iconv [autodetect]
 # build_lzma              # config_options+= --disable-lzma               # System # disable lzma [autodetect]
@@ -404,12 +447,8 @@ CONFIG_SSH="--enable-libssh"
 # build_pocketsphinx      # config_options+= --enable-pocketsphinx        # Audio  # enable PocketSphinx, needed for asr filter [no]
 # build_vapoursynth       # config_options+= --enable-vapoursynth         # Video  # enable VapourSynth demuxer [no]
 # build_whisper           # config_options+= --enable-whisper             # Audio  # enable whisper filter [no]
-#------------------------------------------------------------------------------
-# ------------------------------ NON-FREE features -----------------------------
-#------------------------------------------------------------------------------ 
 # build_decklink          # config_options+= --enable-decklink            # Video  # enable Blackmagic DeckLink I/O support [no]
 # build_libfdk_aac        # config_options+= --enable-libfdk-aac          # Audio  # enable AAC de/encoding via libfdk-aac [no]
-# ----------------------------- hardware features ----------------------------- 
 # build_cuda_llvm         # config_options+= --disable-cuda-llvm          # Video  # disable CUDA compilation using clang [autodetect]
 # build_cuvid             # config_options+= --disable-cuvid              # Video  # disable Nvidia CUVID support [autodetect]
 # build_ffnvcodec         # config_options+= --disable-ffnvcodec          # Video  # disable dynamically linked Nvidia code [autodetect]
@@ -418,16 +457,13 @@ CONFIG_SSH="--enable-libssh"
 # build_vdpau             # config_options+= --disable-vdpau              # Video  # disable Nvidia Video Decode and Presentation API for Unix code [autodetect]
 # build_cuda_nvcc         # config_options+= --enable-cuda-nvcc           # Video  # enable Nvidia CUDA compiler [no]
 # build_libnpp            # config_options+= --enable-libnpp              # Video  # enable Nvidia Performance Primitives-based code [no]
-# --------------------------- linux/unix features -----------------------------    
 # build_mmal              # config_options+= --disable-mmal               # Video  # enable Broadcom Multi-Media Abstraction Layer (Raspberry Pi) via MMAL [no]
 # build_omx_rpi           # config_options+= --disable-omx-rpi            # Video  # enable OpenMAX IL code for Raspberry Pi [no]
-# ----------------------------- windows features ------------------------------ 
 # build_d3d11va           # config_options+= --disable-d3d11va            # Video  # disable Microsoft Direct3D 11 video acceleration code [autodetect]
 # build_d3d12va           # config_options+= --disable-d3d12va            # Video  # disable Microsoft Direct3D 12 video acceleration code [autodetect]
 # build_dxva2             # config_options+= --disable-dxva2              # Video  # disable Microsoft DirectX 9 video acceleration code [autodetect]
 # build_schannel          # config_options+= --disable-schannel           # System # disable SChannel SSP, needed for TLS support on Windows if openssl and gnutls are not used [autodetect]
 # build_mediafoundation   # config_options+= --enable-mediafoundation     # Video  # enable encoding via MediaFoundation [auto]
-# ------------------------------ apple features -------------------------------     
 # build_avfoundation      # config_options+= --disable-avfoundation       # Video  # disable Apple AVFoundation framework [autodetect]
 # build_appkit            # config_options+= --disable-appkit             # System # disable Apple AppKit framework [autodetect]
 # build_audiotoolbox      # config_options+= --disable-audiotoolbox       # Audio  # disable Apple AudioToolbox code [autodetect]

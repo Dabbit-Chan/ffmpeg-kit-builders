@@ -23,63 +23,64 @@
 #include <stdint.h>
 
 #if defined(_WIN32)
-  #ifdef FFMPEG_KIT_BUILDING_DLL
-    #define FFMPEG_API __declspec(dllexport)
-  #else
-    #define FFMPEG_API __declspec(dllimport)
-  #endif
+#ifdef FFMPEG_KIT_BUILDING_DLL
+#define FFMPEG_API __declspec(dllexport)
 #else
-  #define FFMPEG_API __attribute__((visibility("default")))
+#define FFMPEG_API __declspec(dllimport)
+#endif
+#else
+#define FFMPEG_API __attribute__((visibility("default")))
 #endif
 
 #ifdef __cplusplus
-extern "C"
-{
+extern "C" {
 #endif
 
-  typedef struct FFmpegContext FFmpegContext;
+typedef struct FFmpegContext FFmpegContext;
 
-  /**
-   * Initialize ffmpeg context by parsing the command line string.
-   * This does not initialize the FFmpeg libraries or globals yet;
-   * that happens during ffmpeg_run to ensure thread safety.
-   *
-   * @param args_string Space-separated command line arguments (e.g., "-i input.mp4 out.mov")
-   * @return Allocated context or NULL on failure.
-   */
-  FFMPEG_API FFmpegContext *ffmpeg_init(const char *args_string);
+/**
+ * Initialize ffmpeg context by parsing the command line string.
+ * This does not initialize the FFmpeg libraries or globals yet;
+ * that happens during ffmpeg_run to ensure thread safety.
+ *
+ * @param args_string Space-separated command line arguments (e.g., "-i
+ * input.mp4 out.mov")
+ * @return Allocated context or NULL on failure.
+ */
+FFMPEG_API FFmpegContext *ffmpeg_init(const char *args_string);
 
-  /**
-   * Execute the transcoding operation.
-   * This function is thread-safe (uses a global mutex) but blocking.
-   * Only one transcoding session can run at a time due to FFmpeg CLI global state.
-   *
-   * @param ctx The context created by ffmpeg_init.
-   * @return 0 on success, negative AVERROR code on failure.
-   */
-  FFMPEG_API int ffmpeg_run(FFmpegContext *ctx);
+/**
+ * Execute the transcoding operation.
+ * This function is thread-safe (uses a global mutex) but blocking.
+ * Only one transcoding session can run at a time due to FFmpeg CLI global
+ * state.
+ *
+ * @param ctx The context created by ffmpeg_init.
+ * @return 0 on success, negative AVERROR code on failure.
+ */
+FFMPEG_API int ffmpeg_run(FFmpegContext *ctx);
 
-  /**
-   * Get progress information.
-   *
-   * @param ctx The context.
-   * @return Float between 0.0 and 1.0.
-   */
-  FFMPEG_API float ffmpeg_get_progress(FFmpegContext *ctx);
+/**
+ * Get progress information.
+ *
+ * @param ctx The context.
+ * @return Float between 0.0 and 1.0.
+ */
+FFMPEG_API float ffmpeg_get_progress(FFmpegContext *ctx);
 
-  /**
-   * Signal the current operation to cancel.
-   *
-   * @param ctx The context.
-   */
-  FFMPEG_API void ffmpeg_cancel(FFmpegContext *ctx);
+/**
+ * Signal the current operation to cancel.
+ *
+ * @param ctx The context.
+ */
+FFMPEG_API void ffmpeg_cancel(FFmpegContext *ctx);
 
-  /**
-   * Free the context and associated resources.
-   *
-   * @param ctx The context.
-   */
-  FFMPEG_API void ffmpeg_free(FFmpegContext *ctx);
+/**
+ * Free the context and associated resources.
+ *
+ * @param ctx The context.
+ */
+FFMPEG_API void ffmpeg_free(FFmpegContext *ctx);
 
 #ifdef __cplusplus
 }
