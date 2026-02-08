@@ -4,6 +4,8 @@
 
 This project is a wrapper library around FFmpeg and its core tools: [ffmpeg](src/ffmpeg_lib.h), [ffprobe](src/ffprobe_lib.h), and [ffplay](src/ffplay_lib.h). The [ffmpegkit](src/FFmpegKit.hpp) library provides a native library API to other applications, allowing consuming applications to pass string arguments directly to the library as if invoking the FFmpeg tool executables.
 
+For a deep dive into the underlying build process, dependency bundling, and CMake configuration, see the [Build System Guide](docs/BUILD_SYSTEM.md).
+
 The core philosophy is to leverage the existing code written by the FFmpeg team for `fftools`, making minimal changes to adapt them for library use.
 
 ## File Structure & Roles
@@ -56,5 +58,5 @@ To modifying or fixing issues in `ffprobe` (or other tools), follow this strict 
         *   **To**: `+++ b/src/ffprobe.c`
 
 4.  **Rebuild**:
-    *   Run the [build script](CMakeLists.txt) to apply the updated patch and compile the project.
+    *   Run the [runner script](../runner.sh) or follow the [Build System Guide](docs/BUILD_SYSTEM.md) to apply the updated patch and compile the project.
     *   The build system will use the new patch file to generate the final `ffprobe.c` and compile it.

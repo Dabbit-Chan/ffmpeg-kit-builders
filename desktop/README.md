@@ -1,66 +1,58 @@
-# FFmpegKit for Linux
+# FFmpegKit for Desktop (Linux & Windows)
 
 ### 1. Features
 - Provides a `C++` API with `c++11`
-- Includes `x86_64` architecture
-- Builds shared native libraries (.so)
-- Prebuilt binaries not published
+- Provides a `C` API wrapper for easy integration
+- Supports `x86_64` and `i686` architectures
+- Builds shared and static native libraries (.so, .dll, .a)
+- Supports native Linux builds and cross-compilation for Windows
+- Prebuilt binaries are not published
+
+---
+
+### 1.5 Documentation Wiki
+
+For detailed technical guides, please refer to the following documentation:
+- [C API Reference](docs/C_API.md) - Detailed guide for the C API wrapper.
+- [Build System & Patching](docs/BUILD_SYSTEM.md) - Technical overview of how the desktop build works.
+- [Architecture & Workflow](ARCHITECTURE.md) - Development workflow and file structure roles.
+
+---
 
 ### 2. Building
 
-Run `linux.sh` at project root directory to build `ffmpeg-kit` and `ffmpeg` shared libraries. 
+Building FFmpegKit for Desktop is performed using the unified `runner.sh` script located in the project root directory.
 
-Please note that `FFmpegKit` project repository includes the source code of `FFmpegKit` only. `linux.sh` needs 
-network connectivity and internet access to `github.com` in order to download the source code of `FFmpeg` and 
-external libraries enabled.
+#### 2.1 Pragmatic Guide
 
-#### 2.1 Prerequisites
+1.  **Environment Setup**: Follow the prerequisites and toolchain installation steps outlined in the [Main Repository README](../README.md#quick-start).
+2.  **Basic Build**: Execute the runner script to build a base bones ffmpeg build with built-in functionality only. This build will not have any external libraries.
 
-`linux.sh` requires the following packages.
+    ```bash
+    # Build for Linux x86_64
+    sudo ./runner.sh --host=linux --arch=x86_64 --enable-base -y --release
 
-##### 2.1.1 Packages
+    # Build for Windows x86_64 (Cross-compile)
+    sudo ./runner.sh --host=windows --arch=x86_64 --enable-base -y --release
+    ```
 
-Use your package manager (apt, yum, dnf, etc.) to install the following packages.
+3.  **Advanced Options**: Use `--enable-gpl` or `--enable-full` to include additional external libraries. Run `./runner.sh --help` to see all available options or refer to [Main Repository README](../README.md).
 
-Note that the names of the Linux packages vary from distribution to distribution. The names given below are
-valid for Debian/Ubuntu. Some packages may have a different name if you are on another distribution.
+#### 2.2 Build Output
 
-- The following packages are required by the build scripts.
-
-  ```
-  clang llvm lld libclang-14-dev libstdc++6 nasm autoconf automake libtool pkg-config curl git doxygen jsoncpp-dev
-  ```
-
-- These optional packages should be installed only if you want to build corresponding external libraries.
-  
-  ```
-  cmake libasound2-dev libass-dev libfontconfig1-dev libfreetype-dev libfribidi-dev libgmp-dev libgnutls28-dev libmp3lame-dev libopencore-amrnb-dev libopencore-amrwb-dev libopus-dev librubberband-dev libsdl2-dev libshine-dev libsnappy-dev libsoxr-dev libspeex-dev libtesseract-dev libtheora-dev libtwolame-dev libva-dev libvidstab-dev libvorbis-dev libvo-amrwbenc-dev libvpx-dev libv4l-dev libwebp-dev libxml2-dev libxvidcore-dev libx265-dev meson ocl-icd-opencl-dev opencl-headers tcl zlib1g-dev groff gtk-doc-tools libtasn1
-  ```
-
-#### 2.2 Options
-
-Use `--enable-<library name>` flag to support additional external or system libraries.
-
-```
-./linux.sh --enable-fontconfig
-```
-
-Run `--help` to see all available build options.
-
-#### 2.3 Build Output
-
-All libraries created by `linux.sh` can be found under the `prebuilt` directory.
-
-- Headers and libraries created for the `Main` builds are located under the `bundle-linux` folder.
+All libraries and headers created by the build process can be found under the `prebuilt` directory in the project root.
+- Headers and libraries for the consolidated bundle are typically located under `prebuilt/{platform}-{arch}/bundle-.../`.
 
 ### 3. Using
 
 #### 3.1 C++ API
 
-`FFmpegKit` doesn't publish any prebuilt `Linux` libraries, as it does for other platforms. Therefore, you need to
-manually build and import `FFmpegKit` libraries into your projects. 
+FFmpegKit doesn't publish prebuilt desktop libraries. You need to build them manually and import them into your project.
 
-Then, you can use the following API methods to execute `FFmpeg` and `FFprobe` commands inside your application.
+You can use the following API methods to execute `FFmpeg` and `FFprobe` commands inside your application.
+
+> [!NOTE]
+> For the **C API**, see the detailed [C API Guide](docs/C_API.md).
 
 1. Execute synchronous `FFmpeg` commands.
 
@@ -72,18 +64,12 @@ Then, you can use the following API methods to execute `FFmpeg` and `FFprobe` co
 
     auto session = FFmpegKit::execute("-i file1.mp4 -c:v mpeg4 file2.mp4");
     if (ReturnCode::isSuccess(session->getReturnCode())) {
-
         // SUCCESS
-
     } else if (ReturnCode::isCancel(session->getReturnCode())) {
-
         // CANCEL
-
     } else {
-
         // FAILURE
         std::cout << "Command failed with state " << FFmpegKitConfig::sessionStateToString(session->getState()) << " and rc " << session->getReturnCode() << "." << session->getFailStackTrace() << std::endl;
-
     }
     ```
 
@@ -110,7 +96,7 @@ Then, you can use the following API methods to execute `FFmpeg` and `FFprobe` co
     // State of the execution. Shows whether it is still running or completed
     SessionState state = session->getState();
 
-    // Return code for completed sessions. Will be null if session is still running or ends with a failure
+    // Return code for completed sessions.
     auto returnCode = session->getReturnCode();
 
     auto startTime = session->getStartTime();
@@ -130,7 +116,7 @@ Then, you can use the following API methods to execute `FFmpeg` and `FFprobe` co
     auto statistics = session->getStatistics();
     ```
 
-3. Execute asynchronous `FFmpeg` commands by providing session specific `execute`/`log`/`session` callbacks.
+3. Execute asynchronous `FFmpeg` commands by providing session specific callbacks.
 
     ```C++
     #include <FFmpegKit.h>
@@ -142,24 +128,17 @@ Then, you can use the following API methods to execute `FFmpeg` and `FFprobe` co
         const auto state = session->getState();
         auto returnCode = session->getReturnCode();
    
-        // CALLED WHEN SESSION IS EXECUTED
-
         std::cout << "FFmpeg process exited with state " << FFmpegKitConfig::sessionStateToString(state) << " and rc " << returnCode << "." << session->getFailStackTrace() << std::endl;
     }, [](auto log) {
-
         // CALLED WHEN SESSION PRINTS LOGS
-   
     }, [](auto statistics) {
-   
         // CALLED WHEN SESSION GENERATES STATISTICS
-
     });
     ```
 
 4. Execute `FFprobe` commands.
 
     - Synchronous
-
     ```C++
     #include <FFprobeKit.h>
     #include <FFmpegKitConfig.h>
@@ -167,25 +146,9 @@ Then, you can use the following API methods to execute `FFmpeg` and `FFprobe` co
     using namespace ffmpegkit;
 
     auto session = FFprobeKit::execute(ffprobeCommand);
-
     if (!ReturnCode::isSuccess(session->getReturnCode())) {
         std::cout << "Command failed. Please check output for the details." << std::endl;
     }
-    ```
-
-    - Asynchronous
-
-    ```C++
-    #include <FFprobeKit.h>
-    #include <FFmpegKitConfig.h>
-
-    using namespace ffmpegkit;
-
-    FFprobeKit::executeAsync(ffprobeCommand, [](auto session) {
-   
-        // CALLED WHEN SESSION IS EXECUTED
-
-    });
     ```
 
 5. Get media information for a file.
@@ -199,87 +162,6 @@ Then, you can use the following API methods to execute `FFmpeg` and `FFprobe` co
     mediaInformation->getMediaInformation();
     ```
 
-6. Stop ongoing `FFmpeg` operations.
-
-    - Stop all executions
-        ```C++
-        FFmpegKit::cancel();
-        ```
-    - Stop a specific session
-        ```C++
-        FFmpegKit::cancel(sessionId);
-        ```
-
-7. Get previous `FFmpeg` and `FFprobe` sessions from session history.
-
-    ```C++
-    #include <FFmpegKitConfig.h>
-
-    using namespace ffmpegkit;
-
-    auto sessions = FFmpegKitConfig::getSessions();
-    int i = 0;
-    std::for_each(sessions->begin(), sessions->end(), [](const auto session) {
-        std::cout << "Session " << i++ << " = id:" << session->getSessionId() << ", startTime:" << session->getStartTime() << ", duration:" << session-> getDuration() << ", state:" << FFmpegKitConfig::sessionStateToString(session->getState()) << ", returnCode:" << session->getReturnCode() << "." << std::endl;
-    });
-    ```
-8. Enable global callbacks.
-
-    - Session type specific Complete Callbacks, called when an async session has been completed
-
-        ```C++
-        #include <FFmpegKitConfig.h>
-
-        using namespace ffmpegkit;
-
-        FFmpegKitConfig::enableFFmpegSessionCompleteCallback([](auto session) {
-
-        });
-
-        FFmpegKitConfig::enableFFprobeSessionCompleteCallback([](auto session) {
-
-        });
-
-        FFmpegKitConfig::enableMediaInformationSessionCompleteCallback([](auto session) {
-      
-        });
-        ```
-
-    - Log Callback, called when a session generates logs
-
-        ```C++
-        #include <FFmpegKitConfig.h>
-
-        using namespace ffmpegkit;
-
-        FFmpegKitConfig::enableLogCallback([](auto log) {
-            ...
-        });
-        ```
-
-    - Statistics Callback, called when a session generates statistics
-
-        ```C++
-        #include <FFmpegKitConfig.h>
-
-        using namespace ffmpegkit;
-
-        FFmpegKitConfig::enableStatisticsCallback([](auto statistics) {
-            ...
-        });
-        ```
-
-9. Register system fonts and custom font directories.
-
-    ```C++
-    #include <FFmpegKitConfig.h>
-
-    using namespace ffmpegkit;
-
-    FFmpegKitConfig::setFontDirectoryList(std::list<std::string>{"/usr/share/fonts"}, std::map<std::string,std::string>()));
-    ```
-
 ### 4. Test Application
 
-You can see how `FFmpegKit` is used inside an application by running `Linux` test applications developed under the
-[FFmpegKit Test](https://github.com/akashskypatel/ffmpeg-kit-test) project.
+You can see how `FFmpegKit` is used inside an application by running the test applications developed under the `desktop/tests` directory or referring to the [FFmpegKit Test](https://github.com/akashskypatel/ffmpeg-kit-test) project.

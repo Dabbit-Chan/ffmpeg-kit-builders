@@ -2,7 +2,6 @@
 /*.log
 /prebuilt/
 .vscode/
-docs/
 ffmpeg_kit_flutter
 *.shellcheckrc
 */src/Makefile.in
@@ -18,3 +17,4 @@ linux/src/Makefile.in
 .code-workspace
 my_test_env
 ~*
+.agent/
