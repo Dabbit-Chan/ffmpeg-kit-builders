@@ -236,13 +236,15 @@ int ffprobe_run(FFprobeContext *ctx)
 
 char *ffprobe_get_output(FFprobeContext *ctx)
 {
-  if (!ctx || !ctx->output.len)
+  if (!ctx || !ctx->output.str)
     return NULL;
 
   // Finalize the buffer and return a copy
   if (!av_bprint_is_complete(&ctx->output))
   {
-    return NULL;
+    // If truncation occurred, we still want to return what we have
+    // but av_bprint_finalize would be needed if we wanted to free internal buffers
+    // Here we just duplicate what we have.
   }
 
   return av_strdup(ctx->output.str);

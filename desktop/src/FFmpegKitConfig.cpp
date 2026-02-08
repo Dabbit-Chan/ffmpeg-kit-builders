@@ -818,6 +818,7 @@ int executeFFprobe(const long sessionId,
   if (ctx) {
     char *output = ffprobe_get_output(ctx);
     if (output) {
+      std::cout << "ffprobe output captured: " << output << std::endl;
       AVBPrint bprint;
       av_bprint_init(&bprint, 0, AV_BPRINT_SIZE_UNLIMITED);
       av_bprintf(&bprint, "%s", output);
@@ -829,6 +830,8 @@ int executeFFprobe(const long sessionId,
 
       av_bprint_finalize(&bprint, NULL);
       av_free(output);
+    } else {
+      std::cout << "ffprobe output was NULL" << std::endl;
     }
   }
 

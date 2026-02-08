@@ -2,9 +2,12 @@ CompileFlags:
   Add:
     - -xc++
     - -std=c++17
+    - -I/home/vscode/ffmpeg-kit-builders/desktop/src
     - -I/home/vscode/ffmpeg-kit-builders/prebuilt/src/ffmpeg
     - -I/home/vscode/ffmpeg-kit-builders/prebuilt/src/jsoncpp/include
     - -I/home/vscode/ffmpeg-kit-builders/prebuilt/src/sdl2/include
+    - -I/home/vscode/ffmpeg-kit-builders/desktop/build/_deps/googletest-src/googletest/include
+    - -I/home/vscode/ffmpeg-kit-builders/desktop/build/_deps/googletest-src/googlemock/include
     - -DDEBUG
     - -D_GNU_SOURCE
     - -D__STDC_CONSTANT_MACROS
