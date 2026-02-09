@@ -100,7 +100,10 @@ RUN echo 'export RUSTUP_HOME=/usr/local/rustup' >> /etc/profile.d/rust.sh && \
     echo 'export PATH=/usr/local/cargo/bin:$PATH' >> /etc/profile.d/rust.sh && \
     chmod +x /etc/profile.d/rust.sh && \
     /usr/local/cargo/bin/rustup default stable && \
-    /usr/local/cargo/bin/cargo --version
+    ln -s /usr/local/cargo/bin/rustup /usr/bin/rustup && \
+    ln -s /usr/local/cargo/bin/cargo /usr/bin/cargo && \
+    cargo --version && \
+    rustup target add x86_64-pc-windows-gnu
 
 RUN echo 'source /etc/profile.d/rust.sh' >> /home/vscode/.bashrc || true
 
