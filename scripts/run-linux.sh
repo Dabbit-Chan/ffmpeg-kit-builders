@@ -1491,6 +1491,7 @@ build_portaudio() {
     create_dir "$src_dir/$lib/opt"
     download_asiosdk "$lib"
     change_dir "$src_dir/$lib"
+    touch "no.autoreconf"
     generic_configure "--with-asiodir=$src_dir/$lib/opt/asiosdk"
     # disable_nonessential "$src_dir/$lib"
     do_make_and_make_install
@@ -2805,7 +2806,14 @@ build_libopenvino() {
   local base_lib="libopenvino"
   local lib="$base_lib-$host_name"
   local repo
-  repo=$(get_pip_download_link openvino) || exit_message 1 "build_libopenvino: could not find a download link for $base_lib"
+  if ! repo=$(get_pip_download_link openvino) 2> /dev/null; then
+    # fallback to hardcoded repo
+    if [[ "$host_arch" == "x86_64" ]]; then
+      repo="https://files.pythonhosted.org/packages/8a/91/807f4e288969bc696dee2e56d7269abffb56626249642effb8ec2ab7d424/openvino-2025.4.1-20426-cp312-cp312-manylinux2014_x86_64.whl"
+    elif [[ "$host_arch" == "aarch64" || "$host_arch" == "arm64" ]]; then
+      repo="https://files.pythonhosted.org/packages/2e/b4/6c8f68db079b4a140c301c00f9c361df011b4d1205bbdb4cff93f9192348/openvino-2025.4.1-20426-cp312-cp312-manylinux_2_35_aarch64.whl"
+    fi
+  fi
   local repo_ver="2025.4.1"
   
     local manifest="$work_dir/pkgconfig/${lib}_manifest"

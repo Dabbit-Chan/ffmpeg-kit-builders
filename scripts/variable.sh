@@ -40,7 +40,7 @@ export ffmpeg_git_checkout="https://github.com/FFmpeg/FFmpeg.git"
 export cpu_count=$(nproc)
 export original_cpu_count=$(nproc) # save it away for some that revert it temporarily
 export PKG_CONFIG_LIBDIR= # disable pkg-config from finding [and using] normal linux system installed libs [yikes]
-export original_path=$PATH
+export original_path=$PATH:/usr/local/cargo/bin
 export license_dir_list=()
 export extra_ffmpeg_c_flags=""
 
