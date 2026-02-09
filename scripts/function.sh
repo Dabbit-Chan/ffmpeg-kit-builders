@@ -243,9 +243,7 @@ check_files_exist() {
 
 require_sudo() {
 	if [ "$EUID" -ne 0 ]; then
-		echo "This script must be run with sudo" | tee -a "$LOG_FILE"
-		echo "Usage: sudo $0 [OPTIONS]" | tee -a "$LOG_FILE"
-		exit 1
+		exit_message 1 "This script must be run with sudo"
 	fi
 
 	if [ -z "$SUDO_USER" ]; then
@@ -374,8 +372,35 @@ setup_build_environment() {
         *) exit_message 1 "setup_build_environment: Unknown host platform '$host_platform'" ;;
     esac
     create_dir "$src_dir"
-    create_dir "$work_dir"
-    change_dir "$work_dir" || exit
+    change_dir "$work_dir" || exit_message 1 "setup_build_environment: Unable to change to directory '$work_dir'"
+    # PyPa Manylinux comes bundled with these tools that are higher version than whats available through pkg manager
+    # We need to use the bundled versions
+    # List of tools to check
+    for tool in autoconf automake aclocal autoheader autoreconf autom4te libtool libtoolize; do
+        # 1. Get Bundled Version (or 0 if missing)
+        if [ -x "/usr/local/bin/$tool" ]; then
+            bundled_ver=$(/usr/local/bin/"$tool" --version 2>/dev/null | head -n 1 | awk '{print $NF}')
+        else
+            bundled_ver="0"
+        fi
+        # 2. Get Installed System Version (or 0 if missing)
+        if [ -x "/usr/bin/$tool" ]; then
+            installed_ver=$(/usr/bin/"$tool" --version 2>/dev/null | head -n 1 | awk '{print $NF}')
+        else
+            installed_ver="0"
+        fi
+        echo "Checking $tool: Bundled=$bundled_ver vs System=$installed_ver" >> "$LOG_FILE"
+        # 3. Compare: Find the Highest Version
+        # We sort the two versions; 'tail -n 1' gives us the "winner" (highest ver)
+        winner=$(printf '%s\n%s\n' "$bundled_ver" "$installed_ver" | sort -V | tail -n 1)
+        # 4. If Bundled is the winner (and it actually exists), Force Link
+        if [ "$winner" = "$bundled_ver" ] && [ "$bundled_ver" != "0" ]; then
+            echo " -> Updating system $tool to use bundled version $bundled_ver" >> "$LOG_FILE"
+            ln -sf "/usr/local/bin/$tool" "/usr/bin/$tool"
+        else
+            echo " -> Keeping system version (System is newer or Bundled is missing)" >> "$LOG_FILE"
+        fi
+    done
 }
 
 calculate_bits_target() {
@@ -392,8 +417,8 @@ setup_windows_environment() {
     export rust_target="$host_arch-pc-windows-gnu"
     export toolchain_root="mingw-w64-$host_arch"
     export dependency_install_prefix="$work_dir/libraries" # dependencies
-    export toolchain_root_dir="/usr/"
-    export toolchain_bin_path="/usr/bin/"
+    export toolchain_root_dir="/usr/local/mingw-w64/"
+    export toolchain_bin_path="/usr/local/mingw-w64/bin"
     export install_pkgconfig_dir="${dependency_install_prefix}/lib/pkgconfig"
 
     export PKG_CONFIG_PATH="$install_pkgconfig_dir:$ffmpeg_install_prefix/lib/pkgconfig"
@@ -1017,7 +1042,7 @@ list_libraries() {
   download_ffmpeg
   change_dir "$src_dir/ffmpeg"
   ./configure --help
-  exit 0
+  exit_message 0 "list_libraries: Done listing libraries"
 }
 
 set_box_memory_size_bytes() {
@@ -1476,7 +1501,6 @@ get_git_command() {
     ;;
     *)
     exit_message 1 "get_git_command: invalid git ref type $type"
-    exit 1
     ;;
   esac
 }
@@ -3125,7 +3149,7 @@ configure_ffmpeg() {
 		remove_path -f "${ffmpeg_source_dir}/already_configured_$build_ffmpeg_type"*
 	fi
 
-	change_dir "$ffmpeg_source_dir" || exit
+	change_dir "$ffmpeg_source_dir" || exit_message 1 "configure_ffmpeg: could not change to $ffmpeg_source_dir"
 	# iswindows && apply_patch "$PATCHDIR"/frei0r_load-shared-libraries-dynamically.diff
   local postpend_configure_opts=""
 	local init_options=""
@@ -3519,7 +3543,7 @@ install_ffmpeg() {
   cross_windres y
   unset RC
   iswindows && ffmpeg_windows_patches
-
+  iswindows && export LD=${cross_prefix}gcc # ld weirdness with windows
 	do_make_and_make_install "" "" "$(get_ffmpeg_directory)"
   
 	echo -e "INFO: Moving all binaries" | tee -a "$LOG_FILE"
@@ -3647,7 +3671,7 @@ install_pkg_config_file() {
 }
 
 get_ffmpeg_kit_version() {
-	local FFMPEG_KIT_VERSION=$(grep -Eo 'FFmpegKitVersion = .*' "$ffmpeg_kit_src_dir/src/FFmpegKitConfig.h" | tee -a "$LOG_FILE" | grep -Eo ' \".*' | tr -d '"; ')
+	local FFMPEG_KIT_VERSION=$(grep -Eo 'FFmpegKitVersion = .*' "$ffmpeg_kit_src_dir/src/FFmpegKitConfig.hpp" | tee -a "$LOG_FILE" | grep -Eo ' \".*' | tr -d '"; ')
 
 	echo -e "${FFMPEG_KIT_VERSION}"
 }
@@ -3871,7 +3895,7 @@ EOL
 		echo -e "Building in $WORKDIR, will use ~ 285GB space!" | tee -a "$LOG_FILE"
 		echo -e
 	fi
-	change_dir "$WORKDIR" 1 || exit 1
+	change_dir "$WORKDIR" 1 || exit_message 1 "intro: could not change to $WORKDIR"
 	echo -e "sit back, this may take awhile..." | tee -a "$LOG_FILE"
 }
 
@@ -4081,8 +4105,7 @@ EOF
   return 0
   ;;
 	3|exit)
-		echo -e "exiting"
-		exit 0
+		exit_message 0 "user picked exit"
 		;;
 	*)
 		echo -e 'Your choice was not valid, please try again.'
@@ -4131,8 +4154,7 @@ EOF
   return 0
   ;;
 	3|exit)
-		echo -e "exiting"
-		exit 0
+		exit_message 0 "user picked exit"
 		;;
 	*)
 		echo -e 'Your choice was not valid, please try again.'
@@ -5525,8 +5547,7 @@ optimize_dependencies() {
         fi
         # Detect Circular Dependencies
         if [[ -n "${processing[$node]}" ]]; then
-            echo "DEBUG: Circular dependency detected at $node" | tee -a "$LOG_FILE"
-            exit 1
+            exit_message 1 "Circular dependency detected at $node" | tee -a "$LOG_FILE"
         fi
         # Validation: Check if function is defined in current scope
         if ! declare -F "$node" >/dev/null; then

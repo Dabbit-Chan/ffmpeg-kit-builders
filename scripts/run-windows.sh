@@ -4403,7 +4403,7 @@ build_cpuinfo() {
   local lib="cpuinfo"
   local repo="https://github.com/pytorch/cpuinfo"
   change_dir "$src_dir"
-  do_git_checkout "$repo" "$src_dir/$lib"
+  do_git_checkout "$repo" "$src_dir/$lib" "main"
   change_dir "$src_dir/$lib/build" 1
   do_cmake_from_build_dir "$src_dir/$lib" "-DCMAKE_BUILD_TYPE=Release \
 -DCPUINFO_LIBRARY_TYPE=static \

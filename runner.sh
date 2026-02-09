@@ -251,11 +251,16 @@ while [ $# -gt 0 ]; do
 		export build_from="${1#*=}"
 		shift
 		;;
-	--build-deps-only)
-		export build_dependencies_only=y
+	--build-deps-only|--build-deps)
+		export build_dependencies=y
 		shift
 		;;
-	--build-ffmpeg-only=*)
+  --build-ffmpeg-only|--build-ffmpeg)
+    export build_ffmpeg_type=static
+    export build_ffmpeg=y
+    shift
+    ;;
+	--build-ffmpeg-only=*|--build-ffmpeg=*)
     build_type="${1#*=}"
     case "$build_type" in
       shared)
@@ -268,10 +273,15 @@ while [ $# -gt 0 ]; do
       export build_ffmpeg_type=shared
       ;;
     esac
-    export build_ffmpeg_only=y
+    export build_ffmpeg=y
 		shift
 		;;
-	--build-ffmpeg-kit-only=*)
+  --build-ffmpeg-kit-only|--build-ffmpeg-kit)
+    export build_ffmpeg_kit_type=shared
+    export build_ffmpeg_kit=y
+    shift
+    ;;
+	--build-ffmpeg-kit-only=*|--build-ffmpeg-kit=*)
     build_type="${1#*=}"
     case "$build_type" in
       shared)
@@ -284,7 +294,7 @@ while [ $# -gt 0 ]; do
       export build_ffmpeg_kit_type=shared
       ;;
     esac
-    export build_ffmpeg_kit_only=y
+    export build_ffmpeg_kit=y
 		shift
 		;;
 	--print-total-steps | --print-all-steps | --reset-and-clean=* | --reset-and-clean) shift ;; # Handled below, just consume and ignore here
@@ -552,7 +562,7 @@ fi
 
 truthy "$enable_clean_builds" && { clean_ffmpeg_builds; exit 0; }
 
-if ! truthy "$build_dependencies_only"; then
+if ! truthy "$build_dependencies"; then
 truthy "$build_gpl" && truthy "$build_nonfree" && echo -e "ERROR: --enable-gpl is not compatible with --enable-nonfree. Remove one and run again" | tee -a "$LOG_FILE"
 fi
 
@@ -827,35 +837,15 @@ main() {
       exit_message 1 "Invalid step $build_from"
     fi
   else
-    change_dir "$work_dir" || exit 1
-    if truthy "$build_dependencies_only"; then
-      echo -e "INFO: Building dependencies only..." | tee -a "$LOG_FILE"
-      echo -e "WARNING: This may fail if previous dependencies havent been built yet." | tee -a "$LOG_FILE"
-      optimize_dependencies
-      run_valid_build_functions
-    elif truthy "$build_ffmpeg_only"; then
-      echo -e "INFO: Building ffmpeg only..." | tee -a "$LOG_FILE"
-      echo -e "WARNING: This may fail if previous dependencies havent been built yet." | tee -a "$LOG_FILE"
-      download_ffmpeg
-      build_exists || configure_ffmpeg
-      install_ffmpeg
-    elif truthy "$build_ffmpeg_kit_only"; then
-      echo -e "INFO: Building ffmpeg-kit only..." | tee -a "$LOG_FILE"
-      echo -e "WARNING: This may fail if previous dependencies havent been built yet." | tee -a "$LOG_FILE"
-      configure_ffmpeg_kit
-      install_ffmpeg_kit
-      create_ffmpeg_kit_bundle
-    else
-      echo -e "INFO: Building all..." | tee -a "$LOG_FILE"
-      optimize_dependencies
-      run_valid_build_functions
-      download_ffmpeg
-      build_exists || configure_ffmpeg
-      install_ffmpeg
-      configure_ffmpeg_kit
-      install_ffmpeg_kit
-      create_ffmpeg_kit_bundle
-    fi
+    change_dir "$work_dir" || exit_message 1 "unable to change directory to $work_dir"
+    optimize_dependencies
+    truthy "$build_dependencies" && run_valid_build_functions
+    truthy "$build_ffmpeg" && download_ffmpeg
+    truthy "$build_ffmpeg" && { build_exists || configure_ffmpeg; }
+    truthy "$build_ffmpeg" && install_ffmpeg
+    truthy "$build_ffmpeg_kit" && configure_ffmpeg_kit
+    truthy "$build_ffmpeg_kit" && install_ffmpeg_kit
+    truthy "$build_ffmpeg_kit" && create_ffmpeg_kit_bundle
   fi
 }
 
