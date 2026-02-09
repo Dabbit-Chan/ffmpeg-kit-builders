@@ -61,10 +61,12 @@ RUN dnf install -y --allowerasing --setopt=install_weak_deps=False \
     xorg-x11-util-macros \
     xz \
     yasm \
-    zlib-devel && \
-    sudo ln -sf /usr/local/bin/autoconf /usr/bin/autoconf && \
-    sudo ln -sf /usr/local/bin/autoheader /usr/bin/autoheader && \
-    sudo ln -sf /usr/local/bin/autoreconf /usr/bin/autoreconf
+    zlib-devel
+
+# override installed older tools with bundled existing newer tools
+RUN for tool in autoconf automake aclocal autoheader autoreconf autom4te; do \
+    ln -sf /usr/local/bin/$tool /usr/bin/$tool; \
+    done
 
 ENV PATH="/opt/python/cp312-cp312/bin:${PATH}"
 
