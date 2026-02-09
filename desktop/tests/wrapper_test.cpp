@@ -1,6 +1,8 @@
 #include <gtest/gtest.h>
 #include "ffmpegkit_wrapper.hpp"
+#ifndef _WIN32
 #include <unistd.h>
+#endif
 #include <cstdio>
 #include <cstdlib>
 #include <string>
@@ -138,9 +140,15 @@ TEST(FFmpegKitTest, MediaInformation) {
 TEST(FFmpegKitTest, FFplaySession) {
     // Set SDL drivers to dummy for headless execution
     // This allows ffplay to initializing audio/video "devices" without a real display/speaker
+#ifdef _WIN32
+    _putenv("SDL_VIDEODRIVER=dummy");
+    _putenv("SDL_AUDIODRIVER=dummy");
+    _putenv("DISPLAY=:0");
+#else
     setenv("SDL_VIDEODRIVER", "dummy", 1);
     setenv("SDL_AUDIODRIVER", "dummy", 1);
     setenv("DISPLAY", ":0", 1);
+#endif
     // 2. Run ffplay
     // -autoexit: exit when done
     // -t 2: limit duration just in case

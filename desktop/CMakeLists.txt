@@ -279,6 +279,11 @@ FetchContent_Declare(
 )
 # For Windows: Prevent overriding the parent project's compiler/linker settings
 set(gtest_force_shared_crt ON CACHE BOOL "" FORCE)
+# Build GoogleTest as static to avoid exporting runtime symbols and conflicting with libgcc_eh
+if(MINGW)
+    set(BUILD_SHARED_LIBS OFF CACHE BOOL "" FORCE)
+    set(INSTALL_GTEST OFF CACHE BOOL "" FORCE)
+endif()
 FetchContent_MakeAvailable(googletest)
 
 add_subdirectory(tests)
