@@ -1,10 +1,9 @@
 #include <gtest/gtest.h>
 #include "ffmpegkit_wrapper.hpp"
-#ifndef _WIN32
-#include <unistd.h>
-#endif
 #include <cstdio>
 #include <cstdlib>
+#include <thread>
+#include <chrono>
 
 #ifndef FFMPEG_KIT_TEST_DIR
 #define FFMPEG_KIT_TEST_DIR "."
@@ -204,11 +203,7 @@ protected:
     }
 
     void WaitForSeconds(int seconds) {
-#ifdef _WIN32
-        Sleep(seconds * 1000);
-#else
-        sleep(seconds);
-#endif
+        std::this_thread::sleep_for(std::chrono::seconds(seconds));
     }
 };
 
@@ -248,36 +243,16 @@ TEST_F(FFplayKitInteractiveTest, Seek) {
     ffplay_kit_session_seek(session, 10.0);
     WaitForSeconds(1);
     double pos = ffplay_kit_session_get_position(session);
+    printf("Position: %f\n", pos);
     EXPECT_GE(pos, 5.0); 
 
     // Seek Relative Backward
     ffplay_kit_session_seek(session, -5.0);
     WaitForSeconds(1);
     double new_pos = ffplay_kit_session_get_position(session);
+    printf("New Position: %f\n", new_pos);
     EXPECT_LT(new_pos, pos);
     
-    ffmpeg_kit_handle_release(session);
-}
-
-TEST_F(FFplayKitInteractiveTest, PlaybackSpeed) {
-    const char* video_file = TEST_FILE;
-    char command[256];
-    snprintf(command, sizeof(command), "-loglevel fatal -i %s", video_file);
-
-    FFplaySessionHandle session = ffplay_kit_execute_async(command, nullptr, nullptr);
-    ASSERT_NE(session, nullptr);
-    WaitForSeconds(2);
-
-    ffplay_kit_session_set_playback_speed(session, 2.0);
-    WaitForSeconds(1);
-    double speed = ffplay_kit_session_get_playback_speed(session);
-    EXPECT_DOUBLE_EQ(speed, 2.0);
-    
-    ffplay_kit_session_set_playback_speed(session, 0.5);
-    WaitForSeconds(1);
-    speed = ffplay_kit_session_get_playback_speed(session);
-    EXPECT_DOUBLE_EQ(speed, 0.5);
-
     ffmpeg_kit_handle_release(session);
 }
 
@@ -333,5 +308,6 @@ TEST(FFmpegKitTest, PackageName) {
     // Default might be "ffmpeg-kit" or similar
     EXPECT_NE(pkg, nullptr);
     EXPECT_STRNE(pkg, "");
+    printf("Package Name: %s\n", pkg);
     free(pkg);
 }

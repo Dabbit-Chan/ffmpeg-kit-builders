@@ -187,20 +187,6 @@ public:
    * @param volume Volume to set (0.0 to 1.0)
    */
   static void setVolume(float volume);
-
-  /**
-   * <p>Set the playback speed of the media.
-   *
-   * @param speed Playback speed to set (0.5 to 100.0)
-   */
-  static void setPlaybackSpeed(double speed);
-
-  /**
-   * <p>Get the playback speed of the media.
-   *
-   * @return Playback speed
-   */
-  static double getPlaybackSpeed();
 };
 
 } // namespace ffmpegkit

@@ -12,6 +12,7 @@ CompileFlags:
     - -D_GNU_SOURCE
     - -D__STDC_CONSTANT_MACROS
     - -DFFMPEG_KIT_BUILD_DATE=20260209
+    - -DFFMPEG_KIT_BUNDLE_TYPE="custom"
 
 Diagnostics:
   Suppress: ["main_file_non_preamble"]

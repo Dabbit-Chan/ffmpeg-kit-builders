@@ -17,7 +17,7 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS_RELEASE ON)
 # ==============================================================================
 option(BUILD_SHARED_LIBS "Build shared library" ON)
 set(FFMPEG_KIT_BUILD_DATE "" CACHE STRING "Build date override")
-
+set(FFMPEG_KIT_BUNDLE_TYPE "" CACHE STRING "Bundle type override")
 # Define Paths
 set(FFMPEG_SRC_DIR "" CACHE PATH "Path to FFmpeg source directory (fftools)")
 set(FFMPEG_BUILD_DIR "" CACHE PATH "Path to FFmpeg build directory (libs)")
@@ -28,6 +28,10 @@ endif()
 
 if(NOT FFMPEG_BUILD_DIR OR NOT EXISTS "${FFMPEG_BUILD_DIR}/include/config.h")
     message(FATAL_ERROR "FFMPEG_BUILD_DIR is invalid. It must contain include/config.h")
+endif()
+
+if(NOT FFMPEG_BUILD_DIR OR NOT EXISTS "${FFMPEG_BUILD_DIR}/include/config_components.h")
+    message(FATAL_ERROR "FFMPEG_BUILD_DIR is invalid. It must contain include/config_components.h")
 endif()
 
 # ==============================================================================
@@ -111,12 +115,21 @@ endif()
 if(NOT FFMPEG_KIT_BUILD_DATE)
     string(TIMESTAMP FFMPEG_KIT_BUILD_DATE "%Y%m%d")
 endif()
+
+if(NOT FFMPEG_KIT_BUNDLE_TYPE)
+    set(FFMPEG_KIT_BUNDLE_TYPE "custom")
+endif()
+
 file(WRITE "${CMAKE_CURRENT_SOURCE_DIR}/src/config.c" 
     "const char program_name[] = \"ffmpeg-kit\";\nconst int program_birth_year = 2025;\n")
 
 # Find all sources
 file(GLOB_RECURSE KIT_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/src/*.c" "${CMAKE_CURRENT_SOURCE_DIR}/src/*.cpp")
 file(GLOB_RECURSE KIT_HEADERS "${CMAKE_CURRENT_SOURCE_DIR}/src/*.h")
+
+# Exclude ffplay.c and ffprobe.c as they are included in ffplay_lib.c and ffprobe_lib.c respectively
+list(REMOVE_ITEM KIT_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/src/ffplay.c")
+list(REMOVE_ITEM KIT_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/src/ffprobe.c")
 
 # ==============================================================================
 # 5. Dependency Detection
@@ -167,7 +180,11 @@ target_compile_definitions(ffmpegkit PRIVATE
     __STDC_CONSTANT_MACROS
     __STDC_LIMIT_MACROS
     __STDC_FORMAT_MACROS
+)
+
+target_compile_definitions(ffmpegkit PUBLIC
     FFMPEG_KIT_BUILD_DATE=${FFMPEG_KIT_BUILD_DATE}
+    FFMPEG_KIT_BUNDLE_TYPE=\"${FFMPEG_KIT_BUNDLE_TYPE}\"
 )
 
 if(WIN32)

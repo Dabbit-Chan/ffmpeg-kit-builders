@@ -18,19 +18,25 @@
  */
 
 #include "ArchDetect.hpp"
+extern "C" {
+#include <libavutil/avutil.h>
+}
 
 extern void *ffmpegKitInitialize();
 
 const void *_archDetectInitializer{ffmpegKitInitialize()};
 
 std::string ffmpegkit::ArchDetect::getArch() {
-#ifdef FFMPEG_KIT_ARM64
-  return "arm64";
-#elif FFMPEG_KIT_I386
-  return "i386";
-#elif FFMPEG_KIT_X86_64
-  return "x86_64";
-#else
-  return "";
-#endif
+  std::string buildConfiguration = avutil_configuration();
+  std::string key = "--arch=";
+  size_t pos = buildConfiguration.find(key);
+  if (pos == std::string::npos) {
+    return "";
+  }
+  pos += key.length();
+  size_t end = buildConfiguration.find(" ", pos);
+  if (end == std::string::npos) {
+    return buildConfiguration.substr(pos);
+  }
+  return buildConfiguration.substr(pos, end - pos);
 }

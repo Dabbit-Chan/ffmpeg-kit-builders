@@ -33,7 +33,6 @@ New interactive controls for playback:
 - `ffplay_kit_session_pause(FFplaySessionHandle session)`: Pause playback.
 - `ffplay_kit_session_resume(FFplaySessionHandle session)`: Resume playback.
 - `ffplay_kit_session_seek(FFplaySessionHandle session, double seconds)`: Seek to a position.
-- `ffplay_kit_session_set_playback_speed(FFplaySessionHandle session, double speed)`: Set speed (0.5 to 100.0).
 - `ffplay_kit_session_set_volume(FFplaySessionHandle session, float volume)`: Set volume (0.0 to 1.0).
 - `ffplay_kit_session_get_position(FFplaySessionHandle session)`: Get current position in seconds.
 

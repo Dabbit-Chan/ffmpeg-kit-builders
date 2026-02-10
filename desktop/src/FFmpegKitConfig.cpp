@@ -913,8 +913,9 @@ void *ffmpegKitInitialize() {
 
     ffmpegkit::FFmpegKitConfig::enableRedirection();
 
-    std::cout << "Loaded ffmpeg-kit-" << ffmpegkit::Packages::getPackageName()
-              << "-" << ffmpegkit::ArchDetect::getArch() << "-"
+    std::cout << "Loaded ffmpeg-kit-" << ffmpegkit::Packages::getPackageName() << "-" 
+              << ffmpegkit::ArchDetect::getArch() << "-"
+              << (ffmpegkit::Packages::getIsGpl() ? "gpl" : ffmpegkit::Packages::getIsNonFree() ? "nonfree" : "lgpl") << "-"
               << ffmpegkit::FFmpegKitConfig::getVersion() << "-"
               << ffmpegkit::FFmpegKitConfig::getBuildDate() << "." << std::endl;
   });

@@ -414,24 +414,6 @@ ffplay_kit_session_is_paused(FFplaySessionHandle session);
 FFMPEG_KIT_C_EXPORT void
 ffplay_kit_session_set_volume(FFplaySessionHandle session, float volume);
 
-/**
- * Sets the playback speed of the FFplay session.
- *
- * @param session the FFplay session to set the playback speed of
- * @param speed the playback speed to set (0.5 to 100.0)
- */
-FFMPEG_KIT_C_EXPORT void
-ffplay_kit_session_set_playback_speed(FFplaySessionHandle session, double speed);
-
-/**
- * Gets the playback speed of the FFplay session.
- *
- * @param session the FFplay session to get the playback speed of
- * @return the playback speed of the FFplay session
- */
-FFMPEG_KIT_C_EXPORT double
-ffplay_kit_session_get_playback_speed(FFplaySessionHandle session);
-
 /* FFplayKit Global Proxies */
 
 /**
@@ -490,20 +472,6 @@ FFMPEG_KIT_C_EXPORT int ffplay_kit_is_paused(void);
  * @param volume the volume (0.0 to 1.0)
  */
 FFMPEG_KIT_C_EXPORT void ffplay_kit_set_volume(float volume);
-
-/**
- * Sets the playback speed of the current FFplay session.
- *
- * @param speed the playback speed (0.5 to 100.0)
- */
-FFMPEG_KIT_C_EXPORT void ffplay_kit_set_playback_speed(double speed);
-
-/**
- * Returns the playback speed of the current FFplay session.
- *
- * @return the playback speed
- */
-FFMPEG_KIT_C_EXPORT double ffplay_kit_get_playback_speed(void);
 
 /* Config & Global Functions */
 

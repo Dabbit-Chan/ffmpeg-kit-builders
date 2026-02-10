@@ -199,19 +199,6 @@ void ffmpegkit::FFplaySession::setVolume(float volume) {
   }
 }
 
-void ffmpegkit::FFplaySession::setPlaybackSpeed(double speed) {
-  if (_context != nullptr) {
-    ffplay_set_playback_speed(_context, speed);
-  }
-}
-
-double ffmpegkit::FFplaySession::getPlaybackSpeed() {
-  if (_context != nullptr) {
-    return ffplay_get_playback_speed(_context);
-  }
-  return 1.0; 
-}
-
 FFplayContext *ffmpegkit::FFplaySession::getContext() { return _context; }
 
 void ffmpegkit::FFplaySession::setContext(FFplayContext *context) {

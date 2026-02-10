@@ -150,17 +150,3 @@ void ffmpegkit::FFplayKit::setVolume(float volume) {
   }
 }
 
-void ffmpegkit::FFplayKit::setPlaybackSpeed(double speed) {
-  auto session = ffmpegkit::FFmpegKitConfig::getActiveFFplaySession();
-  if (session) {
-    session->setPlaybackSpeed(speed);
-  }
-}
-
-double ffmpegkit::FFplayKit::getPlaybackSpeed() {
-  auto session = ffmpegkit::FFmpegKitConfig::getActiveFFplaySession();
-  if (session) {
-    return session->getPlaybackSpeed();
-  }
-  return 1.0;
-}

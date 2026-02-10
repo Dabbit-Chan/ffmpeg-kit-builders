@@ -371,21 +371,6 @@ void ffplay_kit_session_set_volume(FFplaySessionHandle session, float volume) {
   }
 }
 
-void ffplay_kit_session_set_playback_speed(FFplaySessionHandle session, double speed) {
-  auto ptr = get_ptr<FFplaySession>(session);
-  if (ptr) {
-    ptr->setPlaybackSpeed(speed);
-  }
-}
-
-double ffplay_kit_session_get_playback_speed(FFplaySessionHandle session) {
-  auto ptr = get_ptr<FFplaySession>(session);
-  if (ptr) {
-    return ptr->getPlaybackSpeed();
-  }
-  return 1.0;
-}
-
 void ffplay_kit_seek(double seconds) { FFplayKit::seek(seconds); }
 
 void ffplay_kit_pause(void) { FFplayKit::pause(); }
@@ -403,10 +388,6 @@ int ffplay_kit_is_playing(void) { return FFplayKit::isPlaying() ? 1 : 0; }
 int ffplay_kit_is_paused(void) { return FFplayKit::isPaused() ? 1 : 0; }
 
 void ffplay_kit_set_volume(float volume) { FFplayKit::setVolume(volume); }
-
-void ffplay_kit_set_playback_speed(double speed) { FFplayKit::setPlaybackSpeed(speed); }
-
-double ffplay_kit_get_playback_speed(void) { return FFplayKit::getPlaybackSpeed(); }
 
 /* Config */
 

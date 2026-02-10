@@ -155,24 +155,6 @@ FFMPEG_API int ffplay_is_paused(FFplayContext* ctx);
  */
 FFMPEG_API void ffplay_set_volume(FFplayContext* ctx, float volume);
 
-// Set playback speed
-/**
- * Sets the playback speed.
- *
- * @param ctx the ffplay context
- * @param speed the playback speed
- */
-FFMPEG_API void ffplay_set_playback_speed(FFplayContext* ctx, double speed);
-
-// Get playback speed
-/**
- * Gets the playback speed.
- *
- * @param ctx the ffplay context
- * @return the playback speed
- */
-FFMPEG_API double ffplay_get_playback_speed(FFplayContext* ctx);
-
 // Clean up resources
 /**
  * Cleans up resources.

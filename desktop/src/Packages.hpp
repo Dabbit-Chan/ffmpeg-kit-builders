@@ -44,6 +44,27 @@ public:
    * @return enabled external libraries
    */
   static std::shared_ptr<std::set<std::string>> getExternalLibraries();
+
+  /**
+   * Returns if GPL is enabled.
+   *
+   * @return true if GPL is enabled, false otherwise
+   */
+  static bool getIsGpl();
+
+  /**
+   * Returns if non-free is enabled.
+   *
+   * @return true if non-free is enabled, false otherwise
+   */
+  static bool getIsNonFree();
+
+  /**
+   * Returns the FFmpegKit bundle type.
+   *
+   * @return FFmpegKit bundle type
+   */
+  static std::string getBundleType();
 };
 
 } // namespace ffmpegkit

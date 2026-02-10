@@ -39,7 +39,6 @@ struct FFplayContext {
     char **argv;
     FFplayCallbacks callbacks;
     int quit;
-    double playback_speed;
 };
 
 // Helper for argument splitting (reuse from other libs if possible, specific implementation here)
@@ -106,8 +105,6 @@ FFplayContext* ffplay_init(const char* args_string, const FFplayCallbacks *cb) {
         ctx->callbacks = *cb;
     }
     
-    ctx->playback_speed = 1.0;
-
     // Reset global state in ffplay.c
     ffplay_reset_internal_state();
 
@@ -272,7 +269,6 @@ int ffplay_step(FFplayContext* ctx) {
             SpeedEventData *data = (SpeedEventData*)event.user.data1;
             if (data) {
                 double speed = data->speed;
-                ctx->playback_speed = speed;
 
                 // Capture base filters consistently
                 if (!base_afilters) {
@@ -428,25 +424,6 @@ void ffplay_set_volume(FFplayContext* ctx, float volume) {
     event.user.data1 = data;
     SDL_PushEvent(&event);
 }
-
-void ffplay_set_playback_speed(FFplayContext* ctx, double speed) {
-    if (!ctx || !ctx->is) return;
-
-    SpeedEventData *data = av_malloc(sizeof(SpeedEventData));
-    if (!data) return;
-    data->speed = speed;
-
-    SDL_Event event;
-    event.type = FF_PLAY_SPEED_EVENT;
-    event.user.data1 = data;
-    SDL_PushEvent(&event);
-}
-
-double ffplay_get_playback_speed(FFplayContext* ctx) {
-    if (!ctx) return 1.0;
-    return ctx->playback_speed;
-}
-
 
 void ffplay_free(FFplayContext* ctx) {
     if (!ctx) return;

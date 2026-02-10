@@ -25,146 +25,23 @@ extern "C" {
 #include <memory>
 
 std::string ffmpegkit::Packages::getPackageName() {
-  std::shared_ptr<std::set<std::string>> enabledLibrarySet =
-      getExternalLibraries();
-#define contains_ext_lib(element)                                              \
-  enabledLibrarySet->find(element) != enabledLibrarySet->end()
-  bool speex = contains_ext_lib("speex");
-  bool fribidi = contains_ext_lib("fribidi");
-  bool gnutls = contains_ext_lib("gnutls");
-  bool xvid = contains_ext_lib("xvid");
+  std::string bundleType = getBundleType();
+  return bundleType;
+}
 
-  bool min = false;
-  bool minGpl = false;
-  bool https = false;
-  bool httpsGpl = false;
-  bool audio = false;
-  bool video = false;
-  bool full = false;
-  bool fullGpl = false;
+bool ffmpegkit::Packages::getIsGpl() {
+  std::string buildConfiguration = avutil_configuration();
+  return buildConfiguration.find("--enable-gpl") != std::string::npos;
+}
 
-  if (speex && fribidi) {
-    if (xvid) {
-      fullGpl = true;
-    } else {
-      full = true;
-    }
-  } else if (speex) {
-    audio = true;
-  } else if (fribidi) {
-    video = true;
-  } else if (xvid) {
-    if (gnutls) {
-      httpsGpl = true;
-    } else {
-      minGpl = true;
-    }
-  } else {
-    if (gnutls) {
-      https = true;
-    } else {
-      min = true;
-    }
-  }
+bool ffmpegkit::Packages::getIsNonFree() {
+  std::string buildConfiguration = avutil_configuration();
+  return buildConfiguration.find("--enable-nonfree") != std::string::npos;
+}
 
-  if (fullGpl) {
-    if (contains_ext_lib("dav1d") && contains_ext_lib("fontconfig") &&
-        contains_ext_lib("freetype") && contains_ext_lib("fribidi") &&
-        contains_ext_lib("gmp") && contains_ext_lib("gnutls") &&
-        contains_ext_lib("kvazaar") && contains_ext_lib("mp3lame") &&
-        contains_ext_lib("ass") && contains_ext_lib("iconv") &&
-        contains_ext_lib("ilbc") && contains_ext_lib("theora") &&
-        contains_ext_lib("vidstab") && contains_ext_lib("vorbis") &&
-        contains_ext_lib("vpx") && contains_ext_lib("webp") &&
-        contains_ext_lib("xml2") &&
-        (contains_ext_lib("opencore-amrnb") ||
-         contains_ext_lib("opencore-amrwb")) &&
-        contains_ext_lib("opus") && contains_ext_lib("shine") &&
-        contains_ext_lib("snappy") && contains_ext_lib("soxr") &&
-        contains_ext_lib("speex") && contains_ext_lib("twolame") &&
-        contains_ext_lib("x264") && contains_ext_lib("x265") &&
-        contains_ext_lib("xvid")) {
-      return "full-gpl";
-    } else {
-      return "custom";
-    }
-  }
-
-  if (full) {
-    if (contains_ext_lib("dav1d") && contains_ext_lib("fontconfig") &&
-        contains_ext_lib("freetype") && contains_ext_lib("fribidi") &&
-        contains_ext_lib("gmp") && contains_ext_lib("gnutls") &&
-        contains_ext_lib("kvazaar") && contains_ext_lib("mp3lame") &&
-        contains_ext_lib("ass") && contains_ext_lib("iconv") &&
-        contains_ext_lib("ilbc") && contains_ext_lib("theora") &&
-        contains_ext_lib("vorbis") && contains_ext_lib("vpx") &&
-        contains_ext_lib("webp") && contains_ext_lib("xml2") &&
-        (contains_ext_lib("opencore-amrnb") ||
-         contains_ext_lib("opencore-amrwb")) &&
-        contains_ext_lib("opus") && contains_ext_lib("shine") &&
-        contains_ext_lib("snappy") && contains_ext_lib("soxr") &&
-        contains_ext_lib("speex") && contains_ext_lib("twolame")) {
-      return "full";
-    } else {
-      return "custom";
-    }
-  }
-
-  if (video) {
-    if (contains_ext_lib("dav1d") && contains_ext_lib("fontconfig") &&
-        contains_ext_lib("freetype") && contains_ext_lib("fribidi") &&
-        contains_ext_lib("kvazaar") && contains_ext_lib("ass") &&
-        contains_ext_lib("iconv") && contains_ext_lib("theora") &&
-        contains_ext_lib("vpx") && contains_ext_lib("webp") &&
-        contains_ext_lib("snappy")) {
-      return "video";
-    } else {
-      return "custom";
-    }
-  }
-
-  if (audio) {
-    if (contains_ext_lib("mp3lame") && contains_ext_lib("ilbc") &&
-        contains_ext_lib("vorbis") &&
-        (contains_ext_lib("opencore-amrnb") ||
-         contains_ext_lib("opencore-amrwb")) &&
-        contains_ext_lib("opus") && contains_ext_lib("shine") &&
-        contains_ext_lib("soxr") && contains_ext_lib("speex") &&
-        contains_ext_lib("twolame")) {
-      return "audio";
-    } else {
-      return "custom";
-    }
-  }
-
-  if (httpsGpl) {
-    if (contains_ext_lib("gmp") && contains_ext_lib("gnutls") &&
-        contains_ext_lib("vidstab") && contains_ext_lib("x264") &&
-        contains_ext_lib("x265") && contains_ext_lib("xvid")) {
-      return "https-gpl";
-    } else {
-      return "custom";
-    }
-  }
-
-  if (https) {
-    if (contains_ext_lib("gmp") && contains_ext_lib("gnutls")) {
-      return "https";
-    } else {
-      return "custom";
-    }
-  }
-
-  if (minGpl) {
-    if (contains_ext_lib("vidstab") && contains_ext_lib("x264") &&
-        contains_ext_lib("x265") && contains_ext_lib("xvid")) {
-      return "min-gpl";
-    } else {
-      return "custom";
-    }
-  }
-
-  return "min";
+std::string ffmpegkit::Packages::getBundleType() {
+  std::string bundleType = FFMPEG_KIT_BUNDLE_TYPE;
+  return bundleType;
 }
 
 std::shared_ptr<std::set<std::string>>

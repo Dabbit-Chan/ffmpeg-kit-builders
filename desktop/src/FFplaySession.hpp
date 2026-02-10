@@ -181,20 +181,6 @@ public:
   float getVolume();
 
   /**
-   * Sets the playback speed of the media.
-   *
-   * @param speed the playback speed to set (0.5 to 100.0)
-   */
-  void setPlaybackSpeed(double speed);
-
-  /**
-   * Returns the playback speed of the media.
-   *
-   * @return the playback speed of the media
-   */
-  double getPlaybackSpeed();
-
-  /**
    * Returns the ffplay context.
    *
    * @return the ffplay context
