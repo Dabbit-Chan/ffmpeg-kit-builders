@@ -695,7 +695,7 @@ get_bundle_directory() {
   if [[ -n $(get_bundle_type) ]]; then
     bundle_type="$(get_bundle_type)-"
   fi
-  local is_gpl=""
+  local is_gpl="-lgpl"
   if truthy "$build_gpl"; then
     is_gpl="-gpl"
   fi
@@ -2104,7 +2104,7 @@ do_configure() {
 	local touch_name=$(get_small_touchfile_name "${touch_prefix}_configure" "$configure_options $configure_name")
   local src_touch="$(validate_path "$host_touch")"
   [[ ! -f "$src_touch" ]] && echo -e "INFO: $src_touch not found during do_configure()" >>"$LOG_FILE"
-	if truthy "$build_force" || [[ ! -f "$src_touch" ]]; then
+	if truthy "$build_force" || [[ ! -f "$src_touch" ]] || [[ -n "$4" ]]; then
     echo -e "INFO: Force requested in do_configure(): build_force: $build_force" >>"$LOG_FILE"
 		reset_touch "$cur_dir2" "${touch_prefix}*.touch"
     [[ -f Makefile && "$cur_dir2" != "$ffmpeg_source_dir" ]] && { nice make clean -j"$(get_concurrent_proc)" > >(redirect_output) 2>&1 || true; }
@@ -2216,7 +2216,7 @@ do_make() {
 	local touch_name=$(get_small_touchfile_name "${touch_prefix}_make" "make $extra_make_options")
   local src_touch="$(validate_path "$host_touch")"
   [[ ! -f "$src_touch" ]] && echo -e "INFO: $src_touch not found during do_make()" >>"$LOG_FILE"
-	if truthy "$build_force" || [[ ! -f "$src_touch" ]]; then
+	if truthy "$build_force" || [[ ! -f "$src_touch" ]] || [[ -n $3 ]]; then
     echo -e "INFO: Force requested in do_make(): build_force: $build_force" >>"$LOG_FILE"
 		reset_touch "$cur_dir2" "${touch_prefix}*.touch"
     [[ -f Makefile && "$cur_dir2" != "$ffmpeg_source_dir" ]] && { nice make clean -j"$(get_concurrent_proc)" > >(redirect_output) 2>&1 || true; }
@@ -2288,7 +2288,7 @@ do_make_install() {
 	local touch_name=$(get_small_touchfile_name "${touch_prefix}_install" "make install $make_install_options")
   local src_touch="$(validate_path "$host_touch")"
   [[ ! -f "$src_touch" ]] && echo -e "INFO: $src_touch not found during do_make_install()" >>"$LOG_FILE"
-	if truthy "$build_force" || [[ ! -f "$src_touch" ]]; then
+	if truthy "$build_force" || [[ ! -f "$src_touch" ]] || [[ -n $4 ]]; then
     echo -e "INFO: Force requested in do_make_install(): build_force: $build_force" >>"$LOG_FILE"
 		reset_touch "$cur_dir2" "${touch_prefix}_install*.touch"
     [[ -f ninja.build && "$cur_dir2" != "$ffmpeg_source_dir" ]] && { nice ninja uninstall > >(redirect_output) 2>&1 || true; }
@@ -2359,7 +2359,7 @@ do_cmake() {
   local touch_prefix="${host_name}${touch_postfix}already"
 	local touch_name=$(get_small_touchfile_name "${touch_prefix}_cmake" "cmake $extra_args")
   [[ ! -f "$source_dir/$host_touch" && ! -f "$cur_dir2/$host_touch" ]] && echo -e "INFO: $source_dir/$host_touch or $cur_dir2/$host_touch not found during do_cmake()" >>"$LOG_FILE"
-	if truthy "$build_force" || [[ ! -f "$source_dir/$host_touch" && ! -f "$cur_dir2/$host_touch" ]]; then
+	if truthy "$build_force" || [[ ! -f "$source_dir/$host_touch" && ! -f "$cur_dir2/$host_touch" ]] || [[ -n $4 ]]; then
     echo -e "INFO: Force requested in do_cmake(): build_force: $build_force" >>"$LOG_FILE"
 		reset_touch "$cur_dir2" "${touch_prefix}*.touch"
     reset_touch "$source_dir" "${touch_prefix}*.touch"
@@ -3154,6 +3154,7 @@ configure_ffmpeg() {
   local postpend_configure_opts=""
 	local init_options=""
 
+  # Common compiler flags for Windows    
   if iswindows; then
     fix_pkgconfig_flags
     export LD=${cross_prefix}gcc # ld weirdness with windows
@@ -3163,7 +3164,11 @@ configure_ffmpeg() {
     init_options+=" --target-os=$host_platform"
     init_options+=" --enable-pthreads"
   fi
-
+  if [[ $bits_target == 64 ]]; then
+    export ARCH=amd64
+  else
+    export ARCH=x86
+  fi
   init_options+=" --pkg-config=pkg-config"
 	init_options+=" --pkg-config-flags=--static"
 	init_options+=" --enable-version3"
@@ -3467,7 +3472,7 @@ configure_ffmpeg() {
   cross_windres y
   unset RC
 
-	do_configure "$init_options$config_options$postpend_configure_opts" "./configure" "$(get_ffmpeg_directory)" || exit_message 1 "configure_ffmpeg: unable to configure ffmpeg. see $LOG_FILE for details."
+	do_configure "$init_options$config_options$postpend_configure_opts" "./configure" "$(get_ffmpeg_directory)" 1 || exit_message 1 "configure_ffmpeg: unable to configure ffmpeg. see $LOG_FILE for details."
 
 	echo -e "INFO: Done configuering ffmpeg" | tee -a "$LOG_FILE"
 }
@@ -3532,6 +3537,7 @@ build_exists() {
 
 install_ffmpeg() {
 	echo -e "INFO: Installing ffmpeg if not installed" | tee -a "$LOG_FILE"
+  local touch_postfix="$(get_ffmpeg_directory)"
 	change_dir "$ffmpeg_source_dir"
 
 	echo -e "INFO: Making Ffmpeg $(pwd)" | tee -a "$LOG_FILE"
@@ -3544,8 +3550,10 @@ install_ffmpeg() {
   unset RC
   iswindows && ffmpeg_windows_patches
   iswindows && export LD=${cross_prefix}gcc # ld weirdness with windows
-	do_make_and_make_install "" "" "$(get_ffmpeg_directory)"
-  
+
+	do_make "PREFIX=$ffmpeg_install_prefix" "${touch_postfix}" 1 || exit_message 1 "install_ffmpeg: unable to make ffmpeg. see $LOG_FILE for details."
+  do_make_install "PREFIX=$ffmpeg_install_prefix" "" "${touch_postfix}" 1 || exit_message 1 "install_ffmpeg: unable to make install ffmpeg. see $LOG_FILE for details."
+
 	echo -e "INFO: Moving all binaries" | tee -a "$LOG_FILE"
 
 	{	
@@ -3625,7 +3633,7 @@ install_ffmpeg_pkg() {
 
 install_ffmpeg_kit() {
 	echo -e "INFO: Installing ffmpeg kit to ${ffmpeg_kit_install}" | tee -a "$LOG_FILE"
-  
+  local touch_postfix="$(get_ffmpeg_kit_directory)"
   cross_windres y
   unset RC
 	
@@ -3635,8 +3643,8 @@ install_ffmpeg_kit() {
     remove_path -rf "$ffmpeg_kit_install"
   fi
   
-  do_make "PREFIX=$ffmpeg_kit_install" "$(get_ffmpeg_kit_directory)" || exit_message 1 "install_ffmpeg_kit: unable to make ffmpeg-kit. see $LOG_FILE for details."
-  do_make_install "PREFIX=$ffmpeg_kit_install" "" "$(get_ffmpeg_kit_directory)" || exit_message 1 "install_ffmpeg_kit: unable to make install ffmpeg-kit. see $LOG_FILE for details."
+  do_make "PREFIX=$ffmpeg_kit_install" "${touch_postfix}" 1 || exit_message 1 "install_ffmpeg_kit: unable to make ffmpeg-kit. see $LOG_FILE for details."
+  do_make_install "PREFIX=$ffmpeg_kit_install" "" "${touch_postfix}" 1 || exit_message 1 "install_ffmpeg_kit: unable to make install ffmpeg-kit. see $LOG_FILE for details."
 	
   chmod -R a+rwx "$work_dir"
 	echo -e "INFO: Done installing ffmpeg kit to ${ffmpeg_kit_install}" | tee -a "$LOG_FILE"

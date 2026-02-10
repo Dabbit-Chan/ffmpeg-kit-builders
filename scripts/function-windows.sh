@@ -112,26 +112,20 @@ configure_ffmpeg_kit() {
 	change_dir "${ffmpeg_kit_src_dir}"
 	make distclean > >(redirect_output) 2>&1
 
-	local touch_name=$(get_small_touchfile_name "already_autoreconf_${type_postfix}" "$ffmpeg_kit_version $local_cflags $local_cxxfalgs")
-	if [ ! -f "$touch_name" ]; then
-		remove_path -f "${ffmpeg_kit_src_dir}/already_autoreconf_${type_postfix}"*
-		change_dir "${ffmpeg_kit_src_dir}"
-		autoreconf_library "ffmpeg-kit" || exit_message 1 "could not autoreconf ffmpeg-kit. See $LOG_FILE for details."
-		create_touch_file 0 "$touch_name"
-	fi
-
 	local cmake_params="-DCMAKE_SYSTEM_NAME=Windows \
 -DCMAKE_C_COMPILER=$CC \
 -DCMAKE_CXX_COMPILER=$CXX \
 -DFFMPEG_SRC_DIR=\"$ffmpeg_source_dir\" \
 -DFFMPEG_BUILD_DIR=\"$ffmpeg_install_prefix\" \
--DCMAKE_INSTALL_PREFIX=\"$ffmpeg_kit_install\""
+-DCMAKE_INSTALL_PREFIX=\"$ffmpeg_kit_install\" \
+-DFFMPEG_KIT_BUNDLE_TYPE=\"$(get_bundle_type)\""
 
 	if [[ "$build_ffmpeg_kit_type" == "static" ]]; then
 		cmake_params+=" -DBUILD_SHARED_LIBS=OFF -DBUILD_STATIC_LIBS=ON"
 	else
 		cmake_params+=" -DBUILD_SHARED_LIBS=ON -DBUILD_STATIC_LIBS=OFF"
 	fi
+  
 	change_dir "${ffmpeg_kit_src_dir}"
 	export CFLAGS="${local_cflags}"
 	export CXXFLAGS="${local_cxxfalgs}"
@@ -139,7 +133,7 @@ configure_ffmpeg_kit() {
 	
 	change_dir "${ffmpeg_kit_src_dir}/build" 1
 	
-	do_cmake "$cmake_params" "$ffmpeg_kit_src_dir"
+	do_cmake "$cmake_params" "$ffmpeg_kit_src_dir" "${type_postfix}" 1
 
 	echo -e "INFO: Done configuring ffmpeg kit" | tee -a "$LOG_FILE"
 }
