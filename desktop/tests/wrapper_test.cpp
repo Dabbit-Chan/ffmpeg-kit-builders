@@ -303,6 +303,29 @@ TEST_F(FFplayKitInteractiveTest, GlobalControls) {
     ffmpeg_kit_handle_release(session);
 }
 
+TEST_F(FFplayKitInteractiveTest, GlobalSeek) {
+    const char* video_file = TEST_FILE;
+    char command[256];
+    snprintf(command, sizeof(command), "-loglevel fatal -i %s", video_file);
+
+    FFplaySessionHandle session = ffplay_kit_execute_async(command, nullptr, nullptr);
+    ASSERT_NE(session, nullptr);
+    WaitForSeconds(2);
+
+    // Global Set Position
+    ffplay_kit_set_position(10.0);
+    WaitForSeconds(1);
+    
+    double pos = ffplay_kit_get_position();
+    printf("Position: %f\n", pos);
+    EXPECT_GE(pos, 9.0); // Allow some tolerance
+
+    ffplay_kit_stop();
+    WaitForSeconds(1);
+    ffmpeg_kit_handle_release(session);
+}
+
+
 TEST(FFmpegKitTest, PackageName) {
     char *pkg = ffmpeg_kit_packages_get_package_name();
     // Default might be "ffmpeg-kit" or similar

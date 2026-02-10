@@ -119,6 +119,13 @@ double ffmpegkit::FFplayKit::getPosition() {
   return 0.0;
 }
 
+void ffmpegkit::FFplayKit::setPosition(double position) {
+  auto session = ffmpegkit::FFmpegKitConfig::getActiveFFplaySession();
+  if (session) {
+    session->setPosition(position);
+  }
+}
+
 double ffmpegkit::FFplayKit::getDuration() {
   auto session = ffmpegkit::FFmpegKitConfig::getActiveFFplaySession();
   if (session) {
@@ -150,3 +157,10 @@ void ffmpegkit::FFplayKit::setVolume(float volume) {
   }
 }
 
+float ffmpegkit::FFplayKit::getVolume() {
+  auto session = ffmpegkit::FFmpegKitConfig::getActiveFFplaySession();
+  if (session) {
+    return session->getVolume();
+  }
+  return 0.0;
+}

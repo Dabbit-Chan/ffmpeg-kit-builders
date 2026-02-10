@@ -155,6 +155,14 @@ FFMPEG_API int ffplay_is_paused(FFplayContext* ctx);
  */
 FFMPEG_API void ffplay_set_volume(FFplayContext* ctx, float volume);
 
+/**
+ * Gets the volume.
+ *
+ * @param ctx the ffplay context
+ * @return the volume
+ */
+FFMPEG_API float ffplay_get_volume(FFplayContext* ctx);
+
 // Clean up resources
 /**
  * Cleans up resources.

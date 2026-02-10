@@ -146,6 +146,13 @@ public:
   double getPosition();
 
   /**
+   * Sets the current position of the media.
+   *
+   * @param position the position to set
+   */
+  void setPosition(double position);
+
+  /**
    * Returns the duration of the media.
    *
    * @return the duration of the media
@@ -212,7 +219,6 @@ private:
 
   FFplaySessionCompleteCallback _completeCallback;
   FFplayContext *_context;
-  float _volume;
   double _position;
   double _duration;
   bool _isPlaying;

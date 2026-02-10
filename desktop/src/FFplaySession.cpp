@@ -161,6 +161,10 @@ double ffmpegkit::FFplaySession::getPosition() {
   return 0.0;
 }
 
+void ffmpegkit::FFplaySession::setPosition(double position) {
+  seek(position, 0.0);
+}
+
 double ffmpegkit::FFplaySession::getDuration() {
   if (_context != nullptr) {
     _duration = ffplay_get_duration(_context);
@@ -185,18 +189,17 @@ bool ffmpegkit::FFplaySession::isPaused() {
   return false;
 }
 
-float ffmpegkit::FFplaySession::getVolume() {
-  if (_context != nullptr) {
-    return _volume;
-  }
-  return 0.0;
-}
-
 void ffmpegkit::FFplaySession::setVolume(float volume) {
   if (_context != nullptr) {
     ffplay_set_volume(_context, volume);
-    _volume = volume;
   }
+}
+
+float ffmpegkit::FFplaySession::getVolume() {
+  if (_context != nullptr) {
+    return ffplay_get_volume(_context);
+  }
+  return 0.0;
 }
 
 FFplayContext *ffmpegkit::FFplaySession::getContext() { return _context; }

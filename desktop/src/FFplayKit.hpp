@@ -161,6 +161,13 @@ public:
   static double getPosition();
 
   /**
+   * <p>Set the current position in the media.
+   *
+   * @param position Position to set in seconds
+   */
+  static void setPosition(double position);
+
+  /**
    * <p>Get the duration of the media.
    *
    * @return Duration in seconds
@@ -187,6 +194,13 @@ public:
    * @param volume Volume to set (0.0 to 1.0)
    */
   static void setVolume(float volume);
+
+  /**
+   * <p>Get the volume of the media.
+   *
+   * @return Volume (0.0 to 1.0)
+   */
+  static float getVolume();
 };
 
 } // namespace ffmpegkit

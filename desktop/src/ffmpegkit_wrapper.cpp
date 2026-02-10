@@ -381,6 +381,8 @@ void ffplay_kit_stop(void) { FFplayKit::stop(); }
 
 double ffplay_kit_get_position(void) { return FFplayKit::getPosition(); }
 
+void ffplay_kit_set_position(double seconds) { FFplayKit::setPosition(seconds); }
+
 double ffplay_kit_get_duration(void) { return FFplayKit::getDuration(); }
 
 int ffplay_kit_is_playing(void) { return FFplayKit::isPlaying() ? 1 : 0; }

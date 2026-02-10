@@ -425,6 +425,11 @@ void ffplay_set_volume(FFplayContext* ctx, float volume) {
     SDL_PushEvent(&event);
 }
 
+float ffplay_get_volume(FFplayContext* ctx) {
+    if (!ctx || !ctx->is) return 0.0;
+    return ctx->is->audio_volume;
+}
+
 void ffplay_free(FFplayContext* ctx) {
     if (!ctx) return;
     if (!ctx->quit) {

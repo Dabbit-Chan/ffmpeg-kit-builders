@@ -446,6 +446,13 @@ FFMPEG_KIT_C_EXPORT void ffplay_kit_stop(void);
 FFMPEG_KIT_C_EXPORT double ffplay_kit_get_position(void);
 
 /**
+ * Sets the position of the current FFplay session.
+ *
+ * @param seconds the position in seconds
+ */
+FFMPEG_KIT_C_EXPORT void ffplay_kit_set_position(double seconds);
+
+/**
  * Returns the duration of the current FFplay session.
  *
  * @return the duration in seconds
