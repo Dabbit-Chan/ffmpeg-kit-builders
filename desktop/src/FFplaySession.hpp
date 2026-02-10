@@ -22,105 +22,217 @@
 
 #include "AbstractSession.hpp"
 #include "FFplaySessionCompleteCallback.hpp"
+#include "ffplay_lib.h"
 
 namespace ffmpegkit {
 
-    /**
-     * <p>An FFplay session.
-     */
-    class FFplaySession : public AbstractSession {
-        public:
+/**
+ * <p>An FFplay session.
+ */
+class FFplaySession : public AbstractSession {
+public:
+  /**
+   * Builds a new FFplay session.
+   *
+   * @param arguments command arguments
+   * @return created session
+   */
+  static std::shared_ptr<ffmpegkit::FFplaySession>
+  create(const std::list<std::string> &arguments);
 
-            /**
-             * Builds a new FFplay session.
-             *
-             * @param arguments command arguments
-             * @return created session
-             */
-            static std::shared_ptr<ffmpegkit::FFplaySession> create(const std::list<std::string>& arguments);
+  /**
+   * Builds a new FFplay session.
+   *
+   * @param arguments        command arguments
+   * @param completeCallback session specific complete callback
+   * @return created session
+   */
+  static std::shared_ptr<ffmpegkit::FFplaySession>
+  create(const std::list<std::string> &arguments,
+         const FFplaySessionCompleteCallback completeCallback);
 
-            /**
-             * Builds a new FFplay session.
-             *
-             * @param arguments        command arguments
-             * @param completeCallback session specific complete callback
-             * @return created session
-             */
-            static std::shared_ptr<ffmpegkit::FFplaySession> create(const std::list<std::string>& arguments, const FFplaySessionCompleteCallback completeCallback);
+  /**
+   * Builds a new FFplay session.
+   *
+   * @param arguments        command arguments
+   * @param completeCallback session specific complete callback
+   * @param logCallback      session specific log callback
+   * @return created session
+   */
+  static std::shared_ptr<ffmpegkit::FFplaySession>
+  create(const std::list<std::string> &arguments,
+         const FFplaySessionCompleteCallback completeCallback,
+         const ffmpegkit::LogCallback logCallback);
 
-            /**
-             * Builds a new FFplay session.
-             *
-             * @param arguments        command arguments
-             * @param completeCallback session specific complete callback
-             * @param logCallback      session specific log callback
-             * @return created session
-             */
-            static std::shared_ptr<ffmpegkit::FFplaySession> create(const std::list<std::string>& arguments, const FFplaySessionCompleteCallback completeCallback, const ffmpegkit::LogCallback logCallback);
+  /**
+   * Builds a new FFplay session.
+   *
+   * @param arguments               command arguments
+   * @param completeCallback        session specific complete callback
+   * @param logCallback             session specific log callback
+   * @param logRedirectionStrategy  session specific log redirection strategy
+   * @return created session
+   */
+  static std::shared_ptr<ffmpegkit::FFplaySession>
+  create(const std::list<std::string> &arguments,
+         const FFplaySessionCompleteCallback completeCallback,
+         const ffmpegkit::LogCallback logCallback,
+         const LogRedirectionStrategy logRedirectionStrategy);
 
-            /**
-             * Builds a new FFplay session.
-             *
-             * @param arguments               command arguments
-             * @param completeCallback        session specific complete callback
-             * @param logCallback             session specific log callback
-             * @param logRedirectionStrategy  session specific log redirection strategy
-             * @return created session
-             */
-            static std::shared_ptr<ffmpegkit::FFplaySession> create(const std::list<std::string>& arguments, const FFplaySessionCompleteCallback completeCallback, const ffmpegkit::LogCallback logCallback, const LogRedirectionStrategy logRedirectionStrategy);
+  /**
+   * Returns the session specific complete callback.
+   *
+   * @return session specific complete callback
+   */
+  ffmpegkit::FFplaySessionCompleteCallback getCompleteCallback();
 
-            /**
-             * Returns the session specific complete callback.
-             *
-             * @return session specific complete callback
-             */
-            ffmpegkit::FFplaySessionCompleteCallback getCompleteCallback();
+  /**
+   * Returns whether it is an <code>FFplay</code> session or not.
+   *
+   * @return true if it is an <code>FFplay</code> session, false otherwise
+   */
+  bool isFFplay() const override;
 
-            /**
-             * Returns whether it is an <code>FFplay</code> session or not.
-             *
-             * @return true if it is an <code>FFplay</code> session, false otherwise
-             */
-            bool isFFplay() const override;
+  /**
+   * Returns whether it is an <code>FFmpeg</code> session or not.
+   *
+   * @return true if it is an <code>FFmpeg</code> session, false otherwise
+   */
+  bool isFFmpeg() const override;
 
-            /**
-             * Returns whether it is an <code>FFmpeg</code> session or not.
-             *
-             * @return true if it is an <code>FFmpeg</code> session, false otherwise
-             */
-            bool isFFmpeg() const override;
+  /**
+   * Returns whether it is an <code>FFprobe</code> session or not.
+   *
+   * @return true if it is an <code>FFprobe</code> session, false otherwise
+   */
+  bool isFFprobe() const override;
 
-            /**
-             * Returns whether it is an <code>FFprobe</code> session or not.
-             *
-             * @return true if it is an <code>FFprobe</code> session, false otherwise
-             */
-            bool isFFprobe() const override;
+  /**
+   * Returns whether it is a <code>MediaInformation</code> session or not.
+   *
+   * @return true if it is a <code>MediaInformation</code> session, false
+   * otherwise
+   */
+  bool isMediaInformation() const override;
 
-            /**
-             * Returns whether it is a <code>MediaInformation</code> session or not.
-             *
-             * @return true if it is a <code>MediaInformation</code> session, false otherwise
-             */
-            bool isMediaInformation() const override;
+  /**
+   * Seeks to a specific position in the media.
+   *
+   * @param seconds the seconds to seek to
+   * @param rel the relative position to seek to
+   */
+  void seek(double seconds, double rel = 0.0);
 
-        private:
+  /**
+   * Pauses the media.
+   */
+  void pause();
 
-            struct PublicFFplaySession;
+  /**
+   * Resumes the media.
+   */
+  void resume();
 
-            /**
-             * Builds a new FFplay session.
-             *
-             * @param arguments               command arguments
-             * @param completeCallback        session specific complete callback
-             * @param logCallback             session specific log callback
-             * @param logRedirectionStrategy  session specific log redirection strategy
-             */
-            FFplaySession(const std::list<std::string>& arguments, const FFplaySessionCompleteCallback completeCallback, const ffmpegkit::LogCallback logCallback, const LogRedirectionStrategy logRedirectionStrategy);
+  /**
+   * Stops the media.
+   */
+  void stop();
 
-            FFplaySessionCompleteCallback _completeCallback;
-    };
+  /**
+   * Returns the current position of the media.
+   *
+   * @return the current position of the media
+   */
+  double getPosition();
 
-}
+  /**
+   * Returns the duration of the media.
+   *
+   * @return the duration of the media
+   */
+  double getDuration();
+
+  /**
+   * Returns whether the media is playing.
+   *
+   * @return true if the media is playing, false otherwise
+   */
+  bool isPlaying();
+
+  /**
+   * Returns whether the media is paused.
+   *
+   * @return true if the media is paused, false otherwise
+   */
+  bool isPaused();
+
+  /**
+   * Sets the volume of the media.
+   *
+   * @param volume the volume to set
+   */
+  void setVolume(float volume);
+
+  /**
+   * Returns the volume of the media.
+   *
+   * @return the volume of the media
+   */
+  float getVolume();
+
+  /**
+   * Sets the playback speed of the media.
+   *
+   * @param speed the playback speed to set (0.5 to 100.0)
+   */
+  void setPlaybackSpeed(double speed);
+
+  /**
+   * Returns the playback speed of the media.
+   *
+   * @return the playback speed of the media
+   */
+  double getPlaybackSpeed();
+
+  /**
+   * Returns the ffplay context.
+   *
+   * @return the ffplay context
+   */
+  FFplayContext *getContext();
+
+  /**
+   * Sets the ffplay context.
+   *
+   * @param context the ffplay context
+   */
+  void setContext(FFplayContext *context);
+
+private:
+  struct PublicFFplaySession;
+
+  /**
+   * Builds a new FFplay session.
+   *
+   * @param arguments               command arguments
+   * @param completeCallback        session specific complete callback
+   * @param logCallback             session specific log callback
+   * @param logRedirectionStrategy  session specific log redirection strategy
+   */
+  FFplaySession(const std::list<std::string> &arguments,
+                const FFplaySessionCompleteCallback completeCallback,
+                const ffmpegkit::LogCallback logCallback,
+                const LogRedirectionStrategy logRedirectionStrategy);
+
+  FFplaySessionCompleteCallback _completeCallback;
+  FFplayContext *_context;
+  float _volume;
+  double _position;
+  double _duration;
+  bool _isPlaying;
+  bool _isPaused;
+};
+
+} // namespace ffmpegkit
 
 #endif // FFMPEG_KIT_FFPLAY_SESSION_H

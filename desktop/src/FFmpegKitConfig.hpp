@@ -475,6 +475,13 @@ public:
   getFFplaySessions();
 
   /**
+   * Returns the active FFplay session.
+   *
+   * @return the active FFplay session or nullptr if no session is active
+   */
+  static std::shared_ptr<ffmpegkit::FFplaySession> getActiveFFplaySession();
+
+  /**
    * <p>Returns all MediaInformation sessions in the session history.
    *
    * @return all MediaInformation sessions in the session history

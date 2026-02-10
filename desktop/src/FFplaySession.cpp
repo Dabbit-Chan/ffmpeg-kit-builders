@@ -86,7 +86,7 @@ ffmpegkit::FFplaySession::FFplaySession(
     const LogRedirectionStrategy logRedirectionStrategy)
     : ffmpegkit::AbstractSession(arguments, logCallback,
                                  logRedirectionStrategy),
-      _completeCallback{completeCallback} {}
+      _completeCallback{completeCallback}, _context{nullptr} {}
 
 ffmpegkit::FFplaySessionCompleteCallback
 ffmpegkit::FFplaySession::getCompleteCallback() {
@@ -100,3 +100,120 @@ bool ffmpegkit::FFplaySession::isFFmpeg() const { return false; }
 bool ffmpegkit::FFplaySession::isFFprobe() const { return false; }
 
 bool ffmpegkit::FFplaySession::isMediaInformation() const { return false; }
+
+void ffmpegkit::FFplaySession::seek(double seconds, double rel) {
+  if (_context != nullptr) {
+    if (rel != 0.0) {
+      // Direct relative seek call
+      ffplay_seek(_context, seconds, rel);
+      _position = seconds;
+      return;
+    }
+
+    double duration = getDuration();
+    double currentPos = getPosition();
+    double targetPos;
+    double rel_hint = 0;
+
+    if (seconds < 0) {
+      // Implicit relative seek backward (seconds is the offset)
+      targetPos = currentPos + seconds;
+      rel_hint = seconds;
+    } else {
+      // Absolute seek (seconds is the target pos)
+      targetPos = seconds;
+      rel_hint = targetPos - currentPos;
+    }
+
+    if (targetPos < 0)
+      targetPos = 0;
+    if (duration > 0 && targetPos > duration)
+      targetPos = duration;
+
+    ffplay_seek(_context, targetPos, rel_hint);
+    _position = targetPos;
+  }
+}
+
+void ffmpegkit::FFplaySession::pause() {
+  if (_context != nullptr) {
+    ffplay_pause(_context);
+  }
+}
+
+void ffmpegkit::FFplaySession::resume() {
+  if (_context != nullptr) {
+    ffplay_resume(_context);
+  }
+}
+
+void ffmpegkit::FFplaySession::stop() {
+  if (_context != nullptr) {
+    ffplay_stop(_context);
+  }
+}
+
+double ffmpegkit::FFplaySession::getPosition() {
+  if (_context != nullptr) {
+    _position = ffplay_get_position(_context);
+    return _position;
+  }
+  return 0.0;
+}
+
+double ffmpegkit::FFplaySession::getDuration() {
+  if (_context != nullptr) {
+    _duration = ffplay_get_duration(_context);
+    return _duration;
+  }
+  return 0.0;
+}
+
+bool ffmpegkit::FFplaySession::isPlaying() {
+  if (_context != nullptr) {
+    _isPlaying = ffplay_is_playing(_context) != 0;
+    return _isPlaying;
+  }
+  return false;
+}
+
+bool ffmpegkit::FFplaySession::isPaused() {
+  if (_context != nullptr) {
+    _isPaused = ffplay_is_paused(_context) != 0;
+    return _isPaused;
+  }
+  return false;
+}
+
+float ffmpegkit::FFplaySession::getVolume() {
+  if (_context != nullptr) {
+    return _volume;
+  }
+  return 0.0;
+}
+
+void ffmpegkit::FFplaySession::setVolume(float volume) {
+  if (_context != nullptr) {
+    ffplay_set_volume(_context, volume);
+    _volume = volume;
+  }
+}
+
+void ffmpegkit::FFplaySession::setPlaybackSpeed(double speed) {
+  if (_context != nullptr) {
+    ffplay_set_playback_speed(_context, speed);
+  }
+}
+
+double ffmpegkit::FFplaySession::getPlaybackSpeed() {
+  if (_context != nullptr) {
+    return ffplay_get_playback_speed(_context);
+  }
+  return 1.0; 
+}
+
+FFplayContext *ffmpegkit::FFplaySession::getContext() { return _context; }
+
+void ffmpegkit::FFplaySession::setContext(FFplayContext *context) {
+  _context = context;
+}

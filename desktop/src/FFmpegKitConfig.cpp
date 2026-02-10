@@ -67,6 +67,7 @@ static std::atomic<long> pipeIndexGenerator(1);
 static int sessionHistorySize;
 static std::map<long, std::shared_ptr<ffmpegkit::Session>> sessionHistoryMap;
 static std::list<std::shared_ptr<ffmpegkit::Session>> sessionHistoryList;
+static std::atomic<long> activeFFplaySessionId(0);
 static std::recursive_mutex sessionMutex;
 
 /** Session control variables */
@@ -768,6 +769,7 @@ executeFFmpeg(const long sessionId,
     return -1; // ENOMEM or parse error
   }
 
+
   // REGISTER THE ID BEFORE STARTING THE SESSION
   globalSessionId = sessionId;
   registerSessionId(sessionId);
@@ -780,6 +782,7 @@ executeFFmpeg(const long sessionId,
   // ALWAYS REMOVE THE ID FROM THE MAP
   removeSession(sessionId);
 
+
   // 4. CLEANUP
   ffmpeg_free(ctx);
 
@@ -790,6 +793,7 @@ int executeFFprobe(const long sessionId,
                    const std::shared_ptr<std::list<std::string>> arguments) {
   // SETS DEFAULT LOG LEVEL BEFORE STARTING A NEW RUN
   av_log_set_level(configuredLogLevel);
+  av_log_set_callback(ffmpegkit_log_callback_function);
 
   // 1. Construct command string
   std::string fullCommand = buildCommandString("ffprobe", arguments);
@@ -1224,16 +1228,77 @@ void ffmpegkit::FFmpegKitConfig::ffplayExecute(
   // 1. START THE SESSION
   ffplaySession->startRunning();
 
+  long sessionId = ffplaySession->getSessionId();
+
+  // SINGLE SESSION ENFORCEMENT
+  long previousSessionId = activeFFplaySessionId.exchange(sessionId);
+  if (previousSessionId != 0) {
+    cancelSession(previousSessionId);
+
+    // Wait for previous session to fully complete cleanup
+    auto prevSession = getSession(previousSessionId);
+    if (prevSession) {
+        int retries = 0;
+        int max_retries = 500; // 5 seconds
+        while (prevSession->getState() != SessionStateCompleted && 
+               prevSession->getState() != SessionStateFailed &&
+               retries < max_retries) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(10));
+            retries++;
+        }
+        if (retries >= max_retries) {
+            std::cout << "Warning: Timed out waiting for previous FFplay session " << previousSessionId << " to complete." << std::endl;
+        }
+    }
+  }
+
   // 2. RUN
-  int returnCode =
-      executeFFplay(ffplaySession->getSessionId(), ffplaySession->getArguments());
+  // 2.a Initialize Wrapper Context
+  std::string fullCommand =
+      buildCommandString("ffplay", ffplaySession->getArguments());
+  FFplayContext *ctx = ffplay_init(fullCommand.c_str(), nullptr);
+  if (!ctx) {
+    activeFFplaySessionId.compare_exchange_strong(sessionId, 0);
+    ffplaySession->fail("Failed to initialize FFplay context");
+    return;
+  }
+
+  // REGISTER THE ID BEFORE STARTING THE SESSION
+  globalSessionId = sessionId;
+  registerSessionId(sessionId);
+  resetMessagesInTransmit(sessionId);
+
+  // SET CONTEXT ON SESSION FOR EXTERNAL CONTROL
+  ffplaySession->setContext(ctx);
+
+  int returnCode = ffplay_start(ctx);
+  if (returnCode == 0) {
+    while (ffplay_step(ctx) == 0) {
+      if (cancelRequested(sessionId)) {
+        ffplay_stop(ctx);
+        break;
+      }
+      std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    }
+  }
+
+  // CLEAR CONTEXT ON SESSION
+  ffplaySession->setContext(nullptr);
+
+  // ALWAYS REMOVE THE ID FROM THE MAP
+  removeSession(sessionId);
+
+  // 4. CLEANUP
+  ffplay_free(ctx);
 
   // 3. SET THE GLOBAL SESSION ID BACK TO DEFAULT
   globalSessionId = 0;
 
+  // RESET ACTIVE SESSION ID IF IT'S STILL US
+  activeFFplaySessionId.compare_exchange_strong(sessionId, 0);
+
   // 4. COMPLETE THE SESSION
-  ffplaySession->complete(
-      std::make_shared<ffmpegkit::ReturnCode>(returnCode));
+  ffplaySession->complete(std::make_shared<ffmpegkit::ReturnCode>(returnCode));
 
   // 5. INVOKE SESSION COMPLETE CALLBACK
   ffmpegkit::FFplaySessionCompleteCallback sessionCompleteCallback =
@@ -1489,6 +1554,7 @@ ffmpegkit::Level ffmpegkit::FFmpegKitConfig::getLogLevel() {
 
 void ffmpegkit::FFmpegKitConfig::setLogLevel(const ffmpegkit::Level level) {
   configuredLogLevel = level;
+  av_log_set_level((int)level);
 }
 
 std::string
@@ -1670,6 +1736,15 @@ ffmpegkit::FFmpegKitConfig::getFFplaySessions() {
   lock.unlock();
 
   return result;
+}
+
+std::shared_ptr<ffmpegkit::FFplaySession>
+ffmpegkit::FFmpegKitConfig::getActiveFFplaySession() {
+  long sessionId = activeFFplaySessionId.load();
+  if (sessionId != 0) {
+    return std::static_pointer_cast<FFplaySession>(getSession(sessionId));
+  }
+  return nullptr;
 }
 
 std::shared_ptr<std::list<std::shared_ptr<ffmpegkit::MediaInformationSession>>>

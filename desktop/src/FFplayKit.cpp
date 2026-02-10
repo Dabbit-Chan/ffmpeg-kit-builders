@@ -82,3 +82,85 @@ std::shared_ptr<std::list<std::shared_ptr<ffmpegkit::FFplaySession>>>
 ffmpegkit::FFplayKit::listFFplaySessions() {
   return ffmpegkit::FFmpegKitConfig::getFFplaySessions();
 }
+
+void ffmpegkit::FFplayKit::seek(double seconds) {
+  auto session = ffmpegkit::FFmpegKitConfig::getActiveFFplaySession();
+  if (session) {
+    session->seek(seconds);
+  }
+}
+
+void ffmpegkit::FFplayKit::pause() {
+  auto session = ffmpegkit::FFmpegKitConfig::getActiveFFplaySession();
+  if (session) {
+    session->pause();
+  }
+}
+
+void ffmpegkit::FFplayKit::resume() {
+  auto session = ffmpegkit::FFmpegKitConfig::getActiveFFplaySession();
+  if (session) {
+    session->resume();
+  }
+}
+
+void ffmpegkit::FFplayKit::stop() {
+  auto session = ffmpegkit::FFmpegKitConfig::getActiveFFplaySession();
+  if (session) {
+    session->stop();
+  }
+}
+
+double ffmpegkit::FFplayKit::getPosition() {
+  auto session = ffmpegkit::FFmpegKitConfig::getActiveFFplaySession();
+  if (session) {
+    return session->getPosition();
+  }
+  return 0.0;
+}
+
+double ffmpegkit::FFplayKit::getDuration() {
+  auto session = ffmpegkit::FFmpegKitConfig::getActiveFFplaySession();
+  if (session) {
+    return session->getDuration();
+  }
+  return 0.0;
+}
+
+bool ffmpegkit::FFplayKit::isPlaying() {
+  auto session = ffmpegkit::FFmpegKitConfig::getActiveFFplaySession();
+  if (session) {
+    return session->isPlaying();
+  }
+  return false;
+}
+
+bool ffmpegkit::FFplayKit::isPaused() {
+  auto session = ffmpegkit::FFmpegKitConfig::getActiveFFplaySession();
+  if (session) {
+    return session->isPaused();
+  }
+  return false;
+}
+
+void ffmpegkit::FFplayKit::setVolume(float volume) {
+  auto session = ffmpegkit::FFmpegKitConfig::getActiveFFplaySession();
+  if (session) {
+    session->setVolume(volume);
+  }
+}
+
+void ffmpegkit::FFplayKit::setPlaybackSpeed(double speed) {
+  auto session = ffmpegkit::FFmpegKitConfig::getActiveFFplaySession();
+  if (session) {
+    session->setPlaybackSpeed(speed);
+  }
+}
+
+double ffmpegkit::FFplayKit::getPlaybackSpeed() {
+  auto session = ffmpegkit::FFmpegKitConfig::getActiveFFplaySession();
+  if (session) {
+    return session->getPlaybackSpeed();
+  }
+  return 1.0;
+}

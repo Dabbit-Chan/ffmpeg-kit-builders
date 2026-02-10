@@ -130,6 +130,77 @@ public:
    */
   static std::shared_ptr<std::list<std::shared_ptr<ffmpegkit::FFplaySession>>>
   listFFplaySessions();
+
+  /**
+   * <p>Seek to the given position in the media.
+   *
+   * @param seconds Position to seek to in seconds
+   */
+  static void seek(double seconds);
+
+  /**
+   * <p>Pause the media.
+   */
+  static void pause();
+
+  /**
+   * <p>Resume the media.
+   */
+  static void resume();
+
+  /**
+   * <p>Stop the media.
+   */
+  static void stop();
+
+  /**
+   * <p>Get the current position in the media.
+   *
+   * @return Current position in seconds
+   */
+  static double getPosition();
+
+  /**
+   * <p>Get the duration of the media.
+   *
+   * @return Duration in seconds
+   */
+  static double getDuration();
+
+  /**
+   * <p>Check if the media is playing.
+   *
+   * @return True if the media is playing, false otherwise
+   */
+  static bool isPlaying();
+
+  /**
+   * <p>Check if the media is paused.
+   *
+   * @return True if the media is paused, false otherwise
+   */
+  static bool isPaused();
+
+  /**
+   * <p>Set the volume of the media.
+   *
+   * @param volume Volume to set (0.0 to 1.0)
+   */
+  static void setVolume(float volume);
+
+  /**
+   * <p>Set the playback speed of the media.
+   *
+   * @param speed Playback speed to set (0.5 to 100.0)
+   */
+  static void setPlaybackSpeed(double speed);
+
+  /**
+   * <p>Get the playback speed of the media.
+   *
+   * @return Playback speed
+   */
+  static double getPlaybackSpeed();
 };
 
 } // namespace ffmpegkit

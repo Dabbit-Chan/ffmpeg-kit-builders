@@ -49,32 +49,136 @@ typedef struct FFplayCallbacks {
 
 // Initialize ffplay with command-line arguments as a string
 // Returns NULL on error
+/**
+ * Initializes ffplay with command-line arguments as a string.
+ *
+ * @param args_string the command-line arguments as a string
+ * @param cb the callback
+ * @return the ffplay context
+ */
 FFMPEG_API FFplayContext* ffplay_init(const char* args_string, const FFplayCallbacks *cb);
 
 // Start playback (non-blocking if possible, but ffplay architecture is thread-heavy)
 // Returns 0 on success
+/**
+ * Starts playback (non-blocking if possible, but ffplay architecture is thread-heavy).
+ *
+ * @param ctx the ffplay context
+ * @return 0 on success
+ */
 FFMPEG_API int ffplay_start(FFplayContext* ctx);
 
 // Process events (call regularly from your event loop)
 // Returns 0 if running, 1 if quit/finished
+/**
+ * Processes events (call regularly from your event loop).
+ *
+ * @param ctx the ffplay context
+ * @return 0 if running, 1 if quit/finished
+ */
 FFMPEG_API int ffplay_step(FFplayContext* ctx);
 
 // Control playback
-FFMPEG_API int ffplay_seek(FFplayContext* ctx, double seconds);
+/**
+ * Seeks to a specific position in the media.
+ *
+ * @param ctx the ffplay context
+ * @param seconds the seconds to seek to
+ * @param rel the relative position to seek to
+ * @return 0 on success
+ */
+FFMPEG_API int ffplay_seek(FFplayContext* ctx, double seconds, double rel);
+
+/**
+ * Pauses playback.
+ *
+ * @param ctx the ffplay context
+ * @return 0 on success
+ */
 FFMPEG_API int ffplay_pause(FFplayContext* ctx);
+
+/**
+ * Resumes playback.
+ *
+ * @param ctx the ffplay context
+ * @return 0 on success
+ */
 FFMPEG_API int ffplay_resume(FFplayContext* ctx);
+
+/**
+ * Stops playback.
+ *
+ * @param ctx the ffplay context
+ * @return 0 on success
+ */
 FFMPEG_API int ffplay_stop(FFplayContext* ctx);
 
 // Get playback state
+/**
+ * Gets the playback position.
+ *
+ * @param ctx the ffplay context
+ * @return the playback position
+ */
 FFMPEG_API double ffplay_get_position(FFplayContext* ctx);
+
+/**
+ * Gets the playback duration.
+ *
+ * @param ctx the ffplay context
+ * @return the playback duration
+ */
 FFMPEG_API double ffplay_get_duration(FFplayContext* ctx);
+
+/**
+ * Checks if the playback is playing.
+ *
+ * @param ctx the ffplay context
+ * @return 1 if playing, 0 otherwise
+ */
 FFMPEG_API int ffplay_is_playing(FFplayContext* ctx);
+
+/**
+ * Checks if the playback is paused.
+ *
+ * @param ctx the ffplay context
+ * @return 1 if paused, 0 otherwise
+ */
 FFMPEG_API int ffplay_is_paused(FFplayContext* ctx);
 
 // Set volume (0.0 to 1.0)
+/**
+ * Sets the volume.
+ *
+ * @param ctx the ffplay context
+ * @param volume the volume
+ */
 FFMPEG_API void ffplay_set_volume(FFplayContext* ctx, float volume);
 
+// Set playback speed
+/**
+ * Sets the playback speed.
+ *
+ * @param ctx the ffplay context
+ * @param speed the playback speed
+ */
+FFMPEG_API void ffplay_set_playback_speed(FFplayContext* ctx, double speed);
+
+// Get playback speed
+/**
+ * Gets the playback speed.
+ *
+ * @param ctx the ffplay context
+ * @return the playback speed
+ */
+FFMPEG_API double ffplay_get_playback_speed(FFplayContext* ctx);
+
 // Clean up resources
+/**
+ * Cleans up resources.
+ *
+ * @param ctx the ffplay context
+ */
 FFMPEG_API void ffplay_free(FFplayContext* ctx);
 
 #ifdef __cplusplus

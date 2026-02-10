@@ -14,3 +14,7 @@ target_include_directories(ffmpegkit_tests PRIVATE
     ${CMAKE_SOURCE_DIR}/src
     ${FFMPEG_BUILD_DIR}/include
 )
+
+target_compile_definitions(ffmpegkit_tests PRIVATE 
+    FFMPEG_KIT_TEST_DIR="${CMAKE_CURRENT_SOURCE_DIR}"
+)

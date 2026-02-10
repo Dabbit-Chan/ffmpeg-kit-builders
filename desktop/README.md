@@ -1,11 +1,12 @@
 # FFmpegKit for Desktop (Linux & Windows)
 
 ### 1. Features
-- Provides a `C++` API with `c++11`
+- Provides a `C++` API with `c++17` (Required for modern GoogleTest support)
 - Provides a `C` API wrapper for easy integration
 - Supports `x86_64` and `i686` architectures
 - Builds shared and static native libraries (.so, .dll, .a)
 - Supports native Linux builds and cross-compilation for Windows
+- Includes advanced `FFplay` playback controls (Seek, Pause, Resume, Speed, Volume)
 - Prebuilt binaries are not published
 
 ---

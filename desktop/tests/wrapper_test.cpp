@@ -5,23 +5,28 @@
 #endif
 #include <cstdio>
 #include <cstdlib>
-#include <string>
+
+#ifndef FFMPEG_KIT_TEST_DIR
+#define FFMPEG_KIT_TEST_DIR "."
+#endif
+#define TEST_FILE FFMPEG_KIT_TEST_DIR "/dummy_video.mp4"
 
 // Helper log callback for tests
 void test_log_callback(FFmpegSessionHandle session, const char *message, void *data) {
     // Optional: verify log output if needed
+    printf("Log: %s\n", message);
 }
 
 TEST(FFmpegKitTest, VersionCheck) {
     char *version = ffmpeg_kit_config_get_ffmpeg_version();
     ASSERT_NE(version, nullptr);
     EXPECT_STRNE(version, "");
-    // printf("FFmpeg Version: %s\n", version);
+    printf("FFmpeg Version: %s\n", version);
     free(version);
 }
 
 TEST(FFmpegKitTest, SplitSessionExecution) {
-    FFmpegSessionHandle session = ffmpeg_kit_create_session("-version");
+    FFmpegSessionHandle session = ffmpeg_kit_create_session("-hide_banner -loglevel fatal -version");
     ASSERT_NE(session, nullptr);
 
     FFmpegKitSessionState state = ffmpeg_kit_session_get_state(session);
@@ -30,6 +35,8 @@ TEST(FFmpegKitTest, SplitSessionExecution) {
     ffmpeg_kit_session_execute(session);
 
     state = ffmpeg_kit_session_get_state(session);
+
+    printf("Session state: %d\n", state);
     
     if (state != FFMPEG_KIT_SESSION_STATE_COMPLETED) {
         printf("Session failed with state: %d\n", state);
@@ -58,7 +65,7 @@ TEST(FFmpegKitTest, SplitSessionExecution) {
 }
 
 TEST(FFmpegKitTest, ConfigurationSetters) {
-    ffmpeg_kit_config_set_log_level(FFMPEG_KIT_LOG_LEVEL_INFO);
+    ffmpeg_kit_config_set_log_level(FFMPEG_KIT_LOG_LEVEL_QUIET);
     ffmpeg_kit_config_enable_log_callback(test_log_callback, nullptr);
     // No easy way to verify these without internal access or observing side effects,
     // assuming no crash is success for now.
@@ -81,7 +88,7 @@ TEST(FFmpegKitTest, SessionHistory) {
     }
 
     for(int i=0; i<3; i++) {
-        FFmpegSessionHandle s = ffmpeg_kit_create_session("-version");
+        FFmpegSessionHandle s = ffmpeg_kit_create_session("-hide_banner -loglevel fatal -version");
         ffmpeg_kit_session_execute(s);
     }
     
@@ -107,7 +114,8 @@ TEST(FFmpegKitTest, MediaInformation) {
     // EXPECT_EQ(ffmpeg_kit_session_get_state(create_session), FFMPEG_KIT_SESSION_STATE_COMPLETED);
     // ffmpeg_kit_handle_release(create_session);
 
-    MediaInformationSessionHandle media_session = ffprobe_kit_get_media_information("desktop/tests/dummy_video.mp4");
+    MediaInformationSessionHandle media_session = ffprobe_kit_execute("-hide_banner -loglevel fatal -show_format -i " TEST_FILE " -o media_info.txt");
+
     ASSERT_NE(media_session, nullptr);
     
     FFmpegKitSessionState state = ffmpeg_kit_session_get_state(media_session);
@@ -124,15 +132,18 @@ TEST(FFmpegKitTest, MediaInformation) {
     EXPECT_EQ(state, FFMPEG_KIT_SESSION_STATE_COMPLETED); 
     
     long create_time = ffmpeg_kit_session_get_create_time(media_session);
+    printf("Create Time: %ld\n", create_time);
     EXPECT_GT(create_time, 0);
 
     char *cmd = ffmpeg_kit_session_get_command(media_session);
+    printf("Command: %s\n", cmd);
     EXPECT_NE(cmd, nullptr);
     free(cmd);
     
     // Logs
     int log_count = ffmpeg_kit_session_get_logs_count(media_session);
-    // EXPECT_GE(log_count, 0);
+    printf("Log Count: %d\n", log_count);
+    EXPECT_GE(log_count, 0);
 
     ffmpeg_kit_handle_release(media_session);
 }
@@ -153,7 +164,9 @@ TEST(FFmpegKitTest, FFplaySession) {
     // -autoexit: exit when done
     // -t 2: limit duration just in case
     // We remove -nodisp and -an because with dummy drivers, we WANT it to try to play
-    FFplaySessionHandle play_session = ffplay_kit_execute("-autoexit -t 2 desktop/tests/dummy_video.mp4");
+    char command[512];
+    snprintf(command, sizeof(command), "-loglevel fatal -autoexit -t 2 %s", TEST_FILE);
+    FFplaySessionHandle play_session = ffplay_kit_execute(command);
     ASSERT_NE(play_session, nullptr);
 
     FFmpegKitSessionState state = ffmpeg_kit_session_get_state(play_session);
@@ -169,6 +182,150 @@ TEST(FFmpegKitTest, FFplaySession) {
     EXPECT_EQ(ffmpeg_kit_session_get_return_code(play_session), 0);
 
     ffmpeg_kit_handle_release(play_session);
+}
+
+
+class FFplayKitInteractiveTest : public ::testing::Test {
+protected:
+    void SetUp() override {
+#ifdef _WIN32
+        _putenv("SDL_VIDEODRIVER=dummy");
+        _putenv("SDL_AUDIODRIVER=dummy");
+        _putenv("DISPLAY=:0");
+#else
+        setenv("SDL_VIDEODRIVER", "dummy", 1);
+        setenv("SDL_AUDIODRIVER", "dummy", 1);
+        setenv("DISPLAY", ":0", 1);
+#endif
+    }
+
+    void TearDown() override {
+        ffplay_kit_stop();
+    }
+
+    void WaitForSeconds(int seconds) {
+#ifdef _WIN32
+        Sleep(seconds * 1000);
+#else
+        sleep(seconds);
+#endif
+    }
+};
+
+TEST_F(FFplayKitInteractiveTest, PlayPauseResume) {
+    const char* video_file = TEST_FILE;
+    char command[256];
+    snprintf(command, sizeof(command), "-loglevel fatal -i %s", video_file);
+
+    FFplaySessionHandle session = ffplay_kit_execute_async(command, nullptr, nullptr);
+    ASSERT_NE(session, nullptr);
+    
+    WaitForSeconds(2);
+    EXPECT_EQ(ffplay_kit_session_is_playing(session), 1);
+
+    ffplay_kit_session_pause(session);
+    WaitForSeconds(1);
+    EXPECT_EQ(ffplay_kit_session_is_paused(session), 1);
+
+    ffplay_kit_session_resume(session);
+    WaitForSeconds(1);
+    EXPECT_EQ(ffplay_kit_session_is_paused(session), 0);
+    EXPECT_EQ(ffplay_kit_session_is_playing(session), 1);
+
+    ffmpeg_kit_handle_release(session);
+}
+
+TEST_F(FFplayKitInteractiveTest, Seek) {
+    const char* video_file = TEST_FILE;
+    char command[256];
+    snprintf(command, sizeof(command), "-loglevel fatal -i %s", video_file);
+
+    FFplaySessionHandle session = ffplay_kit_execute_async(command, nullptr, nullptr);
+    ASSERT_NE(session, nullptr);
+    WaitForSeconds(2);
+
+    // Seek Absolute
+    ffplay_kit_session_seek(session, 10.0);
+    WaitForSeconds(1);
+    double pos = ffplay_kit_session_get_position(session);
+    EXPECT_GE(pos, 5.0); 
+
+    // Seek Relative Backward
+    ffplay_kit_session_seek(session, -5.0);
+    WaitForSeconds(1);
+    double new_pos = ffplay_kit_session_get_position(session);
+    EXPECT_LT(new_pos, pos);
+    
+    ffmpeg_kit_handle_release(session);
+}
+
+TEST_F(FFplayKitInteractiveTest, PlaybackSpeed) {
+    const char* video_file = TEST_FILE;
+    char command[256];
+    snprintf(command, sizeof(command), "-loglevel fatal -i %s", video_file);
+
+    FFplaySessionHandle session = ffplay_kit_execute_async(command, nullptr, nullptr);
+    ASSERT_NE(session, nullptr);
+    WaitForSeconds(2);
+
+    ffplay_kit_session_set_playback_speed(session, 2.0);
+    WaitForSeconds(1);
+    double speed = ffplay_kit_session_get_playback_speed(session);
+    EXPECT_DOUBLE_EQ(speed, 2.0);
+    
+    ffplay_kit_session_set_playback_speed(session, 0.5);
+    WaitForSeconds(1);
+    speed = ffplay_kit_session_get_playback_speed(session);
+    EXPECT_DOUBLE_EQ(speed, 0.5);
+
+    ffmpeg_kit_handle_release(session);
+}
+
+TEST_F(FFplayKitInteractiveTest, ConcurrentSessions) {
+    const char* video_file = TEST_FILE;
+    char command[256];
+    snprintf(command, sizeof(command), "-loglevel fatal -i %s", video_file);
+
+    FFplaySessionHandle session1 = ffplay_kit_execute_async(command, nullptr, nullptr);
+    ASSERT_NE(session1, nullptr);
+    WaitForSeconds(2);
+
+    // Session 2 should stop Session 1
+    FFplaySessionHandle session2 = ffplay_kit_execute_async(command, nullptr, nullptr);
+    ASSERT_NE(session2, nullptr);
+    WaitForSeconds(2);
+
+    FFmpegKitSessionState state1 = ffmpeg_kit_session_get_state(session1);
+    EXPECT_EQ(state1, FFMPEG_KIT_SESSION_STATE_COMPLETED);
+    EXPECT_EQ(ffplay_kit_session_is_playing(session2), 1);
+
+    ffmpeg_kit_handle_release(session1);
+    ffmpeg_kit_handle_release(session2);
+}
+
+TEST_F(FFplayKitInteractiveTest, GlobalControls) {
+    const char* video_file = TEST_FILE;
+    char command[256];
+    snprintf(command, sizeof(command), "-loglevel fatal -i %s", video_file);
+
+    FFplaySessionHandle session = ffplay_kit_execute_async(command, nullptr, nullptr);
+    ASSERT_NE(session, nullptr);
+    WaitForSeconds(2);
+
+    ffplay_kit_pause();
+    WaitForSeconds(1);
+    EXPECT_EQ(ffplay_kit_is_paused(), 1);
+
+    ffplay_kit_resume();
+    WaitForSeconds(1);
+    EXPECT_EQ(ffplay_kit_is_paused(), 0);
+
+    ffplay_kit_stop();
+    WaitForSeconds(1);
+    FFmpegKitSessionState state = ffmpeg_kit_session_get_state(session);
+    EXPECT_EQ(state, FFMPEG_KIT_SESSION_STATE_COMPLETED);
+
+    ffmpeg_kit_handle_release(session);
 }
 
 TEST(FFmpegKitTest, PackageName) {

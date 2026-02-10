@@ -155,8 +155,12 @@ target_include_directories(ffmpegkit PRIVATE
 )
 target_include_directories(ffmpegkit PUBLIC ${FFMPEG_INCLUDE_DIRS})
 
+# Set C++ Standard to 17 (Required by prebuilt GoogleTest headers)
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+
 target_compile_options(ffmpegkit PRIVATE -Os -ffunction-sections -fdata-sections)
-target_compile_features(ffmpegkit PRIVATE cxx_std_11)
+target_compile_features(ffmpegkit PRIVATE cxx_std_17)
 
 target_compile_definitions(ffmpegkit PRIVATE
     HAVE_CONFIG_H
@@ -275,7 +279,7 @@ enable_testing()
 include(FetchContent)
 FetchContent_Declare(
   googletest
-  URL https://github.com/google/googletest/archive/refs/tags/v1.14.0.zip
+  URL https://github.com/google/googletest/archive/refs/tags/v1.17.0.zip
 )
 # For Windows: Prevent overriding the parent project's compiler/linker settings
 set(gtest_force_shared_crt ON CACHE BOOL "" FORCE)

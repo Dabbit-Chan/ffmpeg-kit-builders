@@ -47,13 +47,6 @@ static char *strdup_safe_ptr(std::shared_ptr<std::string> strPtr) {
   return strdup_cpp(*strPtr);
 }
 
-// C -> C++ Handle Casting
-// We wrap shared_ptrs in new heap-allocated shared_ptrs so the handle is a
-// "pointer to a shared_ptr". This ensures that the object stays alive as long
-// as the C user keeps the handle (if we managed life-cycle correctly), OR
-// provided the C++ side keeps it alive. For robust opaque handles, the handle
-// should OWN the reference.
-
 template <typename T> static void *to_handle(std::shared_ptr<T> ptr) {
   if (!ptr)
     return nullptr;
@@ -66,15 +59,11 @@ template <typename T> static std::shared_ptr<T> from_handle(void *handle) {
   return *static_cast<std::shared_ptr<T> *>(handle);
 }
 
-// ---- Implementations ----
-
-// Internal: Create Generic Handle
 template <typename T> static void *create_handle(std::shared_ptr<T> ptr) {
   // Cast to void shared_ptr to allow generic deletion
   return new std::shared_ptr<void>(ptr);
 }
 
-// Internal: Get Typed Ptr
 template <typename T> static std::shared_ptr<T> get_ptr(void *handle) {
   if (!handle)
     return nullptr;
@@ -82,7 +71,6 @@ template <typename T> static std::shared_ptr<T> get_ptr(void *handle) {
   return std::static_pointer_cast<T>(void_ptr);
 }
 
-// Internal: Convert list to null-terminated handle array
 template <typename T>
 static void **
 list_to_handle_array(std::shared_ptr<std::list<std::shared_ptr<T>>> list) {
@@ -103,74 +91,8 @@ list_to_handle_array(std::shared_ptr<std::list<std::shared_ptr<T>>> list) {
 
 extern "C" {
 
-// Generic Release
 void ffmpeg_kit_handle_release(void *handle) {
   if (handle) {
-    // We assume all handles are pointers to shared_ptrs on the heap.
-    // We can't know the TYPE to delete strictly speaking if we just `delete
-    // handle`, but `shared_ptr` is not a polymorphic type in that sense.
-    // HOWEVER, `delete void*` is undefined behavior.
-    // We strictly need to know the type to delete it OR use a common base
-    // wrapper. For now, this generic function is DANGEROUS unless we stick to a
-    // convention. But since we can't easily distinguish types at runtime in C,
-    // we should probably have specific release functions or assume they are all
-    // shared_ptr<something> which might have same layout? No, that's unsafe.
-
-    // CORRECT APPROACH: Specific release functions are safer,
-    // but user asked for `ffmpeg_kit_session_release` before.
-    // The API defined `ffmpeg_kit_handle_release` implies a generic one.
-    // We will make specific ones internally or require users to cast?
-    // Let's implement specific releases internally and dispatch if possible
-    // (not possible without type tag). WE WILL IGNORE THIS GENERIC FUNCTION FOR
-    // SAFETY OR IMPLEMENT A HEADER STRUCT. For this implementation, we will
-    // assume the caller KNOWS what they are releasing if we had specific ones.
-    // Since we defined `ffmpeg_kit_handle_release`, let's try to handle it.
-    // We will cast to `std::shared_ptr<void>*`? No.
-
-    // workaround: Since the handle is just a pointer, we will rely on the fact
-    // that the std::shared_ptr destructor is virtual-like in how it handles the
-    // control block, BUT `delete static_cast<std::shared_ptr<T>*>(handle)`
-    // needs T.
-
-    // For this assignment, to be safe, we might implementation
-    // `ffmpeg_kit_handle_release` by checking specific session types or we
-    // forced the user to call specific release functions? The header has
-    // `ffmpeg_kit_handle_release`. Let's make it fail or warn, and encourage
-    // specific ones? No, let's treat all handles as `std::shared_ptr<void>*`
-    // (using aliasing constructor) if we could.
-    //
-    // Pragmantic Solution: All our handles are `new std::shared_ptr<T>(...)`.
-    // We will just cast to `std::shared_ptr<void>*` assuming layout
-    // compatibility for deletion? NO.
-
-    // We will implement `ffmpeg_kit_handle_release` ONLY for Sessions for now,
-    // and hope the user doesn't pass random things.
-    // Actually, we should change the API to have strict types.
-    // But let's support casting to `std::shared_ptr<Session>*` as a baseline
-    // for sessions.
-
-    // To properly fix this: we will implement `ffmpeg_kit_handle_release` by
-    // casting to `std::shared_ptr<void>*` which is technically UB if the
-    // original wasn't that.
-    //
-    // BETTER: We'll use a `Wrapper` struct.
-    // struct Wrapper { void* ptr; void (*deleter)(void*); };
-    // But that changes the handle type.
-
-    // Let's rely on specific Session casting for now, assuming mostly Sessions.
-    // Or better: `delete static_cast<std::shared_ptr<Session>*>(handle)` works
-    // for all Sessions (FFmpeg, FFprobe, MediaInfo). For Objects like
-    // MediaInformation, it will fail.
-
-    // We will enable strict specific release functions in practice,
-    // OR we just leak if we can't delete.
-    // Let's provide specific release functions for objects too?
-    // The header has `ffmpeg_kit_handle_release`.
-    // I will implement it by casting to `std::shared_ptr<void>*` which is a
-    // common hack but unsafe.
-    //
-    // Let's use a `std::shared_ptr<void>` as the common handle storage type?
-    // YES. We will store `std::shared_ptr<void>` for everything.
     delete static_cast<std::shared_ptr<void> *>(handle);
   }
 }
@@ -192,10 +114,6 @@ ffmpeg_kit_execute_async(const char *command,
     return nullptr;
   auto lambda = [complete_cb, user_data](std::shared_ptr<Session> s) {
     if (complete_cb) {
-      // Retrieve the session in a handle.
-      // Note: we can't return the SAME handle pointer as the one returned by
-      // execute_async because strict identity isn't guaranteed here. We create
-      // a temporary handle for the callback.
       auto handle = create_handle(std::dynamic_pointer_cast<FFmpegSession>(s));
       complete_cb(handle, user_data);
       ffmpeg_kit_handle_release(handle);
@@ -220,10 +138,6 @@ FFmpegSessionHandle ffmpeg_kit_execute_async_full(
   };
   auto log = [log_cb, user_data](std::shared_ptr<Log> l) {
     if (log_cb) {
-      // We don't have the session object in Log callback easily unless we
-      // capture it, but we can't capture the session before it's created. C API
-      // demands session handle. We pass NULL for session in log/stats
-      // callbacks? Or we ignore the session session parameter?
       log_cb(nullptr, l->getMessage().c_str(), user_data);
     }
   };
@@ -389,6 +303,110 @@ void ffplay_kit_session_execute_async(FFplaySessionHandle session) {
     FFmpegKitConfig::asyncFFplayExecute(ptr);
   }
 }
+
+void ffplay_kit_session_seek(FFplaySessionHandle session, double seconds) {
+  auto ptr = get_ptr<FFplaySession>(session);
+  if (ptr) {
+    ptr->seek(seconds);
+  }
+}
+
+void ffplay_kit_session_pause(FFplaySessionHandle session) {
+  auto ptr = get_ptr<FFplaySession>(session);
+  if (ptr) {
+    ptr->pause();
+  }
+}
+
+void ffplay_kit_session_resume(FFplaySessionHandle session) {
+  auto ptr = get_ptr<FFplaySession>(session);
+  if (ptr) {
+    ptr->resume();
+  }
+}
+
+void ffplay_kit_session_stop(FFplaySessionHandle session) {
+  auto ptr = get_ptr<FFplaySession>(session);
+  if (ptr) {
+    ptr->stop();
+  }
+}
+
+double ffplay_kit_session_get_position(FFplaySessionHandle session) {
+  auto ptr = get_ptr<FFplaySession>(session);
+  if (ptr) {
+    return ptr->getPosition();
+  }
+  return 0.0;
+}
+
+double ffplay_kit_session_get_duration(FFplaySessionHandle session) {
+  auto ptr = get_ptr<FFplaySession>(session);
+  if (ptr) {
+    return ptr->getDuration();
+  }
+  return 0.0;
+}
+
+int ffplay_kit_session_is_playing(FFplaySessionHandle session) {
+  auto ptr = get_ptr<FFplaySession>(session);
+  if (ptr) {
+    return ptr->isPlaying() ? 1 : 0;
+  }
+  return 0;
+}
+
+int ffplay_kit_session_is_paused(FFplaySessionHandle session) {
+  auto ptr = get_ptr<FFplaySession>(session);
+  if (ptr) {
+    return ptr->isPaused() ? 1 : 0;
+  }
+  return 0;
+}
+
+void ffplay_kit_session_set_volume(FFplaySessionHandle session, float volume) {
+  auto ptr = get_ptr<FFplaySession>(session);
+  if (ptr) {
+    ptr->setVolume(volume);
+  }
+}
+
+void ffplay_kit_session_set_playback_speed(FFplaySessionHandle session, double speed) {
+  auto ptr = get_ptr<FFplaySession>(session);
+  if (ptr) {
+    ptr->setPlaybackSpeed(speed);
+  }
+}
+
+double ffplay_kit_session_get_playback_speed(FFplaySessionHandle session) {
+  auto ptr = get_ptr<FFplaySession>(session);
+  if (ptr) {
+    return ptr->getPlaybackSpeed();
+  }
+  return 1.0;
+}
+
+void ffplay_kit_seek(double seconds) { FFplayKit::seek(seconds); }
+
+void ffplay_kit_pause(void) { FFplayKit::pause(); }
+
+void ffplay_kit_resume(void) { FFplayKit::resume(); }
+
+void ffplay_kit_stop(void) { FFplayKit::stop(); }
+
+double ffplay_kit_get_position(void) { return FFplayKit::getPosition(); }
+
+double ffplay_kit_get_duration(void) { return FFplayKit::getDuration(); }
+
+int ffplay_kit_is_playing(void) { return FFplayKit::isPlaying() ? 1 : 0; }
+
+int ffplay_kit_is_paused(void) { return FFplayKit::isPaused() ? 1 : 0; }
+
+void ffplay_kit_set_volume(float volume) { FFplayKit::setVolume(volume); }
+
+void ffplay_kit_set_playback_speed(double speed) { FFplayKit::setPlaybackSpeed(speed); }
+
+double ffplay_kit_get_playback_speed(void) { return FFplayKit::getPlaybackSpeed(); }
 
 /* Config */
 

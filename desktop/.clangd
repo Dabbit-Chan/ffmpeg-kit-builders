@@ -1,7 +1,7 @@
+# Global Settings (Applies to all files)
 CompileFlags:
+  CompilationDatabase: "desktop"
   Add:
-    - -xc++
-    - -std=c++17
     - -I/home/vscode/ffmpeg-kit-builders/desktop/src
     - -I/home/vscode/ffmpeg-kit-builders/prebuilt/src/ffmpeg
     - -I/home/vscode/ffmpeg-kit-builders/prebuilt/src/jsoncpp/include
@@ -11,4 +11,26 @@ CompileFlags:
     - -DDEBUG
     - -D_GNU_SOURCE
     - -D__STDC_CONSTANT_MACROS
-  CompilationDatabase: "desktop"
+    - -DFFMPEG_KIT_BUILD_DATE=20260209
+
+Diagnostics:
+  Suppress: ["main_file_non_preamble"]
+
+# CompilationDatabase MUST be at the top level, not under CompileFlags
+# This tells clangd where to look for compile_commands.json
+Index:
+  Background: Build
+
+---
+# Specific fix for C files
+If:
+  PathMatch: .*\.c
+CompileFlags:
+  Add: [-xc, -std=gnu17]
+
+---
+# Specific fix for C++ files (the wrapper)
+If:
+  PathMatch: .*\.(cpp|cc|hpp)
+CompileFlags:
+  Add: [-Wno-keyword-macro, -xc++, -std=c++17]
