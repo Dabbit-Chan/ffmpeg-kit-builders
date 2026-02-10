@@ -452,3 +452,7 @@ void ffplay_free(FFplayContext* ctx) {
     }
     av_free(ctx);
 }
+
+void ffplay_close(FFplayContext* ctx) {
+    ffplay_free(ctx);
+}

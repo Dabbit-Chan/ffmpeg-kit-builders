@@ -3690,49 +3690,44 @@ create_ffmpeg_kit_bundle() {
 	local FFMPEG_KIT_VERSION=$(get_ffmpeg_kit_version)
 
   local touch_prefix="${touch_postfix}_already"
-	local touch_name=$(get_small_touchfile_name "${touch_prefix}_bundled" "ffmpeg-kit-bundle $(get_bundle_directory)")
+
+  remove_path -rf "${ffmpeg_kit_bundle}"
+  echo "INFO: (Re-)create_ffmpeg_kit_bundle() because $touch_name not found with \"ffmpeg-kit-bundle $(get_bundle_directory)\"." >>"$LOG_FILE"
+  export FFMPEG_KIT_BUNDLE_INCLUDE_DIRECTORY="${ffmpeg_kit_bundle}/include"
+  export FFMPEG_KIT_BUNDLE_LIB_DIRECTORY="${ffmpeg_kit_bundle}/lib"
+  export FFMPEG_KIT_BUNDLE_BIN_DIRECTORY="${ffmpeg_kit_bundle}/bin"
+  
+  create_dir "${ffmpeg_kit_bundle}/{include,lib/pkgconfig,bin}"
+  
+  {
+    # COPY HEADERS
+    [[ -d "${ffmpeg_kit_install}/include" ]] && cp -rP "${ffmpeg_kit_install}/include/"* "${ffmpeg_kit_bundle}/include"
+    [[ -d "${dependency_install_prefix}/include/json" ]] && cp -rP "${dependency_install_prefix}/include/json" "${ffmpeg_kit_bundle}/include/json"
+
+    # COPY LIBS
+    [[ -d "${ffmpeg_kit_install}/lib" ]] && cp -rP "${ffmpeg_kit_install}/lib/"* "${ffmpeg_kit_bundle}/lib"
+
+    # COPY BINARIES
+    [[ -d "${ffmpeg_kit_install}/bin" ]] && cp -rP "${ffmpeg_kit_install}/bin/"* "${ffmpeg_kit_bundle}/bin"
+  } >>"$LOG_FILE"
+
+  find "${ffmpeg_kit_bundle}/lib/pkgconfig" -type f -name "*.pc" -exec sed -i \
+  -e "s|prefix=.*|prefix=${ffmpeg_kit_bundle}|g" \
+  -e "s|exec_prefix=.*|exec_prefix=\${prefix}|g" \
+  -e "s|libdir=.*|libdir=\${prefix}/lib|g" \
+  -e "s|includedir=.*|includedir=\${prefix}/include|g" {} +
+
+  local LICENSE_BASEDIR="${ffmpeg_kit_bundle}/licenses"
+
+  create_dir "${LICENSE_BASEDIR}"
+  
+  get_licenses
+
+  copy_path "${BASEDIR}"/tools/source/SOURCE "${LICENSE_BASEDIR}/source.txt"
+  copy_path "${BASEDIR}"/tools/license/LICENSE.GPLv3 "${LICENSE_BASEDIR}"/license.txt
+  create_touch_file 0 "$touch_name"
+  echo -e "INFO: Done creating bundle at $ffmpeg_kit_bundle" | tee -a "$LOG_FILE"
 	
-  if truthy "$build_force"; then
-		reset_touch "${ffmpeg_kit_src_dir}" "${touch_prefix}_bundled"*.touch
-    remove_path -rf "${ffmpeg_kit_bundle}"
-	fi
-	if [ ! -f "$touch_name" ]; then
-    echo "INFO: (Re-)create_ffmpeg_kit_bundle() because $touch_name not found with \"ffmpeg-kit-bundle $(get_bundle_directory)\"." >>"$LOG_FILE"
-		export FFMPEG_KIT_BUNDLE_INCLUDE_DIRECTORY="${ffmpeg_kit_bundle}/include"
-		export FFMPEG_KIT_BUNDLE_LIB_DIRECTORY="${ffmpeg_kit_bundle}/lib"
-		export FFMPEG_KIT_BUNDLE_BIN_DIRECTORY="${ffmpeg_kit_bundle}/bin"
-		
-		create_dir "${ffmpeg_kit_bundle}/{include,lib/pkgconfig,bin}"
-		
-		{
-			# COPY HEADERS
-			[[ -d "${ffmpeg_kit_install}/include" ]] && cp -rP "${ffmpeg_kit_install}/include/"* "${ffmpeg_kit_bundle}/include"
-      [[ -d "${dependency_install_prefix}/include/json" ]] && cp -rP "${dependency_install_prefix}/include/json" "${ffmpeg_kit_bundle}/include/json"
-
-			# COPY LIBS
-			[[ -d "${ffmpeg_kit_install}/lib" ]] && cp -rP "${ffmpeg_kit_install}/lib/"* "${ffmpeg_kit_bundle}/lib"
-
-			# COPY BINARIES
-			[[ -d "${ffmpeg_kit_install}/bin" ]] && cp -rP "${ffmpeg_kit_install}/bin/"* "${ffmpeg_kit_bundle}/bin"
-		} >>"$LOG_FILE"
-
-    find "${ffmpeg_kit_bundle}/lib/pkgconfig" -type f -name "*.pc" -exec sed -i \
-    -e "s|prefix=.*|prefix=${ffmpeg_kit_bundle}|g" \
-    -e "s|exec_prefix=.*|exec_prefix=\${prefix}|g" \
-    -e "s|libdir=.*|libdir=\${prefix}/lib|g" \
-    -e "s|includedir=.*|includedir=\${prefix}/include|g" {} +
-
-		local LICENSE_BASEDIR="${ffmpeg_kit_bundle}/licenses"
-
-		create_dir "${LICENSE_BASEDIR}"
-		
-		get_licenses
-
-		copy_path "${BASEDIR}"/tools/source/SOURCE "${LICENSE_BASEDIR}/source.txt"
-		copy_path "${BASEDIR}"/tools/license/LICENSE.GPLv3 "${LICENSE_BASEDIR}"/license.txt
-		create_touch_file 0 "$touch_name"
-    echo -e "INFO: Done creating bundle at $ffmpeg_kit_bundle" | tee -a "$LOG_FILE"
-	fi
   if truthy "$create_release" || truthy "$create_release_clean"; then
     echo -e "INFO: Creating release bundle" | tee -a "$LOG_FILE"
     create_dir "$work_dir/releases"

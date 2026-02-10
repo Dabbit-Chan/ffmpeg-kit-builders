@@ -171,6 +171,13 @@ FFMPEG_API float ffplay_get_volume(FFplayContext* ctx);
  */
 FFMPEG_API void ffplay_free(FFplayContext* ctx);
 
+/**
+ * Closes the ffplay session.
+ *
+ * @param ctx the ffplay context
+ */
+FFMPEG_API void ffplay_close(FFplayContext* ctx);
+
 #ifdef __cplusplus
 }
 #endif

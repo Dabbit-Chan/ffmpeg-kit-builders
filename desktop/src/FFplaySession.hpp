@@ -116,6 +116,11 @@ public:
   bool isMediaInformation() const override;
 
   /**
+   * Starts the media.
+   */
+  void start();
+
+  /**
    * Seeks to a specific position in the media.
    *
    * @param seconds the seconds to seek to
@@ -200,6 +205,11 @@ public:
    * @param context the ffplay context
    */
   void setContext(FFplayContext *context);
+
+  /**
+   * Closes the ffplay session.
+   */
+  void close();
 
 private:
   struct PublicFFplaySession;

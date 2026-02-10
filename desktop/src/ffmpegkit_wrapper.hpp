@@ -330,6 +330,14 @@ FFMPEG_KIT_C_EXPORT void
 ffplay_kit_session_execute(FFplaySessionHandle session);
 
 /**
+ * Gets the current FFplay session.
+ *
+ * @return the FFplay session handle
+ */
+FFMPEG_KIT_C_EXPORT FFplaySessionHandle
+ffplay_kit_get_current_session(void);
+
+/**
  * Executes the FFplay session asynchronously.
  *
  * @param session the FFplay session to execute
@@ -345,6 +353,14 @@ ffplay_kit_session_execute_async(FFplaySessionHandle session);
  */
 FFMPEG_KIT_C_EXPORT void
 ffplay_kit_session_seek(FFplaySessionHandle session, double seconds);
+
+/**
+ * Starts the FFplay session.
+ *
+ * @param session the FFplay session to start
+ */
+FFMPEG_KIT_C_EXPORT void
+ffplay_kit_session_start(FFplaySessionHandle session);
 
 /**
  * Pauses the FFplay session.
@@ -370,6 +386,13 @@ ffplay_kit_session_resume(FFplaySessionHandle session);
 FFMPEG_KIT_C_EXPORT void ffplay_kit_session_stop(FFplaySessionHandle session);
 
 /**
+ * Closes the FFplay session.
+ *
+ * @param session the FFplay session to close
+ */
+FFMPEG_KIT_C_EXPORT void ffplay_kit_session_close(FFplaySessionHandle session);
+
+/**
  * Gets the position of the FFplay session.
  *
  * @param session the FFplay session to get the position of
@@ -377,6 +400,15 @@ FFMPEG_KIT_C_EXPORT void ffplay_kit_session_stop(FFplaySessionHandle session);
  */
 FFMPEG_KIT_C_EXPORT double
 ffplay_kit_session_get_position(FFplaySessionHandle session);
+
+/**
+ * Sets the position of the FFplay session.
+ *
+ * @param session the FFplay session to set the position of
+ * @param seconds the position to set
+ */
+FFMPEG_KIT_C_EXPORT void
+ffplay_kit_session_set_position(FFplaySessionHandle session, double seconds);
 
 /**
  * Gets the duration of the FFplay session.
@@ -414,6 +446,15 @@ ffplay_kit_session_is_paused(FFplaySessionHandle session);
 FFMPEG_KIT_C_EXPORT void
 ffplay_kit_session_set_volume(FFplaySessionHandle session, float volume);
 
+/**
+ * Gets the volume of the FFplay session.
+ *
+ * @param session the FFplay session to get the volume of
+ * @return the volume of the FFplay session
+ */
+FFMPEG_KIT_C_EXPORT float
+ffplay_kit_session_get_volume(FFplaySessionHandle session);
+
 /* FFplayKit Global Proxies */
 
 /**
@@ -422,6 +463,11 @@ ffplay_kit_session_set_volume(FFplaySessionHandle session, float volume);
  * @param seconds the position in seconds
  */
 FFMPEG_KIT_C_EXPORT void ffplay_kit_seek(double seconds);
+
+/**
+ * Starts the current FFplay session.
+ */
+FFMPEG_KIT_C_EXPORT void ffplay_kit_start(void);
 
 /**
  * Pauses the current FFplay session.
@@ -437,6 +483,11 @@ FFMPEG_KIT_C_EXPORT void ffplay_kit_resume(void);
  * Stops the current FFplay session.
  */
 FFMPEG_KIT_C_EXPORT void ffplay_kit_stop(void);
+
+/**
+ * Closes the current FFplay session.
+ */
+FFMPEG_KIT_C_EXPORT void ffplay_kit_close(void);
 
 /**
  * Returns the position of the current FFplay session.
@@ -479,6 +530,13 @@ FFMPEG_KIT_C_EXPORT int ffplay_kit_is_paused(void);
  * @param volume the volume (0.0 to 1.0)
  */
 FFMPEG_KIT_C_EXPORT void ffplay_kit_set_volume(float volume);
+
+/**
+ * Gets the volume of the current FFplay session.
+ *
+ * @return the volume of the current FFplay session
+ */
+FFMPEG_KIT_C_EXPORT float ffplay_kit_get_volume(void);
 
 /* Config & Global Functions */
 
@@ -1005,6 +1063,37 @@ FFMPEG_KIT_C_EXPORT FFmpegSessionHandle ffmpeg_kit_get_session(long session_id);
  * @return the last session
  */
 FFMPEG_KIT_C_EXPORT FFmpegSessionHandle ffmpeg_kit_get_last_session(void);
+
+/**
+ * Gets the last FFmpeg session.
+ *
+ * @return the last FFmpeg session
+ */
+FFMPEG_KIT_C_EXPORT FFmpegSessionHandle ffmpeg_kit_get_last_ffmpeg_session(void);
+
+/**
+ * Gets the last FFprobe session.
+ *
+ * @return the last FFprobe session
+ */
+FFMPEG_KIT_C_EXPORT FFprobeSessionHandle
+ffmpeg_kit_get_last_ffprobe_session(void);
+
+/**
+ * Gets the last FFplay session.
+ *
+ * @return the last FFplay session
+ */
+FFMPEG_KIT_C_EXPORT FFplaySessionHandle
+ffmpeg_kit_get_last_ffplay_session(void);
+
+/**
+ * Gets the last media information session.
+ *
+ * @return the last media information session
+ */
+FFMPEG_KIT_C_EXPORT MediaInformationSessionHandle
+ffmpeg_kit_get_last_media_information_session(void);
 
 /**
  * Gets the last completed session.

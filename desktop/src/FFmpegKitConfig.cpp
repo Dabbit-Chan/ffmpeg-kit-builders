@@ -1632,6 +1632,90 @@ ffmpegkit::FFmpegKitConfig::getLastSession() {
   return sessionHistoryList.front();
 }
 
+std::shared_ptr<ffmpegkit::FFmpegSession>
+ffmpegkit::FFmpegKitConfig::getLastFFmpegSession() {
+  std::unique_lock<std::recursive_mutex> lock(sessionMutex, std::defer_lock);
+
+  lock.lock();
+
+  if (sessionHistoryList.empty()) {
+    return nullptr;
+  }
+
+  for (auto rit = sessionHistoryList.rbegin(); rit != sessionHistoryList.rend();
+       ++rit) {
+    auto session = *rit;
+    if (session->isFFmpeg()) {
+      return std::dynamic_pointer_cast<ffmpegkit::FFmpegSession>(session);
+    }
+  }
+
+  return nullptr;
+}
+
+std::shared_ptr<ffmpegkit::FFprobeSession>
+ffmpegkit::FFmpegKitConfig::getLastFFprobeSession() {
+  std::unique_lock<std::recursive_mutex> lock(sessionMutex, std::defer_lock);
+
+  lock.lock();
+
+  if (sessionHistoryList.empty()) {
+    return nullptr;
+  }
+
+  for (auto rit = sessionHistoryList.rbegin(); rit != sessionHistoryList.rend();
+       ++rit) {
+    auto session = *rit;
+    if (session->isFFprobe()) {
+      return std::dynamic_pointer_cast<ffmpegkit::FFprobeSession>(session);
+    }
+  }
+
+  return nullptr;
+}
+
+std::shared_ptr<ffmpegkit::FFplaySession>
+ffmpegkit::FFmpegKitConfig::getLastFFplaySession() {
+  std::unique_lock<std::recursive_mutex> lock(sessionMutex, std::defer_lock);
+
+  lock.lock();
+
+  if (sessionHistoryList.empty()) {
+    return nullptr;
+  }
+
+  for (auto rit = sessionHistoryList.rbegin(); rit != sessionHistoryList.rend();
+       ++rit) {
+    auto session = *rit;
+    if (session->isFFplay()) {
+      return std::dynamic_pointer_cast<ffmpegkit::FFplaySession>(session);
+    }
+  }
+
+  return nullptr;
+}
+
+std::shared_ptr<ffmpegkit::MediaInformationSession>
+ffmpegkit::FFmpegKitConfig::getLastMediaInformationSession() {
+  std::unique_lock<std::recursive_mutex> lock(sessionMutex, std::defer_lock);
+
+  lock.lock();
+
+  if (sessionHistoryList.empty()) {
+    return nullptr;
+  }
+
+  for (auto rit = sessionHistoryList.rbegin(); rit != sessionHistoryList.rend();
+       ++rit) {
+    auto session = *rit;
+    if (session->isMediaInformation()) {
+      return std::dynamic_pointer_cast<ffmpegkit::MediaInformationSession>(session);
+    }
+  }
+
+  return nullptr;
+}
+
 std::shared_ptr<ffmpegkit::Session>
 ffmpegkit::FFmpegKitConfig::getLastCompletedSession() {
   std::unique_lock<std::recursive_mutex> lock(sessionMutex, std::defer_lock);

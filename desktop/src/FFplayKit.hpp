@@ -139,6 +139,11 @@ public:
   static void seek(double seconds);
 
   /**
+   * <p>Start the media.
+   */
+  static void start();
+
+  /**
    * <p>Pause the media.
    */
   static void pause();
@@ -201,6 +206,11 @@ public:
    * @return Volume (0.0 to 1.0)
    */
   static float getVolume();
+
+  /**
+   * <p>Close the ffplay session.
+   */
+  static void close();
 };
 
 } // namespace ffmpegkit

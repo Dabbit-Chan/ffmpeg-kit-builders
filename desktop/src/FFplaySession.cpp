@@ -135,6 +135,12 @@ void ffmpegkit::FFplaySession::seek(double seconds, double rel) {
   }
 }
 
+void ffmpegkit::FFplaySession::start() {
+  if (_context != nullptr) {
+    ffplay_start(_context);
+  }
+}
+
 void ffmpegkit::FFplaySession::pause() {
   if (_context != nullptr) {
     ffplay_pause(_context);
@@ -206,4 +212,11 @@ FFplayContext *ffmpegkit::FFplaySession::getContext() { return _context; }
 
 void ffmpegkit::FFplaySession::setContext(FFplayContext *context) {
   _context = context;
+}
+
+void ffmpegkit::FFplaySession::close() {
+  if (_context != nullptr) {
+    ffplay_close(_context);
+    _context = nullptr;
+  }
 }

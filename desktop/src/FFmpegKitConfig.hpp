@@ -429,6 +429,34 @@ public:
   static std::shared_ptr<ffmpegkit::Session> getLastSession();
 
   /**
+   * Returns the last FFmpeg session created from the session history.
+   *
+   * @return the last FFmpeg session created or nullptr if session history is empty
+   */
+  static std::shared_ptr<ffmpegkit::FFmpegSession> getLastFFmpegSession();
+
+  /**
+   * Returns the last FFprobe session created from the session history.
+   *
+   * @return the last FFprobe session created or nullptr if session history is empty
+   */
+  static std::shared_ptr<ffmpegkit::FFprobeSession> getLastFFprobeSession();
+
+  /**
+   * Returns the last FFplay session created from the session history.
+   *
+   * @return the last FFplay session created or nullptr if session history is empty
+   */
+  static std::shared_ptr<ffmpegkit::FFplaySession> getLastFFplaySession();
+
+  /**
+   * Returns the last MediaInformation session created from the session history.
+   *
+   * @return the last MediaInformation session created or nullptr if session history is empty
+   */
+  static std::shared_ptr<ffmpegkit::MediaInformationSession> getLastMediaInformationSession();
+
+  /**
    * Returns the last session completed from the session history.
    *
    * @return the last session completed. If there are no completed sessions in

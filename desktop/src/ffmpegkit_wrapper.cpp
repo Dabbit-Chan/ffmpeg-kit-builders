@@ -297,6 +297,11 @@ void ffplay_kit_session_execute(FFplaySessionHandle session) {
   }
 }
 
+FFplaySessionHandle ffplay_kit_get_current_session(void) {
+  auto session = FFmpegKitConfig::getActiveFFplaySession();
+  return create_handle(std::dynamic_pointer_cast<FFplaySession>(session));
+}
+
 void ffplay_kit_session_execute_async(FFplaySessionHandle session) {
   auto ptr = get_ptr<FFplaySession>(session);
   if (ptr) {
@@ -318,6 +323,13 @@ void ffplay_kit_session_pause(FFplaySessionHandle session) {
   }
 }
 
+void ffplay_kit_session_start(FFplaySessionHandle session) {
+  auto ptr = get_ptr<FFplaySession>(session);
+  if (ptr) {
+    ptr->start();
+  }
+}
+
 void ffplay_kit_session_resume(FFplaySessionHandle session) {
   auto ptr = get_ptr<FFplaySession>(session);
   if (ptr) {
@@ -332,12 +344,26 @@ void ffplay_kit_session_stop(FFplaySessionHandle session) {
   }
 }
 
+void ffplay_kit_session_close(FFplaySessionHandle session) {
+  auto ptr = get_ptr<FFplaySession>(session);
+  if (ptr) {
+    ptr->close();
+  }
+}
+
 double ffplay_kit_session_get_position(FFplaySessionHandle session) {
   auto ptr = get_ptr<FFplaySession>(session);
   if (ptr) {
     return ptr->getPosition();
   }
   return 0.0;
+}
+
+void ffplay_kit_session_set_position(FFplaySessionHandle session, double seconds) {
+  auto ptr = get_ptr<FFplaySession>(session);
+  if (ptr) {
+    ptr->setPosition(seconds);
+  }
 }
 
 double ffplay_kit_session_get_duration(FFplaySessionHandle session) {
@@ -371,13 +397,25 @@ void ffplay_kit_session_set_volume(FFplaySessionHandle session, float volume) {
   }
 }
 
+float ffplay_kit_session_get_volume(FFplaySessionHandle session) {
+  auto ptr = get_ptr<FFplaySession>(session);
+  if (ptr) {
+    return ptr->getVolume();
+  }
+  return 0.0;
+}
+
 void ffplay_kit_seek(double seconds) { FFplayKit::seek(seconds); }
+
+void ffplay_kit_start(void) { FFplayKit::start(); }
 
 void ffplay_kit_pause(void) { FFplayKit::pause(); }
 
 void ffplay_kit_resume(void) { FFplayKit::resume(); }
 
 void ffplay_kit_stop(void) { FFplayKit::stop(); }
+
+void ffplay_kit_close(void) { FFplayKit::close(); }
 
 double ffplay_kit_get_position(void) { return FFplayKit::getPosition(); }
 
@@ -390,6 +428,8 @@ int ffplay_kit_is_playing(void) { return FFplayKit::isPlaying() ? 1 : 0; }
 int ffplay_kit_is_paused(void) { return FFplayKit::isPaused() ? 1 : 0; }
 
 void ffplay_kit_set_volume(float volume) { FFplayKit::setVolume(volume); }
+
+float ffplay_kit_get_volume(void) { return FFplayKit::getVolume(); }
 
 /* Config */
 
@@ -710,6 +750,22 @@ FFmpegSessionHandle ffmpeg_kit_get_session(long session_id) {
 
 FFmpegSessionHandle ffmpeg_kit_get_last_session(void) {
   return create_handle(FFmpegKitConfig::getLastSession());
+}
+
+FFmpegSessionHandle ffmpeg_kit_get_last_ffmpeg_session(void) {
+  return create_handle(FFmpegKitConfig::getLastFFmpegSession());
+}
+
+FFprobeSessionHandle ffmpeg_kit_get_last_ffprobe_session(void) {
+  return create_handle(FFmpegKitConfig::getLastFFprobeSession());
+}
+
+FFplaySessionHandle ffmpeg_kit_get_last_ffplay_session(void) {
+  return create_handle(FFmpegKitConfig::getLastFFplaySession());
+}
+
+MediaInformationSessionHandle ffmpeg_kit_get_last_media_information_session(void) {
+  return create_handle(FFmpegKitConfig::getLastMediaInformationSession());
 }
 
 FFmpegSessionHandle ffmpeg_kit_get_last_completed_session(void) {

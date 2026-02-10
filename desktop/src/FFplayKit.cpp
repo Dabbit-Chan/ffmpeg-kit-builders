@@ -90,6 +90,13 @@ void ffmpegkit::FFplayKit::seek(double seconds) {
   }
 }
 
+void ffmpegkit::FFplayKit::start() {
+  auto session = ffmpegkit::FFmpegKitConfig::getActiveFFplaySession();
+  if (session) {
+    session->start();
+  }
+}
+
 void ffmpegkit::FFplayKit::pause() {
   auto session = ffmpegkit::FFmpegKitConfig::getActiveFFplaySession();
   if (session) {
@@ -163,4 +170,11 @@ float ffmpegkit::FFplayKit::getVolume() {
     return session->getVolume();
   }
   return 0.0;
+}
+
+void ffmpegkit::FFplayKit::close() {
+  auto session = ffmpegkit::FFmpegKitConfig::getActiveFFplaySession();
+  if (session) {
+    session->close();
+  }
 }
