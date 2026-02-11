@@ -69,7 +69,11 @@ for flag in $deps; do
         blkid|util|mount|selinux|sepol|resolv)
           raw_libs_to_keep="$raw_libs_to_keep -l$name"
           ;;
-        # --- Category D: Bundled Libraries ---
+        # --- Category D: Test Utils (Skip) ---
+        gtest|gtest_main|gmock|gmock_main)
+          raw_libs_to_keep="$raw_libs_to_keep -l$name"
+          ;;
+        # --- Category E: Bundled Libraries ---
         *)
           found=no
           for dir in $search_paths; do

@@ -54,7 +54,7 @@ namespace ffmpegkit {
 class FFmpegKitConfig {
 public:
   /** Global library version */
-  static constexpr const char *FFmpegKitVersion = "8.0";
+  static constexpr const char *FFmpegKitVersion = FFMPEG_KIT_VERSION;
 
   /**
    * Prefix of named pipes created by ffmpeg-kit.
@@ -151,18 +151,19 @@ public:
   static std::string getFFmpegVersion();
 
   /**
+   * <p>Returns the architecture of FFmpeg bundled within
+   * <code>FFmpegKit</code> library.
+   *
+   * @return the architecture of FFmpeg
+   */
+  static std::string getFFmpegArchitecture();
+
+  /**
    * Returns FFmpegKit library version.
    *
    * @return FFmpegKit version
    */
   static std::string getVersion();
-
-  /**
-   * <p>Returns whether FFmpegKit release is a Long Term Release or not.
-   *
-   * @return true/yes or false/no
-   */
-  static bool isLTSBuild();
 
   /**
    * Returns FFmpegKit library build date.
@@ -212,17 +213,19 @@ public:
    *
    * @param ffplaySession FFplay session which includes command
    * options/arguments
+   * @param waitTimeout    max time to wait in milliseconds until media
+   * information is transmitted
    */
   static void ffplayExecute(
-      const std::shared_ptr<ffmpegkit::FFplaySession> ffplaySession);
+      const std::shared_ptr<ffmpegkit::FFplaySession> ffplaySession, int waitTimeout = 500);
 
   /**
    * <p>Synchronously executes the media information session provided.
    *
    * @param mediaInformationSession media information session which includes
    * command options/arguments
-   * @param waitTimeout             max time to wait until media information is
-   * transmitted
+   * @param waitTimeout             max time to wait in milliseconds until media
+   * information is transmitted
    */
   static void getMediaInformationExecute(
       const std::shared_ptr<ffmpegkit::MediaInformationSession>
@@ -264,9 +267,11 @@ public:
    *
    * @param ffplaySession FFplay session which includes command
    * options/arguments
+   * @param waitTimeout    max time to wait in milliseconds until media
+   * information is transmitted
    */
   static void asyncFFplayExecute(
-      const std::shared_ptr<ffmpegkit::FFplaySession> ffplaySession);
+      const std::shared_ptr<ffmpegkit::FFplaySession> ffplaySession, int waitTimeout);
 
   /**
    * <p>Starts an asynchronous FFprobe execution for the given media information
@@ -279,8 +284,8 @@ public:
    *
    * @param mediaInformationSession media information session which includes
    * command options/arguments
-   * @param waitTimeout             max time to wait until media information is
-   * transmitted
+   * @param waitTimeout             max time to wait in milliseconds until media
+   * information is transmitted
    */
   static void asyncGetMediaInformationExecute(
       const std::shared_ptr<ffmpegkit::MediaInformationSession>

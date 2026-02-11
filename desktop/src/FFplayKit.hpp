@@ -35,10 +35,11 @@ public:
    * <p>Synchronously executes FFplay with arguments provided.
    *
    * @param arguments FFplay command options/arguments as string list
+   * @param timeout   the timeout in milliseconds
    * @return FFplay session created for this execution
    */
   static std::shared_ptr<ffmpegkit::FFplaySession>
-  executeWithArguments(const std::list<std::string> &arguments);
+  executeWithArguments(const std::list<std::string> &arguments, int timeout);
 
   /**
    * <p>Starts an asynchronous FFplay execution with arguments provided.
@@ -50,11 +51,13 @@ public:
    * @param arguments        FFplay command options/arguments as string list
    * @param completeCallback callback that will be called when the execution has
    * completed
+   * @param timeout          the timeout in milliseconds
    * @return FFplay session created for this execution
    */
   static std::shared_ptr<ffmpegkit::FFplaySession>
   executeWithArgumentsAsync(const std::list<std::string> &arguments,
-                            FFplaySessionCompleteCallback completeCallback);
+                            FFplaySessionCompleteCallback completeCallback,
+                            int timeout);
 
   /**
    * <p>Starts an asynchronous FFplay execution with arguments provided.
@@ -67,12 +70,14 @@ public:
    * @param completeCallback    callback that will be called when the execution
    * has completed
    * @param logCallback         callback that will receive logs
+   * @param timeout             the timeout in milliseconds
    * @return FFplay session created for this execution
    */
   static std::shared_ptr<ffmpegkit::FFplaySession>
   executeWithArgumentsAsync(const std::list<std::string> &arguments,
                             FFplaySessionCompleteCallback completeCallback,
-                            ffmpegkit::LogCallback logCallback);
+                            ffmpegkit::LogCallback logCallback,
+                            int timeout);
 
   /**
    * <p>Synchronously executes FFplay command provided. Space character is used
@@ -80,10 +85,11 @@ public:
    * characters to specify arguments inside your command.
    *
    * @param command FFplay command
+   * @param timeout the timeout in milliseconds
    * @return FFplay session created for this execution
    */
   static std::shared_ptr<ffmpegkit::FFplaySession>
-  execute(const std::string command);
+  execute(const std::string command, int timeout);
 
   /**
    * <p>Starts an asynchronous FFplay execution for the given command. Space
@@ -97,11 +103,13 @@ public:
    * @param command          FFplay command
    * @param completeCallback callback that will be called when the execution has
    * completed
+   * @param timeout          the timeout in milliseconds
    * @return FFplay session created for this execution
    */
   static std::shared_ptr<ffmpegkit::FFplaySession>
   executeAsync(const std::string command,
-               FFplaySessionCompleteCallback completeCallback);
+               FFplaySessionCompleteCallback completeCallback,
+               int timeout);
 
   /**
    * <p>Starts an asynchronous FFplay execution for the given command. Space
@@ -116,12 +124,14 @@ public:
    * @param completeCallback    callback that will be called when the execution
    * has completed
    * @param logCallback         callback that will receive logs
+   * @param timeout             the timeout in milliseconds
    * @return FFplay session created for this execution
    */
   static std::shared_ptr<ffmpegkit::FFplaySession>
   executeAsync(const std::string command,
                FFplaySessionCompleteCallback completeCallback,
-               ffmpegkit::LogCallback logCallback);
+               ffmpegkit::LogCallback logCallback,
+               int timeout);
 
   /**
    * <p>Lists all FFplay sessions in the session history.

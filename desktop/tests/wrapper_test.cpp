@@ -165,7 +165,7 @@ TEST(FFmpegKitTest, FFplaySession) {
     // We remove -nodisp and -an because with dummy drivers, we WANT it to try to play
     char command[512];
     snprintf(command, sizeof(command), "-loglevel fatal -autoexit -t 2 %s", TEST_FILE);
-    FFplaySessionHandle play_session = ffplay_kit_execute(command);
+    FFplaySessionHandle play_session = ffplay_kit_execute(command, 1000);
     ASSERT_NE(play_session, nullptr);
 
     FFmpegKitSessionState state = ffmpeg_kit_session_get_state(play_session);
@@ -212,7 +212,7 @@ TEST_F(FFplayKitInteractiveTest, PlayPauseResume) {
     char command[256];
     snprintf(command, sizeof(command), "-loglevel fatal -i %s", video_file);
 
-    FFplaySessionHandle session = ffplay_kit_execute_async(command, nullptr, nullptr);
+    FFplaySessionHandle session = ffplay_kit_execute_async(command, nullptr, nullptr, 1000);
     ASSERT_NE(session, nullptr);
     
     WaitForSeconds(2);
@@ -235,7 +235,7 @@ TEST_F(FFplayKitInteractiveTest, Seek) {
     char command[256];
     snprintf(command, sizeof(command), "-loglevel fatal -i %s", video_file);
 
-    FFplaySessionHandle session = ffplay_kit_execute_async(command, nullptr, nullptr);
+    FFplaySessionHandle session = ffplay_kit_execute_async(command, nullptr, nullptr, 1000);
     ASSERT_NE(session, nullptr);
     WaitForSeconds(2);
 
@@ -261,12 +261,12 @@ TEST_F(FFplayKitInteractiveTest, ConcurrentSessions) {
     char command[256];
     snprintf(command, sizeof(command), "-loglevel fatal -i %s", video_file);
 
-    FFplaySessionHandle session1 = ffplay_kit_execute_async(command, nullptr, nullptr);
+    FFplaySessionHandle session1 = ffplay_kit_execute_async(command, nullptr, nullptr, 1000);
     ASSERT_NE(session1, nullptr);
     WaitForSeconds(2);
 
     // Session 2 should stop Session 1
-    FFplaySessionHandle session2 = ffplay_kit_execute_async(command, nullptr, nullptr);
+    FFplaySessionHandle session2 = ffplay_kit_execute_async(command, nullptr, nullptr, 1000);
     ASSERT_NE(session2, nullptr);
     WaitForSeconds(2);
 
@@ -283,7 +283,7 @@ TEST_F(FFplayKitInteractiveTest, GlobalControls) {
     char command[256];
     snprintf(command, sizeof(command), "-loglevel fatal -i %s", video_file);
 
-    FFplaySessionHandle session = ffplay_kit_execute_async(command, nullptr, nullptr);
+    FFplaySessionHandle session = ffplay_kit_execute_async(command, nullptr, nullptr, 1000);
     ASSERT_NE(session, nullptr);
     WaitForSeconds(2);
 
@@ -308,7 +308,7 @@ TEST_F(FFplayKitInteractiveTest, GlobalSeek) {
     char command[256];
     snprintf(command, sizeof(command), "-loglevel fatal -i %s", video_file);
 
-    FFplaySessionHandle session = ffplay_kit_execute_async(command, nullptr, nullptr);
+    FFplaySessionHandle session = ffplay_kit_execute_async(command, nullptr, nullptr, 1000);
     ASSERT_NE(session, nullptr);
     WaitForSeconds(2);
 
@@ -323,6 +323,50 @@ TEST_F(FFplayKitInteractiveTest, GlobalSeek) {
     ffplay_kit_stop();
     WaitForSeconds(1);
     ffmpeg_kit_handle_release(session);
+}
+
+TEST_F(FFplayKitInteractiveTest, TimeoutSession) {
+    const char* video_file = TEST_FILE;
+    char command[256];
+    snprintf(command, sizeof(command), "-loglevel fatal -i %s", video_file);
+
+    // 1. Start Session 1 normally
+    FFplaySessionHandle session1 = ffplay_kit_execute_async(command, nullptr, nullptr, 1000);
+    ASSERT_NE(session1, nullptr);
+    WaitForSeconds(2);
+    EXPECT_EQ(ffplay_kit_session_is_playing(session1), 1);
+
+    // 2. Create Session 2
+    FFplaySessionHandle session2 = ffplay_kit_create_session(command);
+    ASSERT_NE(session2, nullptr);
+
+    // 3. Execute Session 2 with a very short timeout (5ms)
+    // This should fail because Session 1 is running and won't stop instantly
+    ffplay_kit_session_execute_async(session2, 5);
+    
+    // Wait for async execution to process
+    WaitForSeconds(1);
+
+    // 4. Verify Session 2 failed
+    FFmpegKitSessionState state2 = ffmpeg_kit_session_get_state(session2);
+    
+    // It should be FAILED
+    if (state2 != FFMPEG_KIT_SESSION_STATE_FAILED) {
+         printf("Session 2 state: %d\n", state2);
+         char *failStackTrace = ffmpeg_kit_session_get_fail_stack_trace(session2);
+         if (failStackTrace) {
+             printf("Fail Stack Trace:\n%s\n", failStackTrace);
+             free(failStackTrace);
+         }
+    }
+    EXPECT_EQ(state2, FFMPEG_KIT_SESSION_STATE_FAILED);
+
+    // Session 1 might still be running or stopped depending on how far cleanup got
+    // cleanup requests cancel on Session 1 even if we timeout waiting for it
+    // So session 1 might eventually stop.
+    
+    ffmpeg_kit_handle_release(session1);
+    ffmpeg_kit_handle_release(session2);
 }
 
 

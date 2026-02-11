@@ -136,12 +136,13 @@ FFMPEG_KIT_C_EXPORT FFmpegSessionHandle ffmpeg_kit_execute_async(
  * @param log_cb the callback to be called when a log is generated
  * @param stats_cb the callback to be called when statistics are generated
  * @param user_data the user data to be passed to the callback
+ * @param waitTimeout the timeout in milliseconds
  * @return the FFmpeg session handle
  */
 FFMPEG_KIT_C_EXPORT FFmpegSessionHandle ffmpeg_kit_execute_async_full(
     const char *command, FFmpegKitCompleteCallback complete_cb,
     FFmpegKitLogCallback log_cb, FFmpegKitStatisticsCallback stats_cb,
-    void *user_data);
+    void *user_data, int waitTimeout);
 
 /**
  * Cancels all running FFmpeg sessions.
@@ -292,10 +293,11 @@ ffprobe_kit_get_media_information_async(
  * Executes the given FFplay command.
  *
  * @param command the FFplay command to execute
+ * @param timeout the timeout in milliseconds
  * @return the FFplay session handle
  */
 FFMPEG_KIT_C_EXPORT FFplaySessionHandle
-ffplay_kit_execute(const char *command);
+ffplay_kit_execute(const char *command, int timeout);
 
 /**
  * Executes the given FFplay command asynchronously.
@@ -304,11 +306,12 @@ ffplay_kit_execute(const char *command);
  * @param complete_cb the callback to be called when the FFplay session is
  * completed
  * @param user_data the user data to be passed to the callback
+ * @param waitTimeout the timeout in milliseconds
  * @return the FFplay session handle
  */
 FFMPEG_KIT_C_EXPORT FFplaySessionHandle ffplay_kit_execute_async(
     const char *command, FFplayKitCompleteCallback complete_cb,
-    void *user_data);
+    void *user_data, int waitTimeout);
 
 // FFplay Session Creation and Execution Separation
 
@@ -325,9 +328,10 @@ ffplay_kit_create_session(const char *command);
  * Executes the FFplay session.
  *
  * @param session the FFplay session to execute
+ * @param timeout the timeout in milliseconds
  */
 FFMPEG_KIT_C_EXPORT void
-ffplay_kit_session_execute(FFplaySessionHandle session);
+ffplay_kit_session_execute(FFplaySessionHandle session, int timeout);
 
 /**
  * Gets the current FFplay session.
@@ -341,9 +345,10 @@ ffplay_kit_get_current_session(void);
  * Executes the FFplay session asynchronously.
  *
  * @param session the FFplay session to execute
+ * @param timeout the timeout in milliseconds
  */
 FFMPEG_KIT_C_EXPORT void
-ffplay_kit_session_execute_async(FFplaySessionHandle session);
+ffplay_kit_session_execute_async(FFplaySessionHandle session, int timeout);
 
 /**
  * Seeks to the given position in the FFplay session.
@@ -608,6 +613,13 @@ ffmpeg_kit_config_ignore_signal(FFmpegKitSignal signal);
 FFMPEG_KIT_C_EXPORT char *ffmpeg_kit_config_get_ffmpeg_version(void);
 
 /**
+ * Gets the architecture of FFmpeg bundled within FFmpegKit library.
+ *
+ * @return the architecture of FFmpeg
+ */
+FFMPEG_KIT_C_EXPORT char *ffmpeg_kit_config_get_ffmpeg_architecture(void);
+
+/**
  * Gets the version of FFmpegKit.
  *
  * @return the version of FFmpegKit
@@ -622,6 +634,13 @@ FFMPEG_KIT_C_EXPORT char *ffmpeg_kit_config_get_version(void);
  * @return the name of the package
  */
 FFMPEG_KIT_C_EXPORT char *ffmpeg_kit_packages_get_package_name(void);
+
+/**
+ * Gets the external libraries bundled within FFmpegKit library.
+ *
+ * @return the external libraries for the package
+ */
+FFMPEG_KIT_C_EXPORT char *ffmpeg_kit_packages_get_external_libraries(void);
 
 /**
  * Gets the external libraries for the package.
@@ -695,6 +714,33 @@ ffmpeg_kit_session_get_fail_stack_trace(void *session_handle);
 FFMPEG_KIT_C_EXPORT void ffmpeg_kit_handle_release(void *handle);
 
 /* MediaInformation Session specific */
+
+/**
+ * Creates a new MediaInformation session with the given command.
+ *
+ * @param command the MediaInformation command to execute
+ * @return the MediaInformation session handle
+ */
+FFMPEG_KIT_C_EXPORT MediaInformationSessionHandle
+media_information_create_session(const char *command);
+
+/**
+ * Executes the MediaInformation session.
+ *
+ * @param session the MediaInformation session to execute
+ * @param timeout the timeout in milliseconds
+ */
+FFMPEG_KIT_C_EXPORT void
+media_information_session_execute(MediaInformationSessionHandle session, int timeout);
+
+/**
+ * Executes the MediaInformation session asynchronously.
+ *
+ * @param session the MediaInformation session to execute
+ * @param timeout the timeout in milliseconds
+ */
+FFMPEG_KIT_C_EXPORT void
+media_information_session_execute_async(MediaInformationSessionHandle session, int timeout);
 
 /**
  * Gets the media information from the session.
@@ -1211,13 +1257,6 @@ FFMPEG_KIT_C_EXPORT void
 ffmpeg_kit_config_set_font_directory_list(const char **font_directory_list,
                                           int list_size,
                                           const char *name_mappings_json);
-
-/**
- * Checks if the build is LTS.
- *
- * @return true if the build is LTS, false otherwise
- */
-FFMPEG_KIT_C_EXPORT int ffmpeg_kit_config_is_lts_build(void);
 
 /**
  * Gets the build date.

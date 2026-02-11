@@ -18,6 +18,8 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS_RELEASE ON)
 option(BUILD_SHARED_LIBS "Build shared library" ON)
 set(FFMPEG_KIT_BUILD_DATE "" CACHE STRING "Build date override")
 set(FFMPEG_KIT_BUNDLE_TYPE "" CACHE STRING "Bundle type override")
+set(FFMPEG_KIT_VERSION "" CACHE STRING "FFmpegKit version override")
+
 # Define Paths
 set(FFMPEG_SRC_DIR "" CACHE PATH "Path to FFmpeg source directory (fftools)")
 set(FFMPEG_BUILD_DIR "" CACHE PATH "Path to FFmpeg build directory (libs)")
@@ -185,6 +187,7 @@ target_compile_definitions(ffmpegkit PRIVATE
 target_compile_definitions(ffmpegkit PUBLIC
     FFMPEG_KIT_BUILD_DATE=${FFMPEG_KIT_BUILD_DATE}
     FFMPEG_KIT_BUNDLE_TYPE=\"${FFMPEG_KIT_BUNDLE_TYPE}\"
+    FFMPEG_KIT_VERSION=\"${FFMPEG_KIT_VERSION}\" 
 )
 
 if(WIN32)

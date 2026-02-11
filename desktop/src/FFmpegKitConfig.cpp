@@ -1142,20 +1142,12 @@ std::string ffmpegkit::FFmpegKitConfig::getFFmpegVersion() {
   return FFMPEG_VERSION;
 }
 
-std::string ffmpegkit::FFmpegKitConfig::getVersion() {
-  if (FFmpegKitConfig::isLTSBuild()) {
-    return std::string("").append(FFmpegKitVersion).append("-lts");
-  } else {
-    return FFmpegKitVersion;
-  }
+std::string ffmpegkit::FFmpegKitConfig::getFFmpegArchitecture() {
+  return ffmpegkit::ArchDetect::getArch();
 }
 
-bool ffmpegkit::FFmpegKitConfig::isLTSBuild() {
-#if defined(FFMPEG_KIT_LTS)
-  return true;
-#else
-  return false;
-#endif
+std::string ffmpegkit::FFmpegKitConfig::getVersion() {
+  return FFmpegKitVersion;
 }
 
 std::string ffmpegkit::FFmpegKitConfig::getBuildDate() {
@@ -1192,10 +1184,10 @@ void ffmpegkit::FFmpegKitConfig::ffmpegExecute(
   ffmpegSession->startRunning();
 
   try {
-    int returnCode = executeFFmpeg(ffmpegSession->getSessionId(),
+    int returnCodeValue = executeFFmpeg(ffmpegSession->getSessionId(),
                                    ffmpegSession->getArguments());
-    ffmpegSession->complete(
-        std::make_shared<ffmpegkit::ReturnCode>(returnCode));
+    auto returnCode = std::make_shared<ffmpegkit::ReturnCode>(returnCodeValue);
+    ffmpegSession->complete(returnCode);
   } catch (const std::exception &exception) {
     ffmpegSession->fail(exception.what());
     std::cout << "FFmpeg execute failed: "
@@ -1210,10 +1202,10 @@ void ffmpegkit::FFmpegKitConfig::ffprobeExecute(
   ffprobeSession->startRunning();
 
   try {
-    int returnCode = executeFFprobe(ffprobeSession->getSessionId(),
-                                    ffprobeSession->getArguments());
-    ffprobeSession->complete(
-        std::make_shared<ffmpegkit::ReturnCode>(returnCode));
+    int returnCodeValue = executeFFprobe(ffprobeSession->getSessionId(),
+                                   ffprobeSession->getArguments());
+    auto returnCode = std::make_shared<ffmpegkit::ReturnCode>(returnCodeValue);
+    ffprobeSession->complete(returnCode);
   } catch (const std::exception &exception) {
     ffprobeSession->fail(exception.what());
     std::cout << "FFprobe execute failed: "
@@ -1224,7 +1216,7 @@ void ffmpegkit::FFmpegKitConfig::ffprobeExecute(
 }
 
 void ffmpegkit::FFmpegKitConfig::ffplayExecute(
-    const std::shared_ptr<ffmpegkit::FFplaySession> ffplaySession) {
+    const std::shared_ptr<ffmpegkit::FFplaySession> ffplaySession, int waitTimeout) {
 
   // 1. START THE SESSION
   ffplaySession->startRunning();
@@ -1240,7 +1232,7 @@ void ffmpegkit::FFmpegKitConfig::ffplayExecute(
     auto prevSession = getSession(previousSessionId);
     if (prevSession) {
         int retries = 0;
-        int max_retries = 500; // 5 seconds
+        int max_retries = waitTimeout / 10;
         while (prevSession->getState() != SessionStateCompleted && 
                prevSession->getState() != SessionStateFailed &&
                retries < max_retries) {
@@ -1249,6 +1241,9 @@ void ffmpegkit::FFmpegKitConfig::ffplayExecute(
         }
         if (retries >= max_retries) {
             std::cout << "Warning: Timed out waiting for previous FFplay session " << previousSessionId << " to complete." << std::endl;
+            activeFFplaySessionId.compare_exchange_strong(sessionId, 0);
+            ffplaySession->fail("Timed out waiting for previous session to complete");
+            return;
         }
     }
   }
@@ -1429,9 +1424,9 @@ void ffmpegkit::FFmpegKitConfig::asyncFFprobeExecute(
 }
 
 void ffmpegkit::FFmpegKitConfig::asyncFFplayExecute(
-    const std::shared_ptr<ffmpegkit::FFplaySession> ffplaySession) {
-  auto thread = std::thread([ffplaySession]() {
-    ffmpegkit::FFmpegKitConfig::ffplayExecute(ffplaySession);
+    const std::shared_ptr<ffmpegkit::FFplaySession> ffplaySession, int waitTimeout = 500) {
+  auto thread = std::thread([ffplaySession, waitTimeout]() {
+    ffmpegkit::FFmpegKitConfig::ffplayExecute(ffplaySession, waitTimeout);
 
     ffmpegkit::FFplaySessionCompleteCallback completeCallback =
         ffplaySession->getCompleteCallback();

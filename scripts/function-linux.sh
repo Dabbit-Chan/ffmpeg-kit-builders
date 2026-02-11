@@ -175,7 +175,8 @@ configure_ffmpeg_kit() {
 -DFFMPEG_SRC_DIR=\"$ffmpeg_source_dir\" \
 -DFFMPEG_BUILD_DIR=\"$ffmpeg_install_prefix\" \
 -DCMAKE_INSTALL_PREFIX=\"$ffmpeg_kit_install\" \
--DFFMPEG_KIT_BUNDLE_TYPE=\"$(get_bundle_type)\""
+-DFFMPEG_KIT_BUNDLE_TYPE=\"$(get_bundle_type)\" \
+-DFFMPEG_KIT_VERSION=\"$(get_version_from_changelog)\""
 
 	if [[ "$build_ffmpeg_kit_type" == "static" ]]; then
     cmake_params+=" -DBUILD_SHARED_LIBS=OFF -DBUILD_STATIC_LIBS=ON"

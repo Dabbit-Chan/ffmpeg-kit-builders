@@ -5586,3 +5586,58 @@ optimize_dependencies() {
       echo "INFO: Number of build steps: ${#OPTIMIZED_BUILD_STEPS[@]}" | tee -a "$LOG_FILE"
     fi
 }
+
+get_version() {
+  local version_file="$BASEDIR/version"
+  local version=$(cat "$version_file")
+  echo "$version"
+}
+
+increment_version_patch() {
+  local version_file="$BASEDIR/version"
+  local version=$(cat "$version_file")
+  local version_array=(${version//./ })
+  local version_major=${version_array[0]}
+  local version_minor=${version_array[1]}
+  local version_patch=${version_array[2]}
+  version_patch=$((version_patch + 1))
+  echo "$version_major.$version_minor.$version_patch" > "$version_file"
+}
+
+increment_version_minor() {
+  local version_file="$BASEDIR/version"
+  local version=$(cat "$version_file")
+  local version_array=(${version//./ })
+  local version_major=${version_array[0]}
+  local version_minor=${version_array[1]}
+  local version_patch=${version_array[2]}
+  version_minor=$((version_minor + 1))
+  version_patch=0
+  echo "$version_major.$version_minor.$version_patch" > "$version_file"
+}
+
+increment_version_major() {
+  local version_file="$BASEDIR/version"
+  local version=$(cat "$version_file")
+  local version_array=(${version//./ })
+  local version_major=${version_array[0]}
+  local version_minor=${version_array[1]}
+  local version_patch=${version_array[2]}
+  version_major=$((version_major + 1))
+  version_minor=0
+  version_patch=0
+  echo "$version_major.$version_minor.$version_patch" > "$version_file"
+}
+
+set_version() {
+  local version_file="$BASEDIR/version"
+  local version="$1"
+  echo "$version" > "$version_file"
+}
+
+get_version_from_changelog() {
+  local version_file="$BASEDIR/CHANGELOG.md"
+  local version=$(cat "$version_file" | grep "^## " | head -n 1 | cut -d ' ' -f 2)
+  set_version "$version"
+  echo "$version"
+}

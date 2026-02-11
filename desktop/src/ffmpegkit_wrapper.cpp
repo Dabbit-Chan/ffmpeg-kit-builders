@@ -126,7 +126,7 @@ ffmpeg_kit_execute_async(const char *command,
 FFmpegSessionHandle ffmpeg_kit_execute_async_full(
     const char *command, FFmpegKitCompleteCallback complete_cb,
     FFmpegKitLogCallback log_cb, FFmpegKitStatisticsCallback stats_cb,
-    void *user_data) {
+    void *user_data, int waitTimeout) {
   if (!command)
     return nullptr;
   auto complete = [complete_cb, user_data](std::shared_ptr<Session> s) {
@@ -258,17 +258,17 @@ MediaInformationSessionHandle ffprobe_kit_get_media_information_async(
 
 /* FFplayKit */
 
-FFplaySessionHandle ffplay_kit_execute(const char *command) {
+FFplaySessionHandle ffplay_kit_execute(const char *command, int timeout) {
   if (!command)
     return nullptr;
-  auto session = FFplayKit::execute(std::string(command));
+  auto session = FFplayKit::execute(std::string(command), timeout);
   return create_handle(session);
 }
 
 FFplaySessionHandle
 ffplay_kit_execute_async(const char *command,
                          FFplayKitCompleteCallback complete_cb,
-                         void *user_data) {
+                         void *user_data, int waitTimeout) {
   if (!command)
     return nullptr;
   auto lambda = [complete_cb, user_data](std::shared_ptr<Session> s) {
@@ -278,7 +278,7 @@ ffplay_kit_execute_async(const char *command,
       ffmpeg_kit_handle_release(handle);
     }
   };
-  auto session = FFplayKit::executeAsync(std::string(command), lambda);
+  auto session = FFplayKit::executeAsync(std::string(command), lambda, waitTimeout);
   return create_handle(session);
 }
 
@@ -290,10 +290,10 @@ FFplaySessionHandle ffplay_kit_create_session(const char *command) {
   return create_handle(session);
 }
 
-void ffplay_kit_session_execute(FFplaySessionHandle session) {
+void ffplay_kit_session_execute(FFplaySessionHandle session, int timeout) {
   auto ptr = get_ptr<FFplaySession>(session);
-  if (ptr) {
-    FFmpegKitConfig::ffplayExecute(ptr);
+  if (ptr) {  
+    FFmpegKitConfig::ffplayExecute(ptr, timeout);
   }
 }
 
@@ -302,10 +302,10 @@ FFplaySessionHandle ffplay_kit_get_current_session(void) {
   return create_handle(std::dynamic_pointer_cast<FFplaySession>(session));
 }
 
-void ffplay_kit_session_execute_async(FFplaySessionHandle session) {
+void ffplay_kit_session_execute_async(FFplaySessionHandle session, int timeout) {
   auto ptr = get_ptr<FFplaySession>(session);
   if (ptr) {
-    FFmpegKitConfig::asyncFFplayExecute(ptr);
+    FFmpegKitConfig::asyncFFplayExecute(ptr, timeout);
   }
 }
 
@@ -477,6 +477,10 @@ char *ffmpeg_kit_config_get_ffmpeg_version(void) {
   return strdup_cpp(FFmpegKitConfig::getFFmpegVersion());
 }
 
+char *ffmpeg_kit_config_get_ffmpeg_architecture(void) {
+  return strdup_cpp(FFmpegKitConfig::getFFmpegArchitecture());
+}
+
 char *ffmpeg_kit_config_get_version(void) {
   return strdup_cpp(FFmpegKitConfig::getVersion());
 }
@@ -485,6 +489,17 @@ char *ffmpeg_kit_config_get_version(void) {
 
 char *ffmpeg_kit_packages_get_package_name(void) {
   return strdup_cpp(Packages::getPackageName());
+}
+
+char *ffmpeg_kit_packages_get_bundled_libraries(void) {
+  auto libs = Packages::getExternalLibraries();
+  std::string result = "";
+  for (const auto &lib : *libs) {
+    if (!result.empty())
+      result += ", ";
+    result += lib;
+  }
+  return strdup_cpp(result);
 }
 
 char *ffmpeg_kit_packages_get_external_libraries(void) {
@@ -538,6 +553,31 @@ char *ffmpeg_kit_session_get_fail_stack_trace(void *session_handle) {
 }
 
 /* Media Information Session Specific */
+
+MediaInformationSessionHandle media_information_create_session(
+    const char *command) {
+  if (!command)
+    return nullptr;
+  auto arguments = FFmpegKitConfig::parseArguments(command);
+  auto session = MediaInformationSession::create(arguments);
+  return create_handle(session);
+}
+
+void media_information_session_execute(MediaInformationSessionHandle session, int timeout) {
+  auto ptr = get_ptr<MediaInformationSession>(session);
+  if (ptr) {
+    FFmpegKitConfig::getMediaInformationExecute(ptr, timeout);
+  }
+}
+
+void media_information_session_execute_async(
+    MediaInformationSessionHandle session, int timeout) {
+  auto ptr = get_ptr<MediaInformationSession>(session);
+  if (ptr) {
+    FFmpegKitConfig::asyncGetMediaInformationExecute(ptr, timeout);
+  }
+}
+
 MediaInformationHandle media_information_session_get_media_information(
     MediaInformationSessionHandle session) {
   if (!session)
@@ -936,10 +976,6 @@ void ffmpeg_kit_config_set_font_directory_list(const char **font_directory_list,
   }
   std::map<std::string, std::string> map;
   FFmpegKitConfig::setFontDirectoryList(fonts, map);
-}
-
-int ffmpeg_kit_config_is_lts_build(void) {
-  return FFmpegKitConfig::isLTSBuild() ? 1 : 0;
 }
 
 char *ffmpeg_kit_config_get_build_date(void) {

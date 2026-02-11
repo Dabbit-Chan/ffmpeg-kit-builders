@@ -26,18 +26,18 @@ const void *_ffplayKitInitializer{ffmpegKitInitialize()};
 
 std::shared_ptr<ffmpegkit::FFplaySession>
 ffmpegkit::FFplayKit::executeWithArguments(
-    const std::list<std::string> &arguments) {
+    const std::list<std::string> &arguments, int timeout) {
   auto session = ffmpegkit::FFplaySession::create(arguments);
-  ffmpegkit::FFmpegKitConfig::ffplayExecute(session);
+  ffmpegkit::FFmpegKitConfig::ffplayExecute(session, timeout);
   return session;
 }
 
 std::shared_ptr<ffmpegkit::FFplaySession>
 ffmpegkit::FFplayKit::executeWithArgumentsAsync(
     const std::list<std::string> &arguments,
-    FFplaySessionCompleteCallback completeCallback) {
+    FFplaySessionCompleteCallback completeCallback, int timeout) {
   auto session = ffmpegkit::FFplaySession::create(arguments, completeCallback);
-  ffmpegkit::FFmpegKitConfig::asyncFFplayExecute(session);
+  ffmpegkit::FFmpegKitConfig::asyncFFplayExecute(session, timeout);
   return session;
 }
 
@@ -45,36 +45,36 @@ std::shared_ptr<ffmpegkit::FFplaySession>
 ffmpegkit::FFplayKit::executeWithArgumentsAsync(
     const std::list<std::string> &arguments,
     FFplaySessionCompleteCallback completeCallback,
-    ffmpegkit::LogCallback logCallback) {
+    ffmpegkit::LogCallback logCallback, int timeout) {
   auto session = ffmpegkit::FFplaySession::create(
       arguments, completeCallback, logCallback);
-  ffmpegkit::FFmpegKitConfig::asyncFFplayExecute(session);
+  ffmpegkit::FFmpegKitConfig::asyncFFplayExecute(session, timeout);
   return session;
 }
 
 std::shared_ptr<ffmpegkit::FFplaySession>
-ffmpegkit::FFplayKit::execute(const std::string command) {
+ffmpegkit::FFplayKit::execute(const std::string command, int timeout) {
   auto session = ffmpegkit::FFplaySession::create(
       FFmpegKitConfig::parseArguments(command.c_str()));
-  ffmpegkit::FFmpegKitConfig::ffplayExecute(session);
+  ffmpegkit::FFmpegKitConfig::ffplayExecute(session, timeout);
   return session;
 }
 
 std::shared_ptr<ffmpegkit::FFplaySession> ffmpegkit::FFplayKit::executeAsync(
-    const std::string command, FFplaySessionCompleteCallback completeCallback) {
+    const std::string command, FFplaySessionCompleteCallback completeCallback, int timeout) {
   auto session = ffmpegkit::FFplaySession::create(
       FFmpegKitConfig::parseArguments(command.c_str()), completeCallback);
-  ffmpegkit::FFmpegKitConfig::asyncFFplayExecute(session);
+  ffmpegkit::FFmpegKitConfig::asyncFFplayExecute(session, timeout);
   return session;
 }
 
 std::shared_ptr<ffmpegkit::FFplaySession> ffmpegkit::FFplayKit::executeAsync(
     const std::string command, FFplaySessionCompleteCallback completeCallback,
-    ffmpegkit::LogCallback logCallback) {
+    ffmpegkit::LogCallback logCallback, int timeout) {
   auto session = ffmpegkit::FFplaySession::create(
       FFmpegKitConfig::parseArguments(command.c_str()), completeCallback,
       logCallback);
-  ffmpegkit::FFmpegKitConfig::asyncFFplayExecute(session);
+  ffmpegkit::FFmpegKitConfig::asyncFFplayExecute(session, timeout);
   return session;
 }
 
