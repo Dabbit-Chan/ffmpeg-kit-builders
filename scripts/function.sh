@@ -5784,7 +5784,17 @@ create_github_release() {
             make_latest: "true"
         }')
     echo "$json_payload" >> "$LOG_FILE"
-    upload_release_asset "$attachment"
+    if curl -f -v -s -H "Authorization: Bearer $github_token" \
+        -H "Accept: application/vnd.github+json" \
+        -d "$json_payload" \
+        "https://api.github.com/repos/$owner/$repo/releases" \
+        >> "$LOG_FILE" 2>&1; then
+      echo "Release $tag created successfully." | tee -a "$LOG_FILE"
+      upload_release_asset "$attachment"
+    else
+      echo "Failed to create release $tag." | tee -a "$LOG_FILE"
+      return 1
+    fi
   fi
 }
 
@@ -5795,19 +5805,21 @@ upload_release_asset() {
   local repo="$(get_github_repo)"
   local owner="$(get_github_owner)"
   local github_token="$(get_github_token)"
-  if ! release_id=$(curl -f -s -H "Authorization: Bearer $github_token" \
+  local release_id=$(curl -s -H "Authorization: Bearer $github_token" \
         -H "Accept: application/vnd.github+json" \
-        "https://api.github.com/repos/$owner/$repo/releases/tags/$tag" >> "$LOG_FILE" 2>&1 | jq -r '.id'); then
+        "https://api.github.com/repos/$owner/$repo/releases/tags/$tag" | jq -r '.id')
+  if [[ -z "$release_id" ]]; then
     echo "Error: Could not find release ID for tag $tag" | tee -a "$LOG_FILE"
     return 1
   fi
+  echo "Uploading $attachment as release asset for $tag..." | tee -a "$LOG_FILE"
   if curl -f -s -H "Authorization: Bearer $github_token" \
          -H "Accept: application/vnd.github+json" \
          -H "Content-Type: application/octet-stream" \
          --data-binary @"$attachment" \
          "https://uploads.github.com/repos/$owner/$repo/releases/$release_id/assets?name=$(basename "$attachment")" >> "$LOG_FILE" 2>&1; then
-    echo "Uploaded release asset for $tag successfully." | tee -a "$LOG_FILE"
+    echo "Uploaded $attachment as release asset for $tag successfully." | tee -a "$LOG_FILE"
   else
-    exit_message 1 "Failed to upload release asset for $tag. Please check the logs for more information."
+    exit_message 1 "Failed to upload $attachment as release asset for $tag. Please check the logs for more information."
   fi
 }
