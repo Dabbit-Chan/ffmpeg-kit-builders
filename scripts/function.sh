@@ -3728,13 +3728,16 @@ create_ffmpeg_kit_bundle() {
   create_touch_file 0 "$touch_name"
   echo -e "INFO: Done creating bundle at $ffmpeg_kit_bundle" | tee -a "$LOG_FILE"
 	
-  if truthy "$create_release" || truthy "$create_release_clean"; then
+  if [[ -n "$create_release" ]]; then
     echo -e "INFO: Creating release bundle" | tee -a "$LOG_FILE"
     create_dir "$work_dir/releases"
     local out_dir=$(basename "$ffmpeg_kit_bundle")
     zip_dir "$ffmpeg_kit_bundle" "$work_dir/releases/$out_dir"
     echo -e "INFO: Done creating release bundle at $work_dir/releases/$out_dir.zip" | tee -a "$LOG_FILE"
     truthy "$create_release_clean" && clean_builds "all"
+    if [[ "$create_release" == "remote" ]]; then
+      create_github_release "$work_dir/releases/$out_dir.zip"
+    fi
   fi
   chmod -R a+rwx "$work_dir"
 }
@@ -5635,9 +5638,163 @@ set_version() {
   echo "$version" > "$version_file"
 }
 
-get_version_from_changelog() {
+get_latest_version_from_changelog() {
   local version_file="$BASEDIR/CHANGELOG.md"
-  local version=$(cat "$version_file" | grep "^## " | head -n 1 | cut -d ' ' -f 2)
+  local version=$(awk '/## Version / && ++c==1 {print; exit}' "$version_file" | sed 's/## Version //')
   set_version "$version"
   echo "$version"
+}
+
+ get_previous_version_from_changelog() {
+  local version_file="$BASEDIR/CHANGELOG.md"
+  if [[ ! -f "$version_file" ]]; then
+    exit_message 1 "Changelog file not found" | tee -a "$LOG_FILE"
+  fi
+  local version=$(awk '/## Version / && ++c==2 {print; exit}' "$version_file" | sed 's/## Version //')
+  echo "$version"
+} 
+
+get_changes_from_changelog() {
+  local changelog_file="$BASEDIR/CHANGELOG.md"
+  local cur_version=$(get_latest_version_from_changelog)
+  local prev_version=$(get_previous_version_from_changelog)
+  # Ensure variables are not empty to prevent sed 'unterminated address' errors
+  if [[ -z "$cur_version" || -z "$prev_version" ]]; then
+    echo "Internal Error: Could not determine version range." >&2
+    return 1
+  fi
+  # Capture range: start at current, end at previous, exclude the previous header line
+  local changes=$(sed -n "/^[#][#] Version $cur_version/,/^[#][#] Version $prev_version/p" "$changelog_file" | head -n -1) 
+  # Remove leading/trailing blank lines and escape for JSON body
+  echo "$changes" | sed -e '/./,$!d' -e :a -e '/^\n*$/{$d;N;ba' -e '}'
+}
+
+get_github_token() {
+  local keystore="$(realpath ~vscode/.config/keystore/github)"
+  if [[ -f "$keystore" ]]; then
+    local github_token=$(sed '1q;d' "$keystore")
+    github_token=$(echo "$github_token" | tr -d '\r')
+    if [[ -z "$github_token" ]]; then
+      exit_message 1 "GitHub token not found" | tee -a "$LOG_FILE"
+    fi
+    echo "$github_token"
+  else
+    exit_message 1 "GitHub keystore file not found" | tee -a "$LOG_FILE"
+  fi
+}
+
+get_github_repo() {
+  local keystore="$(realpath ~vscode/.config/keystore/github)"
+  if [[ -f "$keystore" ]]; then
+    local github_repo=$(sed '3q;d' "$keystore")
+    github_repo=$(echo "$github_repo" | tr -d '\r')
+    if [[ -z "$github_repo" ]]; then
+      exit_message 1 "GitHub repo not found" | tee -a "$LOG_FILE"
+    fi
+    echo "$github_repo"
+  else
+    exit_message 1 "GitHub keystore file not found" | tee -a "$LOG_FILE"
+  fi
+}
+
+get_github_owner() {
+  local keystore="$(realpath ~vscode/.config/keystore/github)"
+  if [[ -f "$keystore" ]]; then
+    local github_owner=$(sed '2q;d' "$keystore")
+    github_owner=$(echo "$github_owner" | tr -d '\r')
+    if [[ -z "$github_owner" ]]; then
+      exit_message 1 "GitHub owner not found" | tee -a "$LOG_FILE"
+    fi
+    echo "$github_owner"
+  else
+    exit_message 1 "GitHub keystore file not found" | tee -a "$LOG_FILE"
+  fi
+}
+
+authorize_github() {
+  local github_token="$(get_github_token)"
+  local github_repo="$(get_github_repo)"
+  local github_owner="$(get_github_owner)"
+  if curl -f --request GET \
+    --url "https://api.github.com/octocat" \
+    --header "Authorization: Bearer $github_token" \
+    --header "X-GitHub-Api-Version: 2022-11-28" > /dev/null 2>&1; then
+    echo "GitHub token is valid." | tee -a "$LOG_FILE"
+    return 0
+  else
+    exit_message 1 "GitHub token is invalid." | tee -a "$LOG_FILE"
+    return 1
+  fi
+}
+
+create_github_release() {
+  if ! authorize_github; then
+    exit_message 1 "GitHub token is invalid." | tee -a "$LOG_FILE"
+    return 1
+  fi
+  local attachment="$1"
+  local version=$(get_version)
+  local tag="v$version-$host_platform"
+  local repo="$(get_github_repo)"
+  local owner="$(get_github_owner)"
+  local github_token="$(get_github_token)"
+  # check if tag exists
+  if git show-ref --verify --tags "refs/tags/$tag"; then
+    echo "Tag $tag already exists." | tee -a "$LOG_FILE"
+  else
+    # create tag
+    git tag "$tag"
+    git push origin "$tag"
+  fi
+  # check if release exists
+  if curl -f -v -s -H "Authorization: Bearer $github_token" \
+    -H "Accept: application/vnd.github+json" \
+    "https://api.github.com/repos/$owner/$repo/releases/tags/$tag" \
+    >> "$LOG_FILE" 2>&1; then
+    echo "Release $tag already exists." | tee -a "$LOG_FILE"
+    # upload release asset
+    upload_release_asset "$attachment"
+  else
+    # create release
+    echo "Creating release $tag..." | tee -a "$LOG_FILE"
+    local json_payload=$(jq -n \
+        --arg tag "$tag" \
+        --arg body "$(get_changes_from_changelog)" \
+        '{
+            tag_name: $tag,
+            name: $tag,
+            body: $body,
+            draft: false,
+            prerelease: true,
+            discussion_category_name: "Releases",
+            generate_release_notes: true,
+            make_latest: "true"
+        }')
+    echo "$json_payload" >> "$LOG_FILE"
+    upload_release_asset "$attachment"
+  fi
+}
+
+upload_release_asset() {
+  local attachment="$1"
+  local version=$(get_version)
+  local tag="v$version-$host_platform"
+  local repo="$(get_github_repo)"
+  local owner="$(get_github_owner)"
+  local github_token="$(get_github_token)"
+  if ! release_id=$(curl -f -s -H "Authorization: Bearer $github_token" \
+        -H "Accept: application/vnd.github+json" \
+        "https://api.github.com/repos/$owner/$repo/releases/tags/$tag" >> "$LOG_FILE" 2>&1 | jq -r '.id'); then
+    echo "Error: Could not find release ID for tag $tag" | tee -a "$LOG_FILE"
+    return 1
+  fi
+  if curl -f -s -H "Authorization: Bearer $github_token" \
+         -H "Accept: application/vnd.github+json" \
+         -H "Content-Type: application/octet-stream" \
+         --data-binary @"$attachment" \
+         "https://uploads.github.com/repos/$owner/$repo/releases/$release_id/assets?name=$(basename "$attachment")" >> "$LOG_FILE" 2>&1; then
+    echo "Uploaded release asset for $tag successfully." | tee -a "$LOG_FILE"
+  else
+    exit_message 1 "Failed to upload release asset for $tag. Please check the logs for more information."
+  fi
 }

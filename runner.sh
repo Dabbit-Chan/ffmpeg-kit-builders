@@ -95,11 +95,13 @@ Build Options:
 	--git-get-latest=[n]                                          [do a git pull for latest code from repositories like 
 	                                                              FFmpeg--can force a rebuild if changes are detected]
 	--prefer-stable=[y]                                           build a few libraries from releases instead of git master
-  --release                                                     create release zip of ffmpeg-kit bundled binaries to be distributed
+  --release=[local]|remote                                      create release zip of ffmpeg-kit bundled binaries to be distributed
+                                                                local: create release zip locally
+                                                                remote: publish release zip to GitHub releases
   --release-and-clean                                           create release zip of ffmpeg-kit bundled binaries to be distributed 
                                                                 and clean ffmpeg and ffmpeg-kit build artifacts (dependencies are not deleted)
 	--clean-builds=[shared]|static                                clean ffmpeg and ffmpeg-kit builds of type [shared] or static and exit
-  --reset-and-clean(=ARG)                                       reset and clean all source directories of touch files and build artifacts
+  --clean                                                        reset and clean all source directories of touch files and build artifacts
                                                                 ARG=library src dir name
   --resume                                                      resume previously inturrupted run (based on ~run.state file)
 
@@ -169,11 +171,26 @@ while [ $# -gt 0 ]; do
     export skip_validation=y
     shift
     ;;
-  --release)
-    export create_release=y
+  --release=*)
+    case "${1#*=}" in
+      local)
+        export create_release=local
+        ;;
+      remote)
+        export create_release=remote
+        ;;
+      *)
+        echo "Invalid release type: ${1#*=}. Defaulting to local."
+        export create_release=local
+        ;;
+    esac
     shift
     ;;
-  --release-and-clean)
+  --release)
+    export create_release=local
+    shift
+    ;;
+  --clean)
     export create_release_clean=y
     shift
     ;;
