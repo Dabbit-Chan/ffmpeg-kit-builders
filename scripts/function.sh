@@ -5669,8 +5669,21 @@ get_changes_from_changelog() {
   echo "$changes" | sed -e '/./,$!d' -e :a -e '/^\n*$/{$d;N;ba' -e '}'
 }
 
+get_keystore_file() {
+  if [[ -f .env ]]; then
+    echo ".env"
+  elif [[ -f "$(realpath ~vscode/.config/keystore/github)" ]]; then
+    echo "$(realpath ~vscode/.config/keystore/github)"
+  else
+    exit_message 1 "Keystore file not found. Please create a .env or /home/vscode/.config/keystore/github file with the following format: \n\
+    <your-github-token>\n\
+    <your-github-owner>\n\
+    <your-github-repo>" | tee -a "$LOG_FILE"
+  fi
+}
+
 get_github_token() {
-  local keystore="$(realpath ~vscode/.config/keystore/github)"
+  local keystore="$(get_keystore_file)"
   if [[ -f "$keystore" ]]; then
     local github_token=$(sed '1q;d' "$keystore")
     github_token=$(echo "$github_token" | tr -d '\r')
@@ -5684,7 +5697,7 @@ get_github_token() {
 }
 
 get_github_repo() {
-  local keystore="$(realpath ~vscode/.config/keystore/github)"
+  local keystore="$(get_keystore_file)"
   if [[ -f "$keystore" ]]; then
     local github_repo=$(sed '3q;d' "$keystore")
     github_repo=$(echo "$github_repo" | tr -d '\r')
@@ -5698,7 +5711,7 @@ get_github_repo() {
 }
 
 get_github_owner() {
-  local keystore="$(realpath ~vscode/.config/keystore/github)"
+  local keystore="$(get_keystore_file)"
   if [[ -f "$keystore" ]]; then
     local github_owner=$(sed '2q;d' "$keystore")
     github_owner=$(echo "$github_owner" | tr -d '\r')
