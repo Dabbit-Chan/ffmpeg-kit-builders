@@ -24,6 +24,7 @@ export build_ffmpeg_type=static
 export build_ffmpeg=n
 export build_ffmpeg_kit_type=shared
 export build_ffmpeg_kit=n
+export build_tests=n
 export git_get_latest=n
 export prefer_stable=y # Only for x264 and x265.
 export build_amd_amf=y

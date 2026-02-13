@@ -751,7 +751,7 @@ display_version() {
 	COMMAND=$(echo -e "$0" | sed -e 's/\.\///g')
 
 	echo -e "\
-$COMMAND v$(get_ffmpeg_kit_version)
+$COMMAND v$(get_latest_version_from_changelog)
 Copyright (c) 2025 Akash Patel\n\
 License LGPLv3.0: GNU LGPL version 3 or later\n\
 <https://www.gnu.org/licenses/lgpl-3.0.en.html>\n\
@@ -3541,9 +3541,9 @@ install_ffmpeg() {
 	change_dir "$ffmpeg_source_dir"
 
 	echo -e "INFO: Making Ffmpeg $(pwd)" | tee -a "$LOG_FILE"
-  if truthy "$build_force"; then
-    remove_path -rf "$ffmpeg_install_prefix"
-  fi
+
+  remove_path -rf "$ffmpeg_install_prefix"
+
 	create_dir "$ffmpeg_install_prefix"
   
   cross_windres y
@@ -3574,61 +3574,57 @@ install_ffmpeg() {
 install_ffmpeg_pkg() {
 	echo -e "INFO: Checking deployment files..." | tee -a "$LOG_FILE"
   local touch_postfix="$(get_ffmpeg_directory)"
-	local FFMPEG_KIT_VERSION=$(get_ffmpeg_kit_version)
 
   local touch_prefix="${touch_postfix}_already"
-	local touch_name=$(get_small_touchfile_name "${touch_prefix}_pkgconfig" "ffmpeg $(get_ffmpeg_directory)")
 	
   if truthy "$build_force"; then
 		remove_path -rf "${ffmpeg_source_dir}/${touch_prefix}_pkgconfig"*.touch
 	fi
-  if [[ ! -f "${ffmpeg_source_dir}/$touch_name" ]]; then
-    required_files=(
-      "${ffmpeg_install_prefix}/lib/pkgconfig/libavformat.pc"
-      "${ffmpeg_install_prefix}/lib/pkgconfig/libswresample.pc"
-      "${ffmpeg_install_prefix}/lib/pkgconfig/libswscale.pc"
-      "${ffmpeg_install_prefix}/lib/pkgconfig/libavdevice.pc"
-      "${ffmpeg_install_prefix}/lib/pkgconfig/libavfilter.pc"
-      "${ffmpeg_install_prefix}/lib/pkgconfig/libavcodec.pc"
-      "${ffmpeg_install_prefix}/lib/pkgconfig/libavutil.pc")
+  required_files=(
+    "${ffmpeg_install_prefix}/lib/pkgconfig/libavformat.pc"
+    "${ffmpeg_install_prefix}/lib/pkgconfig/libswresample.pc"
+    "${ffmpeg_install_prefix}/lib/pkgconfig/libswscale.pc"
+    "${ffmpeg_install_prefix}/lib/pkgconfig/libavdevice.pc"
+    "${ffmpeg_install_prefix}/lib/pkgconfig/libavfilter.pc"
+    "${ffmpeg_install_prefix}/lib/pkgconfig/libavcodec.pc"
+    "${ffmpeg_install_prefix}/lib/pkgconfig/libavutil.pc")
 
-    check_files_exist "false" "${required_files[@]}"
+  check_files_exist "false" "${required_files[@]}"
 
-    echo -e "INFO: Done checking deployment files." | tee -a "$LOG_FILE"
+  echo -e "INFO: Done checking deployment files." | tee -a "$LOG_FILE"
 
-    echo -e "INFO: Installing ffmpeg pkg-config" | tee -a "$LOG_FILE"
+  echo -e "INFO: Installing ffmpeg pkg-config" | tee -a "$LOG_FILE"
 
-    # # MANUALLY ADD REQUIRED HEADERS
-    {
-      create_dir "${ffmpeg_install_prefix}"/include/libavutil/{x86,arm,aarch64}
-      create_dir "${ffmpeg_install_prefix}"/include/libavcodec/{x86,arm}
-      overwrite_file "${ffmpeg_source_dir}"/config.h "${ffmpeg_install_prefix}"/include/config.h
-      overwrite_file "${ffmpeg_source_dir}"/config_components.h "${ffmpeg_install_prefix}"/include/config_components.h
-      overwrite_file "${ffmpeg_source_dir}"/libavcodec/mathops.h "${ffmpeg_install_prefix}"/include/libavcodec/mathops.h
-      overwrite_file "${ffmpeg_source_dir}"/libavcodec/x86/mathops.h "${ffmpeg_install_prefix}"/include/libavcodec/x86/mathops.h
-      overwrite_file "${ffmpeg_source_dir}"/libavcodec/arm/mathops.h "${ffmpeg_install_prefix}"/include/libavcodec/arm/mathops.h
-      overwrite_file "${ffmpeg_source_dir}"/libavformat/network.h "${ffmpeg_install_prefix}"/include/libavformat/network.h
-      overwrite_file "${ffmpeg_source_dir}"/libavformat/os_support.h "${ffmpeg_install_prefix}"/include/libavformat/os_support.h
-      overwrite_file "${ffmpeg_source_dir}"/libavformat/url.h "${ffmpeg_install_prefix}"/include/libavformat/url.h
-      overwrite_file "${ffmpeg_source_dir}"/libavutil/attributes_internal.h "${ffmpeg_install_prefix}"/include/libavutil/attributes_internal.h
-      overwrite_file "${ffmpeg_source_dir}"/libavutil/bprint.h "${ffmpeg_install_prefix}"/include/libavutil/bprint.h
-      overwrite_file "${ffmpeg_source_dir}"/libavutil/getenv_utf8.h "${ffmpeg_install_prefix}"/include/libavutil/getenv_utf8.h
-      overwrite_file "${ffmpeg_source_dir}"/libavutil/internal.h "${ffmpeg_install_prefix}"/include/libavutil/internal.h
-      overwrite_file "${ffmpeg_source_dir}"/libavutil/libm.h "${ffmpeg_install_prefix}"/include/libavutil/libm.h
-      overwrite_file "${ffmpeg_source_dir}"/libavutil/reverse.h "${ffmpeg_install_prefix}"/include/libavutil/reverse.h
-      overwrite_file "${ffmpeg_source_dir}"/libavutil/thread.h "${ffmpeg_install_prefix}"/include/libavutil/thread.h
-      overwrite_file "${ffmpeg_source_dir}"/libavutil/timer.h "${ffmpeg_install_prefix}"/include/libavutil/timer.h
-      overwrite_file "${ffmpeg_source_dir}"/libavutil/x86/asm.h "${ffmpeg_install_prefix}"/include/libavutil/x86/asm.h
-      overwrite_file "${ffmpeg_source_dir}"/libavutil/x86/timer.h "${ffmpeg_install_prefix}"/include/libavutil/x86/timer.h
-      overwrite_file "${ffmpeg_source_dir}"/libavutil/arm/timer.h "${ffmpeg_install_prefix}"/include/libavutil/arm/timer.h
-      overwrite_file "${ffmpeg_source_dir}"/libavutil/aarch64/timer.h "${ffmpeg_install_prefix}"/include/libavutil/aarch64/timer.h
-      overwrite_file "${ffmpeg_source_dir}"/compat/w32pthreads.h "${ffmpeg_install_prefix}"/include/libavutil/compat/w32pthreads.h
-      overwrite_file "${ffmpeg_source_dir}"/compat/stdbit/stdbit.h "${ffmpeg_install_prefix}"/include/stdbit/stdbit.h
-      overwrite_file "${ffmpeg_source_dir}"/libavutil/wchar_filename.h "${ffmpeg_install_prefix}"/include/libavutil/wchar_filename.h
-    } >>"$LOG_FILE"
-    chmod -R a+rwx "$work_dir"
-    echo -e "INFO: Done installing ffmpeg pkg-config" | tee -a "$LOG_FILE"
-  fi
+  # # MANUALLY ADD REQUIRED HEADERS
+  {
+    create_dir "${ffmpeg_install_prefix}"/include/libavutil/{x86,arm,aarch64}
+    create_dir "${ffmpeg_install_prefix}"/include/libavcodec/{x86,arm}
+    overwrite_file "${ffmpeg_source_dir}"/config.h "${ffmpeg_install_prefix}"/include/config.h
+    overwrite_file "${ffmpeg_source_dir}"/config_components.h "${ffmpeg_install_prefix}"/include/config_components.h
+    overwrite_file "${ffmpeg_source_dir}"/libavcodec/mathops.h "${ffmpeg_install_prefix}"/include/libavcodec/mathops.h
+    overwrite_file "${ffmpeg_source_dir}"/libavcodec/x86/mathops.h "${ffmpeg_install_prefix}"/include/libavcodec/x86/mathops.h
+    overwrite_file "${ffmpeg_source_dir}"/libavcodec/arm/mathops.h "${ffmpeg_install_prefix}"/include/libavcodec/arm/mathops.h
+    overwrite_file "${ffmpeg_source_dir}"/libavformat/network.h "${ffmpeg_install_prefix}"/include/libavformat/network.h
+    overwrite_file "${ffmpeg_source_dir}"/libavformat/os_support.h "${ffmpeg_install_prefix}"/include/libavformat/os_support.h
+    overwrite_file "${ffmpeg_source_dir}"/libavformat/url.h "${ffmpeg_install_prefix}"/include/libavformat/url.h
+    overwrite_file "${ffmpeg_source_dir}"/libavutil/attributes_internal.h "${ffmpeg_install_prefix}"/include/libavutil/attributes_internal.h
+    overwrite_file "${ffmpeg_source_dir}"/libavutil/bprint.h "${ffmpeg_install_prefix}"/include/libavutil/bprint.h
+    overwrite_file "${ffmpeg_source_dir}"/libavutil/getenv_utf8.h "${ffmpeg_install_prefix}"/include/libavutil/getenv_utf8.h
+    overwrite_file "${ffmpeg_source_dir}"/libavutil/internal.h "${ffmpeg_install_prefix}"/include/libavutil/internal.h
+    overwrite_file "${ffmpeg_source_dir}"/libavutil/libm.h "${ffmpeg_install_prefix}"/include/libavutil/libm.h
+    overwrite_file "${ffmpeg_source_dir}"/libavutil/reverse.h "${ffmpeg_install_prefix}"/include/libavutil/reverse.h
+    overwrite_file "${ffmpeg_source_dir}"/libavutil/thread.h "${ffmpeg_install_prefix}"/include/libavutil/thread.h
+    overwrite_file "${ffmpeg_source_dir}"/libavutil/timer.h "${ffmpeg_install_prefix}"/include/libavutil/timer.h
+    overwrite_file "${ffmpeg_source_dir}"/libavutil/x86/asm.h "${ffmpeg_install_prefix}"/include/libavutil/x86/asm.h
+    overwrite_file "${ffmpeg_source_dir}"/libavutil/x86/timer.h "${ffmpeg_install_prefix}"/include/libavutil/x86/timer.h
+    overwrite_file "${ffmpeg_source_dir}"/libavutil/arm/timer.h "${ffmpeg_install_prefix}"/include/libavutil/arm/timer.h
+    overwrite_file "${ffmpeg_source_dir}"/libavutil/aarch64/timer.h "${ffmpeg_install_prefix}"/include/libavutil/aarch64/timer.h
+    overwrite_file "${ffmpeg_source_dir}"/compat/w32pthreads.h "${ffmpeg_install_prefix}"/include/libavutil/compat/w32pthreads.h
+    overwrite_file "${ffmpeg_source_dir}"/compat/stdbit/stdbit.h "${ffmpeg_install_prefix}"/include/stdbit/stdbit.h
+    overwrite_file "${ffmpeg_source_dir}"/libavutil/wchar_filename.h "${ffmpeg_install_prefix}"/include/libavutil/wchar_filename.h
+  } >>"$LOG_FILE"
+  chmod -R a+rwx "$work_dir"
+  echo -e "INFO: Done installing ffmpeg pkg-config" | tee -a "$LOG_FILE"
 }
 
 install_ffmpeg_kit() {
@@ -3639,9 +3635,7 @@ install_ffmpeg_kit() {
 	
   change_dir "${ffmpeg_kit_src_dir}/build"
 
-  if truthy "$build_force"; then
-    remove_path -rf "$ffmpeg_kit_install"
-  fi
+  remove_path -rf "$ffmpeg_kit_install"
   
   do_make "PREFIX=$ffmpeg_kit_install" "${touch_postfix}" 1 || exit_message 1 "install_ffmpeg_kit: unable to make ffmpeg-kit. see $LOG_FILE for details."
   do_make_install "PREFIX=$ffmpeg_kit_install" "" "${touch_postfix}" 1 || exit_message 1 "install_ffmpeg_kit: unable to make install ffmpeg-kit. see $LOG_FILE for details."
@@ -3678,24 +3672,14 @@ install_pkg_config_file() {
   chmod -R a+rwx "$work_dir"
 }
 
-get_ffmpeg_kit_version() {
-	local FFMPEG_KIT_VERSION=$(grep -Eo 'FFmpegKitVersion = .*' "$ffmpeg_kit_src_dir/src/FFmpegKitConfig.hpp" | tee -a "$LOG_FILE" | grep -Eo ' \".*' | tr -d '"; ')
-
-	echo -e "${FFMPEG_KIT_VERSION}"
-}
-
 create_ffmpeg_kit_bundle() {
 	echo -e "INFO: Creating bundle" | tee -a "$LOG_FILE"
 	local touch_postfix="$host_name"
-	local FFMPEG_KIT_VERSION=$(get_ffmpeg_kit_version)
 
   local touch_prefix="${touch_postfix}_already"
 
   remove_path -rf "${ffmpeg_kit_bundle}"
   echo "INFO: (Re-)create_ffmpeg_kit_bundle() because $touch_name not found with \"ffmpeg-kit-bundle $(get_bundle_directory)\"." >>"$LOG_FILE"
-  export FFMPEG_KIT_BUNDLE_INCLUDE_DIRECTORY="${ffmpeg_kit_bundle}/include"
-  export FFMPEG_KIT_BUNDLE_LIB_DIRECTORY="${ffmpeg_kit_bundle}/lib"
-  export FFMPEG_KIT_BUNDLE_BIN_DIRECTORY="${ffmpeg_kit_bundle}/bin"
   
   create_dir "${ffmpeg_kit_bundle}/{include,lib/pkgconfig,bin}"
   
@@ -5800,26 +5784,49 @@ create_github_release() {
 
 upload_release_asset() {
   local attachment="$1"
+  local asset_name=$(basename "$attachment")
   local version=$(get_version)
   local tag="v$version-$host_platform"
   local repo="$(get_github_repo)"
   local owner="$(get_github_owner)"
   local github_token="$(get_github_token)"
-  local release_id=$(curl -s -H "Authorization: Bearer $github_token" \
-        -H "Accept: application/vnd.github+json" \
-        "https://api.github.com/repos/$owner/$repo/releases/tags/$tag" | jq -r '.id')
-  if [[ -z "$release_id" ]]; then
-    echo "Error: Could not find release ID for tag $tag" | tee -a "$LOG_FILE"
+
+  # Retrieve release metadata
+  local release_json=$(curl -f -s -H "Authorization: Bearer $github_token" \
+    -H "Accept: application/vnd.github+json" \
+    "https://api.github.com/repos/$owner/$repo/releases/tags/$tag")
+
+  if [[ $? -ne 0 ]] || [[ -z "$release_json" ]]; then
+    echo "Error: Could not find release for tag $tag" | tee -a "$LOG_FILE"
     return 1
   fi
+
+  local release_id=$(echo "$release_json" | jq -r '.id')
+
+  # Check for existing asset with the same name
+  local existing_asset_id=$(echo "$release_json" | jq -r ".assets[] | select(.name == \"$asset_name\") | .id")
+
+  if [[ -n "$existing_asset_id" && "$existing_asset_id" != "null" ]]; then
+    echo "Asset $asset_name already exists (ID: $existing_asset_id). Deleting..." | tee -a "$LOG_FILE"
+    curl -f -s -X DELETE \
+      -H "Authorization: Bearer $github_token" \
+      -H "Accept: application/vnd.github+json" \
+      "https://api.github.com/repos/$owner/$repo/releases/assets/$existing_asset_id"
+    
+    if [[ $? -ne 0 ]]; then
+      echo "Warning: Failed to delete existing asset. Upload might fail." | tee -a "$LOG_FILE"
+    fi
+  fi
+
+  # Upload the asset
   echo "Uploading $attachment as release asset for $tag..." | tee -a "$LOG_FILE"
   if curl -f -s -H "Authorization: Bearer $github_token" \
-         -H "Accept: application/vnd.github+json" \
-         -H "Content-Type: application/octet-stream" \
-         --data-binary @"$attachment" \
-         "https://uploads.github.com/repos/$owner/$repo/releases/$release_id/assets?name=$(basename "$attachment")" >> "$LOG_FILE" 2>&1; then
-    echo "Uploaded $attachment as release asset for $tag successfully." | tee -a "$LOG_FILE"
+    -H "Accept: application/vnd.github+json" \
+    -H "Content-Type: application/octet-stream" \
+    --data-binary @"$attachment" \
+    "https://uploads.github.com/repos/$owner/$repo/releases/$release_id/assets?name=$asset_name" >> "$LOG_FILE" 2>&1; then
+    echo "Uploaded $attachment successfully." | tee -a "$LOG_FILE"
   else
-    exit_message 1 "Failed to upload $attachment as release asset for $tag. Please check the logs for more information."
+    exit_message 1 "Failed to upload $attachment. Please check the logs."
   fi
 }

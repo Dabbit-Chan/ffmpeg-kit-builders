@@ -2,10 +2,11 @@
 set -e
 
 # shellcheck disable=SC2317,SC2129,SC1091,SC2120,SC2035,SC2016,SC2310,SC2155,SC2154,SC2034
-
+p=""
 for arg; do
   case "${arg}" in
     linux|windows) 
+      p="${arg:0:1}"
       break
       shift;;
     *)
@@ -14,45 +15,29 @@ for arg; do
   esac
 done
 
-sudo ./scripts/builds/"${arg}"-64-full.sh 1 gfy
+# sudo ./scripts/builds/64-full.sh 1 gfy${p}
 
-sudo ./scripts/builds/"${arg}"-64-full.sh 2 gfy
-sudo ./scripts/builds/"${arg}"-64-full.sh 3 gfy
-sudo ./scripts/builds/"${arg}"-64-full.sh 2 fy
-sudo ./scripts/builds/"${arg}"-64-full.sh 3 fy
-sudo ./scripts/builds/"${arg}"-64-full.sh 2 sgfy
-sudo ./scripts/builds/"${arg}"-64-full.sh 3 sgfy
-sudo ./scripts/builds/"${arg}"-64-full.sh 2 sfy
-sudo ./scripts/builds/"${arg}"-64-full.sh 3 sfy
-sudo ./scripts/builds/"${arg}"-64-audio.sh 2 gfy
-sudo ./scripts/builds/"${arg}"-64-audio.sh 3 gfy
-sudo ./scripts/builds/"${arg}"-64-audio.sh 2 fy
-sudo ./scripts/builds/"${arg}"-64-audio.sh 3 fy
-sudo ./scripts/builds/"${arg}"-64-audio.sh 2 sgfy
-sudo ./scripts/builds/"${arg}"-64-audio.sh 3 sgfy
-sudo ./scripts/builds/"${arg}"-64-audio.sh 2 sfy
-sudo ./scripts/builds/"${arg}"-64-audio.sh 3 sfy
-sudo ./scripts/builds/"${arg}"-64-video.sh 2 gfy
-sudo ./scripts/builds/"${arg}"-64-video.sh 3 gfy
-sudo ./scripts/builds/"${arg}"-64-video.sh 2 fy
-sudo ./scripts/builds/"${arg}"-64-video.sh 3 fy
-sudo ./scripts/builds/"${arg}"-64-video.sh 2 sgfy
-sudo ./scripts/builds/"${arg}"-64-video.sh 3 sgfy
-sudo ./scripts/builds/"${arg}"-64-video.sh 2 sfy
-sudo ./scripts/builds/"${arg}"-64-video.sh 3 sfy
-sudo ./scripts/builds/"${arg}"-64-streaming.sh 2 gfy
-sudo ./scripts/builds/"${arg}"-64-streaming.sh 3 gfy
-sudo ./scripts/builds/"${arg}"-64-streaming.sh 2 fy
-sudo ./scripts/builds/"${arg}"-64-streaming.sh 3 fy
-sudo ./scripts/builds/"${arg}"-64-streaming.sh 2 sgfy
-sudo ./scripts/builds/"${arg}"-64-streaming.sh 3 sgfy
-sudo ./scripts/builds/"${arg}"-64-streaming.sh 2 sfy
-sudo ./scripts/builds/"${arg}"-64-streaming.sh 3 sfy
-sudo ./scripts/builds/"${arg}"-64-video-hw.sh 2 gfy
-sudo ./scripts/builds/"${arg}"-64-video-hw.sh 3 gfy
-sudo ./scripts/builds/"${arg}"-64-video-hw.sh 2 fy
-sudo ./scripts/builds/"${arg}"-64-video-hw.sh 3 fy
-sudo ./scripts/builds/"${arg}"-64-video-hw.sh 2 sgfy
-sudo ./scripts/builds/"${arg}"-64-video-hw.sh 3 sgfy
-sudo ./scripts/builds/"${arg}"-64-video-hw.sh 2 sfy
-sudo ./scripts/builds/"${arg}"-64-video-hw.sh 3 sfy
+# sudo ./scripts/builds/64-base.sh 23 gfy${p}
+# sudo ./scripts/builds/64-base.sh 23 fy${p}
+# sudo ./scripts/builds/64-base.sh 23 sgfy${p}
+# sudo ./scripts/builds/64-base.sh 23 sfy${p}
+# sudo ./scripts/builds/64-full.sh 23 gfy${p}
+sudo ./scripts/builds/64-full.sh 23 fy${p}
+sudo ./scripts/builds/64-full.sh 23 sgfy${p}
+sudo ./scripts/builds/64-full.sh 23 sfy${p}
+sudo ./scripts/builds/64-audio.sh 23 gfy${p}
+sudo ./scripts/builds/64-audio.sh 23 fy${p}
+sudo ./scripts/builds/64-audio.sh 23 sgfy${p}
+sudo ./scripts/builds/64-audio.sh 23 sfy${p}
+sudo ./scripts/builds/64-video.sh 23 gfy${p}
+sudo ./scripts/builds/64-video.sh 23 fy${p}
+sudo ./scripts/builds/64-video.sh 23 sgfy${p}
+sudo ./scripts/builds/64-video.sh 23 sfy${p}
+sudo ./scripts/builds/64-streaming.sh 23 gfy${p}
+sudo ./scripts/builds/64-streaming.sh 23 fy${p}
+sudo ./scripts/builds/64-streaming.sh 23 sgfy${p}
+sudo ./scripts/builds/64-streaming.sh 23 sfy${p}
+sudo ./scripts/builds/64-video-hw.sh 23 gfy${p}
+sudo ./scripts/builds/64-video-hw.sh 23 fy${p}
+sudo ./scripts/builds/64-video-hw.sh 23 sgfy${p}
+sudo ./scripts/builds/64-video-hw.sh 23 sfy${p}

@@ -3360,6 +3360,13 @@ build_libquirc() {
 	do_make "libquirc.a CC=${CC} AR=${AR} AS=${AS} CXX=${CXX} STRIP=${STRIP} RANLIB=${RANLIB} LDFLAGS=\"$LDFLAGS -static\" PREFIX=${dependency_install_prefix}"
   disable_nonessential "$src_dir/$lib"
 	do_make_install
+  if [[ -f "$dependency_install_prefix/lib/libquirc.dll" ]]; then
+    echo "INFO: Found libquirc shared library. Deleting shared build" >>"$LOG_FILE" 2>&1
+    remove_path "$dependency_install_prefix/lib/libquirc.dll" "-fv" >>"$LOG_FILE" 2>&1
+  fi
+  if [[ ! -f "$dependency_install_prefix/lib/libquirc.a" ]]; then
+    exit_message 1 "Build did not generated static library libquirc.a"
+  fi
 	change_dir "$src_dir"
 }
 

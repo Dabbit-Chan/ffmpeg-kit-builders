@@ -1390,8 +1390,22 @@ build_libgsm() {
   -e "s|^GSM_INSTALL_INC.*|GSM_INSTALL_INC = $dependency_install_prefix/include|g" \
   -e "s|^GSM_INSTALL_MAN.*|GSM_INSTALL_MAN = $dependency_install_prefix/man|g" \
   Makefile
-  generic_make "lib/libgsm.a" "make"
-  generic_make "gsminstall" "install"
+  export CFLAGS="$CFLAGS -c -O2 -DNeedFunctionPrototypes=1 -Wall -Wno-comment -DSASR -DWAV49 -I./inc"
+  generic_make "lib/libgsm.a CFLAGS='${CFLAGS}'" "make"
+  generic_make "gsminstall CFLAGS='${CFLAGS}'" "install"
+  cat > "$install_pkgconfig_dir/gsm.pc" <<EOF
+prefix=${dependency_install_prefix}
+exec_prefix=\${prefix}
+libdir=\${prefix}/lib
+includedir=\${prefix}/include
+
+Name: gsm
+Description: GSM de/encoding via libgsm
+Version: 1.0.23
+Requires:
+Libs: -L\${libdir} -lgsm
+Cflags: -I\${includedir}
+EOF
 }
 build_graphite() {
   local lib="graphite"

@@ -155,7 +155,6 @@ configure_ffmpeg_kit() {
   set_toolchain_paths
   
 	local type_postfix="$build_ffmpeg_kit_type"
-	local ffmpeg_kit_version=$(get_ffmpeg_kit_version)
 
 	if truthy "$build_force"; then
 		remove_path -rf "$ffmpeg_kit_src_dir"/already_configured_*
@@ -176,12 +175,24 @@ configure_ffmpeg_kit() {
 -DFFMPEG_BUILD_DIR=\"$ffmpeg_install_prefix\" \
 -DCMAKE_INSTALL_PREFIX=\"$ffmpeg_kit_install\" \
 -DFFMPEG_KIT_BUNDLE_TYPE=\"$(get_bundle_type)\" \
--DFFMPEG_KIT_VERSION=\"$(get_version_from_changelog)\""
+-DFFMPEG_KIT_VERSION=\"$(get_latest_version_from_changelog)\""
 
 	if [[ "$build_ffmpeg_kit_type" == "static" ]]; then
     cmake_params+=" -DBUILD_SHARED_LIBS=OFF -DBUILD_STATIC_LIBS=ON"
 	else
     cmake_params+=" -DBUILD_SHARED_LIBS=ON -DBUILD_STATIC_LIBS=OFF"
+	fi
+
+	if truthy "$build_tests"; then
+    cmake_params+=" -DBUILD_TESTS=ON"
+	else
+    cmake_params+=" -DBUILD_TESTS=OFF"
+	fi
+
+	if truthy "$enable_libplacebo"; then
+    	cmake_params+=" -DENABLE_LIBPLACEBO=ON"
+	else
+    	cmake_params+=" -DENABLE_LIBPLACEBO=OFF"
 	fi
 
 	change_dir "${ffmpeg_kit_src_dir}/build" 1

@@ -122,6 +122,7 @@ Advanced Dependency Control:
                                                                 By default ffmpeg-kit always needs a static build of ffmpeg 
                                                                 to be present already. Does not (re)build ext-library dependencies. 
                                                                 Missing dependencies will cause a failure.
+  --build-tests                                                 Build tests. By default tests are not built. 
 	--list-libraries                                              lists available ext-libraries that can be included
 
 Dynamic Library Control:
@@ -312,6 +313,10 @@ while [ $# -gt 0 ]; do
       ;;
     esac
     export build_ffmpeg_kit=y
+		shift
+		;;
+    --build-tests)
+    export build_tests=y
 		shift
 		;;
 	--print-total-steps | --print-all-steps | --reset-and-clean=* | --reset-and-clean) shift ;; # Handled below, just consume and ignore here
@@ -858,7 +863,7 @@ main() {
     optimize_dependencies
     truthy "$build_dependencies" && run_valid_build_functions
     truthy "$build_ffmpeg" && download_ffmpeg
-    truthy "$build_ffmpeg" && { build_exists || configure_ffmpeg; }
+    truthy "$build_ffmpeg" && configure_ffmpeg
     truthy "$build_ffmpeg" && install_ffmpeg
     truthy "$build_ffmpeg_kit" && configure_ffmpeg_kit
     truthy "$build_ffmpeg_kit" && install_ffmpeg_kit
