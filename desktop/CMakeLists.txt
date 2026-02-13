@@ -11,7 +11,8 @@ project(ffmpeg-kit VERSION 8.0 LANGUAGES C CXX)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 set(CMAKE_EXPORT_COMPILE_COMMANDS_DEBUG ON)
 set(CMAKE_EXPORT_COMPILE_COMMANDS_RELEASE ON)
-
+option(BUILD_TESTS "Build tests" OFF)
+option(ENABLE_LIBPLACEBO "Enable libplacebo" OFF)
 # ==============================================================================
 # 1. Options & Configuration
 # ==============================================================================
@@ -164,6 +165,17 @@ endif()
 # ==============================================================================
 add_library(ffmpegkit ${KIT_SOURCES} ${KIT_HEADERS})
 
+if(ENABLE_LIBPLACEBO)
+    # Force static linking for libplacebo
+    set(_OLD_PKG_CONFIG_USE_STATIC_LIBS ${PKG_CONFIG_USE_STATIC_LIBS})
+    set(PKG_CONFIG_USE_STATIC_LIBS ON)
+    pkg_check_modules(LIBPLACEBO REQUIRED IMPORTED_TARGET libplacebo)
+    set(PKG_CONFIG_USE_STATIC_LIBS ${_OLD_PKG_CONFIG_USE_STATIC_LIBS})
+
+    target_link_libraries(ffmpegkit PRIVATE PkgConfig::LIBPLACEBO)
+    target_compile_definitions(ffmpegkit PRIVATE PL_STATIC PLACEBO_STATIC)
+endif()
+
 target_include_directories(ffmpegkit PRIVATE 
     "${CMAKE_CURRENT_SOURCE_DIR}/src"
     "${FFMPEG_BUILD_DIR}/include"
@@ -191,6 +203,8 @@ target_compile_definitions(ffmpegkit PUBLIC
 )
 
 if(WIN32)
+    set(CMAKE_WINDOWS_EXPORT_ALL_SYMBOLS ON)
+
     target_compile_definitions(ffmpegkit PRIVATE
         _WIN32 WIN32 TARGET_OS_WINDOWS FFMPEG_KIT_WINDOWS
         FFMPEG_KIT_BUILDING_DLL
@@ -294,20 +308,23 @@ install(FILES "${CMAKE_CURRENT_BINARY_DIR}/ffmpeg-kit.pc" DESTINATION lib/pkgcon
 # ==============================================================================
 # 9. Testing
 # ==============================================================================
-enable_testing()
 
-include(FetchContent)
-FetchContent_Declare(
-  googletest
-  URL https://github.com/google/googletest/archive/refs/tags/v1.17.0.zip
-)
-# For Windows: Prevent overriding the parent project's compiler/linker settings
-set(gtest_force_shared_crt ON CACHE BOOL "" FORCE)
-# Build GoogleTest as static to avoid exporting runtime symbols and conflicting with libgcc_eh
-if(MINGW)
-    set(BUILD_SHARED_LIBS OFF CACHE BOOL "" FORCE)
-    set(INSTALL_GTEST OFF CACHE BOOL "" FORCE)
+if(BUILD_TESTS)
+    enable_testing()
+
+    include(FetchContent)
+    FetchContent_Declare(
+    googletest
+    URL https://github.com/google/googletest/archive/refs/tags/v1.17.0.zip
+    )
+    # For Windows: Prevent overriding the parent project's compiler/linker settings
+    set(gtest_force_shared_crt ON CACHE BOOL "" FORCE)
+    # Build GoogleTest as static to avoid exporting runtime symbols and conflicting with libgcc_eh
+    if(MINGW)
+        set(BUILD_SHARED_LIBS OFF CACHE BOOL "" FORCE)
+        set(INSTALL_GTEST OFF CACHE BOOL "" FORCE)
+    endif()
+    FetchContent_MakeAvailable(googletest)
+
+    add_subdirectory(tests)
 endif()
-FetchContent_MakeAvailable(googletest)
-
-add_subdirectory(tests)

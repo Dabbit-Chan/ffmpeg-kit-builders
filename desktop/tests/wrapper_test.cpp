@@ -1,5 +1,5 @@
 #include <gtest/gtest.h>
-#include "ffmpegkit_wrapper.hpp"
+#include "ffmpegkit_wrapper.h"
 #include <cstdio>
 #include <cstdlib>
 #include <thread>
@@ -8,7 +8,8 @@
 #ifndef FFMPEG_KIT_TEST_DIR
 #define FFMPEG_KIT_TEST_DIR "."
 #endif
-#define TEST_FILE FFMPEG_KIT_TEST_DIR "/dummy_video.mp4"
+#define TEST_VIDEO_FILE FFMPEG_KIT_TEST_DIR "/dummy_video.mp4"
+#define TEST_AUDIO_FILE FFMPEG_KIT_TEST_DIR "/dummy_audio.wav"
 
 // Helper log callback for tests
 void test_log_callback(FFmpegSessionHandle session, const char *message, void *data) {
@@ -103,17 +104,24 @@ TEST(FFmpegKitTest, SessionHistory) {
     EXPECT_GT(count, initial_count); 
 }
 
-TEST(FFmpegKitTest, MediaInformation) {
-    // Create a dummy video file using ffmpeg
-    // ----use existing dummy_video.mp4 instead of generating ----
-    // This ensures we have a valid video file for ffprobe to analyze
-    // FFmpegSessionHandle create_session = ffmpeg_kit_execute("-f lavfi -i testsrc=duration=1:size=128x128:rate=1 -y dummy.mp4");
-    
-    // Wait for creation to finish (it is synchronous but good practice to check logic)
-    // EXPECT_EQ(ffmpeg_kit_session_get_state(create_session), FFMPEG_KIT_SESSION_STATE_COMPLETED);
-    // ffmpeg_kit_handle_release(create_session);
+TEST (FFmpegKitTest, GenerateTestVideoFile) {
+    FFmpegSessionHandle session = ffmpeg_kit_create_session("-hide_banner -loglevel info -f lavfi -i testsrc=duration=30:size=512x512:rate=30 -y " TEST_VIDEO_FILE);
+    ffmpeg_kit_session_execute(session);
+    EXPECT_EQ(ffmpeg_kit_session_get_state(session), FFMPEG_KIT_SESSION_STATE_COMPLETED);
+    ffmpeg_kit_handle_release(session);
+    EXPECT_TRUE(access(TEST_VIDEO_FILE, F_OK) == 0);
+}
 
-    MediaInformationSessionHandle media_session = ffprobe_kit_execute("-hide_banner -loglevel fatal -show_format -i " TEST_FILE " -o media_info.txt");
+TEST (FFmpegKitTest, GenerateTestAudioFile) {
+    FFmpegSessionHandle session = ffmpeg_kit_create_session("-hide_banner -loglevel info -f lavfi -i sine=frequency=1000:duration=5 -y " TEST_AUDIO_FILE);
+    ffmpeg_kit_session_execute(session);
+    EXPECT_EQ(ffmpeg_kit_session_get_state(session), FFMPEG_KIT_SESSION_STATE_COMPLETED);
+    ffmpeg_kit_handle_release(session);
+    EXPECT_TRUE(access(TEST_AUDIO_FILE, F_OK) == 0);
+}
+
+TEST(FFmpegKitTest, MediaInformation) {
+    MediaInformationSessionHandle media_session = ffprobe_kit_execute("-hide_banner -loglevel fatal -show_format -i " TEST_VIDEO_FILE " -o media_info.txt");
 
     ASSERT_NE(media_session, nullptr);
     
@@ -164,7 +172,7 @@ TEST(FFmpegKitTest, FFplaySession) {
     // -t 2: limit duration just in case
     // We remove -nodisp and -an because with dummy drivers, we WANT it to try to play
     char command[512];
-    snprintf(command, sizeof(command), "-loglevel fatal -autoexit -t 2 %s", TEST_FILE);
+    snprintf(command, sizeof(command), "-loglevel fatal -autoexit -t 2 %s", TEST_VIDEO_FILE);
     FFplaySessionHandle play_session = ffplay_kit_execute(command, 1000);
     ASSERT_NE(play_session, nullptr);
 
@@ -208,7 +216,7 @@ protected:
 };
 
 TEST_F(FFplayKitInteractiveTest, PlayPauseResume) {
-    const char* video_file = TEST_FILE;
+    const char* video_file = TEST_VIDEO_FILE;
     char command[256];
     snprintf(command, sizeof(command), "-loglevel fatal -i %s", video_file);
 
@@ -231,7 +239,7 @@ TEST_F(FFplayKitInteractiveTest, PlayPauseResume) {
 }
 
 TEST_F(FFplayKitInteractiveTest, Seek) {
-    const char* video_file = TEST_FILE;
+    const char* video_file = TEST_VIDEO_FILE;
     char command[256];
     snprintf(command, sizeof(command), "-loglevel fatal -i %s", video_file);
 
@@ -257,7 +265,7 @@ TEST_F(FFplayKitInteractiveTest, Seek) {
 }
 
 TEST_F(FFplayKitInteractiveTest, ConcurrentSessions) {
-    const char* video_file = TEST_FILE;
+    const char* video_file = TEST_VIDEO_FILE;
     char command[256];
     snprintf(command, sizeof(command), "-loglevel fatal -i %s", video_file);
 
@@ -279,7 +287,7 @@ TEST_F(FFplayKitInteractiveTest, ConcurrentSessions) {
 }
 
 TEST_F(FFplayKitInteractiveTest, GlobalControls) {
-    const char* video_file = TEST_FILE;
+    const char* video_file = TEST_VIDEO_FILE;
     char command[256];
     snprintf(command, sizeof(command), "-loglevel fatal -i %s", video_file);
 
@@ -304,7 +312,7 @@ TEST_F(FFplayKitInteractiveTest, GlobalControls) {
 }
 
 TEST_F(FFplayKitInteractiveTest, GlobalSeek) {
-    const char* video_file = TEST_FILE;
+    const char* video_file = TEST_VIDEO_FILE;
     char command[256];
     snprintf(command, sizeof(command), "-loglevel fatal -i %s", video_file);
 
@@ -326,7 +334,7 @@ TEST_F(FFplayKitInteractiveTest, GlobalSeek) {
 }
 
 TEST_F(FFplayKitInteractiveTest, TimeoutSession) {
-    const char* video_file = TEST_FILE;
+    const char* video_file = TEST_VIDEO_FILE;
     char command[256];
     snprintf(command, sizeof(command), "-loglevel fatal -i %s", video_file);
 

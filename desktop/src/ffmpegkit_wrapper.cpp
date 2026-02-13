@@ -17,7 +17,7 @@
  * along with FFmpegKit.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include "ffmpegkit_wrapper.hpp"
+#include "ffmpegkit_wrapper.h"
 #include "Chapter.hpp"
 #include "FFmpegKit.hpp"
 #include "FFmpegKitConfig.hpp"

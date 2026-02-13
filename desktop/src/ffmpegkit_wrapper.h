@@ -20,21 +20,19 @@
 #ifndef FFMPEG_KIT_WRAPPER_H
 #define FFMPEG_KIT_WRAPPER_H
 
+#include <stdint.h>
+
+#ifndef FFMPEG_KIT_C_EXPORT
+  #if defined(_WIN32)
+    #define FFMPEG_KIT_C_EXPORT __declspec(dllexport)
+  #else
+    #define FFMPEG_KIT_C_EXPORT __attribute__((visibility("default"))) __attribute__((used))
+  #endif
+#endif
+
 #ifdef __cplusplus
 extern "C" {
 #endif
-
-#if defined(_WIN32)
-#if defined(FFMPEG_KIT_BUILDING_DLL)
-#define FFMPEG_KIT_C_EXPORT __declspec(dllexport)
-#else
-#define FFMPEG_KIT_C_EXPORT __declspec(dllimport)
-#endif
-#else
-#define FFMPEG_KIT_C_EXPORT __attribute__((visibility("default")))
-#endif
-
-#include <stdint.h>
 
 // Opaque handles
 typedef void *FFmpegSessionHandle;
