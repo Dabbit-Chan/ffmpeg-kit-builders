@@ -1,5 +1,9 @@
 # FFmpegKit Changelog
 
+## Version 1.1.1
+
+- Added `cmdutils.c.patch` to skip Win32 UTF-8 argument preparation when building as a DLL (`FFMPEG_KIT_BUILDING_DLL`), preventing host application argument corruption.
+
 ## Version 1.1.0
 
 - Added support for listing and setting audio output devices in FFplay.

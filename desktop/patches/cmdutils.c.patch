@@ -1,0 +1,13 @@
+--- a/src/cmdutils.c
++++ b/src/cmdutils.c
+@@ -183,6 +183,10 @@ static char** win32_argv_utf8 = NULL;
+ static void prepare_app_arguments(int *argc_ptr, char ***argv_ptr)
+ {
+     char *argstr_flat;
++#ifdef FFMPEG_KIT_BUILDING_DLL
++    return;
++#endif
++
+     wchar_t **argv_w;
+     int i, buffsize = 0, offset = 0;
+ 
