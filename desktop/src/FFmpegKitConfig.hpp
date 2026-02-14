@@ -582,6 +582,21 @@ public:
    */
   static std::string
   argumentsToString(std::shared_ptr<std::list<std::string>> arguments);
+
+  /**
+   * Sets the audio output device used by ffplay.
+   * 
+   * @param deviceName the name of the device (as returned by listAudioOutputDevices)
+   */
+  static void setAudioOutputDevice(const std::string &deviceName);
+
+  /**
+   * Lists available audio output devices.
+   * 
+   * @return a semi-colon separated string of device names
+   */
+  static std::string listAudioOutputDevices();
+
 };
 
 } // namespace ffmpegkit

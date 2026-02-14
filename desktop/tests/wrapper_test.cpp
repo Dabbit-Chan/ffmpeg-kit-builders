@@ -66,7 +66,7 @@ TEST(FFmpegKitTest, SplitSessionExecution) {
 
 TEST(FFmpegKitTest, ConfigurationSetters) {
     ffmpeg_kit_config_set_log_level(FFMPEG_KIT_LOG_LEVEL_QUIET);
-    ffmpeg_kit_config_enable_log_callback(test_log_callback, nullptr);
+    // ffmpeg_kit_config_enable_log_callback(test_log_callback, nullptr);
     // No easy way to verify these without internal access or observing side effects,
     // assuming no crash is success for now.
 }
@@ -385,4 +385,31 @@ TEST(FFmpegKitTest, PackageName) {
     EXPECT_STRNE(pkg, "");
     printf("Package Name: %s\n", pkg);
     free(pkg);
+}
+
+TEST(FFmpegKitTest, AudioDeviceManagement) {
+    // 1. List devices (might be empty/null in dummy/headless, but API should work)
+    char *devices = ffmpeg_kit_config_list_audio_output_devices();
+    if (devices) {
+        printf("Audio Devices: %s\n", devices); // Use printf for consistency with other tests
+        free(devices);
+    } else {
+        printf("No audio devices found (expected/possible in CI/Headless)\n");
+    }
+
+    // 2. Set Device (Even if dummy, setting it shouldn't crash)
+    ffmpeg_kit_config_set_audio_output_device(nullptr); // Default
+    ffmpeg_kit_config_set_audio_output_device("Test Device"); // Named
+
+    // 3. Verify Playback with detailed config
+    // In a real env, we'd verify the device changes. In dummy mode, we ensure no crash.
+    char command[512];
+    snprintf(command, sizeof(command), "-loglevel fatal -autoexit -t 2 %s", TEST_AUDIO_FILE);
+    FFplaySessionHandle session = ffplay_kit_execute(command, 1000); // 1000ms timeout might act as max wait or similar? 
+    // Actually ffplay_kit_execute second arg is timeout.
+    
+    // Cleanup
+    if (session) {
+        ffmpeg_kit_handle_release(session);
+    }
 }

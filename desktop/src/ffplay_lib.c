@@ -18,9 +18,40 @@
  */
 
 #include "ffplay_lib.h"
+#include <SDL.h>
 
 const char program_name[] = "ffplay";
 const int program_birth_year = 2003;
+
+// Global state for audio device management
+static char *requested_audio_device = NULL;
+static SDL_AudioSpec captured_wanted_spec;
+static int has_captured_spec = 0;
+
+// Interception logic
+static SDL_AudioDeviceID ffplay_kit_SDL_OpenAudioDevice(
+    const char *device,
+    int iscapture,
+    const SDL_AudioSpec *desired,
+    SDL_AudioSpec *obtained,
+    int allowed_changes)
+{
+    // Capture the spec if this is our main playback session opening
+    if (desired && !iscapture) {
+        captured_wanted_spec = *desired;
+        has_captured_spec = 1;
+    }
+
+    const char *target = device;
+    if (requested_audio_device && !iscapture) {
+        target = requested_audio_device;
+    }
+
+    return SDL_OpenAudioDevice(target, iscapture, desired, obtained, allowed_changes);
+}
+
+// Redirection macro must be defined before including ffplay.c
+#define SDL_OpenAudioDevice ffplay_kit_SDL_OpenAudioDevice
 
 // Include the patched ffplay.c to access internal structures and static functions
 // This is a common pattern in FFmpeg tools wrapping (e.g., ffmpeg_lib.c)
@@ -430,6 +461,81 @@ float ffplay_get_volume(FFplayContext* ctx) {
     return ctx->is->audio_volume;
 }
 
+void ffplay_set_audio_output_device(const char* device_name) {
+    // Update global requested name
+    if (requested_audio_device) {
+        av_free(requested_audio_device);
+        requested_audio_device = NULL;
+    }
+    if (device_name) {
+        requested_audio_device = av_strdup(device_name);
+    }
+
+    // Hot-swap if active
+    if (audio_dev > 0 && has_captured_spec) {
+        // Lock not strictly needed if we assume single-thread UI control but let's be safe(r) if SDL supports it
+        // Check SDL_LockAudio not needed for Close/Open per docs
+        
+        SDL_CloseAudioDevice(audio_dev);
+        
+        // Open new device
+        // We MUST use 0 for allowed changes to force SDL to match our existing spec
+        // If we allowed changes, we'd have to reconfigure the whole filter graph which is hard from here
+        SDL_AudioSpec obtained_spec;
+        audio_dev = SDL_OpenAudioDevice(requested_audio_device, 0, &captured_wanted_spec, &obtained_spec, 0);
+        
+        if (audio_dev) {
+            SDL_PauseAudioDevice(audio_dev, 0);
+        } else {
+            av_log(NULL, AV_LOG_ERROR, "Failed to switch audio device: %s\n", SDL_GetError());
+            // Try fallback to default?
+            if (device_name) {
+                 // Open default
+                 audio_dev = SDL_OpenAudioDevice(NULL, 0, &captured_wanted_spec, &obtained_spec, 0);
+                 if (audio_dev) SDL_PauseAudioDevice(audio_dev, 0);
+            }
+        }
+    }
+}
+
+
+char* ffplay_list_audio_devices(void) {
+    if (SDL_InitSubSystem(SDL_INIT_AUDIO) < 0) {
+        return NULL;
+    }
+
+    int count = SDL_GetNumAudioDevices(0);
+    if (count <= 0) return NULL;
+
+    // Build a semicolon separated string
+    // Calculate size first
+    size_t total_len = 0;
+    for (int i=0; i<count; i++) {
+        const char *name = SDL_GetAudioDeviceName(i, 0);
+        if (name) {
+            total_len += strlen(name) + 1; // +1 for ';' or '\0'
+        }
+    }
+    
+    if (total_len == 0) return NULL;
+
+    char *result = av_malloc(total_len + 1);
+    if (!result) return NULL;
+    result[0] = '\0';
+    
+    for (int i=0; i<count; i++) {
+        const char *name = SDL_GetAudioDeviceName(i, 0);
+        if (name) {
+            strcat(result, name);
+            if (i < count - 1) {
+                strcat(result, ";");
+            }
+        }
+    }
+
+    return result;
+}
+
 void ffplay_free(FFplayContext* ctx) {
     if (!ctx) return;
     if (!ctx->quit) {
@@ -445,6 +551,11 @@ void ffplay_free(FFplayContext* ctx) {
         base_afilters = NULL;
     }
 
+    if (requested_audio_device) {
+        av_free(requested_audio_device);
+        requested_audio_device = NULL;
+    }
+    
     // argv freed
     if (ctx->argv) {
         for (int i=0; i<ctx->argc; i++) av_free(ctx->argv[i]);

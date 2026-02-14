@@ -97,4 +97,6 @@ bool ffmpegkit::FFprobeSession::isFFmpeg() const { return false; }
 
 bool ffmpegkit::FFprobeSession::isFFprobe() const { return true; }
 
+bool ffmpegkit::FFprobeSession::isFFplay() const { return false; }
+
 bool ffmpegkit::FFprobeSession::isMediaInformation() const { return false; }

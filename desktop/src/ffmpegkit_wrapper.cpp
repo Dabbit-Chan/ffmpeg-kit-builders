@@ -18,6 +18,7 @@
  */
 
 #include "ffmpegkit_wrapper.h"
+#include "AbstractSession.hpp"
 #include "Chapter.hpp"
 #include "FFmpegKit.hpp"
 #include "FFmpegKitConfig.hpp"
@@ -483,6 +484,14 @@ char *ffmpeg_kit_config_get_ffmpeg_architecture(void) {
 
 char *ffmpeg_kit_config_get_version(void) {
   return strdup_cpp(FFmpegKitConfig::getVersion());
+}
+
+void ffmpeg_kit_config_set_audio_output_device(const char* device_name) {
+  FFmpegKitConfig::setAudioOutputDevice(device_name ? std::string(device_name) : "");
+}
+
+char* ffmpeg_kit_config_list_audio_output_devices(void) {
+  return strdup_cpp(FFmpegKitConfig::listAudioOutputDevices());
 }
 
 /* Packages */
@@ -1184,5 +1193,23 @@ long chapter_get_number_property(ChapterHandle handle, const char *key) {
 char *chapter_get_all_properties_json(ChapterHandle handle) {
   auto props = get_ptr<Chapter>(handle)->getAllProperties();
   return props ? strdup_cpp(props->toStyledString()) : nullptr;
+}
+
+int session_is_ffmpeg_session(void *session) {
+  if (!session)
+    return 0;
+  return get_ptr<AbstractSession>(session)->isFFmpeg();
+}
+
+int session_is_ffprobe_session(void *session) {
+  if (!session)
+    return 0;
+  return get_ptr<AbstractSession>(session)->isFFprobe();
+}
+
+int session_is_ffplay_session(void *session) {
+  if (!session)
+    return 0;
+  return get_ptr<AbstractSession>(session)->isFFplay();
 }
 }

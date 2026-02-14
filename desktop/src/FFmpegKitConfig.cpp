@@ -1973,3 +1973,17 @@ std::string ffmpegkit::FFmpegKitConfig::argumentsToString(
 
   return string;
 }
+
+void ffmpegkit::FFmpegKitConfig::setAudioOutputDevice(const std::string &deviceName) {
+    ffplay_set_audio_output_device(deviceName.empty() ? nullptr : deviceName.c_str());
+}
+
+std::string ffmpegkit::FFmpegKitConfig::listAudioOutputDevices() {
+    char* devices = ffplay_list_audio_devices();
+    std::string result = "";
+    if (devices) {
+        result = std::string(devices);
+        av_free(devices);
+    }
+    return result;
+}

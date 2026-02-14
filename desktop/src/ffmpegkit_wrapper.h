@@ -624,6 +624,20 @@ FFMPEG_KIT_C_EXPORT char *ffmpeg_kit_config_get_ffmpeg_architecture(void);
  */
 FFMPEG_KIT_C_EXPORT char *ffmpeg_kit_config_get_version(void);
 
+/**
+ * Sets the audio output device for the ffplay session.
+ *
+ * @param device_name the name of the audio output device
+ */
+FFMPEG_KIT_C_EXPORT void ffmpeg_kit_config_set_audio_output_device(const char* device_name);
+
+/**
+ * Returns a semi-colon separated list of audio output devices.
+ *
+ * @return a semi-colon separated list of audio output devices
+ */
+FFMPEG_KIT_C_EXPORT char* ffmpeg_kit_config_list_audio_output_devices(void);
+
 /* Packages */
 
 /**
@@ -1519,6 +1533,33 @@ FFMPEG_KIT_C_EXPORT long chapter_get_number_property(ChapterHandle handle,
  * @return the all properties JSON
  */
 FFMPEG_KIT_C_EXPORT char *chapter_get_all_properties_json(ChapterHandle handle);
+
+/**
+ * Checks if the session is a FFmpeg session.
+ *
+ * @param session the session to check
+ * @return 1 if the session is a FFmpeg session, 0 otherwise
+ */
+FFMPEG_KIT_C_EXPORT int
+session_is_ffmpeg_session(void *session);
+
+/**
+ * Checks if the session is a FFprobe session.
+ *
+ * @param session the session to check
+ * @return 1 if the session is a FFprobe session, 0 otherwise
+ */
+FFMPEG_KIT_C_EXPORT int
+session_is_ffprobe_session(void *session);
+
+/**
+ * Checks if the session is a FFplay session.
+ *
+ * @param session the session to check
+ * @return 1 if the session is a FFplay session, 0 otherwise
+ */
+FFMPEG_KIT_C_EXPORT int
+session_is_ffplay_session(void *session);
 
 #ifdef __cplusplus
 }

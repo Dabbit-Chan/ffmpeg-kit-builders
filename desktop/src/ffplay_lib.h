@@ -163,6 +163,28 @@ FFMPEG_API void ffplay_set_volume(FFplayContext* ctx, float volume);
  */
 FFMPEG_API float ffplay_get_volume(FFplayContext* ctx);
 
+/**
+ * Sets the audio output device.
+ * null for default device
+ *
+ * @param device_name the name of the audio device
+ */
+FFMPEG_API void ffplay_set_audio_output_device(const char* device_name);
+
+/**
+ * Get all available audio devices.
+ * format: null-terminated array of strings.
+ * caller must free results with free() (and also free strings?)
+ * No, let's keep it simple: Callback pattern?
+ * Or: Returns a single string with names separated by \0, double null at end.
+ * Actually, let's provide a callback based approach to avoid complex memory management across boundaries.
+ */
+
+// Better approach for wrapper: 
+// Returns a single string with all device names delimited by ';'. (Assumes device names don't contain ';')
+// Returns NULL if error. Caller must free.
+FFMPEG_API char* ffplay_list_audio_devices(void);
+
 // Clean up resources
 /**
  * Cleans up resources.
