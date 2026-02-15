@@ -3,6 +3,8 @@
 ## Version 1.1.2
 
 - Added `session_is_media_information_session()` C API function to check if a session is a MediaInformation session.
+- Fixed potential dangling pointer issues in `ffmpegkit_wrapper.cpp` log handling.
+- Prevent potential null dereferences in log and statistics callbacks and introduce `ffmpeg_kit_free` utility function for ABI mismatch issues between C++ and C.
 
 ## Version 1.1.1
 

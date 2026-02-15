@@ -1570,6 +1570,13 @@ session_is_ffplay_session(void *session);
 FFMPEG_KIT_C_EXPORT int
 session_is_media_information_session(void *session);
 
+/**
+ * Frees the memory allocated for the pointer.
+ *
+ * @param ptr the pointer to free
+ */
+FFMPEG_KIT_C_EXPORT void ffmpeg_kit_free(void *ptr);
+
 #ifdef __cplusplus
 }
 #endif
