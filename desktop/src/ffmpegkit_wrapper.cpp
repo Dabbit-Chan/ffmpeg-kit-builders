@@ -139,7 +139,8 @@ FFmpegSessionHandle ffmpeg_kit_execute_async_full(
   };
   auto log = [log_cb, user_data](std::shared_ptr<Log> l) {
     if (log_cb) {
-      log_cb(nullptr, l->getMessage().c_str(), user_data);
+      std::string message = l->getMessage();
+      log_cb(nullptr, message.c_str(), user_data);;
     }
   };
   auto stats = [stats_cb, user_data](std::shared_ptr<Statistics> s) {
@@ -862,7 +863,8 @@ void ffmpeg_kit_config_enable_log_callback(FFmpegKitLogCallback log_cb,
   if (log_cb) {
     FFmpegKitConfig::enableLogCallback([](std::shared_ptr<Log> log) {
       if (g_log_callback) {
-        g_log_callback(nullptr, log->getMessage().c_str(), g_log_user_data);
+        std::string message = log->getMessage();
+        g_log_callback(nullptr, message.c_str(), g_log_user_data);
       }
     });
   } else {
@@ -1084,7 +1086,8 @@ char *ffmpeg_kit_session_get_log_at(void *session_handle, int index) {
   if (logs && index >= 0 && index < logs->size()) {
     auto it = logs->begin();
     std::advance(it, index);
-    return strdup_cpp((*it)->getMessage());
+    std::string message = (*it)->getMessage();
+    return strdup_cpp(message);
   }
   return nullptr;
 }
