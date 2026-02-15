@@ -1212,4 +1212,10 @@ int session_is_ffplay_session(void *session) {
     return 0;
   return get_ptr<AbstractSession>(session)->isFFplay();
 }
+
+int session_is_media_information_session(void *session) {
+  if (!session)
+    return 0;
+  return get_ptr<AbstractSession>(session)->isMediaInformation();
+}
 }

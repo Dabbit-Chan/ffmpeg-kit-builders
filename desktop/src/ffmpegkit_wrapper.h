@@ -1561,6 +1561,15 @@ session_is_ffprobe_session(void *session);
 FFMPEG_KIT_C_EXPORT int
 session_is_ffplay_session(void *session);
 
+/**
+ * Checks if the session is a FFmpegKit session.
+ *
+ * @param session the session to check
+ * @return 1 if the session is a MediaInformation session, 0 otherwise
+ */
+FFMPEG_KIT_C_EXPORT int
+session_is_media_information_session(void *session);
+
 #ifdef __cplusplus
 }
 #endif

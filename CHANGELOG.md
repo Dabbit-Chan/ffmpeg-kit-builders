@@ -1,5 +1,9 @@
 # FFmpegKit Changelog
 
+## Version 1.1.2
+
+- Added `session_is_media_information_session()` C API function to check if a session is a MediaInformation session.
+
 ## Version 1.1.1
 
 - Added `cmdutils.c.patch` to skip Win32 UTF-8 argument preparation when building as a DLL (`FFMPEG_KIT_BUILDING_DLL`), preventing host application argument corruption.
