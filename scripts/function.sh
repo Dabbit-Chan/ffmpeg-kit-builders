@@ -1939,8 +1939,11 @@ do_python() {
     echo -e "INFO: Force requested in do_python(): build_force: $build_force" >>"$LOG_FILE"
     if [[ "${configure_name[*]}" == *configure* ]]; then
       reset_touch "$cur_dir2" "${touch_prefix}*.touch"
+      if [[ -f $src_touch ]]; then
+        echo -e "INFO: $src_touch found during do_python(). Uninstalling existing installation..." >>"$LOG_FILE"
+        { eval "python3 ./waf uninstall" > >(redirect_output) 2>&1 || true; }
+      fi
       { eval "python3 ./waf clean" > >(redirect_output) 2>&1 || true; }
-      { eval "python3 ./waf uninstall" > >(redirect_output) 2>&1 || true; }
     else
 		  reset_touch "$cur_dir2" "${touch_prefix}_$(basename "${configure_name[*]}")*.touch"
     fi
@@ -1953,6 +1956,7 @@ do_python() {
 		eval "${configure_command[*]} $configure_options" > >(redirect_output) 2>&1 || exit_message 1 "do_python: could not run configure ${configure_command[*]}"
 		create_touch_file 0 "$touch_name"
     add_src_dir "$(pwd)"
+    find . -maxdepth 1 -name "*_src_state.touch" ! -name "$(basename "$src_touch")" -delete > >(redirect_output) 2>&1 # delete other src_state.touch files
 	else
 		echo -e "INFO: Already used python $(basename "$cur_dir2")" >>"$LOG_FILE"
 	fi
@@ -1981,7 +1985,10 @@ do_cargo_build() {
 	if truthy "$build_force" || [[ ! -f "$src_touch" ]]; then
     echo -e "INFO: Force requested in do_cargo_build(): build_force: $build_force" >>"$LOG_FILE"
 		reset_touch "$cur_dir2" "${touch_prefix}*.touch"
-    { cargo uninstall >>"$LOG_FILE" 2>&1 || true; }
+    if [[ -f $src_touch ]]; then
+      echo -e "INFO: $src_touch found during do_cargo_build(). Uninstalling existing installation..." >>"$LOG_FILE"
+      { cargo uninstall >>"$LOG_FILE" 2>&1 || true; }
+    fi
     { cargo clean --release >>"$LOG_FILE" 2>&1 || true; }
 	fi
 	if [ ! -f "$touch_name" ]; then
@@ -1996,6 +2003,7 @@ do_cargo_build() {
 		}
 		create_touch_file 0 "$touch_name"
     add_src_dir "$(pwd)"
+    find . -maxdepth 1 -name "*_src_state.touch" ! -name "$(basename "$src_touch")" -delete > >(redirect_output) 2>&1 # delete other src_state.touch files
 		echo -e "INFO: Done with cargo build" >>"$LOG_FILE"
 	else
 		echo -e "INFO: Cargo already build" >>"$LOG_FILE"
@@ -2028,6 +2036,7 @@ do_cargo_install() {
 		}
 		create_touch_file 0 "$touch_name"
     add_src_dir "$(pwd)"
+    find . -maxdepth 1 -name "*_src_state.touch" ! -name "$(basename "$src_touch")" -delete > >(redirect_output) 2>&1 # delete other src_state.touch files
 		echo -e "INFO: Done with cargo cinstall" >>"$LOG_FILE"
 	else
 		echo -e "INFO: Cargo already installed" >>"$LOG_FILE"
@@ -2108,8 +2117,11 @@ do_configure() {
     echo -e "INFO: Force requested in do_configure(): build_force: $build_force" >>"$LOG_FILE"
 		reset_touch "$cur_dir2" "${touch_prefix}*.touch"
     [[ -f Makefile && "$cur_dir2" != "$ffmpeg_source_dir" ]] && { nice make clean -j"$(get_concurrent_proc)" > >(redirect_output) 2>&1 || true; }
-    [[ -f ninja.build && "$cur_dir2" != "$ffmpeg_source_dir" ]] && { nice ninja uninstall > >(redirect_output) 2>&1 || true; }
-    [[ -f Makefile && "$cur_dir2" != "$ffmpeg_source_dir" ]] && { nice make uninstall > >(redirect_output) 2>&1 || true; }
+    if [[ -f $src_touch ]]; then
+      echo -e "INFO: $src_touch found during do_configure(). Uninstalling existing installation..." >>"$LOG_FILE"
+      [[ -f ninja.build && "$cur_dir2" != "$ffmpeg_source_dir" ]] && { nice ninja uninstall > >(redirect_output) 2>&1 || true; }
+      [[ -f Makefile && "$cur_dir2" != "$ffmpeg_source_dir" ]] && { nice make uninstall > >(redirect_output) 2>&1 || true; }
+    fi
 	fi
 	if [ ! -f "$touch_name" ]; then
     echo "INFO: (Re-)do_configure() because $touch_name not found with \"$configure_options $configure_name\"." >>"$LOG_FILE"
@@ -2152,6 +2164,7 @@ do_configure() {
 		} # less nicey than make (since single thread, and what if you're running another ffmpeg nice build elsewhere?)
 		create_touch_file 0 "$touch_name"
     add_src_dir "$cur_dir2"
+    find . -maxdepth 1 -name "*_src_state.touch" ! -name "$(basename "$src_touch")" -delete > >(redirect_output) 2>&1 # delete other src_state.touch files
 	else
 	 echo -e "DEBUG: already configured $(basename "$cur_dir2")" >>"$LOG_FILE"
 	fi
@@ -2199,6 +2212,7 @@ do_autogen() {
 		}
 		create_touch_file 0 "$touch_name"
     add_src_dir "$(pwd)"
+    find . -maxdepth 1 -name "*_src_state.touch" ! -name "$(basename "$src_touch")" -delete > >(redirect_output) 2>&1 # delete other src_state.touch files
 		echo -e "INFO: Done with ./autogen.sh" >>"$LOG_FILE"
 	else
 		echo -e "INFO: ./autogen.sh already ran" >>"$LOG_FILE"
@@ -2220,8 +2234,11 @@ do_make() {
     echo -e "INFO: Force requested in do_make(): build_force: $build_force" >>"$LOG_FILE"
 		reset_touch "$cur_dir2" "${touch_prefix}*.touch"
     [[ -f Makefile && "$cur_dir2" != "$ffmpeg_source_dir" ]] && { nice make clean -j"$(get_concurrent_proc)" > >(redirect_output) 2>&1 || true; }
-    [[ -f ninja.build && "$cur_dir2" != "$ffmpeg_source_dir" ]] && { nice ninja uninstall > >(redirect_output) 2>&1 || true; }
-    [[ -f Makefile && "$cur_dir2" != "$ffmpeg_source_dir" ]] && { nice make uninstall > >(redirect_output) 2>&1 || true; }
+    if [[ -f $src_touch ]]; then
+      echo -e "INFO: $src_touch found during do_make(). Uninstalling existing installation..." >>"$LOG_FILE"
+      [[ -f ninja.build && "$cur_dir2" != "$ffmpeg_source_dir" ]] && { nice ninja uninstall > >(redirect_output) 2>&1 || true; }
+      [[ -f Makefile && "$cur_dir2" != "$ffmpeg_source_dir" ]] && { nice make uninstall > >(redirect_output) 2>&1 || true; }
+    fi
 	fi
 	if [ ! -f "$touch_name" ]; then
     echo "INFO: (Re-)do_make() because $touch_name not found with \"make $extra_make_options\"." >>"$LOG_FILE"
@@ -2246,6 +2263,7 @@ do_make() {
     eval "nice make $extra_make_options" > >(redirect_output) 2>&1 || exit_message 1 "do_make: could not make with $extra_make_options"
 		create_touch_file 0 "$touch_name" # only touch if the build was OK
     add_src_dir "$(pwd)"
+    find . -maxdepth 1 -name "*_src_state.touch" ! -name "$(basename "$src_touch")" -delete > >(redirect_output) 2>&1 # delete other src_state.touch files
 	else
 		echo -e "INFO: Already made $(dirname "$cur_dir2") $(basename "$cur_dir2") ..." >>"$LOG_FILE"
 	fi
@@ -2291,8 +2309,11 @@ do_make_install() {
 	if truthy "$build_force" || [[ ! -f "$src_touch" ]] || [[ -n $4 ]]; then
     echo -e "INFO: Force requested in do_make_install(): build_force: $build_force" >>"$LOG_FILE"
 		reset_touch "$cur_dir2" "${touch_prefix}_install*.touch"
-    [[ -f ninja.build && "$cur_dir2" != "$ffmpeg_source_dir" ]] && { nice ninja uninstall > >(redirect_output) 2>&1 || true; }
-    [[ -f Makefile && "$cur_dir2" != "$ffmpeg_source_dir" ]] && { nice make uninstall > >(redirect_output) 2>&1 || true; }
+    if [[ -f $src_touch ]]; then
+      echo -e "INFO: $src_touch found during do_make_install(). Uninstalling existing installation..." >>"$LOG_FILE"
+      [[ -f ninja.build && "$cur_dir2" != "$ffmpeg_source_dir" ]] && { nice ninja uninstall > >(redirect_output) 2>&1 || true; }
+      [[ -f Makefile && "$cur_dir2" != "$ffmpeg_source_dir" ]] && { nice make uninstall > >(redirect_output) 2>&1 || true; }
+    fi
 	fi
 	if [ ! -f "$touch_name" ]; then
     echo "INFO: (Re-)do_make_install() because $touch_name not found with \"make install $make_install_options\"." >>"$LOG_FILE"
@@ -2313,6 +2334,7 @@ do_make_install() {
 		eval "nice make -j$(get_concurrent_proc) $make_install_options" > >(redirect_output) 2>&1 || exit_message 1 "do_make_install: could not make with $make_install_options"
 		create_touch_file 0 "$touch_name"
     add_src_dir "$(pwd)"
+    find . -maxdepth 1 -name "*_src_state.touch" ! -name "$(basename "$src_touch")" -delete > >(redirect_output) 2>&1 # delete other src_state.touch files
 	fi
 }
 
@@ -2363,8 +2385,11 @@ do_cmake() {
     echo -e "INFO: Force requested in do_cmake(): build_force: $build_force" >>"$LOG_FILE"
 		reset_touch "$cur_dir2" "${touch_prefix}*.touch"
     reset_touch "$source_dir" "${touch_prefix}*.touch"
-    [[ -f ninja.build && "$cur_dir2" != "$ffmpeg_kit_src_dir/build" ]] && { nice ninja uninstall > >(redirect_output) 2>&1 || true; }
-    [[ -f Makefile && "$cur_dir2" != "$ffmpeg_kit_src_dir/build" ]] && { nice make uninstall > >(redirect_output) 2>&1 || true; }
+    if [[ -f $src_touch ]]; then
+      echo -e "INFO: $src_touch found during do_cmake(). Uninstalling existing installation..." >>"$LOG_FILE"
+      [[ -f ninja.build && "$cur_dir2" != "$ffmpeg_kit_src_dir/build" ]] && { nice ninja uninstall > >(redirect_output) 2>&1 || true; }
+      [[ -f Makefile && "$cur_dir2" != "$ffmpeg_kit_src_dir/build" ]] && { nice make uninstall > >(redirect_output) 2>&1 || true; }
+    fi
     { clean_cmake_cache "$cur_dir2" "$(validate_path "$source_dir")" || true; }
 	fi
 	if [ ! -f "$touch_name" ]; then
@@ -2388,6 +2413,7 @@ do_cmake() {
 		eval "nice -n 5 ${cmake_command} -G\"Unix Makefiles\" $command" > >(redirect_output) 2>&1 || exit_message 1 "do_cmake: could not run nice: \"${cmake_command} -G\"Unix Makefiles\" $command\""
 		create_touch_file 0 "$touch_name"
     add_src_dir "$(pwd)" "$source_dir"
+    find . -maxdepth 1 -name "*_src_state.touch" ! -name "$(basename "$src_touch")" -delete > >(redirect_output) 2>&1 # delete other src_state.touch files
 	fi
 }
 generic_cmake() {
@@ -2523,6 +2549,7 @@ do_meson() {
 		eval "${configure_command[*]} $configure_options" > >(redirect_output) 2>&1 || exit_message 1 "do_meson: could not run configure ${configure_command[*]}"
 		create_touch_file 0 "$touch_name"
     add_src_dir "$(pwd)"
+    find . -maxdepth 1 -name "*_src_state.touch" ! -name "$(basename "$src_touch")" -delete > >(redirect_output) 2>&1 # delete other src_state.touch files
 	else
 		echo -e "INFO: Already used meson $(basename "$cur_dir2")" >>"$LOG_FILE"
 	fi
@@ -2570,6 +2597,7 @@ do_ninja_and_ninja_install() {
 		ninja -C build install > >(redirect_output) 2>&1 || exit_message 1 "do_ninja_and_ninja_install: could not do_ninja() in $(pwd) ninja running: \"build $extra_make_options\""
 		create_touch_file 0 "$touch_name"
     add_src_dir "$(pwd)"
+    find . -maxdepth 1 -name "*_src_state.touch" ! -name "$(basename "$src_touch")" -delete > >(redirect_output) 2>&1 # delete other src_state.touch files
 	fi
 }
 
@@ -2586,8 +2614,11 @@ do_ninja() {
 	if truthy "$build_force" || [[ ! -f "$src_touch" ]]; then
     echo -e "INFO: Force requested in do_ninja(): build_force: $build_force" >>"$LOG_FILE"
 		reset_touch "$cur_dir2" "${touch_prefix}*.touch"
-    [[ -f ninja.build ]] && { nice ninja uninstall > >(redirect_output) 2>&1 || true; }
-    [[ -f Makefile ]] && { nice make uninstall > >(redirect_output) 2>&1 || true; }
+    if [[ -f $src_touch ]]; then
+      echo -e "INFO: $src_touch found during do_ninja(). Uninstalling existing installation..." >>"$LOG_FILE"
+      [[ -f ninja.build ]] && { nice ninja uninstall > >(redirect_output) 2>&1 || true; }
+      [[ -f Makefile ]] && { nice make uninstall > >(redirect_output) 2>&1 || true; }
+    fi
 	fi
 	if [ ! -f "$touch_name" ]; then
     echo "INFO: (Re-)do_ninja() because $touch_name not found with \"ninja build $extra_make_options\"." >>"$LOG_FILE"
@@ -2598,6 +2629,7 @@ do_ninja() {
 		ninja -C build ${extra_make_options} > >(redirect_output) 2>&1 || exit_message 1 "do_ninja: could not do_ninja() ninja running: \"build $extra_make_options\""
 		create_touch_file 0 "$touch_name"
     add_src_dir "$(pwd)"
+    find . -maxdepth 1 -name "*_src_state.touch" ! -name "$(basename "$src_touch")" -delete > >(redirect_output) 2>&1 # delete other src_state.touch files
 	else
 		echo -e "INFO: already did ninja $(basename "$cur_dir2")" >>"$LOG_FILE"
 	fi
