@@ -29,6 +29,26 @@ The project uses a specific file structure to manage patches and source modifica
     *   **Description**: These are the actual source files used during compilation. In this workflow, they are effectively generated or overwritten by the patch application process.
     *   **Rule**: Changes should be made to `.bak` files and then formatted into a patch file. Direct edits here may be lost or not propagate correctly if determining patches against `.orig`.
 
+*   **Original Source (`.h.orig`)**:
+    *   Example: `cmdutils.h.orig`
+    *   **Description**: These are untouched, pristine copies of the original header files from the upstream `ffmpeg/fftools` repository.
+    *   **Rule**: These files must NEVER be modified. They serve as the baseline for patch generation.
+
+*   **Patched Snapshot (`.h.bak`)**:
+    *   Example: `cmdutils.h.bak`
+    *   **Description**: These files represent the current state of the patched header code. They are snapshots of the files after applying the existing patches.
+    *   **Rule**: These are the **primary files for development**. All modifications, fixes, and new features should be applied to these files. They are the blueprint for generating updated patches.
+
+*   **Compiled Source (`.h`)**:
+    *   Example: `cmdutils.h`
+    *   **Description**: These are the actual header files used during compilation. In this workflow, they are effectively generated or overwritten by the patch application process.
+    *   **Rule**: Changes should be made to `.bak` files and then formatted into a patch file. Direct edits here may be lost or not propagate correctly if determining patches against `.orig`.
+
+*   **Wrapper Source (`*_lib.c`, `*_lib.h`, `*_wrapper.cpp`, `*_wrapper.h`)**:
+    *   Example: `ffprobe_lib.c`
+    *   **Description**: These are the actual source files used during compilation. 
+    *   **Rule**: These files are part of ffmpeg-kit source and can be modified directly.
+
 ### Patches (`desktop/patches/`)
 
 *   **Patch Files (`.patch`)**:
