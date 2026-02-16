@@ -120,6 +120,8 @@ FFMPEG_KIT_C_EXPORT FFmpegSessionHandle ffmpeg_kit_execute(const char *command);
  * completed
  * @param user_data the user data to be passed to the callback
  * @return the FFmpeg session handle
+ * @note The user data is owned by the callback and should be freed by the
+ * callback owner including the handle.
  */
 FFMPEG_KIT_C_EXPORT FFmpegSessionHandle ffmpeg_kit_execute_async(
     const char *command, FFmpegKitCompleteCallback complete_cb,
@@ -136,6 +138,8 @@ FFMPEG_KIT_C_EXPORT FFmpegSessionHandle ffmpeg_kit_execute_async(
  * @param user_data the user data to be passed to the callback
  * @param waitTimeout the timeout in milliseconds
  * @return the FFmpeg session handle
+ * @note The user data is owned by the callback and should be freed by the
+ * callback owner including the handle.
  */
 FFMPEG_KIT_C_EXPORT FFmpegSessionHandle ffmpeg_kit_execute_async_full(
     const char *command, FFmpegKitCompleteCallback complete_cb,
@@ -209,6 +213,8 @@ ffprobe_kit_execute(const char *command);
  * completed
  * @param user_data the user data to be passed to the callback
  * @return the FFprobe session handle
+ * @note The user data is owned by the callback and should be freed by the
+ * callback owner including the handle.
  */
 FFMPEG_KIT_C_EXPORT FFprobeSessionHandle ffprobe_kit_execute_async(
     const char *command, FFprobeKitCompleteCallback complete_cb,
@@ -279,6 +285,8 @@ ffprobe_kit_get_media_information(const char *path);
  * completed
  * @param user_data the user data to be passed to the callback
  * @return the media information session handle
+ * @note The user data is owned by the callback and should be freed by the
+ * callback owner including the handle.
  */
 FFMPEG_KIT_C_EXPORT MediaInformationSessionHandle
 ffprobe_kit_get_media_information_async(
@@ -306,6 +314,8 @@ ffplay_kit_execute(const char *command, int timeout);
  * @param user_data the user data to be passed to the callback
  * @param waitTimeout the timeout in milliseconds
  * @return the FFplay session handle
+ * @note The user data is owned by the callback and should be freed by the
+ * callback owner including the handle.
  */
 FFMPEG_KIT_C_EXPORT FFplaySessionHandle ffplay_kit_execute_async(
     const char *command, FFplayKitCompleteCallback complete_cb,
@@ -1187,6 +1197,8 @@ FFMPEG_KIT_C_EXPORT void ffmpeg_kit_clear_sessions(void);
  *
  * @param log_cb the log callback
  * @param user_data the user data
+ * @note The user data is owned by the callback and should be freed by the
+ * callback owner including the handle.
  */
 FFMPEG_KIT_C_EXPORT void
 ffmpeg_kit_config_enable_log_callback(FFmpegKitLogCallback log_cb,
@@ -1206,6 +1218,8 @@ FFMPEG_KIT_C_EXPORT void ffmpeg_kit_config_enable_statistics_callback(
  *
  * @param complete_cb the FFmpeg session complete callback
  * @param user_data the user data
+ * @note The user data is owned by the callback and should be freed by the
+ * callback owner including the handle.
  */
 FFMPEG_KIT_C_EXPORT void
 ffmpeg_kit_config_enable_ffmpeg_session_complete_callback(
@@ -1216,6 +1230,8 @@ ffmpeg_kit_config_enable_ffmpeg_session_complete_callback(
  *
  * @param complete_cb the FFprobe session complete callback
  * @param user_data the user data
+ * @note The user data is owned by the callback and should be freed by the
+ * callback owner including the handle.
  */
 FFMPEG_KIT_C_EXPORT void
 ffmpeg_kit_config_enable_ffprobe_session_complete_callback(
@@ -1226,6 +1242,8 @@ ffmpeg_kit_config_enable_ffprobe_session_complete_callback(
  *
  * @param complete_cb the FFplay session complete callback
  * @param user_data the user data
+ * @note The user data is owned by the callback and should be freed by the
+ * callback owner including the handle.
  */
 FFMPEG_KIT_C_EXPORT void
 ffmpeg_kit_config_enable_ffplay_session_complete_callback(
@@ -1236,6 +1254,8 @@ ffmpeg_kit_config_enable_ffplay_session_complete_callback(
  *
  * @param complete_cb the media information session complete callback
  * @param user_data the user data
+ * @note The user data is owned by the callback and should be freed by the
+ * callback owner including the handle.
  */
 FFMPEG_KIT_C_EXPORT void
 ffmpeg_kit_config_enable_media_information_session_complete_callback(

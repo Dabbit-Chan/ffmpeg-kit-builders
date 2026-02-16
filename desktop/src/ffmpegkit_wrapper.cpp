@@ -61,6 +61,8 @@ template <typename T> static std::shared_ptr<T> from_handle(void *handle) {
 }
 
 template <typename T> static void *create_handle(std::shared_ptr<T> ptr) {
+  if (!ptr)
+    return nullptr;
   // Cast to void shared_ptr to allow generic deletion
   return new std::shared_ptr<void>(ptr);
 }
@@ -117,7 +119,7 @@ ffmpeg_kit_execute_async(const char *command,
     if (complete_cb) {
       auto handle = create_handle(std::dynamic_pointer_cast<FFmpegSession>(s));
       complete_cb(handle, user_data);
-      ffmpeg_kit_handle_release(handle);
+      // Handle ownership transferred to Dart callback
     }
   };
   auto session = FFmpegKit::executeAsync(std::string(command), lambda);
@@ -134,18 +136,26 @@ FFmpegSessionHandle ffmpeg_kit_execute_async_full(
     if (complete_cb) {
       auto handle = create_handle(std::dynamic_pointer_cast<FFmpegSession>(s));
       complete_cb(handle, user_data);
-      ffmpeg_kit_handle_release(handle);
+      // Handle ownership transferred to Dart callback
     }
   };
   auto log = [log_cb, user_data](std::shared_ptr<Log> l) {
     if (log_cb && l) {
       std::string message = l->getMessage();
-      log_cb(nullptr, message.c_str(), user_data);
+      char *message_copy = strdup_cpp(message);
+      
+      // Pass ID as pointer (Hack to avoid allocation/threading issues)
+      void *session_handle = (void *)(uintptr_t)l->getSessionId();
+
+      log_cb(session_handle, message_copy, user_data);
     }
   };
   auto stats = [stats_cb, user_data](std::shared_ptr<Statistics> s) {
     if (stats_cb && s) {
-      stats_cb(nullptr, s->getTime(), s->getSize(), s->getBitrate(),
+      // Pass ID as pointer (Hack to avoid allocation/threading issues)
+      void *session_handle = (void *)(uintptr_t)s->getSessionId();
+
+      stats_cb(session_handle, s->getTime(), s->getSize(), s->getBitrate(),
                s->getSpeed(), s->getVideoFrameNumber(), s->getVideoFps(),
                s->getVideoQuality(), user_data);
     }
@@ -203,7 +213,7 @@ ffprobe_kit_execute_async(const char *command,
     if (complete_cb) {
       auto handle = create_handle(std::dynamic_pointer_cast<FFprobeSession>(s));
       complete_cb(handle, user_data);
-      ffmpeg_kit_handle_release(handle);
+      // Handle ownership transferred to Dart callback
     }
   };
   auto session = FFprobeKit::executeAsync(std::string(command), lambda);
@@ -250,7 +260,7 @@ MediaInformationSessionHandle ffprobe_kit_get_media_information_async(
     if (complete_cb) {
       auto handle = create_handle(s);
       complete_cb(handle, user_data);
-      ffmpeg_kit_handle_release(handle);
+      // Handle ownership transferred to Dart callback
     }
   };
   auto session =
@@ -277,7 +287,7 @@ ffplay_kit_execute_async(const char *command,
     if (complete_cb) {
       auto handle = create_handle(std::dynamic_pointer_cast<FFplaySession>(s));
       complete_cb(handle, user_data);
-      ffmpeg_kit_handle_release(handle);
+      // Handle ownership transferred to Dart callback
     }
   };
   auto session = FFplayKit::executeAsync(std::string(command), lambda, waitTimeout);
@@ -864,7 +874,12 @@ void ffmpeg_kit_config_enable_log_callback(FFmpegKitLogCallback log_cb,
     FFmpegKitConfig::enableLogCallback([](std::shared_ptr<Log> log) {
       if (g_log_callback && log) {
         std::string message = log->getMessage();
-        g_log_callback(nullptr, message.c_str(), g_log_user_data);
+        char *message_copy = strdup_cpp(message);
+
+        // Pass ID as pointer (Hack to avoid allocation/threading issues)
+        void *session_handle = (void *)(uintptr_t)log->getSessionId();
+
+        g_log_callback(session_handle, message_copy, g_log_user_data);
       }
     });
   } else {
@@ -879,8 +894,11 @@ void ffmpeg_kit_config_enable_statistics_callback(
   if (stats_cb) {
     FFmpegKitConfig::enableStatisticsCallback(
         [](std::shared_ptr<Statistics> s) {
-          if (g_stats_callback) {
-            g_stats_callback(nullptr, s->getTime(), s->getSize(),
+          if (g_stats_callback && s) {
+            // Pass ID as pointer (Hack to avoid allocation/threading issues)
+            void *session_handle = (void *)(uintptr_t)s->getSessionId();
+
+            g_stats_callback(session_handle, s->getTime(), s->getSize(),
                              s->getBitrate(), s->getSpeed(),
                              s->getVideoFrameNumber(), s->getVideoFps(),
                              s->getVideoQuality(), g_stats_user_data);
@@ -901,7 +919,7 @@ void ffmpeg_kit_config_enable_ffmpeg_session_complete_callback(
           if (g_ffmpeg_complete_callback) {
             auto handle = create_handle(title);
             g_ffmpeg_complete_callback(handle, g_ffmpeg_complete_user_data);
-            ffmpeg_kit_handle_release(handle);
+            // Handle ownership transferred to Dart callback
           }
         });
   } else {
@@ -919,7 +937,7 @@ void ffmpeg_kit_config_enable_ffprobe_session_complete_callback(
           if (g_ffprobe_complete_callback) {
             auto handle = create_handle(title);
             g_ffprobe_complete_callback(handle, g_ffprobe_complete_user_data);
-            ffmpeg_kit_handle_release(handle);
+            // Handle ownership transferred to Dart callback
           }
         });
   } else {
@@ -937,7 +955,7 @@ void ffmpeg_kit_config_enable_ffplay_session_complete_callback(
           if (g_ffplay_complete_callback) {
             auto handle = create_handle(title);
             g_ffplay_complete_callback(handle, g_ffplay_complete_user_data);
-            ffmpeg_kit_handle_release(handle);
+            // Handle ownership transferred to Dart callback
           }
         });
   } else {
@@ -955,7 +973,7 @@ void ffmpeg_kit_config_enable_media_information_session_complete_callback(
           if (g_media_complete_callback) {
             auto handle = create_handle(title);
             g_media_complete_callback(handle, g_media_complete_user_data);
-            ffmpeg_kit_handle_release(handle);
+            // Handle ownership transferred to Dart callback
           }
         });
   } else {

@@ -1,5 +1,13 @@
 # FFmpegKit Changelog
 
+## Version 1.1.3
+
+- Transferred session handle ownership to completion callbacks in the C API, enabling manual lifecycle management.
+- Updated log and statistics callbacks to include session handles for better progress tracking.
+- Added detailed documentation for user data ownership and handle management in `ffmpegkit_wrapper.h`.
+- Fixed potential null pointer dereference in internal handle creation logic.
+- Ensured FFmpeg log callbacks are correctly initialized before execution.
+
 ## Version 1.1.2
 
 - Added `session_is_media_information_session()` C API function to check if a session is a MediaInformation session.

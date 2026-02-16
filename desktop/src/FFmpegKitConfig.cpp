@@ -759,7 +759,8 @@ executeFFmpeg(const long sessionId,
               const std::shared_ptr<std::list<std::string>> arguments) {
   // SETS DEFAULT LOG LEVEL BEFORE STARTING A NEW RUN
   av_log_set_level(configuredLogLevel);
-
+  av_log_set_callback(ffmpegkit_log_callback_function);
+  
   // 1. Construct command string for the library init
   std::string fullCommand = buildCommandString("ffmpeg", arguments);
 
