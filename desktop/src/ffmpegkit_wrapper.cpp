@@ -1245,4 +1245,25 @@ void ffmpeg_kit_free(void *ptr) {
     free(ptr);
   }
 }
+
+void ffmpeg_kit_config_enable_debug_log() {
+  FFmpegKitConfig::enableDebugLog();
+}
+
+void ffmpeg_kit_config_disable_debug_log() {
+  FFmpegKitConfig::disableDebugLog();
+}
+
+int ffmpeg_kit_config_is_debug_log_enabled() {
+  return FFmpegKitConfig::isDebugLogEnabled();
+}
+
+char *ffmpeg_kit_config_get_debug_log() {
+  return strdup_cpp(FFmpegKitConfig::getDebugLog());
+}
+
+void ffmpeg_kit_config_clear_debug_log() {
+  FFmpegKitConfig::clearDebugLog();
+}
+
 }

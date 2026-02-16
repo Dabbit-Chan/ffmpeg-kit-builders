@@ -597,6 +597,35 @@ public:
    */
   static std::string listAudioOutputDevices();
 
+  /**
+   * Enables debugging for all sessions.
+   */
+  static void enableDebugLog();
+
+  /**
+   * Disables debugging for all sessions.
+   */
+  static void disableDebugLog();
+
+  /**
+   * Checks if debugging is enabled for all sessions.
+   * 
+   * @return true if debugging is enabled, false otherwise
+   */
+  static bool isDebugLogEnabled();
+
+  /**
+   * Gets the debug log for all sessions.
+   * 
+   * @return debug log for all sessions
+   */
+  static std::string getDebugLog();
+
+  /**
+   * Clears the debug log.
+   */
+  static void clearDebugLog();
+
 };
 
 } // namespace ffmpegkit

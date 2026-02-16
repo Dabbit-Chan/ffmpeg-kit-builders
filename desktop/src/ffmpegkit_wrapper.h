@@ -1597,6 +1597,35 @@ session_is_media_information_session(void *session);
  */
 FFMPEG_KIT_C_EXPORT void ffmpeg_kit_free(void *ptr);
 
+/**
+ * Enables the debug log.
+ */
+FFMPEG_KIT_C_EXPORT void ffmpeg_kit_config_enable_debug_log();
+
+/**
+ * Disables the debug log.
+ */
+FFMPEG_KIT_C_EXPORT void ffmpeg_kit_config_disable_debug_log();
+
+/**
+ * Checks if the debug log is enabled.
+ *
+ * @return 1 if the debug log is enabled, 0 otherwise
+ */
+FFMPEG_KIT_C_EXPORT int ffmpeg_kit_config_is_debug_log_enabled();
+
+/**
+ * Gets the debug log.
+ *
+ * @return the debug log
+ */
+FFMPEG_KIT_C_EXPORT char *ffmpeg_kit_config_get_debug_log();
+
+/**
+ * Clears the debug log.
+ */
+FFMPEG_KIT_C_EXPORT void ffmpeg_kit_config_clear_debug_log();
+
 #ifdef __cplusplus
 }
 #endif

@@ -1,5 +1,12 @@
 # FFmpegKit Changelog
 
+## Version 1.1.4
+
+- Added debug logging infrastructure to `FFmpegKitConfig` (`enableDebugLog`, `getDebugLog`, etc.) for troubleshooting session execution.
+- Improved session log handling by ensuring all asynchronous messages are processed before session completion.
+- Added `tlsSessionId` thread-local storage to better track sessions in concurrent environments.
+- Added `opt_common.c.patch` to prevent `av_log_set_callback` from being overwritten during help/version commands.
+
 ## Version 1.1.3
 
 - Transferred session handle ownership to completion callbacks in the C API, enabling manual lifecycle management.
