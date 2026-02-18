@@ -318,7 +318,7 @@ static struct AVTextFormatSection sections[] = {
     [SECTION_ID_SUBTITLE] =           { SECTION_ID_SUBTITLE, "subtitle", 0, { -1 } },
 };
 
-static const OptionDef *options;
+static FFMPEG_THREAD_LOCAL OptionDef *options;
 
 /* FFprobe context */
 static const char *input_filename;
@@ -2990,7 +2990,7 @@ DEFINE_OPT_SHOW_SECTION(streams,          STREAMS)
 DEFINE_OPT_SHOW_SECTION(programs,         PROGRAMS)
 DEFINE_OPT_SHOW_SECTION(stream_groups,    STREAM_GROUPS)
 
-static const OptionDef real_options[] = {
+static FFMPEG_THREAD_LOCAL OptionDef real_options[] = {
     CMDUTILS_COMMON_OPTIONS
     { "f",                     OPT_TYPE_FUNC, OPT_FUNC_ARG, {.func_arg = opt_format}, "force format", "format" },
     { "unit",                  OPT_TYPE_BOOL,        0, {&show_value_unit}, "show unit of the displayed values" },
@@ -3271,10 +3271,9 @@ end:
     // Cleanup custom AVIO
     if (avio_buf) {
         avio_flush(avio_buf);
-        // avio_close calls close_buffer which we don't want, or frees buffer?
-        // avio_context_free handles the struct.
-        // We allocated avio_ptr with av_malloc, avio_context_free frees the internal buffer 
-        // if it allocated it? No, we passed it.
+        if (avio_buf->buffer) {
+            av_freep(&avio_buf->buffer);
+        }
         avio_context_free(&avio_buf);
     }
     av_freep(&output_format);

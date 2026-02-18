@@ -301,6 +301,11 @@ typedef struct VideoState {
     int last_video_stream, last_audio_stream, last_subtitle_stream;
 
     SDL_cond *continue_read_thread;
+    int autoexit;
+    int loop;
+    int64_t duration;
+    int64_t start_time;
+    int infinite_buffer;
 } VideoState;
 
 /* options specified by the user */
@@ -1224,6 +1229,7 @@ static void stream_component_close(VideoState *is, int stream_index)
         av_freep(&is->audio_buf1);
         is->audio_buf1_size = 0;
         is->audio_buf = NULL;
+        avfilter_graph_free(&is->agraph);
 
         if (is->rdft) {
             av_tx_uninit(&is->rdft);
@@ -2790,6 +2796,10 @@ static int stream_component_open(VideoState *is, int stream_index)
 
 fail:
     avcodec_free_context(&avctx);
+    if (is->agraph != NULL) {
+        avfilter_graph_free(&is->agraph);
+    }
+
 out:
     av_channel_layout_uninit(&ch_layout);
     av_dict_free(&opts);
@@ -2849,7 +2859,7 @@ static int read_thread(void *arg)
 
     memset(st_index, -1, sizeof(st_index));
     is->eof = 0;
-
+    
     pkt = av_packet_alloc();
     if (!pkt) {
         av_log(NULL, AV_LOG_FATAL, "Could not allocate packet.\n");
@@ -2923,21 +2933,22 @@ static int read_thread(void *arg)
     is->max_frame_duration = (ic->iformat->flags & AVFMT_TS_DISCONT) ? 10.0 : 3600.0;
 
     if (!window_title && (t = av_dict_get(ic->metadata, "title", NULL, 0)))
-        window_title = av_asprintf("%s - %s", t->value, input_filename);
+        window_title = av_asprintf("%s - %s", t->value, is->filename);
 
     /* if seeking requested, we execute it */
-    if (start_time != AV_NOPTS_VALUE) {
+    if (is->start_time != AV_NOPTS_VALUE) {
         int64_t timestamp;
 
-        timestamp = start_time;
+        timestamp = is->start_time;
         /* add the stream start time */
-        if (ic->start_time != AV_NOPTS_VALUE)
-            timestamp += ic->start_time;
+        if (is->start_time != AV_NOPTS_VALUE && is->start_time > 0) {
+        int64_t seek_pos = is->start_time;
         ret = avformat_seek_file(ic, -1, INT64_MIN, timestamp, INT64_MAX, 0);
-        if (ret < 0) {
-            av_log(NULL, AV_LOG_WARNING, "%s: could not seek to position %0.3f\n",
-                    is->filename, (double)timestamp / AV_TIME_BASE);
-        }
+        if (is->duration != AV_NOPTS_VALUE) {
+        av_log(NULL, AV_LOG_INFO, "Duration: %02"PRId64":%02"PRId64":%02"PRId64".%02"PRId64"\n",
+               is->duration / 3600, (is->duration / 60) % 60, is->duration % 60, (is->duration * 100 / AV_TIME_BASE) % 100);
+    }
+    }
     }
 
     is->realtime = is_realtime(ic);
@@ -2979,7 +2990,7 @@ static int read_thread(void *arg)
                                  st_index[AVMEDIA_TYPE_VIDEO]),
                                 NULL, 0);
 
-    is->show_mode = show_mode;
+    // is->show_mode = show_mode; // Removed to respect initialized value
     if (st_index[AVMEDIA_TYPE_VIDEO] >= 0) {
         AVStream *st = ic->streams[st_index[AVMEDIA_TYPE_VIDEO]];
         AVCodecParameters *codecpar = st->codecpar;
@@ -3011,8 +3022,8 @@ static int read_thread(void *arg)
         goto fail;
     }
 
-    if (infinite_buffer < 0 && is->realtime)
-        infinite_buffer = 1;
+    if (is->infinite_buffer < 0 && is->realtime)
+        is->infinite_buffer = 1;
 
     for (;;) {
         if (is->abort_request)
@@ -3027,7 +3038,7 @@ static int read_thread(void *arg)
 #if CONFIG_RTSP_DEMUXER || CONFIG_MMSH_PROTOCOL
         if (is->paused &&
                 (!strcmp(ic->iformat->name, "rtsp") ||
-                 (ic->pb && !strncmp(input_filename, "mmsh:", 5)))) {
+                 (ic->pb && !strncmp(is->filename, "mmsh:", 5)))) {
             /* wait 10 ms to avoid trying to get another packet */
             /* XXX: horrible */
             SDL_Delay(10);
@@ -3075,7 +3086,7 @@ static int read_thread(void *arg)
         }
 
         /* if the queue are full, no need to read more */
-        if (infinite_buffer<1 &&
+        if (is->infinite_buffer < 1 &&
               (is->audioq.size + is->videoq.size + is->subtitleq.size > MAX_QUEUE_SIZE
             || (stream_has_enough_packets(is->audio_st, is->audio_stream, &is->audioq) &&
                 stream_has_enough_packets(is->video_st, is->video_stream, &is->videoq) &&
@@ -3089,9 +3100,9 @@ static int read_thread(void *arg)
         if (!is->paused &&
             (!is->audio_st || (is->auddec.finished == is->audioq.serial && frame_queue_nb_remaining(&is->sampq) == 0)) &&
             (!is->video_st || (is->viddec.finished == is->videoq.serial && frame_queue_nb_remaining(&is->pictq) == 0))) {
-            if (loop != 1 && (!loop || --loop)) {
-                stream_seek(is, start_time != AV_NOPTS_VALUE ? start_time : 0, 0, 0);
-            } else if (autoexit) {
+            if (is->loop != 1 && (!is->loop || --is->loop)) {
+            stream_seek(is, is->start_time != AV_NOPTS_VALUE ? is->start_time : 0, 0, 0);
+        } else if (is->autoexit) {
                 ret = AVERROR_EOF;
                 goto fail;
             }
@@ -3108,7 +3119,7 @@ static int read_thread(void *arg)
                 is->eof = 1;
             }
             if (ic->pb && ic->pb->error) {
-                if (autoexit)
+                if (is->autoexit)
                     goto fail;
                 else
                     break;
@@ -3123,11 +3134,11 @@ static int read_thread(void *arg)
         /* check if packet is in play range specified by user, then queue, otherwise discard */
         stream_start_time = ic->streams[pkt->stream_index]->start_time;
         pkt_ts = pkt->pts == AV_NOPTS_VALUE ? pkt->dts : pkt->pts;
-        pkt_in_play_range = duration == AV_NOPTS_VALUE ||
+        pkt_in_play_range = is->duration == AV_NOPTS_VALUE ||
                 (pkt_ts - (stream_start_time != AV_NOPTS_VALUE ? stream_start_time : 0)) *
                 av_q2d(ic->streams[pkt->stream_index]->time_base) -
-                (double)(start_time != AV_NOPTS_VALUE ? start_time : 0) / 1000000
-                <= ((double)duration / 1000000);
+                (double)(is->start_time != AV_NOPTS_VALUE ? is->start_time : 0) / 1000000
+                <= ((double)is->duration / 1000000);
         if (pkt->stream_index == is->audio_stream && pkt_in_play_range) {
             packet_queue_put(&is->audioq, pkt);
         } else if (pkt->stream_index == is->video_stream && pkt_in_play_range
@@ -3174,6 +3185,14 @@ static VideoState *stream_open(const char *filename,
     is->iformat = iformat;
     is->ytop    = 0;
     is->xleft   = 0;
+    
+    /* init TLS-copied state */
+    is->loop = loop;
+    is->duration = duration;
+    is->start_time = start_time;
+    is->infinite_buffer = infinite_buffer;
+    is->autoexit = autoexit;
+    is->show_mode = show_mode;
 
     /* start video display */
     if (frame_queue_init(&is->pictq, &is->videoq, VIDEO_PICTURE_QUEUE_SIZE, 1) < 0)
@@ -3197,6 +3216,7 @@ static VideoState *stream_open(const char *filename,
     init_clock(&is->audclk, &is->audioq.serial);
     init_clock(&is->extclk, &is->extclk.serial);
     is->audio_clock_serial = -1;
+
     if (startup_volume < 0)
         av_log(NULL, AV_LOG_WARNING, "-volume=%d < 0, setting to 0\n", startup_volume);
     if (startup_volume > 100)
