@@ -3741,8 +3741,8 @@ create_ffmpeg_kit_bundle() {
   
   get_licenses
 
-  copy_path "${BASEDIR}"/tools/source/SOURCE "${LICENSE_BASEDIR}/source.txt"
-  copy_path "${BASEDIR}"/tools/license/LICENSE.GPLv3 "${LICENSE_BASEDIR}"/license.txt
+  copy_path "${BASEDIR}"/LICENSE "${LICENSE_BASEDIR}"/ffmpeg-kit_license.txt
+
   create_touch_file 0 "$touch_name"
   echo -e "INFO: Done creating bundle at $ffmpeg_kit_bundle" | tee -a "$LOG_FILE"
 	
@@ -4574,13 +4574,13 @@ add_src_dir() {
 }
 
 get_licenses() {
-  local dir_file="$install_pkgconfig_dir/$(get_bundle_directory).txt"
+  local dir_file="$work_dir/pkgconfig/$(get_bundle_directory).txt"
   [[ ! -f "$dir_file" ]] && { echo -e "DEBUG: could not find license src dir list file $dir_file\n  No licenses copied."; return 1; }
-  mapfile -t license_dir_list < "$install_pkgconfig_dir/$(get_bundle_directory).txt"
+  mapfile -t license_dir_list < "$dir_file"
   for dir in "${license_dir_list[@]}"; do
     [[ -z "$dir" ]] && continue
     [[ ! -d "$dir" ]] && continue
-    bash "${SCRIPTDIR}/extract_licenses.sh" "${dir}" "${LICENSE_BASEDIR}/$(basename "$dir")" > >(redirect_output) 2>&1
+    bash "${SCRIPTDIR}/extract_licenses.sh" "${dir}" "${LICENSE_BASEDIR}/$(basename "$dir").txt" > >(redirect_output) 2>&1
   done
 }
 
