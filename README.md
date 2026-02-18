@@ -171,7 +171,8 @@ prebuilt/
 | Option | Description |
 |--------|-------------|
 | `-h, --help` | Display help |
-| `-d, --debug` | Build with debug symbols (`-g`) and no optimization |
+| `-d, --debug` | Enable shell command tracing (`set -x`) |
+| `--debug-build\|--build-debug` | Build with debug symbols (`-g`) and no optimization |
 | `-f, --force` | Force rebuild of all dependencies (cleans `already_built` flags) |
 | `-y` | Non-interactive mode (accept defaults) |
 | `--release` | create release zip of ffmpeg-kit bundled binaries to be distributed |
@@ -241,8 +242,9 @@ prebuilt/
 | `--build-from={0..} OR [library_name]`   |   | Start building dependencies from given step (0.. or step/library name) |
 | `--build-deps=[y]`                       |`y`| Whether or not to skip building dependencies
 | `--build-deps-only`                      |   | Only build dependency binaries. Will not build app binaries. (static or shared build only affects ffmpeg and ffmpeg-kit. Dependencies are always built statically.) |
-|`--build-ffmpeg-only=[shared]\|static`    |   | build ffmpeg binaries only of type [shared] or static. Does not (re)build ext-library dependencies. By default ffmpeg-kit always needs a static build of ffmpeg to be present already. Missing dependencies will cause a failure
-|`--build-ffmpeg-kit-only=[shared]\|static`|   | build ffmpeg-kit library and bundle only of type [shared] or static. By default ffmpeg-kit always needs a static build of ffmpeg to be present already. Does not (re)build ext-library dependencies. Missing dependencies will cause a failure.
+|`--build-ffmpeg-kit-only\|--kit\|--ffmpeg-kit=[shared]\|static`|   | build ffmpeg-kit library and bundle only of type [shared] or static. By default ffmpeg-kit always needs a static build of ffmpeg to be present already. Does not (re)build ext-library dependencies. Missing dependencies will cause a failure.
+|`--build-ffmpeg-only\|--ffmpeg=[shared]\|static`    |   | build ffmpeg binaries only of type [shared] or static. Does not (re)build ext-library dependencies. By default ffmpeg-kit always needs a static build of ffmpeg to be present already. Missing dependencies will cause a failure
+|`--build-tests\|--test\|--tests`          |   | Build tests. By default tests are not built. 
 |`--clean-builds=[shared]\|static`         |   | clean ffmpeg and ffmpeg-kit builds of type [shared] or static and exit
 |`--reset-and-clean(=ARG)`                 |   | reset and clean all source directories of touch files and build artifacts. ARG=library src dir name
 | `--list-libraries`                       |   | Lists ffmpeg configuration including extra libraries and exit |

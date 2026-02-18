@@ -30,11 +30,11 @@ Building FFmpegKit for Desktop is performed using the unified `runner.sh` script
 2.  **Basic Build**: Execute the runner script to build a bare bones ffmpeg build with built-in functionality only. This build will not have any external libraries.
 
     ```bash
-    # Build for Linux x86_64
-    sudo ./runner.sh --host=linux --arch=x86_64 --enable-base -y --release
+    # Minimal build for Linux x86_64
+    sudo ./runner.sh --host=linux --arch=x86_64 --enable-base --gpl --kit --skip --skip-pkg-check --release=local -y
 
-    # Build for Windows x86_64 (Cross-compile)
-    sudo ./runner.sh --host=windows --arch=x86_64 --enable-base -y --release
+    # Minimal build for Windows x86_64 (Cross-compile)
+    sudo ./runner.sh --host=windows --arch=x86_64 --enable-base --gpl --kit --skip --skip-pkg-check --release=local -y
     ```
 
 3.  **Advanced Options**: Use `--enable-gpl` or `--enable-full` to include additional external libraries. Run `./runner.sh --help` to see all available options or refer to [Main Repository README](../README.md).
@@ -44,125 +44,108 @@ Building FFmpegKit for Desktop is performed using the unified `runner.sh` script
 All libraries and headers created by the build process can be found under the `prebuilt` directory in the project root.
 - Headers and libraries for the consolidated bundle are typically located under `prebuilt/{platform}-{arch}/bundle-.../`.
 
-### 3. Using
-
-#### 3.1 C++ API
+### 3. Usage
 
 FFmpegKit doesn't publish prebuilt desktop libraries. You need to build them manually and import them into your project.
 
-You can use the following API methods to execute `FFmpeg` and `FFprobe` commands inside your application.
+#### 3.1 C API Wrapper (Recommended for FFI)
 
-> [!NOTE]
-> For the **C API**, see the detailed [C API Guide](docs/C_API.md).
+The C API wrapper is designed for high performance and easy integration with C/C++ projects or FFIs (like Flutter, Dart, or Python).
 
-1. Execute synchronous `FFmpeg` commands.
+##### Execute FFmpeg
+```C
+#include <ffmpegkit_wrapper.h>
 
-    ```C++
-    #include <FFmpegKit.h>
-    #include <FFmpegKitConfig.h>
+// Synchronous execution
+FFmpegSessionHandle session = ffmpeg_kit_execute("-i input.mp4 output.mov");
 
-    using namespace ffmpegkit;
+// Check state
+FFmpegKitSessionState state = ffmpeg_kit_session_get_state(session);
+if (state == FFMPEG_KIT_SESSION_STATE_COMPLETED) {
+    int rc = ffmpeg_kit_session_get_return_code(session);
+    printf("Execution successful with return code: %d\n", rc);
+}
 
-    auto session = FFmpegKit::execute("-i file1.mp4 -c:v mpeg4 file2.mp4");
-    if (ReturnCode::isSuccess(session->getReturnCode())) {
-        // SUCCESS
-    } else if (ReturnCode::isCancel(session->getReturnCode())) {
-        // CANCEL
-    } else {
-        // FAILURE
-        std::cout << "Command failed with state " << FFmpegKitConfig::sessionStateToString(session->getState()) << " and rc " << session->getReturnCode() << "." << session->getFailStackTrace() << std::endl;
-    }
-    ```
+// Memory Management: Always release handles
+ffmpeg_kit_handle_release(session);
+```
 
-2. Each `execute` call (sync or async) creates a new session. Access every detail about your execution from the 
-   session created.
+##### Concurrent Execution
+FFmpegKit for Desktop supports **parallel execution**. You can run multiple FFmpeg or FFprobe commands simultaneously in separate threads.
 
-    ```C++
-    #include <FFmpegKit.h>
-    #include <FFmpegKitConfig.h>
+```C
+// Start multiple asynchronous sessions
+FFmpegSessionHandle s1 = ffmpeg_kit_execute_async("-i in1.mp4 out1.mp4", NULL, NULL);
+FFmpegSessionHandle s2 = ffmpeg_kit_execute_async("-i in2.mp4 out2.mp4", NULL, NULL);
 
-    using namespace ffmpegkit;
-   
-    auto session = FFmpegKit::execute("-i file1.mp4 -c:v mpeg4 file2.mp4");
+// ... perform other tasks ...
 
-    // Unique session id created for this execution
-    long sessionId = session->getSessionId();
+// Release handles (will also cancel if still running)
+ffmpeg_kit_handle_release(s1);
+ffmpeg_kit_handle_release(s2);
+```
 
-    // Command arguments as a single string
-    auto command = session->getCommand();
+##### Media Information (FFprobe)
+```C
+MediaInformationSessionHandle media_session = ffprobe_kit_get_media_information("video.mp4");
+if (ffmpeg_kit_session_get_state(media_session) == FFMPEG_KIT_SESSION_STATE_COMPLETED) {
+    MediaInformationHandle info = media_information_session_get_media_information(media_session);
+    char* format = media_information_get_format(info);
+    printf("Format: %s\n", format);
+    
+    // Cleanup
+    ffmpeg_kit_free(format);
+    ffmpeg_kit_handle_release(info);
+}
+ffmpeg_kit_handle_release(media_session);
+```
 
-    // Command arguments
-    auto arguments = session->getArguments();
+##### FFplay Playback Control
+FFmpegKit provides advanced playback controls. Note that only one FFplay session can be active at a time; starting a new one automatically stops the previous one.
 
-    // State of the execution. Shows whether it is still running or completed
-    SessionState state = session->getState();
+```C
+// Start playback asynchronously
+FFplaySessionHandle play_session = ffplay_kit_execute_async("-i video.mp4", NULL, NULL, 1000);
 
-    // Return code for completed sessions.
-    auto returnCode = session->getReturnCode();
+// Interactive Controls
+ffplay_kit_session_pause(play_session);
+ffplay_kit_session_seek(play_session, 10.5); // Seek to 10.5 seconds
+ffplay_kit_session_resume(play_session);
 
-    auto startTime = session->getStartTime();
-    auto endTime = session->getEndTime();
-    long duration = session->getDuration();
+double pos = ffplay_kit_session_get_position(play_session);
+printf("Current Position: %f\n", pos);
 
-    // Console output generated for this execution
-    auto output = session->getOutput();
+ffmpeg_kit_handle_release(play_session);
+```
 
-    // The stack trace if FFmpegKit fails to run a command
-    auto failStackTrace = session->getFailStackTrace();
+#### 3.2 C++ API
 
-    // The list of logs generated for this execution
-    auto logs = session->getLogs();
+For native C++ projects, you can use the object-oriented API:
 
-    // The list of statistics generated for this execution
-    auto statistics = session->getStatistics();
-    ```
+```C++
+#include <FFmpegKit.h>
+#include <FFmpegKitConfig.h>
 
-3. Execute asynchronous `FFmpeg` commands by providing session specific callbacks.
+using namespace ffmpegkit;
 
-    ```C++
-    #include <FFmpegKit.h>
-    #include <FFmpegKitConfig.h>
+// Async execution with callbacks
+FFmpegKit::executeAsync("-i file1.mp4 file2.mp4", [](auto session) {
+    std::cout << "Finished with state: " << (int)session->getState() << std::endl;
+}, [](auto log) {
+    std::cout << log->getMessage();
+}, [](auto stats) {
+    std::cout << "Speed: " << stats->getSpeed() << "x" << std::endl;
+});
+```
 
-    using namespace ffmpegkit;
-   
-    FFmpegKit::executeAsync("-i file1.mp4 -c:v mpeg4 file2.mp4", [](auto session) {
-        const auto state = session->getState();
-        auto returnCode = session->getReturnCode();
-   
-        std::cout << "FFmpeg process exited with state " << FFmpegKitConfig::sessionStateToString(state) << " and rc " << returnCode << "." << session->getFailStackTrace() << std::endl;
-    }, [](auto log) {
-        // CALLED WHEN SESSION PRINTS LOGS
-    }, [](auto statistics) {
-        // CALLED WHEN SESSION GENERATES STATISTICS
-    });
-    ```
+---
 
-4. Execute `FFprobe` commands.
+### 4. Testing
 
-    - Synchronous
-    ```C++
-    #include <FFprobeKit.h>
-    #include <FFmpegKitConfig.h>
+A comprehensive suite of tests is available in the `desktop/tests` directory. These serve as a blueprint for advanced usage:
 
-    using namespace ffmpegkit;
+- **[wrapper_test.cpp](tests/wrapper_test.cpp)**: Demonstrates C API usage, media information extraction, and concurrency.
+- **[callback_test.cpp](tests/callback_test.cpp)**: Examples of using log and statistics callbacks.
+- **[stress_test.cpp](tests/stress_test.cpp)**: Verifies stability under heavy concurrent load.
 
-    auto session = FFprobeKit::execute(ffprobeCommand);
-    if (!ReturnCode::isSuccess(session->getReturnCode())) {
-        std::cout << "Command failed. Please check output for the details." << std::endl;
-    }
-    ```
-
-5. Get media information for a file.
-
-    ```C++
-    #include <FFprobeKit.h>
-
-    using namespace ffmpegkit;
-
-    auto mediaInformation = FFprobeKit::getMediaInformation("<file path or uri>");
-    mediaInformation->getMediaInformation();
-    ```
-
-### 4. Test Application
-
-You can see how `FFmpegKit` is used inside an application by running the test applications developed under the `desktop/tests` directory or referring to the [FFmpegKit Test](https://github.com/akashskypatel/ffmpeg-kit-test) project.
+To run the tests, refer to the [Build System documentation](docs/BUILD_SYSTEM.md#running-tests).
