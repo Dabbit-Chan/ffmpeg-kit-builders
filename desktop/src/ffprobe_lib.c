@@ -17,11 +17,9 @@
  * along with FFmpegKit.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include "config.h"
 #include "ffprobe_lib.h"
 #include "ffprobe.c"
 #include "libavutil/mem.h"
-#include "libavutil/avstring.h"
 #include "libavutil/bprint.h"
 #include <string.h>
 #include <stdlib.h>
@@ -35,46 +33,48 @@
 #endif
 
 // Global lock to protect ffmpeg.c global variables
-    
-// --- MUTEX ABSTRACTION START ---
-#ifdef _WIN32
-  static CRITICAL_SECTION ffprobe_lock;
-  static volatile long ffmpeg_lock_initialized = 0;
+// // --- MUTEX ABSTRACTION START ---
+// #ifdef _WIN32
+//   static CRITICAL_SECTION ffprobe_lock;
+//   static volatile long ffmpeg_lock_initialized = 0;
 
-  static void lock_init(void) {
-      // Thread-safe one-time initialization
-      if (InterlockedCompareExchange(&ffmpeg_lock_initialized, 1, 0) == 0) {
-          InitializeCriticalSection(&ffprobe_lock);
-          InterlockedExchange(&ffmpeg_lock_initialized, 2);
-      } else {
-          // Wait for initialization to complete if another thread is doing it
-          while (InterlockedCompareExchange(&ffmpeg_lock_initialized, 2, 2) != 2) {
-              Sleep(1);
-          }
-      }
-  }
+//   static void lock_init(void) {
+//       // Thread-safe one-time initialization
+//       if (InterlockedCompareExchange(&ffmpeg_lock_initialized, 1, 0) == 0) {
+//           InitializeCriticalSection(&ffprobe_lock);
+//           InterlockedExchange(&ffmpeg_lock_initialized, 2);
+//       } else {
+//           // Wait for initialization to complete if another thread is doing it
+//           while (InterlockedCompareExchange(&ffmpeg_lock_initialized, 2, 2) != 2) {
+//               Sleep(1);
+//           }
+//       }
+//   }
 
-  static void lib_mutex_lock(void) {
-      if (ffmpeg_lock_initialized != 2) lock_init();
-      EnterCriticalSection(&ffprobe_lock);
-  }
+//   static void lib_mutex_lock(void) {
+//       if (ffmpeg_lock_initialized != 2) lock_init();
+//       EnterCriticalSection(&ffprobe_lock);
+//   }
 
-  static void lib_mutex_unlock(void) {
-      LeaveCriticalSection(&ffprobe_lock);
-  }
-#else
-  // POSIX Implementation
-  static pthread_mutex_t ffprobe_lock = PTHREAD_MUTEX_INITIALIZER;
+//   static void lib_mutex_unlock(void) {
+//       LeaveCriticalSection(&ffprobe_lock);
+//   }
+// #else
+//   // POSIX Implementation
+//   static pthread_mutex_t ffprobe_lock = PTHREAD_MUTEX_INITIALIZER;
 
-  static void lib_mutex_lock(void) {
-      pthread_mutex_lock(&ffprobe_lock);
-  }
+//   static void lib_mutex_lock(void) {
+//       pthread_mutex_lock(&ffprobe_lock);
+//   }
 
-  static void lib_mutex_unlock(void) {
-      pthread_mutex_unlock(&ffprobe_lock);
-  }
-#endif
-// --- MUTEX ABSTRACTION END ---
+//   static void lib_mutex_unlock(void) {
+//       pthread_mutex_unlock(&ffprobe_lock);
+//   }
+// #endif
+// // --- MUTEX ABSTRACTION END ---
+
+// Forward declare the auto-generated TLS initializer
+extern void ffprobe_tls_init_options(void);
 
 extern int ffprobe_run_internal(int argc, char **argv, AVBPrint *output_buf);
 extern void ffprobe_reset_internal_state(void);
@@ -224,12 +224,14 @@ int ffprobe_run(FFprobeContext *ctx)
   if (!ctx)
     return AVERROR(EINVAL);
 
-  lib_mutex_lock();
+  //lib_mutex_lock();
+
+  ffprobe_tls_init_options();
 
   // Parse options and run probe
   ctx->ret = ffprobe_run_internal(ctx->argc, ctx->argv, &ctx->output);
 
-  lib_mutex_unlock();
+  //lib_mutex_unlock();
 
   return ctx->ret;
 }

@@ -122,7 +122,8 @@ Advanced Dependency Control:
                                                                 By default ffmpeg-kit always needs a static build of ffmpeg 
                                                                 to be present already. Does not (re)build ext-library dependencies. 
                                                                 Missing dependencies will cause a failure.
-  --build-tests                                                 Build tests. By default tests are not built. 
+  --build-tests|--build-test|--test|--tests                     Build tests. By default tests are not built. 
+  --debug-build|--build-debug                                   Build debug version of ffmpeg and ffmpeg-kit.
 	--list-libraries                                              lists available ext-libraries that can be included
 
 Dynamic Library Control:
@@ -148,7 +149,6 @@ while [ $# -gt 0 ]; do
     exit 0
     ;;
 	-d | --debug)
-    export do_debug_build=y
 		set -x
 		shift
 		;;
@@ -159,6 +159,10 @@ while [ $# -gt 0 ]; do
   -y)
     export accept_defaults=y
     echo "Skipping interactive. Accepting defult selections."
+    shift
+    ;;
+  --debug-build|--build-debug)
+    export do_debug_build=y
     shift
     ;;
   --resume)
@@ -273,12 +277,12 @@ while [ $# -gt 0 ]; do
 		export build_dependencies=y
 		shift
 		;;
-  --build-ffmpeg-only|--build-ffmpeg)
+  --build-ffmpeg-only|--build-ffmpeg|--ffmpeg)
     export build_ffmpeg_type=static
     export build_ffmpeg=y
     shift
     ;;
-	--build-ffmpeg-only=*|--build-ffmpeg=*)
+	--build-ffmpeg-only=*|--build-ffmpeg=*|--ffmpeg=*)
     build_type="${1#*=}"
     case "$build_type" in
       shared)
@@ -294,12 +298,12 @@ while [ $# -gt 0 ]; do
     export build_ffmpeg=y
 		shift
 		;;
-  --build-ffmpeg-kit-only|--build-ffmpeg-kit)
+  --build-ffmpeg-kit-only|--build-ffmpeg-kit|--ffmpeg-kit|--kit)
     export build_ffmpeg_kit_type=shared
     export build_ffmpeg_kit=y
     shift
     ;;
-	--build-ffmpeg-kit-only=*|--build-ffmpeg-kit=*)
+	--build-ffmpeg-kit-only=*|--build-ffmpeg-kit=*|--ffmpeg-kit=*|--kit=*)
     build_type="${1#*=}"
     case "$build_type" in
       shared)
@@ -315,7 +319,7 @@ while [ $# -gt 0 ]; do
     export build_ffmpeg_kit=y
 		shift
 		;;
-    --build-tests)
+    --build-tests|--build-test|--test|--tests)
     export build_tests=y
 		shift
 		;;

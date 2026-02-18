@@ -19,7 +19,7 @@ The [CMakeLists.txt](../CMakeLists.txt) is the heart of the desktop build. It pe
 Following the [Development Workflow](../ARCHITECTURE.md#development-workflow), patches are the source of truth for all modifications to the original FFmpeg tools.
 - Patches are stored in `desktop/patches/`.
 - They are applied by CMake during the configuration phase.
-- **Tip**: Always generate patches against the `.orig` baseline.
+- **Tip**: Always generate patches against the `_orig` baseline.
 
 ### 3. Bundling Scripts
 - **Linux (`scripts/shared-library.sh`)**: Analyzes the generated shared library, identifies non-system dependencies, and creates a `bundle_manifest.txt`.

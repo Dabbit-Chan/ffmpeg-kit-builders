@@ -19,6 +19,7 @@
 
 #include "ffplay_lib.h"
 #include <SDL.h>
+#include "ffmpeg_tls.h"
 
 const char program_name[] = "ffplay";
 const int program_birth_year = 2003;
@@ -57,10 +58,11 @@ static SDL_AudioDeviceID ffplay_kit_SDL_OpenAudioDevice(
 // This is a common pattern in FFmpeg tools wrapping (e.g., ffmpeg_lib.c)
 #include "ffplay.c"
 
+// Forward declare the auto-generated TLS initializer
+extern void ffplay_tls_init_options(void);
 // Forward declarations of internal functions we need that might be static
 // (If they are static in ffplay.c, including the file makes them available here)
-
-extern void (*ffplay_on_show_help)(void);
+extern FFMPEG_THREAD_LOCAL void (*ffplay_on_show_help)(void);
 extern VideoState *ffplay_init_internal(int argc, char **argv);
 extern void ffplay_reset_internal_state(void);
 
@@ -139,6 +141,8 @@ FFplayContext* ffplay_init(const char* args_string, const FFplayCallbacks *cb) {
     // Reset global state in ffplay.c
     ffplay_reset_internal_state();
 
+    ffplay_tls_init_options();
+
     ctx->argc = split_args(args_string, &ctx->argv);
     if (ctx->argc < 0) {
         av_free(ctx);
@@ -189,10 +193,8 @@ int ffplay_start(FFplayContext* ctx) {
     return 0; 
 }
 
-// Single step of the event loop logic
-
-
 int ffplay_step(FFplayContext* ctx) {
+    if (ctx->quit) return 1;
     if (!ctx || !ctx->is) return 1;
 
     SDL_Event event;
@@ -206,6 +208,7 @@ int ffplay_step(FFplayContext* ctx) {
         case SDL_KEYDOWN:
             if (exit_on_keydown || event.key.keysym.sym == SDLK_ESCAPE || event.key.keysym.sym == SDLK_q) {
                 do_exit(ctx->is);
+                ctx->is = NULL;
                 ctx->quit = 1;
                 return 1;
             }
@@ -363,9 +366,11 @@ int ffplay_step(FFplayContext* ctx) {
     }
     
     // Refresh video if needed (from refresh_loop_wait_event logic)
-    if (!cursor_hidden && av_gettime_relative() - cursor_last_shown > CURSOR_HIDE_DELAY) {
-        SDL_ShowCursor(0);
-        cursor_hidden = 1;
+    if (!cursor_hidden) {
+        if (av_gettime_relative() - cursor_last_shown > CURSOR_HIDE_DELAY) {
+            SDL_ShowCursor(0);
+            cursor_hidden = 1;
+        }
     }
     
     if (ctx->is->show_mode != SHOW_MODE_NONE && (!ctx->is->paused || ctx->is->force_refresh)) {
@@ -416,7 +421,12 @@ int ffplay_stop(FFplayContext* ctx) {
     
     SDL_Event event;
     event.type = FF_QUIT_EVENT;
-    event.user.data1 = ctx->is;
+    // Don't pass is pointer as data, it might be freed before event is processed if we are racing.
+    // However, the event loop uses event.user.data1 = is. 
+    // But since we are inside ffplay_lib.c and have access to ctx->is, we rely on the loop to handle it correctly.
+    // The issue is likely that the read_thread or other threads are accessing 'is' while it's being freed.
+    // But here we are just pushing an event.
+    event.user.data1 = ctx->is; 
     SDL_PushEvent(&event);
     
     return 0;
@@ -540,7 +550,14 @@ void ffplay_free(FFplayContext* ctx) {
     if (!ctx) return;
     if (!ctx->quit) {
         do_exit(ctx->is);
+        // do_exit called SDL_Quit once.
     }
+    
+    // Force full SDL shutdown in case multiple inits increased refcount
+    while (SDL_WasInit(0)) {
+        SDL_Quit();
+    }
+
     // Cleanup globals
     if (allocated_afilters) {
         av_free(allocated_afilters);
@@ -556,6 +573,13 @@ void ffplay_free(FFplayContext* ctx) {
         requested_audio_device = NULL;
     }
     
+    // Free VideoState structure (allocated in ffplay.c/ffplay_init_internal)
+    // NOTE: stream_close(is) called by do_exit(is) already frees 'is' (av_free(is) in stream_close).
+    // So we must NOT free it again here.
+    if (ctx->is) {
+        ctx->is = NULL;
+    }
+
     // argv freed
     if (ctx->argv) {
         for (int i=0; i<ctx->argc; i++) av_free(ctx->argv[i]);

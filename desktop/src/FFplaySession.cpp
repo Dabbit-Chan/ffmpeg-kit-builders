@@ -216,7 +216,19 @@ void ffmpegkit::FFplaySession::setContext(FFplayContext *context) {
 
 void ffmpegkit::FFplaySession::close() {
   if (_context != nullptr) {
-    ffplay_close(_context);
+    ffplay_stop(_context);
+    // Do not set _context to nullptr here immediately if we want to allow the thread to clear it, 
+    // but typically close() implies we detach. 
+    // However, if we set it to nullptr, executeFFplay won't be able to clear it (which is fine).
+    // But importantly, we MUST NOT free it.
     _context = nullptr;
   }
+}
+
+void ffmpegkit::FFplaySession::cancel() {
+  close();
+}
+
+ffmpegkit::FFplaySession::~FFplaySession() {
+  close();
 }

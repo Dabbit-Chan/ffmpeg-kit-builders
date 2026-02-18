@@ -1,5 +1,13 @@
 # FFmpegKit Changelog
 
+## Version 1.2.0
+
+- **Concurrency & Thread Safety**: Implemented automated AST-based refactoring to convert FFmpeg global state into Thread-Local Storage (TLS), enabling true multi-threaded execution within the same process.
+- **Improved Development Workflow**: Renamed source snapshots (`_bak.c`/`_orig.c`) and introduced `DEVELOPMENT.md` detailing the new automated patching pipeline.
+- **FFplay Stability**: Refactored `ffplay` to move engine state into `VideoState` and improved graph cleanup to prevent memory leaks during rapid session recycling.
+- **Build System**: Added support for dynamic TLS and options patching directly within the CMake build sequence.
+- **Architecture Documentation**: Added a comprehensive `ARCHITECTURE.md` at the project root.
+
 ## Version 1.1.4
 
 - Added debug logging infrastructure to `FFmpegKitConfig` (`enableDebugLog`, `getDebugLog`, etc.) for troubleshooting session execution.

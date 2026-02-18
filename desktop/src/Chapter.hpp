@@ -20,6 +20,7 @@
 #ifndef FFMPEG_KIT_CHAPTER_H
 #define FFMPEG_KIT_CHAPTER_H
 
+#include "FFmpegKitObject.hpp"
 #include "json/value.h"
 #include <memory>
 #include <string>
@@ -29,7 +30,7 @@ namespace ffmpegkit {
 /**
  * Chapter class.
  */
-class Chapter {
+class Chapter : public FFmpegKitObject {
 public:
   static constexpr const char *KeyId = "id";
   static constexpr const char *KeyTimeBase = "time_base";

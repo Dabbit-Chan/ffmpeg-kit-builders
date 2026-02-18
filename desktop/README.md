@@ -16,7 +16,7 @@
 For detailed technical guides, please refer to the following documentation:
 - [C API Reference](docs/C_API.md) - Detailed guide for the C API wrapper.
 - [Build System & Patching](docs/BUILD_SYSTEM.md) - Technical overview of how the desktop build works.
-- [Architecture & Workflow](ARCHITECTURE.md) - Development workflow and file structure roles.
+- [Architecture & Workflow](DEVELOPMENT.md) - Development workflow and file structure roles.
 
 ---
 

@@ -735,6 +735,11 @@ ffmpeg_kit_session_get_fail_stack_trace(void *session_handle);
  */
 FFMPEG_KIT_C_EXPORT void ffmpeg_kit_handle_release(void *handle);
 
+/**
+ * Clears all active and history sessions.
+ */
+FFMPEG_KIT_C_EXPORT void ffmpeg_kit_config_clear_sessions();
+
 /* MediaInformation Session specific */
 
 /**
@@ -1589,6 +1594,43 @@ session_is_ffplay_session(void *session);
  */
 FFMPEG_KIT_C_EXPORT int
 session_is_media_information_session(void *session);
+
+/**
+ * Enables the debug log.
+ *
+ * @param session the session to enable the debug log for
+ */
+FFMPEG_KIT_C_EXPORT void session_enable_debug_log(void *session);
+
+/**
+ * Disables the debug log.
+ *
+ * @param session the session to disable the debug log for
+ */
+FFMPEG_KIT_C_EXPORT void session_disable_debug_log(void *session);
+
+/**
+ * Checks if the debug log is enabled.
+ *
+ * @param session the session to check
+ * @return 1 if the debug log is enabled, 0 otherwise
+ */
+FFMPEG_KIT_C_EXPORT int session_is_debug_log_enabled(void *session);
+
+/**
+ * Gets the debug log.
+ *
+ * @param session the session to get the debug log for
+ * @return the debug log
+ */
+FFMPEG_KIT_C_EXPORT char *session_get_debug_log(void *session);
+
+/**
+ * Clears the debug log.
+ *
+ * @param session the session to clear the debug log for
+ */
+FFMPEG_KIT_C_EXPORT void session_clear_debug_log(void *session);
 
 /**
  * Frees the memory allocated for the pointer.

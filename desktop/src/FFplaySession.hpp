@@ -211,6 +211,16 @@ public:
    */
   void close();
 
+  /**
+   * Cancels the ffplay session.
+   */
+  /**
+   * Cancels the ffplay session.
+   */
+  void cancel() override;
+
+  virtual ~FFplaySession();
+
 private:
   struct PublicFFplaySession;
 

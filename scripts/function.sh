@@ -3178,7 +3178,9 @@ configure_ffmpeg() {
 	change_dir "$ffmpeg_source_dir" || return 1
 
 	if truthy "$build_force"; then
-		remove_path -f "${ffmpeg_source_dir}/already_configured_$build_ffmpeg_type"*
+		reset_touch "${ffmpeg_source_dir}" "already_configured_$build_ffmpeg_type*"
+    git_hard_reset "${ffmpeg_source_dir}" || exit_message 1 "git_hard_reset: could not reset ffmpeg git repository"
+    touch "no.autoreconf"
 	fi
 
 	change_dir "$ffmpeg_source_dir" || exit_message 1 "configure_ffmpeg: could not change to $ffmpeg_source_dir"

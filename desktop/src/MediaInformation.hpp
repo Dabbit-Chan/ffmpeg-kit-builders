@@ -20,6 +20,7 @@
 #ifndef FFMPEG_KIT_MEDIA_INFORMATION_H
 #define FFMPEG_KIT_MEDIA_INFORMATION_H
 
+#include "FFmpegKitObject.hpp"
 #include "Chapter.hpp"
 #include "StreamInformation.hpp"
 #include "json/value.h"
@@ -31,7 +32,7 @@ namespace ffmpegkit {
 /**
  * Media information class.
  */
-class MediaInformation {
+class MediaInformation : public FFmpegKitObject {
 public:
   static constexpr const char *KeyFormatProperties = "format";
   static constexpr const char *KeyFilename = "filename";

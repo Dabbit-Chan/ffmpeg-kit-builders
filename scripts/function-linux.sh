@@ -195,6 +195,14 @@ configure_ffmpeg_kit() {
     	cmake_params+=" -DENABLE_LIBPLACEBO=OFF"
 	fi
 
+	if truthy "$do_debug_build"; then
+		cmake_params+=" -DCMAKE_BUILD_TYPE=Debug"
+    CFLAGS+=" -Og -fno-omit-frame-pointer -ggdb -fsanitize=address -fstack-protector-all"
+    CXXFLAGS+=" -Og -fno-omit-frame-pointer -ggdb -fsanitize=address -D_GLIBCXX_DEBUG -fstack-protector-all"
+	else
+		cmake_params+=" -DCMAKE_BUILD_TYPE=Release"
+	fi
+
 	change_dir "${ffmpeg_kit_src_dir}/build" 1
   
   do_cmake "$cmake_params" "$ffmpeg_kit_src_dir" "${type_postfix}" 1

@@ -20,6 +20,7 @@
 #ifndef FFMPEG_KIT_ABSTRACT_SESSION_H
 #define FFMPEG_KIT_ABSTRACT_SESSION_H
 
+#include <mutex>
 #include "Session.hpp"
 
 namespace ffmpegkit {
@@ -30,7 +31,8 @@ namespace ffmpegkit {
  * sessions.
  */
 class AbstractSession : public Session,
-                        std::enable_shared_from_this<AbstractSession> {
+                        public std::enable_shared_from_this<AbstractSession> {
+
 public:
   /**
    * Defines how long default "getAll" methods wait, in milliseconds.
@@ -47,6 +49,9 @@ public:
   AbstractSession(const std::list<std::string> &arguments,
                   const ffmpegkit::LogCallback logCallback,
                   const LogRedirectionStrategy logRedirectionStrategy);
+
+  virtual ~AbstractSession();
+
 
   /**
    * Waits for all asynchronous messages to be transmitted until the given
@@ -291,9 +296,50 @@ public:
    */
   void cancel() override;
 
+  /**
+   * Enables FFmpeg-Kit debugging for all sessions.
+   */
+  void enableDebugLog() override;
+
+  /**
+   * Disables FFmpeg-Kit debugging for all sessions.
+   */
+  void disableDebugLog() override;
+
+  /**
+   * Checks if FFmpeg-Kit debugging is enabled for all sessions.
+   * 
+   * @return true if debugging is enabled, false otherwise
+   */
+  bool isDebugLogEnabled() const override;
+
+  /**
+   * Gets the FFmpeg-Kit debug log for all sessions.
+   * 
+   * @return debug log for all sessions
+   */
+  std::string getDebugLog() const override;
+
+  /**
+   * Clears the FFmpeg-Kit debug log.
+   */
+  void clearDebugLog() override;
+  
+  /**
+   * Logs a message to the FFmpeg-Kit debug log.
+   * 
+   * @param fmt format string
+   * @param ... arguments
+   */
+  void debugLog(const char *fmt, ...) override;
+
 private:
   const long _sessionId;
   ffmpegkit::LogCallback _logCallback;
+  mutable std::mutex _debugLogMutex;
+  bool _debuggingEnabled;
+  std::string _debugLog;
+
   std::chrono::time_point<std::chrono::system_clock> _createTime;
   std::chrono::time_point<std::chrono::system_clock> _startTime;
   std::chrono::time_point<std::chrono::system_clock> _endTime;

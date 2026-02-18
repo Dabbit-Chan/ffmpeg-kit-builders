@@ -28,6 +28,8 @@
 #include "MediaInformationSession.hpp"
 #include "Packages.hpp"
 #include "StreamInformation.hpp"
+#include "FFmpegKitObject.hpp"
+#include "Statistics.hpp"
 #include <cstring>
 
 using namespace ffmpegkit;
@@ -48,30 +50,18 @@ static char *strdup_safe_ptr(std::shared_ptr<std::string> strPtr) {
   return strdup_cpp(*strPtr);
 }
 
-template <typename T> static void *to_handle(std::shared_ptr<T> ptr) {
-  if (!ptr)
-    return nullptr;
-  return new std::shared_ptr<T>(ptr);
-}
-
-template <typename T> static std::shared_ptr<T> from_handle(void *handle) {
-  if (!handle)
-    return nullptr;
-  return *static_cast<std::shared_ptr<T> *>(handle);
-}
-
 template <typename T> static void *create_handle(std::shared_ptr<T> ptr) {
   if (!ptr)
     return nullptr;
-  // Cast to void shared_ptr to allow generic deletion
-  return new std::shared_ptr<void>(ptr);
+  // Cast to FFmpegKitObject shared_ptr to allow dynamic casting later
+  return new std::shared_ptr<FFmpegKitObject>(std::static_pointer_cast<FFmpegKitObject>(ptr));
 }
 
 template <typename T> static std::shared_ptr<T> get_ptr(void *handle) {
   if (!handle)
     return nullptr;
-  auto void_ptr = *static_cast<std::shared_ptr<void> *>(handle);
-  return std::static_pointer_cast<T>(void_ptr);
+  auto obj_ptr = *static_cast<std::shared_ptr<FFmpegKitObject> *>(handle);
+  return std::dynamic_pointer_cast<T>(obj_ptr);
 }
 
 template <typename T>
@@ -96,9 +86,16 @@ extern "C" {
 
 void ffmpeg_kit_handle_release(void *handle) {
   if (handle) {
-    delete static_cast<std::shared_ptr<void> *>(handle);
+    // Safely check if it's a session before calling cancel
+    auto session = get_ptr<Session>(handle);
+    if (session) {
+      session->cancel();
+    }
+    delete static_cast<std::shared_ptr<FFmpegKitObject> *>(handle);
   }
 }
+
+void ffmpeg_kit_config_clear_sessions() { FFmpegKitConfig::clearSessions(); }
 
 /* FFmpegKit */
 
@@ -1246,24 +1243,33 @@ void ffmpeg_kit_free(void *ptr) {
   }
 }
 
-void ffmpeg_kit_config_enable_debug_log() {
-  FFmpegKitConfig::enableDebugLog();
+void session_enable_debug_log(void *session) {
+  if (!session)
+    return;
+  get_ptr<AbstractSession>(session)->enableDebugLog();
 }
 
-void ffmpeg_kit_config_disable_debug_log() {
-  FFmpegKitConfig::disableDebugLog();
+void session_disable_debug_log(void *session) {
+  if (!session)
+    return;
+  get_ptr<AbstractSession>(session)->disableDebugLog();
 }
 
-int ffmpeg_kit_config_is_debug_log_enabled() {
-  return FFmpegKitConfig::isDebugLogEnabled();
+int session_is_debug_log_enabled(void *session) {
+  if (!session)
+    return 0;
+  return get_ptr<AbstractSession>(session)->isDebugLogEnabled();
 }
 
-char *ffmpeg_kit_config_get_debug_log() {
-  return strdup_cpp(FFmpegKitConfig::getDebugLog());
+char *session_get_debug_log(void *session) {
+  if (!session)
+    return nullptr;
+  return strdup_cpp(get_ptr<AbstractSession>(session)->getDebugLog());
 }
 
-void ffmpeg_kit_config_clear_debug_log() {
-  FFmpegKitConfig::clearDebugLog();
+void session_clear_debug_log(void *session) {
+  if (!session)
+    return;
+  get_ptr<AbstractSession>(session)->clearDebugLog();
 }
-
 }

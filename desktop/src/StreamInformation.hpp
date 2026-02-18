@@ -20,6 +20,7 @@
 #ifndef FFMPEG_KIT_STREAM_INFORMATION_H
 #define FFMPEG_KIT_STREAM_INFORMATION_H
 
+#include "FFmpegKitObject.hpp"
 #include "json/value.h"
 #include <memory>
 #include <string>
@@ -29,7 +30,7 @@ namespace ffmpegkit {
 /**
  * Stream information class.
  */
-class StreamInformation {
+class StreamInformation : public FFmpegKitObject {
 public:
   static constexpr const char *KeyIndex = "index";
   static constexpr const char *KeyType = "codec_type";

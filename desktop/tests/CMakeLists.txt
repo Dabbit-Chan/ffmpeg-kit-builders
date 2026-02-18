@@ -1,6 +1,8 @@
 add_executable(ffmpegkit_tests
     main_test.cpp
     wrapper_test.cpp
+    callback_test.cpp
+    stress_test.cpp
 )
 
 target_link_libraries(ffmpegkit_tests

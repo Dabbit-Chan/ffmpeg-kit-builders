@@ -20,6 +20,7 @@
 #ifndef FFMPEG_KIT_SESSION_H
 #define FFMPEG_KIT_SESSION_H
 
+#include "FFmpegKitObject.hpp"
 #include "Log.hpp"
 #include "LogCallback.hpp"
 #include "LogRedirectionStrategy.hpp"
@@ -34,8 +35,12 @@ namespace ffmpegkit {
 /**
  * <p>Common interface for all <code>FFmpegKit</code> sessions.
  */
-class Session {
+class Session : public FFmpegKitObject {
 public:
+  virtual ~Session() {}
+
+  virtual bool isSession() const override { return true; }
+
   /**
    * Returns the session specific log callback.
    *
@@ -270,6 +275,43 @@ public:
    * Cancels running the session.
    */
   virtual void cancel() = 0;
+
+  /**
+   * Enables FFmpeg-Kit debugging for all sessions.
+   */
+  virtual void enableDebugLog() = 0;
+
+  /**
+   * Disables FFmpeg-Kit debugging for all sessions.
+   */
+  virtual void disableDebugLog() = 0;
+
+  /**
+   * Checks if FFmpeg-Kit debugging is enabled for all sessions.
+   * 
+   * @return true if debugging is enabled, false otherwise
+   */
+  virtual bool isDebugLogEnabled() const = 0;
+
+  /**
+   * Gets the FFmpeg-Kit debug log for all sessions.
+   * 
+   * @return debug log for all sessions
+   */
+  virtual std::string getDebugLog() const = 0;
+
+  /**
+   * Clears the FFmpeg-Kit debug log.
+   */
+  virtual void clearDebugLog() = 0;
+  
+  /**
+   * Logs a message to the FFmpeg-Kit debug log.
+   * 
+   * @param fmt format string
+   * @param ... arguments
+   */
+  virtual void debugLog(const char *fmt, ...) = 0;
 };
 
 } // namespace ffmpegkit

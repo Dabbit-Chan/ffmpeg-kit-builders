@@ -20,14 +20,15 @@
 #ifndef FFMPEG_KIT_STATISTICS_H
 #define FFMPEG_KIT_STATISTICS_H
 
-#include <cstdint> // Add this line
+#include "FFmpegKitObject.hpp"
+#include <cstdint>
 
 namespace ffmpegkit {
 
 /**
  * Statistics entry class.
  */
-class Statistics {
+class Statistics : public FFmpegKitObject {
 public:
   Statistics(const long sessionId, const int videoFrameNumber,
              const float videoFps, const float videoQuality, const int64_t size,

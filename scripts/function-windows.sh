@@ -111,6 +111,10 @@ configure_ffmpeg_kit() {
 	change_dir "${ffmpeg_kit_src_dir}"
 	make distclean > >(redirect_output) 2>&1
 
+	export CFLAGS="${local_cflags}"
+	export CXXFLAGS="${local_cxxfalgs}"
+	export LDFLAGS="${LDFLAGS//-static /} -static-libgcc -static-libstdc++"
+
 	local cmake_params="-DCMAKE_SYSTEM_NAME=Windows \
 -DCMAKE_C_COMPILER=$CC \
 -DCMAKE_CXX_COMPILER=$CXX \
@@ -137,11 +141,16 @@ configure_ffmpeg_kit() {
 	else
     	cmake_params+=" -DENABLE_LIBPLACEBO=OFF"
 	fi
-  
+
+	if truthy "$do_debug_build"; then
+		cmake_params+=" -DCMAKE_BUILD_TYPE=Debug"
+		CFLAGS+=" -g -fno-omit-frame-pointer -ggdb -fsanitize=address -fstack-protector-all"
+		CXXFLAGS+=" -g -fno-omit-frame-pointer -ggdb -fsanitize=address -D_GLIBCXX_DEBUG -fstack-protector-all"
+	else
+		cmake_params+=" -DCMAKE_BUILD_TYPE=Release"
+	fi
+
 	change_dir "${ffmpeg_kit_src_dir}"
-	export CFLAGS="${local_cflags}"
-	export CXXFLAGS="${local_cxxfalgs}"
-	export LDFLAGS="${LDFLAGS//-static /} -static-libgcc -static-libstdc++"
 	
 	change_dir "${ffmpeg_kit_src_dir}/build" 1
 	

@@ -27,6 +27,7 @@
 #include <condition_variable>
 #include <iostream>
 #include <mutex>
+#include <stdarg.h>
 
 static std::atomic<long> sessionIdGenerator(1);
 
@@ -37,12 +38,17 @@ ffmpegkit::AbstractSession::AbstractSession(
     const std::list<std::string> &arguments,
     const ffmpegkit::LogCallback logCallback,
     const LogRedirectionStrategy logRedirectionStrategy)
-    : _arguments{std::make_shared<std::list<std::string>>(arguments)},
-      _sessionId{sessionIdGenerator++}, _logCallback{logCallback},
+    : _sessionId{sessionIdGenerator++}, _logCallback{logCallback},
+      _debuggingEnabled{false}, _debugLog{""},
       _createTime{std::chrono::system_clock::now()},
+      _arguments{std::make_shared<std::list<std::string>>(arguments)},
       _logs{std::make_shared<std::list<std::shared_ptr<ffmpegkit::Log>>>()},
       _state{SessionStateCreated}, _returnCode{nullptr},
       _logRedirectionStrategy{logRedirectionStrategy} {}
+
+
+ffmpegkit::AbstractSession::~AbstractSession() {}
+
 
 void ffmpegkit::AbstractSession::waitForAsynchronousMessagesInTransmit(
     const int timeout) const {
@@ -231,4 +237,68 @@ void ffmpegkit::AbstractSession::cancel() {
   if (_state == SessionStateRunning) {
     FFmpegKit::cancel(_sessionId);
   }
+}
+
+static std::string getCurrentTimeStamp() {
+    time_t now;
+    time(&now);
+    char buf[sizeof "2026-02-17T17:49:50Z"];
+    strftime(buf, sizeof buf, "%Y-%m-%dT%H:%M:%SZ", gmtime(&now));
+    return std::string(buf);
+}
+
+void ffmpegkit::AbstractSession::debugLog(const char *fmt, ...) {
+    if (!_debuggingEnabled) return;
+
+    // 1. Properly format the variadic arguments (evaluate %ld, %s, etc.)
+    va_list args1;
+    va_start(args1, fmt);
+    va_list args2;
+    va_copy(args2, args1);
+
+    // Calculate required buffer size
+    int len = std::vsnprintf(nullptr, 0, fmt, args1);
+    va_end(args1);
+    if (len < 0) {
+        va_end(args2);
+        return;
+    }
+    
+    // Write formatted string to buffer
+    std::vector<char> buffer(len + 1);
+    std::vsnprintf(buffer.data(), buffer.size(), fmt, args2);
+    va_end(args2);
+    std::lock_guard<std::mutex> lock(_debugLogMutex);
+    // Optional: Prevent unbounded memory growth (Cap log at ~1MB)
+    if (_debugLog.size() > 1024 * 1024) {
+         // Erase the oldest half of the logs to free memory
+         _debugLog.erase(0, 512 * 1024); 
+         _debugLog += "\n[... PREVIOUS LOGS TRUNCATED FOR MEMORY ...]\n";
+    }
+
+    _debugLog += "[" + getCurrentTimeStamp() + "] ";
+    _debugLog += buffer.data();
+    _debugLog += "\n";
+}
+
+void ffmpegkit::AbstractSession::clearDebugLog() {
+    std::lock_guard<std::mutex> lock(_debugLogMutex);
+    _debugLog = "";
+}
+
+std::string ffmpegkit::AbstractSession::getDebugLog() const {
+    std::lock_guard<std::mutex> lock(_debugLogMutex);
+    return _debugLog;
+}
+
+void ffmpegkit::AbstractSession::enableDebugLog() {
+    _debuggingEnabled = true;
+}
+
+void ffmpegkit::AbstractSession::disableDebugLog() {
+    _debuggingEnabled = false;
+}
+
+bool ffmpegkit::AbstractSession::isDebugLogEnabled() const {
+    return _debuggingEnabled;
 }

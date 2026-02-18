@@ -13,6 +13,7 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS_DEBUG ON)
 set(CMAKE_EXPORT_COMPILE_COMMANDS_RELEASE ON)
 option(BUILD_TESTS "Build tests" OFF)
 option(ENABLE_LIBPLACEBO "Enable libplacebo" OFF)
+option(CMAKE_BUILD_TYPE "Build type" "Release")
 # ==============================================================================
 # 1. Options & Configuration
 # ==============================================================================
@@ -110,6 +111,34 @@ if(IS_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/patches")
             endif()
         endif()
     endforeach()
+
+    if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/scripts/tls_patch.py")
+        message(STATUS "Applying TLS (Thread Local Storage) patches...")
+        execute_process(
+            COMMAND python3 "${CMAKE_CURRENT_SOURCE_DIR}/scripts/tls_patch.py" 
+            WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
+            RESULT_VARIABLE TLS_PATCH_EXIT_CODE
+        )
+        if(NOT TLS_PATCH_EXIT_CODE EQUAL 0)
+            message(FATAL_ERROR "Failed to apply TLS patches. Check for conflicts.")
+        endif()
+    else()
+        message(FATAL_ERROR "TLS patch script not found. Cannot proceed.")
+    endif()
+
+    if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/scripts/options_patch.py")
+        message(STATUS "Applying Options patches...")
+        execute_process(
+            COMMAND python3 "${CMAKE_CURRENT_SOURCE_DIR}/scripts/options_patch.py" 
+            WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
+            RESULT_VARIABLE OPTIONS_PATCH_EXIT_CODE
+        )
+        if(NOT OPTIONS_PATCH_EXIT_CODE EQUAL 0)
+            message(FATAL_ERROR "Failed to apply Options patches. Check for conflicts.")
+        endif()
+    else()
+        message(FATAL_ERROR "Options patch script not found. Cannot proceed.")
+    endif()
 endif()
 
 # ==============================================================================
@@ -133,6 +162,14 @@ file(GLOB_RECURSE KIT_HEADERS "${CMAKE_CURRENT_SOURCE_DIR}/src/*.h")
 # Exclude ffplay.c and ffprobe.c as they are included in ffplay_lib.c and ffprobe_lib.c respectively
 list(REMOVE_ITEM KIT_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/src/ffplay.c")
 list(REMOVE_ITEM KIT_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/src/ffprobe.c")
+
+# exclude _bak and _orig files
+list(FILTER KIT_SOURCES EXCLUDE REGEX ".*_(bak|orig)\\.(c|cpp)$")
+list(FILTER KIT_HEADERS EXCLUDE REGEX ".*_(bak|orig)\\.h$")
+
+# print KIT_SOURCES and KIT_HEADERS
+message(STATUS "KIT_SOURCES: ${KIT_SOURCES}")
+message(STATUS "KIT_HEADERS: ${KIT_HEADERS}")
 
 # ==============================================================================
 # 5. Dependency Detection
