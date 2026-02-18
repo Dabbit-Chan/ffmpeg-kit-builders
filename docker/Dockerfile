@@ -20,6 +20,7 @@ RUN dnf install -y --allowerasing --setopt=install_weak_deps=False \
     clang \
     compiler-rt \
     coreutils \
+    clang-tools-extra \
     curl \
     cvs \
     ed \
@@ -27,6 +28,7 @@ RUN dnf install -y --allowerasing --setopt=install_weak_deps=False \
     gcc \
     gcc-c++ \
     gcc-gfortran \
+    gcc-toolset-14-libasan-devel \
     gettext \
     gettext-devel \
     glib2-devel \
@@ -39,6 +41,7 @@ RUN dnf install -y --allowerasing --setopt=install_weak_deps=False \
     libzstd-devel \
     lld \
     llvm \
+    libasan \
     make \
     nasm \
     ninja-build \
