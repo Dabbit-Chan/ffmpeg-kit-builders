@@ -1,0 +1,9 @@
+leak:SDL_DBus_Init
+leak:SDL_Init
+leak:SDL_InitSubSystem
+leak:__interceptor_malloc
+leak:libLLVM
+leak:libGL
+leak:libglapi
+leak:libGLX_mesa
+leak:<unknown module>
