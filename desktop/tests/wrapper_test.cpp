@@ -390,7 +390,11 @@ TEST(FFmpegKitTest, PackageName) {
 
 TEST(FFmpegKitTest, AudioDeviceManagement) {
     // Force dummy audio for headless environments
-    setenv("SDL_AUDIODRIVER", "dummy", 1);
+    #ifdef _WIN32
+        _putenv("SDL_AUDIODRIVER=dummy");
+    #else
+        setenv("SDL_AUDIODRIVER", "dummy", 1);
+    #endif
 
     // 1. List devices
     char *devices = ffmpeg_kit_config_list_audio_output_devices();

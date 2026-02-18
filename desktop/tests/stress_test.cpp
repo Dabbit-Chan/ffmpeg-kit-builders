@@ -14,8 +14,13 @@ class StressTest : public ::testing::Test {
 protected:
     void SetUp() override {
         // Ensure environment for ffplay
-        setenv("SDL_VIDEODRIVER", "dummy", 1);
-        setenv("SDL_AUDIODRIVER", "dummy", 1);
+        #ifdef _WIN32
+            _putenv("SDL_VIDEODRIVER=dummy");
+            _putenv("SDL_AUDIODRIVER=dummy");
+        #else
+            setenv("SDL_VIDEODRIVER", "dummy", 1);
+            setenv("SDL_AUDIODRIVER", "dummy", 1);
+        #endif
     }
 
     void TearDown() override {
