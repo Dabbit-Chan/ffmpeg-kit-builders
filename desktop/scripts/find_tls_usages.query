@@ -1,0 +1,6 @@
+# Match the declaration of a TLS variable
+# (Assuming FFMPEG_THREAD_LOCAL expands to a thread-local duration)
+let tlsDecl varDecl(hasThreadStorageDuration())
+
+# Match every reference to that declaration
+match declRefExpr(to(tlsDecl)).bind("usage")
