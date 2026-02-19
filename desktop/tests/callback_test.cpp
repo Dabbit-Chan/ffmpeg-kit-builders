@@ -194,8 +194,8 @@ public:
 
     static void CompleteCallback(FFplaySessionHandle session, void* user_data) {
         auto* capturer = static_cast<PlayCallbackCapturer*>(user_data);
-        capturer->complete_called = true;
         capturer->session = session;
+        capturer->complete_called = true;
     }
 };
 

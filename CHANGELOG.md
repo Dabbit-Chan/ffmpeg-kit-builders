@@ -1,5 +1,12 @@
 # FFmpegKit Changelog
 
+## Version 1.4.0
+
+- **Concurrency**: Refactored `ffmpeg` and `ffplay` internal state variables from volatile to atomic types to ensure safer multi-threaded execution.
+- **State Encapsulation**: Moved global display/filter contexts into the `VideoState` struct within `ffplay`, allowing for independent parallel session execution.
+- **Thread Initialization**: Updated `ffmpeg_sched.c` to properly initialize Thread-Local Storage (TLS) options for spawned worker threads.
+- **Documentation**: Updated `DEVELOPMENT.md` to list exactly which source files from `ffmpeg/fftools` fall under the concurrency patching workflow.
+
 ## Version 1.3.1
 
 - **Memory Management**: Fixed a memory leak in log callbacks where message copies were not being freed. Log messages are now passed directly using internal pointers.

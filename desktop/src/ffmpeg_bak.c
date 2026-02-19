@@ -137,20 +137,20 @@ void term_exit(void)
     term_exit_sigsafe();
 }
 
-static volatile int received_sigterm = 0;
-static volatile int received_nb_signals = 0;
+static atomic_int received_sigterm = 0;
+static atomic_int received_nb_signals = 0;
 static atomic_int transcode_init_done = 0;
-static volatile int ffmpeg_exited = 0;
+static atomic_int ffmpeg_exited = 0;
 static int64_t copy_ts_first_pts = AV_NOPTS_VALUE;
 
 void
 sigterm_handler(int sig)
 {
     int ret;
-    received_sigterm = sig;
-    received_nb_signals++;
+    atomic_store(&received_sigterm, sig);
+    atomic_fetch_add(&received_nb_signals, 1);
     term_exit_sigsafe();
-    if(received_nb_signals > 3) {
+    if(atomic_load(&received_nb_signals) > 3) {
         ret = write(2/*STDERR_FILENO*/, "Received > 3 system signals, hard exiting\n",
                     strlen("Received > 3 system signals, hard exiting\n"));
         if (ret < 0) { /* Do nothing */ };
@@ -178,7 +178,7 @@ static BOOL WINAPI CtrlHandler(DWORD fdwCtrlType)
            process is hard terminated, so stall as long as we need to
            to try and let the main thread(s) clean up and gracefully terminate
            (we have at most 5 seconds, but should be done far before that). */
-        while (!ffmpeg_exited) {
+        while (!atomic_load(&ffmpeg_exited)) {
             Sleep(0);
         }
         return TRUE;
@@ -304,7 +304,7 @@ static int read_key(void)
 
 static int decode_interrupt_cb(void *ctx)
 {
-    return received_nb_signals > atomic_load(&transcode_init_done);
+    return atomic_load(&received_nb_signals) > atomic_load(&transcode_init_done);
 }
 
 const AVIOInterruptCB int_cb = { decode_interrupt_cb, NULL };
@@ -356,14 +356,14 @@ static void ffmpeg_cleanup(int ret)
 
     avformat_network_deinit();
 
-    if (received_sigterm) {
+    if (atomic_load(&received_sigterm)) {
         av_log(NULL, AV_LOG_INFO, "Exiting normally, received signal %d.\n",
-               (int) received_sigterm);
+               (int) atomic_load(&received_sigterm));
     } else if (ret && atomic_load(&transcode_init_done)) {
         av_log(NULL, AV_LOG_INFO, "Conversion failed!\n");
     }
     term_exit();
-    ffmpeg_exited = 1;
+    atomic_store(&ffmpeg_exited, 1);
 }
 
 OutputStream *ost_iter(OutputStream *prev)
@@ -398,32 +398,42 @@ InputStream *ist_iter(InputStream *prev)
     return NULL;
 }
 
+static pthread_mutex_t frame_data_lock = PTHREAD_MUTEX_INITIALIZER;
+
 static void frame_data_free(void *opaque, uint8_t *data)
 {
     FrameData *fd = (FrameData *)data;
 
+    pthread_mutex_lock(&frame_data_lock);
     avcodec_parameters_free(&fd->par_enc);
+    pthread_mutex_unlock(&frame_data_lock);
 
     av_free(data);
 }
 
 static int frame_data_ensure(AVBufferRef **dst, int writable)
 {
+    int ret;
+    AVBufferRef *old_src = NULL;
+
+    pthread_mutex_lock(&frame_data_lock);
     AVBufferRef *src = *dst;
 
     if (!src || (writable && !av_buffer_is_writable(src))) {
         FrameData *fd;
 
         fd = av_mallocz(sizeof(*fd));
-        if (!fd)
-            return AVERROR(ENOMEM);
+        if (!fd) {
+            ret = AVERROR(ENOMEM);
+            goto finish;
+        }
 
         *dst = av_buffer_create((uint8_t *)fd, sizeof(*fd),
                                 frame_data_free, NULL, 0);
         if (!*dst) {
-            av_buffer_unref(&src);
             av_freep(&fd);
-            return AVERROR(ENOMEM);
+            ret = AVERROR(ENOMEM);
+            goto finish;
         }
 
         if (src) {
@@ -433,20 +443,19 @@ static int frame_data_ensure(AVBufferRef **dst, int writable)
             fd->par_enc = NULL;
 
             if (fd_src->par_enc) {
-                int ret = 0;
-
                 fd->par_enc = avcodec_parameters_alloc();
-                ret = fd->par_enc ?
-                      avcodec_parameters_copy(fd->par_enc, fd_src->par_enc) :
-                      AVERROR(ENOMEM);
+                if (!fd->par_enc)
+                    ret = AVERROR(ENOMEM);
+                else
+                    ret = avcodec_parameters_copy(fd->par_enc, fd_src->par_enc);
+
                 if (ret < 0) {
                     av_buffer_unref(dst);
-                    av_buffer_unref(&src);
-                    return ret;
+                    goto finish;
                 }
             }
 
-            av_buffer_unref(&src);
+            old_src = src;
         } else {
             fd->dec.frame_num = UINT64_MAX;
             fd->dec.pts       = AV_NOPTS_VALUE;
@@ -456,7 +465,11 @@ static int frame_data_ensure(AVBufferRef **dst, int writable)
         }
     }
 
-    return 0;
+    ret = 0;
+finish:
+    pthread_mutex_unlock(&frame_data_lock);
+    av_buffer_unref(&old_src);
+    return ret;
 }
 
 FrameData *frame_data(AVFrame *frame)
@@ -702,7 +715,7 @@ static void print_report(int is_last_report, int64_t timer_start, int64_t cur_ti
     if (progress_avio) {
         av_bprintf(&buf_script, "progress=%s\n",
                    is_last_report ? "end" : "continue");
-        avio_write(progress_avio, buf_script.str,
+        avio_write(progress_avio, (const uint8_t *)buf_script.str,
                    FFMIN(buf_script.len, buf_script.size - 1));
         avio_flush(progress_avio);
         av_bprint_finalize(&buf_script, NULL);
@@ -913,7 +926,7 @@ static int transcode(Scheduler *sch)
     while (!sch_wait(sch, stats_period, &transcode_ts)) {
         int64_t cur_time= av_gettime_relative();
 
-        if (received_nb_signals)
+        if (atomic_load(&received_nb_signals))
             break;
 
         /* if 'q' pressed, exits */
@@ -1000,10 +1013,10 @@ void ffmpeg_reset_internal_state(void)
     av_freep(&decoders);
     
     // Reset flags
-    received_sigterm = 0;
-    received_nb_signals = 0;
+    atomic_store(&received_sigterm, 0);
+    atomic_store(&received_nb_signals, 0);
     atomic_store(&transcode_init_done, 0);
-    ffmpeg_exited = 0;
+    atomic_store(&ffmpeg_exited, 0);
     copy_ts_first_pts = AV_NOPTS_VALUE;
     
     // Reset stats
@@ -1073,7 +1086,7 @@ int ffmpeg_run_internal(int argc, char **argv)
                utime / 1000000.0, stime / 1000000.0, rtime / 1000000.0);
     }
 
-    ret = received_nb_signals                 ? 255 :
+    ret = atomic_load(&received_nb_signals)                 ? 255 :
           (ret == FFMPEG_ERROR_RATE_EXCEEDED) ?  69 : ret;
 
 finish:

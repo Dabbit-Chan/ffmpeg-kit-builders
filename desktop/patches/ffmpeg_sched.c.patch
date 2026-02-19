@@ -1,0 +1,23 @@
+diff --git a/src/ffmpeg_sched.c b/src/ffmpeg_sched.c
+index 3180367..0a1f45c 100755
+--- a/src/ffmpeg_sched.c
++++ b/src/ffmpeg_sched.c
+@@ -2524,6 +2524,8 @@ static int task_cleanup(Scheduler *sch, SchedulerNode node)
+     }
+ }
+ 
++extern void ffmpeg_tls_init_options(void);
++
+ static void *task_wrapper(void *arg)
+ {
+     SchTask  *task = arg;
+@@ -2531,6 +2533,9 @@ static void *task_wrapper(void *arg)
+     int ret;
+     int err = 0;
+ 
++    // FFmpegKit: Initialize TLS options for the sub-thread
++    ffmpeg_tls_init_options();
++
+     ret = task->func(task->func_arg);
+     if (ret < 0)
+         av_log(task->func_arg, AV_LOG_ERROR,

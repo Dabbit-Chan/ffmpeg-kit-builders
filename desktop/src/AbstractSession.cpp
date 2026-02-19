@@ -168,6 +168,7 @@ std::string ffmpegkit::AbstractSession::getOutput() const {
 }
 
 ffmpegkit::SessionState ffmpegkit::AbstractSession::getState() const {
+  std::lock_guard<std::mutex> lock(_stateMutex);
   return _state;
 }
 
@@ -192,10 +193,12 @@ bool ffmpegkit::AbstractSession::thereAreAsynchronousMessagesInTransmit()
 
 void ffmpegkit::AbstractSession::addLog(
     const std::shared_ptr<ffmpegkit::Log> log) {
+  std::lock_guard<std::mutex> lock(_stateMutex);
   _logs->push_back(log);
 }
 
 void ffmpegkit::AbstractSession::startRunning() {
+  std::lock_guard<std::mutex> lock(_stateMutex);
   _state = SessionStateRunning;
   _startTime = std::chrono::system_clock::now();
 }

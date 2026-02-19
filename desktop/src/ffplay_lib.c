@@ -28,6 +28,9 @@ const int program_birth_year = 2003;
 static char *requested_audio_device = NULL;
 static SDL_AudioSpec captured_wanted_spec;
 static int has_captured_spec = 0;
+struct VideoState; // Forward declaration
+static struct VideoState *active_audio_is = NULL;
+static SDL_AudioDeviceID active_audio_dev_id = 0;
 
 // Interception logic
 static SDL_AudioDeviceID ffplay_kit_SDL_OpenAudioDevice(
@@ -37,22 +40,37 @@ static SDL_AudioDeviceID ffplay_kit_SDL_OpenAudioDevice(
     SDL_AudioSpec *obtained,
     int allowed_changes)
 {
-    // Capture the spec if this is our main playback session opening
-    if (desired && !iscapture) {
-        captured_wanted_spec = *desired;
-        has_captured_spec = 1;
-    }
-
     const char *target = device;
     if (requested_audio_device && !iscapture) {
         target = requested_audio_device;
     }
 
-    return SDL_OpenAudioDevice(target, iscapture, desired, obtained, allowed_changes);
+    SDL_AudioDeviceID dev = SDL_OpenAudioDevice(target, iscapture, desired, obtained, allowed_changes);
+
+    // Capture the spec if this is our main playback session opening
+    if (desired && !iscapture && dev > 0) {
+        captured_wanted_spec = *desired;
+        has_captured_spec = 1;
+        // active_audio_is will be extracted from userdata after compilation of ffplay.c struct
+        active_audio_is = (struct VideoState *)desired->userdata;
+        active_audio_dev_id = dev;
+    }
+
+    return dev;
+}
+
+static void ffplay_kit_SDL_CloseAudioDevice(SDL_AudioDeviceID dev) {
+    if (dev > 0 && dev == active_audio_dev_id) {
+        active_audio_is = NULL;
+        active_audio_dev_id = 0;
+        has_captured_spec = 0;
+    }
+    SDL_CloseAudioDevice(dev);
 }
 
 // Redirection macro must be defined before including ffplay.c
 #define SDL_OpenAudioDevice ffplay_kit_SDL_OpenAudioDevice
+#define SDL_CloseAudioDevice ffplay_kit_SDL_CloseAudioDevice
 
 // Include the patched ffplay.c to access internal structures and static functions
 // This is a common pattern in FFmpeg tools wrapping (e.g., ffmpeg_lib.c)
@@ -482,30 +500,33 @@ void ffplay_set_audio_output_device(const char* device_name) {
     }
 
     // Hot-swap if active
-    if (audio_dev > 0 && has_captured_spec) {
+    if (active_audio_is && active_audio_is->audio_dev > 0 && has_captured_spec) {
         // Lock not strictly needed if we assume single-thread UI control but let's be safe(r) if SDL supports it
         // Check SDL_LockAudio not needed for Close/Open per docs
         
-        SDL_CloseAudioDevice(audio_dev);
+        struct VideoState *local_is = active_audio_is;
+        SDL_CloseAudioDevice(local_is->audio_dev); 
+        // Note: active_audio_is is cleared by interception here!
         
         // Open new device
         // We MUST use 0 for allowed changes to force SDL to match our existing spec
         // If we allowed changes, we'd have to reconfigure the whole filter graph which is hard from here
         SDL_AudioSpec obtained_spec;
-        audio_dev = SDL_OpenAudioDevice(requested_audio_device, 0, &captured_wanted_spec, &obtained_spec, 0);
+        local_is->audio_dev = SDL_OpenAudioDevice(requested_audio_device, 0, &captured_wanted_spec, &obtained_spec, 0);
         
-        if (audio_dev) {
-            SDL_PauseAudioDevice(audio_dev, 0);
+        if (local_is->audio_dev) {
+            SDL_PauseAudioDevice(local_is->audio_dev, 0);
         } else {
             av_log(NULL, AV_LOG_ERROR, "Failed to switch audio device: %s\n", SDL_GetError());
             // Try fallback to default?
             if (device_name) {
                  // Open default
-                 audio_dev = SDL_OpenAudioDevice(NULL, 0, &captured_wanted_spec, &obtained_spec, 0);
-                 if (audio_dev) SDL_PauseAudioDevice(audio_dev, 0);
+                 local_is->audio_dev = SDL_OpenAudioDevice(NULL, 0, &captured_wanted_spec, &obtained_spec, 0);
+                 if (local_is->audio_dev) SDL_PauseAudioDevice(local_is->audio_dev, 0);
             }
         }
     }
+
 }
 
 
@@ -515,7 +536,10 @@ char* ffplay_list_audio_devices(void) {
     }
 
     int count = SDL_GetNumAudioDevices(0);
-    if (count <= 0) return NULL;
+    if (count <= 0) {
+        SDL_QuitSubSystem(SDL_INIT_AUDIO);
+        return NULL;
+    }
 
     // Build a semicolon separated string
     // Calculate size first
@@ -527,10 +551,16 @@ char* ffplay_list_audio_devices(void) {
         }
     }
     
-    if (total_len == 0) return NULL;
+    if (total_len == 0) {
+        SDL_QuitSubSystem(SDL_INIT_AUDIO);
+        return NULL;
+    }
 
     char *result = av_malloc(total_len + 1);
-    if (!result) return NULL;
+    if (!result) {
+        SDL_QuitSubSystem(SDL_INIT_AUDIO);
+        return NULL;
+    }
     result[0] = '\0';
     
     for (int i=0; i<count; i++) {
@@ -543,6 +573,7 @@ char* ffplay_list_audio_devices(void) {
         }
     }
 
+    SDL_QuitSubSystem(SDL_INIT_AUDIO);
     return result;
 }
 

@@ -71,6 +71,8 @@ To support cross-platform concurrency without maintaining massive, brittle patch
 
 To modify or fix issues in `ffprobe` (or other tools), follow this strict workflow:
 
+*Steps 2-3 can be automated using the `generate_patch.sh` script.*
+
 1.  **Modify the Snapshot (`_bak.c`)**:
     * Open `desktop/src/ffprobe_bak.c`.
     * Apply your changes (fixes, debug prints, new features) directly to this file. 
@@ -97,3 +99,64 @@ To modify or fix issues in `ffprobe` (or other tools), follow this strict workfl
         3. It executes `tls_patch.py` to identify and mark all global variables as Thread-Local.
         4. It executes `options_patch.py` to decouple the static arrays and generate the runtime initializers.
         5. The C compiler builds the final, fully-concurrent shared library.
+
+## Files from ffmpeg/fftools
+
+These files must follow the same development workflow as described above.
+
+- cmdutils.c
+- cmdutils.h
+- config.c
+- config.h
+- config_components.c
+- config_components.h
+- dummy.c
+- ffmpeg_dec.c
+- ffmpeg_demux.c
+- ffmpeg_enc.c
+- ffmpeg_filter.c
+- ffmpeg_hw.c
+- ffmpeg_mux_init.c
+- ffmpeg_mux.c
+- ffmpeg_mux.h
+- ffmpeg_opt.c
+- ffmpeg_sched.c
+- ffmpeg_sched.h
+- ffmpeg_utils.h
+- ffmpeg.c
+- ffmpeg.h
+- ffplay.h
+- ffplay.c
+- ffplay_renderer.h
+- ffplay_renderer.c
+- ffprobe.c
+- fopen_utf8.h
+- graphprint_res.c
+- opt_common.c
+- opt_common.h
+- sync_queue.c
+- sync_queue.h
+- thread_queue.c
+- thread_queue.h
+- graph/graphprint.c
+- graph/graphprint.h
+- resources/graph.css.c
+- resources/graph.html.c
+- resources/resman.c
+- resources/resman.h
+- textformat/avtextformat.c
+- textformat/avtextformat.h
+- textformat/avtextwriters.h
+- textformat/tf_compact.c
+- textformat/tf_default.c
+- textformat/tf_flat.c
+- textformat/tf_ini.c
+- textformat/tf_internal.h
+- textformat/tf_json.c
+- textformat/tf_mermaid.c
+- textformat/tf_mermaid.h
+- textformat/tf_xml.c
+- textformat/tw_avio.c
+- textformat/tw_buffer.c
+- textformat/tw_stdout.c
+- stdbit.h

@@ -90,6 +90,14 @@ def parse_logs_by_line(log_paths):
                     line_patches[current_file][line_num].add(match_sym.group(1))
     return line_patches
 
+TLS_EXCLUSION_LIST = {
+    "received_sigterm",
+    "received_nb_signals",
+    "ffmpeg_exited",
+    "transcode_init_done",
+    "frame_data_lock"
+}
+
 def apply_line_patches(line_patches, whitelist):
     """Applies the TLS macro exclusively to files explicitly listed in the whitelist."""
     include_line = '#include "ffmpeg_tls.h"\n'
@@ -113,6 +121,13 @@ def apply_line_patches(line_patches, whitelist):
         for i, line in enumerate(lines):
             line_num = i + 1 
             if line_num in patches:
+                # Check for exclusions by checking if any excluded symbol is in the patches for this line
+                symbols_on_line = patches[line_num]
+                if any(sym in TLS_EXCLUSION_LIST for sym in symbols_on_line):
+                    print(f"[SKIPPED] {file_path}:{line_num}: Excluded symbols: {symbols_on_line}")
+                    new_lines.append(line)
+                    continue
+
                 if "FFMPEG_THREAD_LOCAL" not in line:
                     match = re.match(r"^(\s*)", line)
                     indent = match.group(1) if match else ""
