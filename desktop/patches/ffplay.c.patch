@@ -1,5 +1,5 @@
 diff --git a/src/ffplay.c b/src/ffplay.c
-index 2a572fc..ac358fd 100755
+index 2a572fc..8281dad 100755
 --- a/src/ffplay.c
 +++ b/src/ffplay.c
 @@ -51,6 +51,7 @@
@@ -632,6 +632,15 @@ index 2a572fc..ac358fd 100755
                  SDL_Event event;
                  event.type = FF_QUIT_EVENT;
                  event.user.data1 = is;
+@@ -2381,7 +2461,7 @@ static int audio_decode_frame(VideoState *is)
+     do {
+ #if defined(_WIN32)
+         while (frame_queue_nb_remaining(&is->sampq) == 0) {
+-            if ((av_gettime_relative() - audio_callback_time) > 1000000LL * is->audio_hw_buf_size / is->audio_tgt.bytes_per_sec / 2)
++            if ((av_gettime_relative() - is->audio_callback_time) > 1000000LL * is->audio_hw_buf_size / is->audio_tgt.bytes_per_sec / 2)
+                 return -1;
+             av_usleep (1000);
+         }
 @@ -2483,7 +2563,7 @@ static void sdl_audio_callback(void *opaque, Uint8 *stream, int len)
      VideoState *is = opaque;
      int audio_size, len1;
