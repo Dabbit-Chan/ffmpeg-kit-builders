@@ -1328,16 +1328,8 @@ void ffmpegkit::FFmpegKitConfig::ffplayExecute(
     // Wait for previous session to fully complete cleanup
     auto prevSession = getSession(previousSessionId);
     if (prevSession) {
-        int retries = 0;
-        int max_retries = waitTimeout / 10;
-        while (prevSession->getState() != SessionStateCompleted && 
-               prevSession->getState() != SessionStateFailed &&
-               retries < max_retries) {
-            std::this_thread::sleep_for(std::chrono::milliseconds(10));
-            retries++;
-        }
-        if (retries >= max_retries) {
-            std::cout << "Warning: Timed out waiting for previous FFplay session " << previousSessionId << " to complete." << std::endl;
+        if (!prevSession->waitFor(waitTimeout)) {
+            std::cout << "FFplay execute failed: Timed out waiting for previous FFplay session " << previousSessionId << " to complete." << std::endl;
             activeFFplaySessionId.compare_exchange_strong(sessionId, 0);
             ffplaySession->fail("Timed out waiting for previous session to complete");
             return;

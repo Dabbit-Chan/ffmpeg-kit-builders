@@ -202,15 +202,23 @@ void ffmpegkit::AbstractSession::startRunning() {
 
 void ffmpegkit::AbstractSession::complete(
     const std::shared_ptr<ffmpegkit::ReturnCode> returnCode) {
-  _returnCode = returnCode;
-  _state = SessionStateCompleted;
-  _endTime = std::chrono::system_clock::now();
+  {
+    std::lock_guard<std::mutex> lock(_stateMutex);
+    _returnCode = returnCode;
+    _state = SessionStateCompleted;
+    _endTime = std::chrono::system_clock::now();
+  }
+  _stateConditionVariable.notify_all();
 }
 
 void ffmpegkit::AbstractSession::fail(const char *error) {
-  _failStackTrace = error;
-  _state = SessionStateFailed;
-  _endTime = std::chrono::system_clock::now();
+  {
+    std::lock_guard<std::mutex> lock(_stateMutex);
+    _failStackTrace = error;
+    _state = SessionStateFailed;
+    _endTime = std::chrono::system_clock::now();
+  }
+  _stateConditionVariable.notify_all();
 }
 
 bool ffmpegkit::AbstractSession::isFFmpeg() const {
@@ -237,6 +245,20 @@ void ffmpegkit::AbstractSession::cancel() {
   if (_state == SessionStateRunning) {
     FFmpegKit::cancel(_sessionId);
   }
+}
+
+void ffmpegkit::AbstractSession::wait() {
+  std::unique_lock<std::mutex> lock(_stateMutex);
+  _stateConditionVariable.wait(lock, [this] {
+    return _state == SessionStateCompleted || _state == SessionStateFailed;
+  });
+}
+
+bool ffmpegkit::AbstractSession::waitFor(int timeout) {
+  std::unique_lock<std::mutex> lock(_stateMutex);
+  return _stateConditionVariable.wait_for(lock, std::chrono::milliseconds(timeout), [this] {
+    return _state == SessionStateCompleted || _state == SessionStateFailed;
+  });
 }
 
 static std::string getCurrentTimeStamp() {

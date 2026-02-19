@@ -1,5 +1,11 @@
 # FFmpegKit Changelog
 
+## Version 1.3.0
+
+- **Synchronization**: Added `wait()` and `waitFor(timeout)` methods to the `Session` interface for efficient, event-driven completion tracking.
+- **Thread Safety**: Implemented mutex-protected state transitions in `AbstractSession` to ensure robust session lifecycle management.
+- **FFplay Optimization**: Refactored `ffplayExecute` to use the new synchronization primitives instead of busy-wait polling for previous session cleanup.
+
 ## Version 1.2.0
 
 - **Concurrency & Thread Safety**: Implemented automated AST-based refactoring to convert FFmpeg global state into Thread-Local Storage (TLS), enabling true multi-threaded execution within the same process.

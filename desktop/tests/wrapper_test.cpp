@@ -69,6 +69,7 @@ TEST(FFmpegKitTest, ConfigurationSetters) {
     // ffmpeg_kit_config_enable_log_callback(test_log_callback, nullptr);
     // No easy way to verify these without internal access or observing side effects,
     // assuming no crash is success for now.
+    EXPECT_EQ(ffmpeg_kit_config_get_log_level(), FFMPEG_KIT_LOG_LEVEL_QUIET);
 }
 
 TEST(FFmpegKitTest, SessionHistory) {
@@ -156,7 +157,7 @@ TEST(FFmpegKitTest, MediaInformation) {
     ffmpeg_kit_handle_release(media_session);
 }
 
-TEST(FFmpegKitTest, FFplaySession) {
+TEST(FFplayKitTest, FFplaySession) {
     // Set SDL drivers to dummy for headless execution
     // This allows ffplay to initializing audio/video "devices" without a real display/speaker
 #ifdef _WIN32

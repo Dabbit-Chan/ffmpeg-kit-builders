@@ -21,6 +21,7 @@
 #define FFMPEG_KIT_ABSTRACT_SESSION_H
 
 #include <mutex>
+#include <condition_variable>
 #include "Session.hpp"
 
 namespace ffmpegkit {
@@ -333,12 +334,28 @@ public:
    */
   void debugLog(const char *fmt, ...) override;
 
+  /**
+   * Waits for the session to complete or fail.
+   */
+  void wait() override;
+
+  /**
+   * Waits for the session to complete or fail until the given timeout.
+   *
+   * @param timeout wait timeout in milliseconds
+   * @return true if session has completed or failed, false if it timed out
+   */
+  bool waitFor(int timeout) override;
+
 private:
   const long _sessionId;
   ffmpegkit::LogCallback _logCallback;
   mutable std::mutex _debugLogMutex;
   bool _debuggingEnabled;
   std::string _debugLog;
+
+  mutable std::mutex _stateMutex;
+  mutable std::condition_variable _stateConditionVariable;
 
   std::chrono::time_point<std::chrono::system_clock> _createTime;
   std::chrono::time_point<std::chrono::system_clock> _startTime;

@@ -312,6 +312,19 @@ public:
    * @param ... arguments
    */
   virtual void debugLog(const char *fmt, ...) = 0;
+
+  /**
+   * Waits for the session to complete or fail.
+   */
+  virtual void wait() = 0;
+
+  /**
+   * Waits for the session to complete or fail until the given timeout.
+   *
+   * @param timeout wait timeout in milliseconds
+   * @return true if session has completed or failed, false if it timed out
+   */
+  virtual bool waitFor(int timeout) = 0;
 };
 
 } // namespace ffmpegkit
