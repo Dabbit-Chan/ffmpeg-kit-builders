@@ -81,7 +81,7 @@ TEST_F(CallbackTest, FFmpegAsyncExecute) {
 TEST_F(CallbackTest, FFmpegAsyncExecuteFull) {
     CallbackCapturer capturer;
     // Use a command that generates output and takes a bit of time (testsrc)
-    std::string cmd = "-hide_banner -f lavfi -i testsrc=duration=1:size=128x128:rate=30 -f null -";
+    std::string cmd = "-loglevel debug -hide_banner -f lavfi -i testsrc=duration=1:size=128x128:rate=30 -f null -";
     
     FFmpegSessionHandle session = ffmpeg_kit_execute_async_full(
         cmd.c_str(), 
@@ -212,7 +212,7 @@ TEST_F(CallbackTest, FFplayAsyncExecute) {
     PlayCallbackCapturer capturer;
     // Short playback
     char command[512];
-    snprintf(command, sizeof(command), "-hide_banner -loglevel warning -autoexit -t 0.5 %s", TEST_VIDEO_FILE);
+    snprintf(command, sizeof(command), "-hide_banner -loglevel debug -autoexit -t 0.5 %s", TEST_VIDEO_FILE);
 
     FFplaySessionHandle session = ffplay_kit_execute_async(command, PlayCallbackCapturer::CompleteCallback, &capturer, 5000);
     ASSERT_NE(session, nullptr);

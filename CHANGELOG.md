@@ -1,5 +1,11 @@
 # FFmpegKit Changelog
 
+## Version 1.3.1
+
+- **Memory Management**: Fixed a memory leak in log callbacks where message copies were not being freed. Log messages are now passed directly using internal pointers.
+- **Robustness**: Modified `ffmpeg_kit_handle_release` to block destruction until the native background thread has gracefully exited. This prevents use-after-free crashes caused by asynchronous log callbacks under high load.
+- **Diagnostic Coverage**: Updated integration tests to use `-loglevel debug` by default, ensuring better verification of asynchronous log handling logic.
+
 ## Version 1.3.0
 
 - **Synchronization**: Added `wait()` and `waitFor(timeout)` methods to the `Session` interface for efficient, event-driven completion tracking.

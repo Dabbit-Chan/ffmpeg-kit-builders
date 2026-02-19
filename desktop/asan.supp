@@ -1,7 +1,7 @@
 leak:SDL_DBus_Init
 leak:SDL_Init
 leak:SDL_InitSubSystem
-leak:__interceptor_malloc
+leak:libX11
 leak:libLLVM
 leak:libGL
 leak:libglapi

@@ -31,6 +31,7 @@
 #include "FFmpegKitObject.hpp"
 #include "Statistics.hpp"
 #include <cstring>
+#include <thread>
 
 using namespace ffmpegkit;
 
@@ -90,6 +91,15 @@ void ffmpeg_kit_handle_release(void *handle) {
     auto session = get_ptr<Session>(handle);
     if (session) {
       session->cancel();
+      /**
+      * Block destruction until the native background thread has gracefully exited.
+      * Prevents use-after-free crashes caused by asynchronous log callbacks 
+      * (especially under high I/O like -loglevel debug) attempting to access 
+      * destroyed session structures or mutexes.
+      */
+      while (session->getState() == SessionStateRunning) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(10));
+      }
     }
     delete static_cast<std::shared_ptr<FFmpegKitObject> *>(handle);
   }
@@ -139,12 +149,11 @@ FFmpegSessionHandle ffmpeg_kit_execute_async_full(
   auto log = [log_cb, user_data](std::shared_ptr<Log> l) {
     if (log_cb && l) {
       std::string message = l->getMessage();
-      char *message_copy = strdup_cpp(message);
       
       // Pass ID as pointer (Hack to avoid allocation/threading issues)
       void *session_handle = (void *)(uintptr_t)l->getSessionId();
 
-      log_cb(session_handle, message_copy, user_data);
+      log_cb(session_handle, message.c_str(), user_data);
     }
   };
   auto stats = [stats_cb, user_data](std::shared_ptr<Statistics> s) {
@@ -871,12 +880,11 @@ void ffmpeg_kit_config_enable_log_callback(FFmpegKitLogCallback log_cb,
     FFmpegKitConfig::enableLogCallback([](std::shared_ptr<Log> log) {
       if (g_log_callback && log) {
         std::string message = log->getMessage();
-        char *message_copy = strdup_cpp(message);
 
         // Pass ID as pointer (Hack to avoid allocation/threading issues)
         void *session_handle = (void *)(uintptr_t)log->getSessionId();
 
-        g_log_callback(session_handle, message_copy, g_log_user_data);
+        g_log_callback(session_handle, message.c_str(), g_log_user_data);
       }
     });
   } else {

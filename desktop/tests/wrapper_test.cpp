@@ -26,7 +26,7 @@ TEST(FFmpegKitTest, VersionCheck) {
 }
 
 TEST(FFmpegKitTest, SplitSessionExecution) {
-    FFmpegSessionHandle session = ffmpeg_kit_create_session("-hide_banner -loglevel fatal -version");
+    FFmpegSessionHandle session = ffmpeg_kit_create_session("-hide_banner -loglevel debug -version");
     ASSERT_NE(session, nullptr);
 
     FFmpegKitSessionState state = ffmpeg_kit_session_get_state(session);
@@ -89,7 +89,7 @@ TEST(FFmpegKitTest, SessionHistory) {
     }
 
     for(int i=0; i<3; i++) {
-        FFmpegSessionHandle s = ffmpeg_kit_create_session("-hide_banner -loglevel fatal -version");
+        FFmpegSessionHandle s = ffmpeg_kit_create_session("-hide_banner -loglevel debug -version");
         ffmpeg_kit_session_execute(s);
         ffmpeg_kit_handle_release(s);
     }
@@ -174,7 +174,7 @@ TEST(FFplayKitTest, FFplaySession) {
     // -t 2: limit duration just in case
     // We remove -nodisp and -an because with dummy drivers, we WANT it to try to play
     char command[512];
-    snprintf(command, sizeof(command), "-loglevel fatal -autoexit -t 2 %s", TEST_VIDEO_FILE);
+    snprintf(command, sizeof(command), "-loglevel debug -autoexit -t 2 %s", TEST_VIDEO_FILE);
     FFplaySessionHandle play_session = ffplay_kit_execute(command, 1000);
     ASSERT_NE(play_session, nullptr);
 
@@ -220,7 +220,7 @@ protected:
 TEST_F(FFplayKitInteractiveTest, PlayPauseResume) {
     const char* video_file = TEST_VIDEO_FILE;
     char command[256];
-    snprintf(command, sizeof(command), "-loglevel fatal -i %s", video_file);
+    snprintf(command, sizeof(command), "-loglevel debug -i %s", video_file);
 
     FFplaySessionHandle session = ffplay_kit_execute_async(command, nullptr, nullptr, 1000);
     ASSERT_NE(session, nullptr);
@@ -243,7 +243,7 @@ TEST_F(FFplayKitInteractiveTest, PlayPauseResume) {
 TEST_F(FFplayKitInteractiveTest, Seek) {
     const char* video_file = TEST_VIDEO_FILE;
     char command[256];
-    snprintf(command, sizeof(command), "-loglevel fatal -i %s", video_file);
+    snprintf(command, sizeof(command), "-loglevel debug -i %s", video_file);
 
     FFplaySessionHandle session = ffplay_kit_execute_async(command, nullptr, nullptr, 1000);
     ASSERT_NE(session, nullptr);
@@ -269,7 +269,7 @@ TEST_F(FFplayKitInteractiveTest, Seek) {
 TEST_F(FFplayKitInteractiveTest, ConcurrentSessions) {
     const char* video_file = TEST_VIDEO_FILE;
     char command[256];
-    snprintf(command, sizeof(command), "-loglevel fatal -i %s", video_file);
+    snprintf(command, sizeof(command), "-loglevel debug -i %s", video_file);
 
     FFplaySessionHandle session1 = ffplay_kit_execute_async(command, nullptr, nullptr, 1000);
     ASSERT_NE(session1, nullptr);
@@ -291,7 +291,7 @@ TEST_F(FFplayKitInteractiveTest, ConcurrentSessions) {
 TEST_F(FFplayKitInteractiveTest, GlobalControls) {
     const char* video_file = TEST_VIDEO_FILE;
     char command[256];
-    snprintf(command, sizeof(command), "-loglevel fatal -i %s", video_file);
+    snprintf(command, sizeof(command), "-loglevel debug -i %s", video_file);
 
     FFplaySessionHandle session = ffplay_kit_execute_async(command, nullptr, nullptr, 1000);
     ASSERT_NE(session, nullptr);
@@ -316,7 +316,7 @@ TEST_F(FFplayKitInteractiveTest, GlobalControls) {
 TEST_F(FFplayKitInteractiveTest, GlobalSeek) {
     const char* video_file = TEST_VIDEO_FILE;
     char command[256];
-    snprintf(command, sizeof(command), "-loglevel fatal -i %s", video_file);
+    snprintf(command, sizeof(command), "-loglevel debug -i %s", video_file);
 
     FFplaySessionHandle session = ffplay_kit_execute_async(command, nullptr, nullptr, 1000);
     ASSERT_NE(session, nullptr);
@@ -338,7 +338,7 @@ TEST_F(FFplayKitInteractiveTest, GlobalSeek) {
 TEST_F(FFplayKitInteractiveTest, TimeoutSession) {
     const char* video_file = TEST_VIDEO_FILE;
     char command[256];
-    snprintf(command, sizeof(command), "-loglevel fatal -i %s", video_file);
+    snprintf(command, sizeof(command), "-loglevel debug -i %s", video_file);
 
     // 1. Start Session 1 normally
     FFplaySessionHandle session1 = ffplay_kit_execute_async(command, nullptr, nullptr, 1000);
@@ -430,11 +430,11 @@ TEST(FFmpegKitTest, AudioDeviceManagement) {
 }
 TEST(FFmpegKitTest, ConcurrentOperations) {
     // 1. Create a slow FFmpeg session (e.g., generating a long video)
-    FFmpegSessionHandle ffmpeg_session = ffmpeg_kit_create_session("-hide_banner -loglevel fatal -f lavfi -i testsrc=duration=5:size=128x128:rate=10 -y concurrent_output.mp4");
+    FFmpegSessionHandle ffmpeg_session = ffmpeg_kit_create_session("-hide_banner -loglevel debug -f lavfi -i testsrc=duration=5:size=128x128:rate=10 -y concurrent_output.mp4");
     ASSERT_NE(ffmpeg_session, nullptr);
 
     // 2. Create a FFprobe session to run at the same time
-    FFprobeSessionHandle ffprobe_session = ffprobe_kit_create_session("-hide_banner -loglevel fatal -show_format -i " TEST_VIDEO_FILE);
+    FFprobeSessionHandle ffprobe_session = ffprobe_kit_create_session("-hide_banner -loglevel debug -show_format -i " TEST_VIDEO_FILE);
     ASSERT_NE(ffprobe_session, nullptr);
 
     // 3. Execute both asynchronously
@@ -473,8 +473,8 @@ TEST(FFmpegKitTest, ConcurrentOperations) {
 
 TEST(FFmpegKitTest, ConcurrentFFmpegSessions) {
     // 1. Create two FFmpeg sessions
-    FFmpegSessionHandle ffmpeg_session1 = ffmpeg_kit_create_session("-hide_banner -loglevel fatal -f lavfi -i testsrc=duration=3:size=128x128:rate=10 -y concurrent1.mp4");
-    FFmpegSessionHandle ffmpeg_session2 = ffmpeg_kit_create_session("-hide_banner -loglevel fatal -f lavfi -i testsrc=duration=3:size=128x128:rate=10 -y concurrent2.mp4");
+    FFmpegSessionHandle ffmpeg_session1 = ffmpeg_kit_create_session("-hide_banner -loglevel debug -f lavfi -i testsrc=duration=3:size=128x128:rate=10 -y concurrent1.mp4");
+    FFmpegSessionHandle ffmpeg_session2 = ffmpeg_kit_create_session("-hide_banner -loglevel debug -f lavfi -i testsrc=duration=3:size=128x128:rate=10 -y concurrent2.mp4");
     
     ASSERT_NE(ffmpeg_session1, nullptr);
     ASSERT_NE(ffmpeg_session2, nullptr);
@@ -515,12 +515,12 @@ TEST(FFmpegKitTest, ConcurrentFFmpegSessions) {
 
 TEST_F(FFplayKitInteractiveTest, FFplayWithFFmpegConcurrency) {
     // 1. Start a slow FFmpeg session
-    FFmpegSessionHandle ffmpeg_session = ffmpeg_kit_create_session("-hide_banner -loglevel fatal -f lavfi -i testsrc=duration=5:size=128x128:rate=10 -y ffplay_concurrent.mp4");
+    FFmpegSessionHandle ffmpeg_session = ffmpeg_kit_create_session("-hide_banner -loglevel debug -f lavfi -i testsrc=duration=5:size=128x128:rate=10 -y ffplay_concurrent.mp4");
     ffmpeg_kit_session_execute_async(ffmpeg_session);
     
     // 2. Start FFplay session
     char command[256];
-    snprintf(command, sizeof(command), "-loglevel fatal -i %s", TEST_VIDEO_FILE);
+    snprintf(command, sizeof(command), "-loglevel debug -i %s", TEST_VIDEO_FILE);
     FFplaySessionHandle play_session = ffplay_kit_execute_async(command, nullptr, nullptr, 1000);
     ASSERT_NE(play_session, nullptr);
 
@@ -548,13 +548,13 @@ TEST_F(FFplayKitInteractiveTest, FFplayWithFFmpegConcurrency) {
 TEST_F(FFplayKitInteractiveTest, FFplayWithFFprobeConcurrency) {
     // 1. Start FFplay session
     char command[256];
-    snprintf(command, sizeof(command), "-loglevel fatal -i %s", TEST_VIDEO_FILE);
+    snprintf(command, sizeof(command), "-loglevel debug -i %s", TEST_VIDEO_FILE);
     FFplaySessionHandle play_session = ffplay_kit_execute_async(command, nullptr, nullptr, 1000);
     ASSERT_NE(play_session, nullptr);
     WaitForSeconds(1);
 
     // 2. Run FFprobe session concurrently
-    FFprobeSessionHandle probe_session = ffprobe_kit_execute("-hide_banner -loglevel fatal -show_format -i " TEST_VIDEO_FILE);
+    FFprobeSessionHandle probe_session = ffprobe_kit_execute("-hide_banner -loglevel debug -show_format -i " TEST_VIDEO_FILE);
     ASSERT_NE(probe_session, nullptr);
 
     // 3. Verify FFplay is still playing and probe finished
@@ -568,8 +568,8 @@ TEST_F(FFplayKitInteractiveTest, FFplayWithFFprobeConcurrency) {
 
 TEST(FFmpegKitTest, ConcurrentFFprobeSessions) {
     // 1. Create two FFprobe sessions
-    FFprobeSessionHandle ffprobe_session1 = ffprobe_kit_create_session("-hide_banner -loglevel fatal -show_format -i " TEST_VIDEO_FILE);
-    FFprobeSessionHandle ffprobe_session2 = ffprobe_kit_create_session("-hide_banner -loglevel fatal -show_format -i " TEST_VIDEO_FILE);
+    FFprobeSessionHandle ffprobe_session1 = ffprobe_kit_create_session("-hide_banner -loglevel debug -show_format -i " TEST_VIDEO_FILE);
+    FFprobeSessionHandle ffprobe_session2 = ffprobe_kit_create_session("-hide_banner -loglevel debug -show_format -i " TEST_VIDEO_FILE);
     
     ASSERT_NE(ffprobe_session1, nullptr);
     ASSERT_NE(ffprobe_session2, nullptr);
