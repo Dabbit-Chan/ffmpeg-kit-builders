@@ -29,6 +29,8 @@ RUN dnf install -y --allowerasing --setopt=install_weak_deps=False \
     gcc-c++ \
     gcc-gfortran \
     gcc-toolset-14-libasan-devel \
+    gcc-toolset-14-libubsan-devel \
+    gcc-toolset-14-libtsan-devel \
     gettext \
     gettext-devel \
     glib2-devel \
