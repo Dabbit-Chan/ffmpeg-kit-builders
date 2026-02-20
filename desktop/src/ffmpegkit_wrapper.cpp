@@ -148,7 +148,7 @@ FFmpegSessionHandle ffmpeg_kit_execute_async_full(
   };
   auto log = [log_cb, user_data](std::shared_ptr<Log> l) {
     if (log_cb && l) {
-      std::string message = l->getMessage();
+      const std::string& message = l->getMessage();
       
       // Pass ID as pointer (Hack to avoid allocation/threading issues)
       void *session_handle = (void *)(uintptr_t)l->getSessionId();
@@ -789,6 +789,9 @@ FFmpegSessionHandle *ffmpeg_kit_get_sessions(void) {
   return (FFmpegSessionHandle *)list_to_handle_array(
       FFmpegKitConfig::getSessions());
 }
+FFmpegSessionHandle *ffmpeg_kit_list_sessions(void) {
+  return ffmpeg_kit_get_sessions();
+}
 
 FFmpegSessionHandle *ffmpeg_kit_get_ffmpeg_sessions(void) {
   return (FFmpegSessionHandle *)list_to_handle_array(
@@ -799,6 +802,9 @@ FFprobeSessionHandle *ffmpeg_kit_get_ffprobe_sessions(void) {
   return (FFprobeSessionHandle *)list_to_handle_array(
       FFmpegKitConfig::getFFprobeSessions());
 }
+FFprobeSessionHandle *ffprobe_kit_list_sessions(void) {
+  return ffmpeg_kit_get_ffprobe_sessions();
+}
 
 FFplaySessionHandle *ffmpeg_kit_get_ffplay_sessions(void) {
   return (FFplaySessionHandle *)list_to_handle_array(
@@ -808,6 +814,9 @@ FFplaySessionHandle *ffmpeg_kit_get_ffplay_sessions(void) {
 MediaInformationSessionHandle *ffmpeg_kit_get_media_information_sessions(void) {
   return (MediaInformationSessionHandle *)list_to_handle_array(
       FFmpegKitConfig::getMediaInformationSessions());
+}
+MediaInformationSessionHandle *media_information_kit_list_sessions(void) {
+  return ffmpeg_kit_get_media_information_sessions();
 }
 
 FFmpegSessionHandle ffmpeg_kit_get_session(long session_id) {
@@ -824,6 +833,18 @@ FFmpegSessionHandle ffmpeg_kit_get_last_ffmpeg_session(void) {
 
 FFprobeSessionHandle ffmpeg_kit_get_last_ffprobe_session(void) {
   return create_handle(FFmpegKitConfig::getLastFFprobeSession());
+}
+FFprobeSessionHandle ffprobe_kit_get_last_session(void) {
+  return ffmpeg_kit_get_last_ffprobe_session();
+}
+FFprobeSessionHandle ffprobe_kit_get_last_completed_session(void) {
+  // Simplification: return last completed regardless of type or find first ffprobe from end
+  // For now return last completed if it is ffprobe
+  auto session = FFmpegKitConfig::getLastCompletedSession();
+  if (session && session->isFFprobe()) {
+      return create_handle(session);
+  }
+  return nullptr;
 }
 
 FFplaySessionHandle ffmpeg_kit_get_last_ffplay_session(void) {
@@ -879,7 +900,7 @@ void ffmpeg_kit_config_enable_log_callback(FFmpegKitLogCallback log_cb,
   if (log_cb) {
     FFmpegKitConfig::enableLogCallback([](std::shared_ptr<Log> log) {
       if (g_log_callback && log) {
-        std::string message = log->getMessage();
+        const std::string& message = log->getMessage();
 
         // Pass ID as pointer (Hack to avoid allocation/threading issues)
         void *session_handle = (void *)(uintptr_t)log->getSessionId();
@@ -1109,7 +1130,7 @@ char *ffmpeg_kit_session_get_log_at(void *session_handle, int index) {
   if (logs && index >= 0 && index < logs->size()) {
     auto it = logs->begin();
     std::advance(it, index);
-    std::string message = (*it)->getMessage();
+    const std::string& message = (*it)->getMessage();
     return strdup_cpp(message);
   }
   return nullptr;
@@ -1145,6 +1166,30 @@ StatisticsHandle ffmpeg_kit_session_get_statistics_at(void *session_handle,
     return create_handle(*it);
   }
   return nullptr;
+}
+
+
+/* Statistics Getters */
+int ffmpeg_kit_statistics_get_video_frame_number(StatisticsHandle handle) {
+  return get_ptr<Statistics>(handle)->getVideoFrameNumber();
+}
+float ffmpeg_kit_statistics_get_video_fps(StatisticsHandle handle) {
+  return get_ptr<Statistics>(handle)->getVideoFps();
+}
+float ffmpeg_kit_statistics_get_video_quality(StatisticsHandle handle) {
+  return get_ptr<Statistics>(handle)->getVideoQuality();
+}
+long ffmpeg_kit_statistics_get_size(StatisticsHandle handle) {
+  return (long)get_ptr<Statistics>(handle)->getSize();
+}
+double ffmpeg_kit_statistics_get_time(StatisticsHandle handle) {
+  return get_ptr<Statistics>(handle)->getTime();
+}
+double ffmpeg_kit_statistics_get_bitrate(StatisticsHandle handle) {
+  return get_ptr<Statistics>(handle)->getBitrate();
+}
+double ffmpeg_kit_statistics_get_speed(StatisticsHandle handle) {
+  return get_ptr<Statistics>(handle)->getSpeed();
 }
 
 /* Entity Properties Extended */

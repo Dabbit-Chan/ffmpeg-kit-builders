@@ -486,8 +486,9 @@ void ffplay_set_volume(FFplayContext* ctx, float volume) {
 
 float ffplay_get_volume(FFplayContext* ctx) {
     if (!ctx || !ctx->is) return 0.0;
-    return ctx->is->audio_volume;
+    return (float)ctx->is->audio_volume / SDL_MIX_MAXVOLUME;
 }
+
 
 void ffplay_set_audio_output_device(const char* device_name) {
     // Update global requested name

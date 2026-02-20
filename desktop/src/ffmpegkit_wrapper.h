@@ -158,14 +158,6 @@ FFMPEG_KIT_C_EXPORT void ffmpeg_kit_cancel(void);
  */
 FFMPEG_KIT_C_EXPORT void ffmpeg_kit_cancel_session(long session_id);
 
-/**
- * Returns a list of all running FFmpeg sessions.
- *
- * @return a list of all running FFmpeg sessions
- */
-FFMPEG_KIT_C_EXPORT FFmpegSessionHandle ffmpeg_kit_list_sessions(
-    void); // Returns a list/iterator handle? Simplified: returns
-           // NULL/NotImplemented for now or need list API
 
 // Session Creation and Execution Separation
 
@@ -232,14 +224,6 @@ FFMPEG_KIT_C_EXPORT void ffprobe_kit_cancel(void);
  */
 FFMPEG_KIT_C_EXPORT void ffprobe_kit_cancel_session(long session_id);
 
-/**
- * Returns a list of all running FFprobe sessions.
- *
- * @return a list of all running FFprobe sessions
- */
-FFMPEG_KIT_C_EXPORT FFprobeSessionHandle ffprobe_kit_list_sessions(
-    void); // Returns a list/iterator handle? Simplified: returns
-           // NULL/NotImplemented for now or need list API
 
 // FFprobe Session Creation and Execution Separation
 
@@ -1087,6 +1071,13 @@ FFMPEG_KIT_C_EXPORT char *chapter_get_tags_json(ChapterHandle handle);
 FFMPEG_KIT_C_EXPORT FFmpegSessionHandle *ffmpeg_kit_get_sessions(void);
 
 /**
+ * Gets the sessions.
+ *
+ * @return the sessions
+ */
+FFMPEG_KIT_C_EXPORT FFmpegSessionHandle *ffmpeg_kit_list_sessions(void);
+
+/**
  * Gets the FFmpeg sessions.
  *
  * @return the FFmpeg sessions
@@ -1108,6 +1099,13 @@ FFMPEG_KIT_C_EXPORT FFmpegSessionHandle *ffmpeg_kit_get_ffmpeg_sessions(void);
 FFMPEG_KIT_C_EXPORT FFprobeSessionHandle *ffmpeg_kit_get_ffprobe_sessions(void);
 
 /**
+ * Gets the FFprobe sessions.
+ *
+ * @return the FFprobe sessions
+ */
+FFMPEG_KIT_C_EXPORT FFprobeSessionHandle *ffprobe_kit_list_sessions(void);
+
+/**
  * Gets the FFplay sessions.
  *
  * @return the FFplay sessions
@@ -1121,6 +1119,14 @@ FFMPEG_KIT_C_EXPORT FFplaySessionHandle *ffmpeg_kit_get_ffplay_sessions(void);
  */
 FFMPEG_KIT_C_EXPORT MediaInformationSessionHandle *
 ffmpeg_kit_get_media_information_sessions(void);
+
+/**
+ * Gets the media information sessions.
+ *
+ * @return the media information sessions
+ */
+FFMPEG_KIT_C_EXPORT MediaInformationSessionHandle *
+media_information_kit_list_sessions(void);
 
 /**
  * Gets the session.
@@ -1151,6 +1157,20 @@ FFMPEG_KIT_C_EXPORT FFmpegSessionHandle ffmpeg_kit_get_last_ffmpeg_session(void)
  */
 FFMPEG_KIT_C_EXPORT FFprobeSessionHandle
 ffmpeg_kit_get_last_ffprobe_session(void);
+
+/**
+ * Gets the last FFprobe session.
+ *
+ * @return the last FFprobe session
+ */
+FFMPEG_KIT_C_EXPORT FFprobeSessionHandle ffprobe_kit_get_last_session(void);
+
+/**
+ * Gets the last completed FFprobe session.
+ *
+ * @return the last completed FFprobe session
+ */
+FFMPEG_KIT_C_EXPORT FFprobeSessionHandle ffprobe_kit_get_last_completed_session(void);
 
 /**
  * Gets the last FFplay session.
@@ -1430,6 +1450,64 @@ ffmpeg_kit_session_get_statistics_count(void *session_handle);
  */
 FFMPEG_KIT_C_EXPORT StatisticsHandle
 ffmpeg_kit_session_get_statistics_at(void *session_handle, int index);
+
+/* Statistics Getters */
+
+/**
+ * Gets the video frame number.
+ *
+ * @param handle the statistics handle
+ * @return the video frame number
+ */
+FFMPEG_KIT_C_EXPORT int ffmpeg_kit_statistics_get_video_frame_number(StatisticsHandle handle);
+
+/**
+ * Gets the video FPS.
+ *
+ * @param handle the statistics handle
+ * @return the video FPS
+ */
+FFMPEG_KIT_C_EXPORT float ffmpeg_kit_statistics_get_video_fps(StatisticsHandle handle);
+
+/**
+ * Gets the video quality.
+ *
+ * @param handle the statistics handle
+ * @return the video quality
+ */
+FFMPEG_KIT_C_EXPORT float ffmpeg_kit_statistics_get_video_quality(StatisticsHandle handle);
+
+/**
+ * Gets the size.
+ *
+ * @param handle the statistics handle
+ * @return the size
+ */
+FFMPEG_KIT_C_EXPORT long ffmpeg_kit_statistics_get_size(StatisticsHandle handle);
+
+/**
+ * Gets the time.
+ *
+ * @param handle the statistics handle
+ * @return the time
+ */
+FFMPEG_KIT_C_EXPORT double ffmpeg_kit_statistics_get_time(StatisticsHandle handle);
+
+/**
+ * Gets the bitrate.
+ *
+ * @param handle the statistics handle
+ * @return the bitrate
+ */
+FFMPEG_KIT_C_EXPORT double ffmpeg_kit_statistics_get_bitrate(StatisticsHandle handle);
+
+/**
+ * Gets the speed.
+ *
+ * @param handle the statistics handle
+ * @return the speed
+ */
+FFMPEG_KIT_C_EXPORT double ffmpeg_kit_statistics_get_speed(StatisticsHandle handle);
 
 /* Entity Properties Extended */
 

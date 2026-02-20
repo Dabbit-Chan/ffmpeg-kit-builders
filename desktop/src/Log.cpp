@@ -27,4 +27,4 @@ long ffmpegkit::Log::getSessionId() const { return _sessionId; }
 
 ffmpegkit::Level ffmpegkit::Log::getLevel() const { return _level; }
 
-std::string ffmpegkit::Log::getMessage() const { return _message; }
+const std::string& ffmpegkit::Log::getMessage() const { return _message; }

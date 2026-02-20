@@ -33,7 +33,7 @@ public:
   Log(const long sessionId, const ffmpegkit::Level level, const char *message);
   long getSessionId() const;
   ffmpegkit::Level getLevel() const;
-  std::string getMessage() const;
+  const std::string& getMessage() const;
 
 private:
   long _sessionId;
