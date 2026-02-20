@@ -57,16 +57,38 @@ endif()
 
 # Copy fftools (Source code)
 message(STATUS "Copying fftools from ${FFMPEG_SRC_DIR}...")
+#copy fftools to src/fftools.tmp
 file(COPY "${FFMPEG_SRC_DIR}/fftools/" 
-     DESTINATION "${CMAKE_CURRENT_SOURCE_DIR}/src/"
+     DESTINATION "${CMAKE_CURRENT_SOURCE_DIR}/src/fftools.tmp"
      FILES_MATCHING
      PATTERN "*.c"
      PATTERN "*.h"
      PATTERN "*.css"
      PATTERN "*.html"
 )
-file(COPY "${FFMPEG_SRC_DIR}/compat/stdbit/stdbit.h" DESTINATION "${CMAKE_CURRENT_SOURCE_DIR}/src/")
-
+# replace "fftools/" in "# include" with  "" in "${CMAKE_CURRENT_SOURCE_DIR}/src/fftools.tmp"
+file(GLOB_RECURSE FFTMP_FILES "${CMAKE_CURRENT_SOURCE_DIR}/src/fftools.tmp/*.c" "${CMAKE_CURRENT_SOURCE_DIR}/src/fftools.tmp/*.h")
+foreach(FFTMP_FILE ${FFTMP_FILES})
+    file(READ "${FFTMP_FILE}" FFTMP_CONTENT)
+    string(REPLACE "#include \"fftools/" "#include \"" FFTMP_CONTENT "${FFTMP_CONTENT}")
+    file(WRITE "${FFTMP_FILE}" "${FFTMP_CONTENT}")
+endforeach()
+# move files in fftools.tmp to src
+file(COPY "${CMAKE_CURRENT_SOURCE_DIR}/src/fftools.tmp/" 
+     DESTINATION "${CMAKE_CURRENT_SOURCE_DIR}/src/"
+     FILES_MATCHING
+     PATTERN "*"
+)
+# remove fftools.tmp
+file(REMOVE_RECURSE "${CMAKE_CURRENT_SOURCE_DIR}/src/fftools.tmp")
+# copy stdbit to src
+file(COPY "${FFMPEG_SRC_DIR}/compat/stdbit/stdbit.h" DESTINATION "${CMAKE_CURRENT_SOURCE_DIR}/src/compat/")
+# copy va_copy.h to src
+file(COPY "${FFMPEG_SRC_DIR}/compat/va_copy.h" DESTINATION "${CMAKE_CURRENT_SOURCE_DIR}/src/compat/")
+# copy w32dlfcn.h to src
+if(WIN32)
+    file(COPY "${FFMPEG_SRC_DIR}/compat/w32dlfcn.h" DESTINATION "${CMAKE_CURRENT_SOURCE_DIR}/src/compat/")
+endif()
 # Remove unwanted ffplay files
 # file(GLOB REMOVE_FILES "${CMAKE_CURRENT_SOURCE_DIR}/src/ffplay*")
 # if(REMOVE_FILES)

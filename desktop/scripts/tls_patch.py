@@ -99,19 +99,30 @@ TLS_EXCLUSION_LIST = {
 }
 
 def apply_line_patches(line_patches, whitelist):
-    """Applies the TLS macro exclusively to files explicitly listed in the whitelist."""
+    """Applies the TLS macro exclusively to files explicitly listed in the whitelist and within SRC_DIR."""
     include_line = '#include "ffmpeg_tls.h"\n'
+    abs_src_dir = os.path.abspath(SRC_DIR)
+    
     for file_path, patches in line_patches.items():
-        if not os.path.exists(file_path): 
+        abs_file_path = os.path.abspath(file_path)
+        if not os.path.exists(abs_file_path): 
             continue
         
+        # Limit changes to source strictly under SRC_DIR
+        try:
+            rel_path_to_src = os.path.relpath(abs_file_path, abs_src_dir)
+            if rel_path_to_src.startswith("..") or os.path.isabs(rel_path_to_src):
+                continue
+        except ValueError:
+            continue # Different drives on Windows
+            
         # Strict Whitelist Enforcement Barrier
-        file_name = os.path.basename(file_path)
-        rel_path = os.path.relpath(file_path, SRC_DIR).replace('\\', '/')
+        file_name = os.path.basename(abs_file_path)
+        rel_path = rel_path_to_src.replace('\\', '/')
         if file_name not in whitelist and rel_path not in whitelist:
             continue
             
-        with open(file_path, 'r', encoding='utf-8') as f:
+        with open(abs_file_path, 'r', encoding='utf-8') as f:
             lines = f.readlines()
             
         new_lines = []
@@ -141,10 +152,10 @@ def apply_line_patches(line_patches, whitelist):
                         line = indent + "FFMPEG_THREAD_LOCAL " + stripped
             new_lines.append(line)
             
-        with open(file_path, 'w', encoding='utf-8') as f:
+        with open(abs_file_path, 'w', encoding='utf-8') as f:
             f.writelines(new_lines)
             
-        print(f"[PATCHED] {file_path}: Applied {len(patches)} coordinate patches.")
+        print(f"[PATCHED] {abs_file_path}: Applied {len(patches)} coordinate patches.")
 
 def create_tls_header():
     header_path = os.path.join(SRC_DIR, "ffmpeg_tls.h")
