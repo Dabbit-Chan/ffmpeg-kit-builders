@@ -1280,4 +1280,34 @@ void session_clear_debug_log(void *session) {
     return;
   get_ptr<AbstractSession>(session)->clearDebugLog();
 }
+
+void ffmpeg_kit_config_enable_debug_log(void *session) {
+  if (!session)
+    return;
+  get_ptr<AbstractSession>(session)->enableDebugLog();
+}
+
+void ffmpeg_kit_config_disable_debug_log(void *session) {
+  if (!session)
+    return;
+  get_ptr<AbstractSession>(session)->disableDebugLog();
+}
+
+int ffmpeg_kit_config_is_debug_log_enabled(void *session) {
+  if (!session)
+    return 0;
+  return get_ptr<AbstractSession>(session)->isDebugLogEnabled();
+}
+
+char *ffmpeg_kit_config_get_debug_log(void *session) {
+  if (!session)
+    return nullptr;
+  return strdup_cpp(get_ptr<AbstractSession>(session)->getDebugLog());
+}
+
+void ffmpeg_kit_config_clear_debug_log(void *session) {
+  if (!session)
+    return;
+  get_ptr<AbstractSession>(session)->clearDebugLog();
+}
 }

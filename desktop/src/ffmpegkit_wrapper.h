@@ -1640,33 +1640,33 @@ FFMPEG_KIT_C_EXPORT void session_clear_debug_log(void *session);
 FFMPEG_KIT_C_EXPORT void ffmpeg_kit_free(void *ptr);
 
 /**
- * Enables the debug log.
+ * Enables the debug log for the session.
  */
-FFMPEG_KIT_C_EXPORT void ffmpeg_kit_config_enable_debug_log();
+FFMPEG_KIT_C_EXPORT void ffmpeg_kit_config_enable_debug_log(void *session);
 
 /**
- * Disables the debug log.
+ * Disables the debug log for the session.
  */
-FFMPEG_KIT_C_EXPORT void ffmpeg_kit_config_disable_debug_log();
+FFMPEG_KIT_C_EXPORT void ffmpeg_kit_config_disable_debug_log(void *session);
 
 /**
- * Checks if the debug log is enabled.
+ * Checks if the debug log is enabled for the session.
  *
  * @return 1 if the debug log is enabled, 0 otherwise
  */
-FFMPEG_KIT_C_EXPORT int ffmpeg_kit_config_is_debug_log_enabled();
+FFMPEG_KIT_C_EXPORT int ffmpeg_kit_config_is_debug_log_enabled(void *session);
 
 /**
- * Gets the debug log.
+ * Gets the debug log for the session.
  *
  * @return the debug log
  */
-FFMPEG_KIT_C_EXPORT char *ffmpeg_kit_config_get_debug_log();
+FFMPEG_KIT_C_EXPORT char *ffmpeg_kit_config_get_debug_log(void *session);
 
 /**
- * Clears the debug log.
+ * Clears the debug log for the session.
  */
-FFMPEG_KIT_C_EXPORT void ffmpeg_kit_config_clear_debug_log();
+FFMPEG_KIT_C_EXPORT void ffmpeg_kit_config_clear_debug_log(void *session);
 
 #ifdef __cplusplus
 }
