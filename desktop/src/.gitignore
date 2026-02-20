@@ -80,3 +80,6 @@ config.h.in
 bundle_manifest.txt
 ffmpeg-linker-script.map
 libs.txt
+compat/va_copy.h
+compat/stdbit.h
+compat/w32dlfcn.h
