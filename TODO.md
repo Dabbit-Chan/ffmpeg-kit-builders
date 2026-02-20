@@ -99,3 +99,9 @@
 ## FFplay
 
 [ ] Make SDL output embeddable into any application, but most importantly Flutter.
+
+## Platform support
+
+[ ] Add Android support
+[ ] Add iOS support
+[ ] Add macOS support
