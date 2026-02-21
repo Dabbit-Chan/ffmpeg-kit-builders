@@ -48,7 +48,6 @@ typedef std::function<void(
     const std::shared_ptr<ffmpegkit::FFprobeSession> session)>
     FFprobeSessionCompleteCallback;
 
-#include "FFprobeSession.hpp"
 
 } // namespace ffmpegkit
 

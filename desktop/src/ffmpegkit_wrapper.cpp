@@ -32,10 +32,12 @@
 #include "Statistics.hpp"
 #include <cstring>
 #include <thread>
+#include <set>
 
 using namespace ffmpegkit;
 
 static std::mutex g_handle_mutex;
+static std::set<void *> g_active_handles;
 
 
 // ---- Helpers ----
@@ -54,19 +56,27 @@ static char *strdup_safe_ptr(std::shared_ptr<std::string> strPtr) {
   return strdup_cpp(*strPtr);
 }
 
+template <typename T> static std::shared_ptr<T> get_ptr_internal(void *handle) {
+  if (!handle || g_active_handles.find(handle) == g_active_handles.end())
+    return nullptr;
+  auto obj_ptr = *static_cast<std::shared_ptr<FFmpegKitObject> *>(handle);
+  return std::dynamic_pointer_cast<T>(obj_ptr);
+}
+
+template <typename T> static std::shared_ptr<T> get_ptr(void *handle) {
+  std::lock_guard<std::mutex> lock(g_handle_mutex);
+  return get_ptr_internal<T>(handle);
+}
+
 template <typename T> static void *create_handle(std::shared_ptr<T> ptr) {
   if (!ptr)
     return nullptr;
   std::lock_guard<std::mutex> lock(g_handle_mutex);
   // Cast to FFmpegKitObject shared_ptr to allow dynamic casting later
-  return new std::shared_ptr<FFmpegKitObject>(std::static_pointer_cast<FFmpegKitObject>(ptr));
-}
-
-template <typename T> static std::shared_ptr<T> get_ptr(void *handle) {
-  if (!handle)
-    return nullptr;
-  auto obj_ptr = *static_cast<std::shared_ptr<FFmpegKitObject> *>(handle);
-  return std::dynamic_pointer_cast<T>(obj_ptr);
+  void *handle = new std::shared_ptr<FFmpegKitObject>(
+      std::static_pointer_cast<FFmpegKitObject>(ptr));
+  g_active_handles.insert(handle);
+  return handle;
 }
 
 template <typename T>
@@ -91,22 +101,35 @@ extern "C" {
 
 void ffmpeg_kit_handle_release(void *handle) {
   if (handle) {
-    // Safely check if it's a session before calling cancel
-    auto session = get_ptr<Session>(handle);
+    std::shared_ptr<Session> session;
+
+    {
+      std::lock_guard<std::mutex> lock(g_handle_mutex);
+      auto it = g_active_handles.find(handle);
+      if (it == g_active_handles.end()) {
+        return;
+      }
+
+      // Safely check if it's a session before calling cancel
+      session = get_ptr_internal<Session>(handle);
+
+      // Remove from active handles immediately to prevent double-release or use during shutdown
+      g_active_handles.erase(it);
+    }
+
     if (session) {
       session->cancel();
       /**
-      * Block destruction until the native background thread has gracefully exited.
-      * Prevents use-after-free crashes caused by asynchronous log callbacks 
-      * (especially under high I/O like -loglevel debug) attempting to access 
-      * destroyed session structures or mutexes.
-      */
+       * Block destruction until the native background thread has gracefully exited.
+       * Prevents use-after-free crashes caused by asynchronous log callbacks
+       * (especially under high I/O like -loglevel debug) attempting to access
+       * destroyed session structures or mutexes.
+       */
       while (session->getState() == SessionStateRunning) {
         std::this_thread::sleep_for(std::chrono::milliseconds(10));
       }
     }
-    
-    std::lock_guard<std::mutex> lock(g_handle_mutex);
+
     delete static_cast<std::shared_ptr<FFmpegKitObject> *>(handle);
   }
 }

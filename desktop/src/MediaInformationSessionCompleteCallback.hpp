@@ -48,7 +48,6 @@ typedef std::function<void(
     const std::shared_ptr<ffmpegkit::MediaInformationSession> session)>
     MediaInformationSessionCompleteCallback;
 
-#include "MediaInformationSession.hpp"
 
 } // namespace ffmpegkit
 

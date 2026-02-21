@@ -48,7 +48,6 @@ typedef std::function<void(
     const std::shared_ptr<ffmpegkit::FFplaySession> session)>
     FFplaySessionCompleteCallback;
 
-#include "FFplaySession.hpp"
 
 } // namespace ffmpegkit
 

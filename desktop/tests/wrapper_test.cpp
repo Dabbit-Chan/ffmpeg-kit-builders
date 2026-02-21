@@ -1175,3 +1175,43 @@ TEST(FFmpegKitTest, SessionListingAliases) {
     ffmpeg_kit_handle_release(ffprobe);
     ffmpeg_kit_handle_release(media);
 }
+
+TEST(FFmpegKitTest, HandleManagement) {
+    // 1. Create a session and get a handle
+    FFmpegSessionHandle session = ffmpeg_kit_create_session("-version");
+    ASSERT_NE(session, nullptr);
+
+    // 2. First release - should work normally
+    ffmpeg_kit_handle_release(session);
+    SUCCEED();
+
+    // 3. Second release (Double Free) - should be caught by protection and NOT crash
+    ffmpeg_kit_handle_release(session);
+    SUCCEED();
+
+    // 4. Release nullptr - should be no-op
+    ffmpeg_kit_handle_release(nullptr);
+    SUCCEED();
+}
+
+TEST(FFmpegKitTest, ConcurrentHandleRelease) {
+    // Create a session
+    FFmpegSessionHandle session = ffmpeg_kit_create_session("-version");
+    ASSERT_NE(session, nullptr);
+
+    // Multiple threads trying to release the SAME handle simultaneously
+    const int thread_count = 10;
+    std::vector<std::thread> threads;
+    for (int i = 0; i < thread_count; ++i) {
+        threads.emplace_back([session]() {
+            ffmpeg_kit_handle_release(session);
+        });
+    }
+
+    for (auto& t : threads) {
+        t.join();
+    }
+
+    // If we reached here without crashing/hanging, the test passed
+    SUCCEED();
+}
