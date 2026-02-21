@@ -1,5 +1,13 @@
 # FFmpegKit Changelog
 
+## Version 0.6.0
+
+- **Thread Safety**: Comprehensive refactoring of session management and global configurations to ensure thread-safe operations. Added mutex protection to `FFmpegSession`, `MediaInformationSession`, and global callback handlers to eliminate data races identified by ThreadSanitizer.
+- **Memory Barriers**: Implemented explicit memory barriers in `AbstractSession` destructor to synchronize session lifecycle transitions across threads.
+- **Singleton Initialization**: Introduced eager initialization of internal static managers in `ffmpegKitInitialize` to prevent lazy-loading race conditions during high-concurrency bursts.
+- **FFplay Robustness**: Synchronized internal API access in the `ffplay` engine, ensuring safe interaction between the SDL event loop and external control commands.
+- **Concurrency**: Improved handle management in the C wrapper with global synchronization, preventing use-after-free scenarios during rapid session destruction.
+
 ## Version 0.5.0
 
 - **API Extensions**: Added new statistics getter functions to the C API (`ffmpeg_kit_statistics_get_video_frame_number`, `ffmpeg_kit_statistics_get_speed`, etc.) and session listing utilities (`ffmpeg_kit_list_sessions`, `ffprobe_kit_list_sessions`).

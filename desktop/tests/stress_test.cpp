@@ -25,6 +25,12 @@ protected:
 
     void TearDown() override {
         ffmpeg_kit_config_clear_sessions();
+        ffmpeg_kit_config_enable_log_callback(nullptr, nullptr);
+        ffmpeg_kit_config_enable_statistics_callback(nullptr, nullptr);
+        ffmpeg_kit_config_enable_ffmpeg_session_complete_callback(nullptr, nullptr);
+        ffmpeg_kit_config_enable_ffprobe_session_complete_callback(nullptr, nullptr);
+        ffmpeg_kit_config_enable_ffplay_session_complete_callback(nullptr, nullptr);
+        ffmpeg_kit_config_enable_media_information_session_complete_callback(nullptr, nullptr);
     }
 };
 

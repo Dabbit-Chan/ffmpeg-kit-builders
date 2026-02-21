@@ -107,6 +107,7 @@ namespace ffmpegkit {
         private:
 
             struct PublicFFprobeSession;
+            mutable std::mutex _stateMutex;
 
             /**
              * Builds a new FFprobe session.

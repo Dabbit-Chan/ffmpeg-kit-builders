@@ -108,6 +108,10 @@ static std::recursive_mutex &getCallbackDataMutex() {
   static std::recursive_mutex *instance = new std::recursive_mutex();
   return *instance;
 }
+static std::recursive_mutex &getGlobalCallbacksMutex() {
+  static std::recursive_mutex *instance = new std::recursive_mutex();
+  return *instance;
+}
 static std::mutex &getCallbackMutex() {
   static std::mutex *instance = new std::mutex();
   return *instance;
@@ -642,16 +646,18 @@ static void process_log(long sessionId, int levelValueInt,
     }
   }
 
-  ffmpegkit::LogCallback globalLogCallback = logCallback;
-  if (globalLogCallback != nullptr) {
-    globalCallbackDefined = true;
+  {
+    std::lock_guard<std::recursive_mutex> lock(getGlobalCallbacksMutex());
+    if (logCallback != nullptr) {
+      globalCallbackDefined = true;
 
-    try {
-      // NOTIFY GLOBAL CALLBACK DEFINED
-      globalLogCallback(log);
-    } catch (const std::exception &exception) {
-      std::cout << "Exception thrown inside global log callback. "
-                << exception.what() << std::endl;
+      try {
+        // NOTIFY GLOBAL CALLBACK DEFINED
+        logCallback(log);
+      } catch (const std::exception &exception) {
+        std::cout << "Exception thrown inside global log callback. "
+                  << exception.what() << std::endl;
+      }
     }
   }
 
@@ -719,13 +725,15 @@ void process_statistics(long sessionId, int videoFrameNumber, float videoFps,
     }
   }
 
-  ffmpegkit::StatisticsCallback globalStatisticsCallback = statisticsCallback;
-  if (globalStatisticsCallback != nullptr) {
-    try {
-      globalStatisticsCallback(statistics);
-    } catch (const std::exception &exception) {
-      std::cout << "Exception thrown inside global statistics callback. "
-                << exception.what() << std::endl;
+  {
+    std::lock_guard<std::recursive_mutex> lock(getGlobalCallbacksMutex());
+    if (statisticsCallback != nullptr) {
+      try {
+        statisticsCallback(statistics);
+      } catch (const std::exception &exception) {
+        std::cout << "Exception thrown inside global statistics callback. "
+                  << exception.what() << std::endl;
+      }
     }
   }
 }
@@ -994,6 +1002,19 @@ void *ffmpegKitInitialize() {
   std::call_once(ffmpegKitInitializerFlag, []() {
     std::cout << "Loading ffmpeg-kit." << std::endl;
 
+    // Eagerly initialize all Meyers Singletons to establish a strict 
+    // happens-before edge prior to spawning any background threads. 
+    // This prevents ThreadSanitizer from flagging data races during 
+    // the lazy initialization of these static pointers.
+    (void)getSessionMutex();
+    (void)getSessionHistoryMap();
+    (void)getSessionHistoryList();
+    (void)getCallbackDataMutex();
+    (void)getGlobalCallbacksMutex();
+    (void)getCallbackMutex();
+    (void)getCallbackMonitor();
+    (void)getCallbackDataList();
+
     sessionHistorySize = 10;
 
     for (int i = 0; i < SESSION_MAP_SIZE; i++) {
@@ -1021,6 +1042,8 @@ void *ffmpegKitInitialize() {
               << ffmpegkit::FFmpegKitConfig::getVersion() << "-"
               << ffmpegkit::FFmpegKitConfig::getBuildDate() << "." << std::endl;
   });
+
+  std::lock_guard<std::recursive_mutex> lock(getCallbackDataMutex());
 
   return NULL;
 }
@@ -1453,18 +1476,21 @@ void ffmpegkit::FFmpegKitConfig::asyncFFmpegExecute(
       }
     }
 
-    ffmpegkit::FFmpegSessionCompleteCallback
-        globalFFmpegSessionCompleteCallback =
-            ffmpegkit::FFmpegKitConfig::getFFmpegSessionCompleteCallback();
-    if (globalFFmpegSessionCompleteCallback != nullptr) {
-      try {
-        // NOTIFY SESSION CALLBACK DEFINED
-        ffmpegSession->debugLog("[GET MEDIA INFO] sessionId: %ld NOTIFY GLOBAL SESSION CALLBACK DEFINED", ffmpegSession->getSessionId());
-        globalFFmpegSessionCompleteCallback(ffmpegSession);
-      } catch (const std::exception &exception) {
-        ffmpegSession->debugLog("[GET MEDIA INFO] sessionId: %ld exception: %s", ffmpegSession->getSessionId(), exception.what());
-        std::cout << "Exception thrown inside global complete callback. "
-                  << exception.what() << std::endl;
+    {
+      std::lock_guard<std::recursive_mutex> lock(getGlobalCallbacksMutex());
+      ffmpegkit::FFmpegSessionCompleteCallback
+          globalFFmpegSessionCompleteCallback =
+              ffmpegkit::FFmpegKitConfig::getFFmpegSessionCompleteCallback();
+      if (globalFFmpegSessionCompleteCallback != nullptr) {
+        try {
+          // NOTIFY SESSION CALLBACK DEFINED
+          ffmpegSession->debugLog("[GET MEDIA INFO] sessionId: %ld NOTIFY GLOBAL SESSION CALLBACK DEFINED", ffmpegSession->getSessionId());
+          globalFFmpegSessionCompleteCallback(ffmpegSession);
+        } catch (const std::exception &exception) {
+          ffmpegSession->debugLog("[GET MEDIA INFO] sessionId: %ld exception: %s", ffmpegSession->getSessionId(), exception.what());
+          std::cout << "Exception thrown inside global complete callback. "
+                    << exception.what() << std::endl;
+        }
       }
     }
   });
@@ -1491,18 +1517,21 @@ void ffmpegkit::FFmpegKitConfig::asyncFFprobeExecute(
       }
     }
 
-    ffmpegkit::FFprobeSessionCompleteCallback
-        globalFFprobeSessionCompleteCallback =
-            ffmpegkit::FFmpegKitConfig::getFFprobeSessionCompleteCallback();
-    if (globalFFprobeSessionCompleteCallback != nullptr) {
-      try {
-        // NOTIFY SESSION CALLBACK DEFINED
-        ffprobeSession->debugLog("[GET MEDIA INFO] sessionId: %ld NOTIFY GLOBAL SESSION CALLBACK DEFINED", ffprobeSession->getSessionId());
-        globalFFprobeSessionCompleteCallback(ffprobeSession);
-      } catch (const std::exception &exception) {
-        ffprobeSession->debugLog("[GET MEDIA INFO] sessionId: %ld exception: %s", ffprobeSession->getSessionId(), exception.what());
-        std::cout << "Exception thrown inside global complete callback. "
-                  << exception.what() << std::endl;
+    {
+      std::lock_guard<std::recursive_mutex> lock(getGlobalCallbacksMutex());
+      ffmpegkit::FFprobeSessionCompleteCallback
+          globalFFprobeSessionCompleteCallback =
+              ffmpegkit::FFmpegKitConfig::getFFprobeSessionCompleteCallback();
+      if (globalFFprobeSessionCompleteCallback != nullptr) {
+        try {
+          // NOTIFY SESSION CALLBACK DEFINED
+          ffprobeSession->debugLog("[GET MEDIA INFO] sessionId: %ld NOTIFY GLOBAL SESSION CALLBACK DEFINED", ffprobeSession->getSessionId());
+          globalFFprobeSessionCompleteCallback(ffprobeSession);
+        } catch (const std::exception &exception) {
+          ffprobeSession->debugLog("[GET MEDIA INFO] sessionId: %ld exception: %s", ffprobeSession->getSessionId(), exception.what());
+          std::cout << "Exception thrown inside global complete callback. "
+                    << exception.what() << std::endl;
+        }
       }
     }
   });
@@ -1529,18 +1558,21 @@ void ffmpegkit::FFmpegKitConfig::asyncFFplayExecute(
       }
     }
 
-    ffmpegkit::FFplaySessionCompleteCallback
-        globalFFplaySessionCompleteCallback =
-            ffmpegkit::FFmpegKitConfig::getFFplaySessionCompleteCallback();
-    if (globalFFplaySessionCompleteCallback != nullptr) {
-      try {
-        // NOTIFY SESSION CALLBACK DEFINED
-        ffplaySession->debugLog("[GET MEDIA INFO] sessionId: %ld NOTIFY GLOBAL SESSION CALLBACK DEFINED", ffplaySession->getSessionId());
-        globalFFplaySessionCompleteCallback(ffplaySession);
-      } catch (const std::exception &exception) {
-        ffplaySession->debugLog("[GET MEDIA INFO] sessionId: %ld exception: %s", ffplaySession->getSessionId(), exception.what());
-        std::cout << "Exception thrown inside global complete callback. "
-                  << exception.what() << std::endl;
+    {
+      std::lock_guard<std::recursive_mutex> lock(getGlobalCallbacksMutex());
+      ffmpegkit::FFplaySessionCompleteCallback
+          globalFFplaySessionCompleteCallback =
+              ffmpegkit::FFmpegKitConfig::getFFplaySessionCompleteCallback();
+      if (globalFFplaySessionCompleteCallback != nullptr) {
+        try {
+          // NOTIFY SESSION CALLBACK DEFINED
+          ffplaySession->debugLog("[GET MEDIA INFO] sessionId: %ld NOTIFY GLOBAL SESSION CALLBACK DEFINED", ffplaySession->getSessionId());
+          globalFFplaySessionCompleteCallback(ffplaySession);
+        } catch (const std::exception &exception) {
+          ffplaySession->debugLog("[GET MEDIA INFO] sessionId: %ld exception: %s", ffplaySession->getSessionId(), exception.what());
+          std::cout << "Exception thrown inside global complete callback. "
+                    << exception.what() << std::endl;
+        }
       }
     }
   });
@@ -1570,18 +1602,21 @@ void ffmpegkit::FFmpegKitConfig::asyncGetMediaInformationExecute(
       }
     }
 
-    ffmpegkit::MediaInformationSessionCompleteCallback
-        globalMediaInformationSessionCompleteCallback = ffmpegkit::
-            FFmpegKitConfig::getMediaInformationSessionCompleteCallback();
-    if (globalMediaInformationSessionCompleteCallback != nullptr) {
-      try {
-        // NOTIFY SESSION CALLBACK DEFINED
-        mediaInformationSession->debugLog("[GET MEDIA INFO] sessionId: %ld NOTIFY GLOBAL SESSION CALLBACK DEFINED", mediaInformationSession->getSessionId());
-        globalMediaInformationSessionCompleteCallback(mediaInformationSession);
-      } catch (const std::exception &exception) {
-        mediaInformationSession->debugLog("[GET MEDIA INFO] sessionId: %ld exception: %s", mediaInformationSession->getSessionId(), exception.what());
-        std::cout << "Exception thrown inside global complete callback. "
-                  << exception.what() << std::endl;
+    {
+      std::lock_guard<std::recursive_mutex> lock(getGlobalCallbacksMutex());
+      ffmpegkit::MediaInformationSessionCompleteCallback
+          globalMediaInformationSessionCompleteCallback = ffmpegkit::
+              FFmpegKitConfig::getMediaInformationSessionCompleteCallback();
+      if (globalMediaInformationSessionCompleteCallback != nullptr) {
+        try {
+          // NOTIFY SESSION CALLBACK DEFINED
+          mediaInformationSession->debugLog("[GET MEDIA INFO] sessionId: %ld NOTIFY GLOBAL SESSION CALLBACK DEFINED", mediaInformationSession->getSessionId());
+          globalMediaInformationSessionCompleteCallback(mediaInformationSession);
+        } catch (const std::exception &exception) {
+          mediaInformationSession->debugLog("[GET MEDIA INFO] sessionId: %ld exception: %s", mediaInformationSession->getSessionId(), exception.what());
+          std::cout << "Exception thrown inside global complete callback. "
+                    << exception.what() << std::endl;
+        }
       }
     }
   });
@@ -1591,51 +1626,61 @@ void ffmpegkit::FFmpegKitConfig::asyncGetMediaInformationExecute(
 
 void ffmpegkit::FFmpegKitConfig::enableLogCallback(
     const ffmpegkit::LogCallback callback) {
+  std::lock_guard<std::recursive_mutex> lock(getGlobalCallbacksMutex());
   logCallback = callback;
 }
 
 void ffmpegkit::FFmpegKitConfig::enableStatisticsCallback(
     const ffmpegkit::StatisticsCallback callback) {
+  std::lock_guard<std::recursive_mutex> lock(getGlobalCallbacksMutex());
   statisticsCallback = callback;
 }
 
 void ffmpegkit::FFmpegKitConfig::enableFFmpegSessionCompleteCallback(
     const FFmpegSessionCompleteCallback completeCallback) {
+  std::lock_guard<std::recursive_mutex> lock(getGlobalCallbacksMutex());
   ffmpegSessionCompleteCallback = completeCallback;
 }
 
 ffmpegkit::FFmpegSessionCompleteCallback
 ffmpegkit::FFmpegKitConfig::getFFmpegSessionCompleteCallback() {
+  std::lock_guard<std::recursive_mutex> lock(getGlobalCallbacksMutex());
   return ffmpegSessionCompleteCallback;
 }
 
 void ffmpegkit::FFmpegKitConfig::enableFFprobeSessionCompleteCallback(
     const FFprobeSessionCompleteCallback completeCallback) {
+  std::lock_guard<std::recursive_mutex> lock(getGlobalCallbacksMutex());
   ffprobeSessionCompleteCallback = completeCallback;
 }
 
 ffmpegkit::FFprobeSessionCompleteCallback
 ffmpegkit::FFmpegKitConfig::getFFprobeSessionCompleteCallback() {
+  std::lock_guard<std::recursive_mutex> lock(getGlobalCallbacksMutex());
   return ffprobeSessionCompleteCallback;
 }
 
 void ffmpegkit::FFmpegKitConfig::enableFFplaySessionCompleteCallback(
     const FFplaySessionCompleteCallback completeCallback) {
+  std::lock_guard<std::recursive_mutex> lock(getGlobalCallbacksMutex());
   ffplaySessionCompleteCallback = completeCallback;
 }
 
 ffmpegkit::FFplaySessionCompleteCallback
 ffmpegkit::FFmpegKitConfig::getFFplaySessionCompleteCallback() {
+  std::lock_guard<std::recursive_mutex> lock(getGlobalCallbacksMutex());
   return ffplaySessionCompleteCallback;
 }
 
 void ffmpegkit::FFmpegKitConfig::enableMediaInformationSessionCompleteCallback(
     const MediaInformationSessionCompleteCallback completeCallback) {
+  std::lock_guard<std::recursive_mutex> lock(getGlobalCallbacksMutex());
   mediaInformationSessionCompleteCallback = completeCallback;
 }
 
 ffmpegkit::MediaInformationSessionCompleteCallback
 ffmpegkit::FFmpegKitConfig::getMediaInformationSessionCompleteCallback() {
+  std::lock_guard<std::recursive_mutex> lock(getGlobalCallbacksMutex());
   return mediaInformationSessionCompleteCallback;
 }
 
@@ -2088,7 +2133,9 @@ ffmpegkit::FFmpegKitConfig::~FFmpegKitConfig() {
   clearSessions();
   // 2. Reset global callbacks with lock
   {
-    std::lock_guard<std::recursive_mutex> lock(getSessionMutex());
+    std::lock_guard<std::recursive_mutex> lock(getGlobalCallbacksMutex());
+    logCallback = nullptr;
+    statisticsCallback = nullptr;
     ffmpegSessionCompleteCallback = nullptr;
     ffprobeSessionCompleteCallback = nullptr;
     ffplaySessionCompleteCallback = nullptr;

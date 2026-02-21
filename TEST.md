@@ -38,11 +38,11 @@ sudo ./runner.sh --host=windows --arch=x86_64 --enable-base --gpl --kit --test -
 
 ```bash
 # disbale ASLR temporarily for thread sanitizer tests
-setarch $(uname -m) -R ./desktop/build/tests/ffmpegkit_tests
+setarch $(uname -m) -R ./desktop/build/tests/ffmpegkit_tests > test_tsan.log 2>&1
 ```
 
 ### Address Sanitizer
 
 ```bash
-export LSAN_OPTIONS=suppressions=/home/vscode/ffmpeg-kit-builders/desktop/tests/asan.supp && export ASAN_OPTIONS=detect_odr_violation=0:detect_leaks=1 && ./desktop/build/tests/ffmpegkit_tests --gtest_filter=FFmpegKitTest.DebugLog > test.log 2>&1
+export LSAN_OPTIONS=suppressions=/home/vscode/ffmpeg-kit-builders/desktop/tests/asan.supp && export ASAN_OPTIONS=detect_odr_violation=0:detect_leaks=1 && ./desktop/build/tests/ffmpegkit_tests > test_asan.log 2>&1
 ```

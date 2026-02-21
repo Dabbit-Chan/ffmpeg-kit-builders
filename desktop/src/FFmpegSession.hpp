@@ -193,7 +193,7 @@ private:
                 ffmpegkit::LogCallback logCallback,
                 ffmpegkit::StatisticsCallback statisticsCallback,
                 ffmpegkit::LogRedirectionStrategy logRedirectionStrategy);
-
+  mutable std::mutex _stateMutex;
   ffmpegkit::StatisticsCallback _statisticsCallback;
   FFmpegSessionCompleteCallback _completeCallback;
   std::shared_ptr<std::list<std::shared_ptr<ffmpegkit::Statistics>>>

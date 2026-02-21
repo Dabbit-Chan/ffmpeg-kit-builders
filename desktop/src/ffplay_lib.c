@@ -92,6 +92,28 @@ struct FFplayContext {
     int quit;
 };
 
+// Global API Synchronization to satisfy TSAN strictly on FFI context pointer reads
+static SDL_mutex *ffplay_api_mutex = NULL;
+static SDL_SpinLock ffplay_init_lock = 0;
+static FFplayContext *active_ffplay_ctx = NULL;
+
+static void lock_ffplay_api(void) {
+    if (!ffplay_api_mutex) {
+        SDL_AtomicLock(&ffplay_init_lock);
+        if (!ffplay_api_mutex) {
+            ffplay_api_mutex = SDL_CreateMutex();
+        }
+        SDL_AtomicUnlock(&ffplay_init_lock);
+    }
+    SDL_LockMutex(ffplay_api_mutex);
+}
+
+static void unlock_ffplay_api(void) {
+    if (ffplay_api_mutex) {
+        SDL_UnlockMutex(ffplay_api_mutex);
+    }
+}
+
 // Helper for argument splitting (reuse from other libs if possible, specific implementation here)
 static int split_args(const char *args, char ***argv_out) {
     if (!args || !argv_out) return -1;
@@ -169,14 +191,22 @@ FFplayContext* ffplay_init(const char* args_string, const FFplayCallbacks *cb) {
 
     // Call internal init
     // Note: ffplay_init_internal calls everything up to event_loop
-    ctx->is = ffplay_init_internal(ctx->argc, ctx->argv);
-    if (!ctx->is) {
+    VideoState *is = ffplay_init_internal(ctx->argc, ctx->argv);
+    
+    if (!is) {
         // Init failed
         for (int i=0; i<ctx->argc; i++) av_free(ctx->argv[i]);
         av_free(ctx->argv);
         av_free(ctx);
         return NULL;
     }
+
+    ctx->is = is;
+    
+    // Safely publish the context 
+    lock_ffplay_api();
+    active_ffplay_ctx = ctx;
+    unlock_ffplay_api();
 
     return ctx;
 }
@@ -206,14 +236,16 @@ static char *base_afilters = NULL;
 static char *allocated_afilters = NULL;
 
 int ffplay_start(FFplayContext* ctx) {
-    if (!ctx || !ctx->is) return -1;
-    // ffplay_init_internal already started threads (read_thread, etc.)
-    return 0; 
+    int ret = -1;
+    lock_ffplay_api();
+    if (ctx && active_ffplay_ctx == ctx && ctx->is) ret = 0;
+    unlock_ffplay_api();
+    return ret; 
 }
 
 int ffplay_step(FFplayContext* ctx) {
-    if (ctx->quit) return 1;
-    if (!ctx || !ctx->is) return 1;
+    if (!ctx) return 1;
+    if (ctx->quit || !ctx->is) return 1;
 
     SDL_Event event;
     double remaining_time = 0.0; // Instant return if possible
@@ -225,9 +257,13 @@ int ffplay_step(FFplayContext* ctx) {
          switch (event.type) {
         case SDL_KEYDOWN:
             if (exit_on_keydown || event.key.keysym.sym == SDLK_ESCAPE || event.key.keysym.sym == SDLK_q) {
-                do_exit(ctx->is);
-                ctx->is = NULL;
+                lock_ffplay_api();
+                if (ctx->is) {
+                    do_exit(ctx->is);
+                    ctx->is = NULL;
+                }
                 ctx->quit = 1;
+                unlock_ffplay_api();
                 return 1;
             }
             if (!ctx->is->width) continue;
@@ -238,18 +274,24 @@ int ffplay_step(FFplayContext* ctx) {
                 break;
             case SDLK_p:
             case SDLK_SPACE:
+                lock_ffplay_api();
                 toggle_pause(ctx->is);
+                unlock_ffplay_api();
                 break;
             case SDLK_m:
                 toggle_mute(ctx->is);
                 break;
             case SDLK_KP_MULTIPLY:
             case SDLK_0:
+                lock_ffplay_api();
                 update_volume(ctx->is, 1, SDL_VOLUME_STEP);
+                unlock_ffplay_api();
                 break;
             case SDLK_KP_DIVIDE:
             case SDLK_9:
+                lock_ffplay_api();
                 update_volume(ctx->is, -1, SDL_VOLUME_STEP);
+                unlock_ffplay_api();
                 break;
             case SDLK_s: // S: Step to next frame
                 step_to_next_frame(ctx->is);
@@ -277,15 +319,19 @@ int ffplay_step(FFplayContext* ctx) {
                     toggle_audio_display(ctx->is);
                 }
                 break;
-             // Seeking logic copied from event_loop
             default:
                 break;
             }
             break;
         case SDL_QUIT:
         case FF_QUIT_EVENT:
-            do_exit(ctx->is);
+            lock_ffplay_api();
+            if (ctx->is) {
+                do_exit(ctx->is);
+                ctx->is = NULL;
+            }
             ctx->quit = 1;
+            unlock_ffplay_api();
             return 1;
         
         // Custom Events Handling
@@ -300,19 +346,29 @@ int ffplay_step(FFplayContext* ctx) {
             break;
         }
         case FF_PLAY_PAUSE_EVENT:
-            if (!ctx->is->paused)
+            lock_ffplay_api();
+            if (ctx->is && !ctx->is->paused)
                 stream_toggle_pause(ctx->is);
+            unlock_ffplay_api();
             break;
         case FF_PLAY_RESUME_EVENT:
-            if (ctx->is->paused)
+            lock_ffplay_api();
+            if (ctx->is && ctx->is->paused)
                 stream_toggle_pause(ctx->is);
+            unlock_ffplay_api();
             break;
         case FF_PLAY_VOLUME_EVENT: {
             VolumeEventData *data = (VolumeEventData*)event.user.data1;
             if (data) {
                 int vol = av_clip(data->volume * 100, 0, 100);
                 vol = av_clip(SDL_MIX_MAXVOLUME * vol / 100, 0, SDL_MIX_MAXVOLUME);
-                ctx->is->audio_volume = vol;
+                
+                lock_ffplay_api();
+                if (ctx->is) {
+                    ctx->is->audio_volume = vol;
+                }
+                unlock_ffplay_api();
+                
                 av_free(data);
             }
             break;
@@ -365,12 +421,6 @@ int ffplay_step(FFplayContext* ctx) {
                 afilters = allocated_afilters;
 
                 // Force reconfiguration of audio filters
-                // We need to access the graph to reconfigure, but ffplay.c handles this 
-                // by checking afilters change mostly in configure_audio_filters
-                // But we need to trigger it.
-                // In ffplay.c, `audio_open` or `configure_filtergraph` uses `afilters`.
-                // Changing logic: `audio_thread` reconfigures if `is->audio_filter_src.freq` changes or similar.
-                // Setting `is->audio_filter_src.freq = 0` forces reconfiguration in `audio_thread`.
                 ctx->is->audio_filter_src.freq = 0;
                 
                 av_free(data);
@@ -391,7 +441,7 @@ int ffplay_step(FFplayContext* ctx) {
         }
     }
     
-    if (ctx->is->show_mode != SHOW_MODE_NONE && (!ctx->is->paused || ctx->is->force_refresh)) {
+    if (ctx->is && ctx->is->show_mode != SHOW_MODE_NONE && (!ctx->is->paused || ctx->is->force_refresh)) {
          video_refresh(ctx->is, &remaining_time);
     }
 
@@ -399,96 +449,129 @@ int ffplay_step(FFplayContext* ctx) {
 }
 
 int ffplay_seek(FFplayContext* ctx, double seconds, double rel) {
-    if (!ctx || !ctx->is) return -1;
-    
-    SeekEventData *data = av_malloc(sizeof(SeekEventData));
-    if (!data) return -1;
-    data->seconds = seconds;
-    data->rel = rel;
+    int ret = -1;
+    lock_ffplay_api();
+    if (ctx && active_ffplay_ctx == ctx && ctx->is) {
+        SeekEventData *data = av_malloc(sizeof(SeekEventData));
+        if (data) {
+            data->seconds = seconds;
+            data->rel = rel;
 
-    SDL_Event event;
-    event.type = FF_PLAY_SEEK_EVENT;
-    event.user.data1 = data;
-    SDL_PushEvent(&event);
-    
-    return 0;
+            SDL_Event event;
+            event.type = FF_PLAY_SEEK_EVENT;
+            event.user.data1 = data;
+            SDL_PushEvent(&event);
+            ret = 0;
+        }
+    }
+    unlock_ffplay_api();
+    return ret;
 }
 
 int ffplay_pause(FFplayContext* ctx) {
-    if (!ctx || !ctx->is) return -1;
-    
-    SDL_Event event;
-    event.type = FF_PLAY_PAUSE_EVENT;
-    SDL_PushEvent(&event);
-    
-    return 0;
+    int ret = -1;
+    lock_ffplay_api();
+    if (ctx && active_ffplay_ctx == ctx && ctx->is) {
+        SDL_Event event;
+        event.type = FF_PLAY_PAUSE_EVENT;
+        SDL_PushEvent(&event);
+        ret = 0;
+    }
+    unlock_ffplay_api();
+    return ret;
 }
 
 int ffplay_resume(FFplayContext* ctx) {
-    if (!ctx || !ctx->is) return -1;
-
-    SDL_Event event;
-    event.type = FF_PLAY_RESUME_EVENT;
-    SDL_PushEvent(&event);
-    
-    return 0;
+    int ret = -1;
+    lock_ffplay_api();
+    if (ctx && active_ffplay_ctx == ctx && ctx->is) {
+        SDL_Event event;
+        event.type = FF_PLAY_RESUME_EVENT;
+        SDL_PushEvent(&event);
+        ret = 0;
+    }
+    unlock_ffplay_api();
+    return ret;
 }
 
 int ffplay_stop(FFplayContext* ctx) {
-    if (!ctx || !ctx->is) return -1;
-    
-    SDL_Event event;
-    event.type = FF_QUIT_EVENT;
-    // Don't pass is pointer as data, it might be freed before event is processed if we are racing.
-    // However, the event loop uses event.user.data1 = is. 
-    // But since we are inside ffplay_lib.c and have access to ctx->is, we rely on the loop to handle it correctly.
-    // The issue is likely that the read_thread or other threads are accessing 'is' while it's being freed.
-    // But here we are just pushing an event.
-    event.user.data1 = ctx->is; 
-    SDL_PushEvent(&event);
-    
-    return 0;
+    int ret = -1;
+    lock_ffplay_api();
+    if (ctx && active_ffplay_ctx == ctx && ctx->is) {
+        SDL_Event event;
+        event.type = FF_QUIT_EVENT;
+        event.user.data1 = ctx->is; 
+        SDL_PushEvent(&event);
+        ret = 0;
+    }
+    unlock_ffplay_api();
+    return ret;
 }
 
 double ffplay_get_position(FFplayContext* ctx) {
-    if (!ctx || !ctx->is) return 0.0;
-    return get_master_clock(ctx->is);
+    double pos = 0.0;
+    lock_ffplay_api();
+    if (ctx && active_ffplay_ctx == ctx && ctx->is) {
+        pos = get_master_clock(ctx->is);
+    }
+    unlock_ffplay_api();
+    return pos;
 }
 
 double ffplay_get_duration(FFplayContext* ctx) {
-    if (!ctx || !ctx->is || !ctx->is->ic) return 0.0;
-    if (ctx->is->ic->duration == AV_NOPTS_VALUE) return 0.0;
-    return (double)ctx->is->ic->duration / AV_TIME_BASE;
+    double dur = 0.0;
+    lock_ffplay_api();
+    if (ctx && active_ffplay_ctx == ctx && ctx->is && ctx->is->ic && ctx->is->ic->duration != AV_NOPTS_VALUE) {
+        dur = (double)ctx->is->ic->duration / AV_TIME_BASE;
+    }
+    unlock_ffplay_api();
+    return dur;
 }
 
 int ffplay_is_playing(FFplayContext* ctx) {
-    if (!ctx || !ctx->is) return 0;
-    return !ctx->is->paused && !ctx->quit;
+    int playing = 0;
+    lock_ffplay_api();
+    if (ctx && active_ffplay_ctx == ctx && ctx->is) {
+        playing = !ctx->is->paused && !ctx->quit;
+    }
+    unlock_ffplay_api();
+    return playing;
 }
 
 int ffplay_is_paused(FFplayContext* ctx) {
-    if (!ctx || !ctx->is) return 0;
-    return ctx->is->paused;
+    int paused = 0;
+    lock_ffplay_api();
+    if (ctx && active_ffplay_ctx == ctx && ctx->is) {
+        paused = ctx->is->paused;
+    }
+    unlock_ffplay_api();
+    return paused;
 }
 
 void ffplay_set_volume(FFplayContext* ctx, float volume) {
-    if (!ctx || !ctx->is) return;
-    
-    VolumeEventData *data = av_malloc(sizeof(VolumeEventData));
-    if (!data) return;
-    data->volume = volume;
-
-    SDL_Event event;
-    event.type = FF_PLAY_VOLUME_EVENT;
-    event.user.data1 = data;
-    SDL_PushEvent(&event);
+    lock_ffplay_api();
+    if (ctx && active_ffplay_ctx == ctx && ctx->is) {
+        VolumeEventData *data = av_malloc(sizeof(VolumeEventData));
+        if (data) {
+            data->volume = volume;
+            SDL_Event event;
+            event.type = FF_PLAY_VOLUME_EVENT;
+            event.user.data1 = data;
+            SDL_PushEvent(&event);
+        }
+    }
+    unlock_ffplay_api();
 }
 
 float ffplay_get_volume(FFplayContext* ctx) {
-    if (!ctx || !ctx->is) return 0.0;
-    return (float)ctx->is->audio_volume / SDL_MIX_MAXVOLUME;
+    float vol = 0.0;
+    lock_ffplay_api();
+    if (ctx && active_ffplay_ctx == ctx && ctx->is) {
+        vol = (float)ctx->is->audio_volume / SDL_MIX_MAXVOLUME;
+    }
+    unlock_ffplay_api();
+    return vol;
 }
-
 
 void ffplay_set_audio_output_device(const char* device_name) {
     // Update global requested name
@@ -502,16 +585,10 @@ void ffplay_set_audio_output_device(const char* device_name) {
 
     // Hot-swap if active
     if (active_audio_is && active_audio_is->audio_dev > 0 && has_captured_spec) {
-        // Lock not strictly needed if we assume single-thread UI control but let's be safe(r) if SDL supports it
-        // Check SDL_LockAudio not needed for Close/Open per docs
-        
         struct VideoState *local_is = active_audio_is;
         SDL_CloseAudioDevice(local_is->audio_dev); 
         // Note: active_audio_is is cleared by interception here!
         
-        // Open new device
-        // We MUST use 0 for allowed changes to force SDL to match our existing spec
-        // If we allowed changes, we'd have to reconfigure the whole filter graph which is hard from here
         SDL_AudioSpec obtained_spec;
         local_is->audio_dev = SDL_OpenAudioDevice(requested_audio_device, 0, &captured_wanted_spec, &obtained_spec, 0);
         
@@ -519,9 +596,7 @@ void ffplay_set_audio_output_device(const char* device_name) {
             SDL_PauseAudioDevice(local_is->audio_dev, 0);
         } else {
             av_log(NULL, AV_LOG_ERROR, "Failed to switch audio device: %s\n", SDL_GetError());
-            // Try fallback to default?
             if (device_name) {
-                 // Open default
                  local_is->audio_dev = SDL_OpenAudioDevice(NULL, 0, &captured_wanted_spec, &obtained_spec, 0);
                  if (local_is->audio_dev) SDL_PauseAudioDevice(local_is->audio_dev, 0);
             }
@@ -529,7 +604,6 @@ void ffplay_set_audio_output_device(const char* device_name) {
     }
 
 }
-
 
 char* ffplay_list_audio_devices(void) {
     if (SDL_InitSubSystem(SDL_INIT_AUDIO) < 0) {
@@ -542,13 +616,11 @@ char* ffplay_list_audio_devices(void) {
         return NULL;
     }
 
-    // Build a semicolon separated string
-    // Calculate size first
     size_t total_len = 0;
     for (int i=0; i<count; i++) {
         const char *name = SDL_GetAudioDeviceName(i, 0);
         if (name) {
-            total_len += strlen(name) + 1; // +1 for ';' or '\0'
+            total_len += strlen(name) + 1;
         }
     }
     
@@ -580,10 +652,17 @@ char* ffplay_list_audio_devices(void) {
 
 void ffplay_free(FFplayContext* ctx) {
     if (!ctx) return;
-    if (!ctx->quit) {
-        do_exit(ctx->is);
-        // do_exit called SDL_Quit once.
+    
+    lock_ffplay_api();
+    if (active_ffplay_ctx == ctx) {
+        active_ffplay_ctx = NULL;
     }
+    if (!ctx->quit && ctx->is) {
+        do_exit(ctx->is);
+        ctx->is = NULL;
+        ctx->quit = 1;
+    }
+    unlock_ffplay_api();
     
     // Force full SDL shutdown in case multiple inits increased refcount
     while (SDL_WasInit(0)) {
@@ -605,13 +684,6 @@ void ffplay_free(FFplayContext* ctx) {
         requested_audio_device = NULL;
     }
     
-    // Free VideoState structure (allocated in ffplay.c/ffplay_init_internal)
-    // NOTE: stream_close(is) called by do_exit(is) already frees 'is' (av_free(is) in stream_close).
-    // So we must NOT free it again here.
-    if (ctx->is) {
-        ctx->is = NULL;
-    }
-
     // argv freed
     if (ctx->argv) {
         for (int i=0; i<ctx->argc; i++) av_free(ctx->argv[i]);

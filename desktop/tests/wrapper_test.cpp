@@ -1072,6 +1072,7 @@ TEST(FFmpegKitTest, SessionProperties) {
     EXPECT_GE(duration, 0);
 
     ffmpeg_kit_handle_release(session);
+    remove("test_props.wav");
 }
 
 TEST(FFmpegKitTest, Statistics) {
@@ -1102,6 +1103,7 @@ TEST(FFmpegKitTest, Statistics) {
     }
 
     ffmpeg_kit_handle_release(session);
+    remove("test_stats.mp4");
 }
 
 TEST(FFprobeKitTest, LastSessionAliases) {

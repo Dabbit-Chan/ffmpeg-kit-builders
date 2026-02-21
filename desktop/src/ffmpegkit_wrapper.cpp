@@ -35,6 +35,9 @@
 
 using namespace ffmpegkit;
 
+static std::mutex g_handle_mutex;
+
+
 // ---- Helpers ----
 
 static char *strdup_cpp(const std::string &str) {
@@ -54,6 +57,7 @@ static char *strdup_safe_ptr(std::shared_ptr<std::string> strPtr) {
 template <typename T> static void *create_handle(std::shared_ptr<T> ptr) {
   if (!ptr)
     return nullptr;
+  std::lock_guard<std::mutex> lock(g_handle_mutex);
   // Cast to FFmpegKitObject shared_ptr to allow dynamic casting later
   return new std::shared_ptr<FFmpegKitObject>(std::static_pointer_cast<FFmpegKitObject>(ptr));
 }
@@ -101,6 +105,8 @@ void ffmpeg_kit_handle_release(void *handle) {
         std::this_thread::sleep_for(std::chrono::milliseconds(10));
       }
     }
+    
+    std::lock_guard<std::mutex> lock(g_handle_mutex);
     delete static_cast<std::shared_ptr<FFmpegKitObject> *>(handle);
   }
 }

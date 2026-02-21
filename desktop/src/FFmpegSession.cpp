@@ -13,14 +13,15 @@
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU Lesser General License for more details.
  *
- *  You should have received a copy of the GNU Lesser General License
- *  along with FFmpegKit.  If not, see <http://www.gnu.org/licenses/>.
+ * You should have received a copy of the GNU Lesser General License
+ * along with FFmpegKit.  If not, see <http://www.gnu.org/licenses/>.
  */
 
 #include "FFmpegSession.hpp"
 #include "FFmpegKitConfig.hpp"
 #include "LogCallback.hpp"
 #include "StatisticsCallback.hpp"
+#include <mutex>
 
 extern void addSessionToSessionHistory(const std::shared_ptr<ffmpegkit::Session> session);
 
@@ -81,10 +82,12 @@ std::shared_ptr<std::list<std::shared_ptr<ffmpegkit::Statistics>>> ffmpegkit::FF
 }
 
 std::shared_ptr<std::list<std::shared_ptr<ffmpegkit::Statistics>>> ffmpegkit::FFmpegSession::getStatistics() {
+    std::lock_guard<std::mutex> lock(_stateMutex);
     return _statistics;
 }
 
 std::shared_ptr<ffmpegkit::Statistics> ffmpegkit::FFmpegSession::getLastReceivedStatistics() {
+    std::lock_guard<std::mutex> lock(_stateMutex);
     if (_statistics->size() > 0) {
         return _statistics->back();
     } else {
@@ -93,6 +96,7 @@ std::shared_ptr<ffmpegkit::Statistics> ffmpegkit::FFmpegSession::getLastReceived
 }
 
 void ffmpegkit::FFmpegSession::addStatistics(const std::shared_ptr<ffmpegkit::Statistics> statistics) {
+    std::lock_guard<std::mutex> lock(_stateMutex);
     _statistics->push_back(statistics);
 }
 

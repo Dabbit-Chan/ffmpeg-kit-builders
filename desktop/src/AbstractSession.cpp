@@ -13,8 +13,8 @@
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU Lesser General License for more details.
  *
- *  You should have received a copy of the GNU Lesser General License
- *  along with FFmpegKit.  If not, see <http://www.gnu.org/licenses/>.
+ * You should have received a copy of the GNU Lesser General License
+ * along with FFmpegKit.  If not, see <http://www.gnu.org/licenses/>.
  */
 
 #include "AbstractSession.hpp"
@@ -47,7 +47,18 @@ ffmpegkit::AbstractSession::AbstractSession(
       _logRedirectionStrategy{logRedirectionStrategy} {}
 
 
-ffmpegkit::AbstractSession::~AbstractSession() {}
+ffmpegkit::AbstractSession::~AbstractSession() {
+  // Establish a strict happens-before memory barrier between the final
+  // session execution steps (e.g., inside complete() or fail()) and this destructor.
+  // Prevents ThreadSanitizer from flagging data races on condition variables
+  // and return codes when the final shared_ptr is dropped by an un-synchronized
+  // thread (like the session history cleanup).
+  std::unique_lock<std::mutex> stateLock(_stateMutex);
+  stateLock.unlock();
+  
+  std::unique_lock<std::mutex> debugLock(_debugLogMutex);
+  debugLock.unlock();
+}
 
 
 void ffmpegkit::AbstractSession::waitForAsynchronousMessagesInTransmit(
@@ -205,22 +216,18 @@ void ffmpegkit::AbstractSession::startRunning() {
 
 void ffmpegkit::AbstractSession::complete(
     const std::shared_ptr<ffmpegkit::ReturnCode> returnCode) {
-  {
-    std::lock_guard<std::mutex> lock(_stateMutex);
-    _returnCode = returnCode;
-    _state = SessionStateCompleted;
-    _endTime = std::chrono::system_clock::now();
-  }
+  std::lock_guard<std::mutex> lock(_stateMutex);
+  _returnCode = returnCode;
+  _state = SessionStateCompleted;
+  _endTime = std::chrono::system_clock::now();
   _stateConditionVariable.notify_all();
 }
 
 void ffmpegkit::AbstractSession::fail(const char *error) {
-  {
-    std::lock_guard<std::mutex> lock(_stateMutex);
-    _failStackTrace = error;
-    _state = SessionStateFailed;
-    _endTime = std::chrono::system_clock::now();
-  }
+  std::lock_guard<std::mutex> lock(_stateMutex);
+  _failStackTrace = error;
+  _state = SessionStateFailed;
+  _endTime = std::chrono::system_clock::now();
   _stateConditionVariable.notify_all();
 }
 

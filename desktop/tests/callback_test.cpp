@@ -18,6 +18,12 @@ class CallbackTest : public ::testing::Test {
 protected:
     void TearDown() override {
         ffmpeg_kit_config_clear_sessions();
+        ffmpeg_kit_config_enable_log_callback(nullptr, nullptr);
+        ffmpeg_kit_config_enable_statistics_callback(nullptr, nullptr);
+        ffmpeg_kit_config_enable_ffmpeg_session_complete_callback(nullptr, nullptr);
+        ffmpeg_kit_config_enable_ffprobe_session_complete_callback(nullptr, nullptr);
+        ffmpeg_kit_config_enable_ffplay_session_complete_callback(nullptr, nullptr);
+        ffmpeg_kit_config_enable_media_information_session_complete_callback(nullptr, nullptr);
     }
 };
 
@@ -257,21 +263,33 @@ public:
     static void CompleteCallback(FFmpegSessionHandle session, void* user_data) {
         auto* capturer = static_cast<GlobalCallbackCapturer*>(user_data);
         capturer->complete_called_count++;
+        if (session) {
+            ffmpeg_kit_handle_release(session);
+        }
     }
 
     static void FFprobeCompleteCallback(FFprobeSessionHandle session, void* user_data) {
         auto* capturer = static_cast<GlobalCallbackCapturer*>(user_data);
         capturer->complete_called_count++;
+        if (session) {
+            ffmpeg_kit_handle_release(session);
+        }
     }
 
     static void FFplayCompleteCallback(FFplaySessionHandle session, void* user_data) {
         auto* capturer = static_cast<GlobalCallbackCapturer*>(user_data);
         capturer->complete_called_count++;
+        if (session) {
+            ffmpeg_kit_handle_release(session);
+        }
     }
 
     static void MediaInformationCompleteCallback(MediaInformationSessionHandle session, void* user_data) {
         auto* capturer = static_cast<GlobalCallbackCapturer*>(user_data);
         capturer->complete_called_count++;
+        if (session) {
+            ffmpeg_kit_handle_release(session);
+        }
     }
 };
 

@@ -80,11 +80,13 @@ ffmpegkit::MediaInformationSession::MediaInformationSession(
 
 std::shared_ptr<ffmpegkit::MediaInformation>
 ffmpegkit::MediaInformationSession::getMediaInformation() {
+  std::lock_guard<std::mutex> lock(_stateMutex);
   return _mediaInformation;
 }
 
 void ffmpegkit::MediaInformationSession::setMediaInformation(
     const std::shared_ptr<ffmpegkit::MediaInformation> mediaInformation) {
+  std::lock_guard<std::mutex> lock(_stateMutex);
   _mediaInformation = mediaInformation;
 }
 
@@ -101,4 +103,11 @@ bool ffmpegkit::MediaInformationSession::isFFplay() const { return false; }
 
 bool ffmpegkit::MediaInformationSession::isMediaInformation() const {
   return true;
+}
+
+ffmpegkit::MediaInformationSession::~MediaInformationSession() {
+  // Synchronize destruction of derived members to prevent TSAN data races
+  // with background threads that might be actively setting them.
+  std::lock_guard<std::mutex> lock(_stateMutex);
+  _mediaInformation.reset();
 }
