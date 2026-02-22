@@ -51,7 +51,7 @@ public:
         capturer->log_called = true;
     }
 
-    static void StatisticsCallback(FFmpegSessionHandle session, int time, int64_t size, double bitrate, double speed, int videoFrameNumber, float videoFps, float videoQuality, void* user_data) {
+    static void StatisticsCallback(FFmpegSessionHandle session, int64_t time, int64_t size, double bitrate, double speed, int64_t videoFrameNumber, double videoFps, double videoQuality, void* user_data) {
         auto* capturer = static_cast<CallbackCapturer*>(user_data);
         capturer->stats_called = true;
     }
@@ -65,7 +65,7 @@ TEST_F(CallbackTest, FFmpegAsyncExecute) {
     ASSERT_NE(session, nullptr);
 
     // Wait for completion (busy wait with timeout)
-    int timeout_ms = 5000;
+    int64_t timeout_ms = 5000;
     while (!capturer.complete_called && timeout_ms > 0) {
         std::this_thread::sleep_for(std::chrono::milliseconds(10));
         timeout_ms -= 10;
@@ -100,7 +100,7 @@ TEST_F(CallbackTest, FFmpegAsyncExecuteFull) {
     ASSERT_NE(session, nullptr);
 
     // Wait for completion
-    int timeout_ms = 10000;
+    int64_t timeout_ms = 10000;
     while (!capturer.complete_called && timeout_ms > 0) {
         std::this_thread::sleep_for(std::chrono::milliseconds(10));
         timeout_ms -= 10;
@@ -141,7 +141,7 @@ TEST_F(CallbackTest, FFprobeAsyncExecute) {
     FFprobeSessionHandle session = ffprobe_kit_execute_async("-version", ProbeCallbackCapturer::CompleteCallback, &capturer);
     ASSERT_NE(session, nullptr);
 
-    int timeout_ms = 5000;
+    int64_t timeout_ms = 5000;
     while (!capturer.complete_called && timeout_ms > 0) {
         std::this_thread::sleep_for(std::chrono::milliseconds(10));
         timeout_ms -= 10;
@@ -162,7 +162,7 @@ TEST_F(CallbackTest, MediaInformationAsync) {
     MediaInformationSessionHandle session = ffprobe_kit_get_media_information_async(TEST_VIDEO_FILE, ProbeCallbackCapturer::MediaInfoCompleteCallback, &capturer);
     ASSERT_NE(session, nullptr);
 
-    int timeout_ms = 10000; // Increased timeout slightly
+    int64_t timeout_ms = 10000; // Increased timeout slightly
     while (!capturer.complete_called && timeout_ms > 0) {
         std::this_thread::sleep_for(std::chrono::milliseconds(10));
         timeout_ms -= 10;
@@ -223,7 +223,7 @@ TEST_F(CallbackTest, FFplayAsyncExecute) {
     FFplaySessionHandle session = ffplay_kit_execute_async(command, PlayCallbackCapturer::CompleteCallback, &capturer, 5000);
     ASSERT_NE(session, nullptr);
 
-    int timeout_ms = 5000;
+    int64_t timeout_ms = 5000;
     while (!capturer.complete_called && timeout_ms > 0) {
         std::this_thread::sleep_for(std::chrono::milliseconds(10));
         timeout_ms -= 10;
@@ -244,7 +244,7 @@ class GlobalCallbackCapturer {
 public:
     std::atomic<bool> log_called{false};
     std::atomic<bool> stats_called{false};
-    std::atomic<int> complete_called_count{0};
+    std::atomic<int64_t> complete_called_count{0};
     std::vector<std::string> logs;
 
     static void LogCallback(FFmpegSessionHandle session, const char* log, void* user_data) {
@@ -255,7 +255,7 @@ public:
         capturer->log_called = true;
     }
 
-    static void StatisticsCallback(FFmpegSessionHandle session, int time, int64_t size, double bitrate, double speed, int videoFrameNumber, float videoFps, float videoQuality, void* user_data) {
+    static void StatisticsCallback(FFmpegSessionHandle session, int64_t time, int64_t size, double bitrate, double speed, int64_t videoFrameNumber, double videoFps, double videoQuality, void* user_data) {
         auto* capturer = static_cast<GlobalCallbackCapturer*>(user_data);
         capturer->stats_called = true;
     }
@@ -325,7 +325,7 @@ TEST_F(CallbackTest, GlobalCallbacks) {
     
     MediaInformationSessionHandle media_session = ffprobe_kit_get_media_information_async(TEST_VIDEO_FILE, nullptr, nullptr);
 
-    int timeout_ms = 10000;
+    int64_t timeout_ms = 10000;
     while (capturer.complete_called_count < 4 && timeout_ms > 0) {
         std::this_thread::sleep_for(std::chrono::milliseconds(10));
         timeout_ms -= 10;

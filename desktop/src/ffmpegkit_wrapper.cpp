@@ -165,7 +165,7 @@ ffmpeg_kit_execute_async(const char *command,
 FFmpegSessionHandle ffmpeg_kit_execute_async_full(
     const char *command, FFmpegKitCompleteCallback complete_cb,
     FFmpegKitLogCallback log_cb, FFmpegKitStatisticsCallback stats_cb,
-    void *user_data, int waitTimeout) {
+    void *user_data, int64_t waitTimeout) {
   if (!command)
     return nullptr;
   auto complete = [complete_cb, user_data](std::shared_ptr<Session> s) {
@@ -225,7 +225,7 @@ void ffmpeg_kit_session_execute_async(FFmpegSessionHandle session) {
 
 void ffmpeg_kit_cancel(void) { FFmpegKit::cancel(); }
 
-void ffmpeg_kit_cancel_session(long session_id) {
+void ffmpeg_kit_cancel_session(int64_t session_id) {
   FFmpegKit::cancel(session_id);
 }
 
@@ -305,7 +305,7 @@ MediaInformationSessionHandle ffprobe_kit_get_media_information_async(
 
 /* FFplayKit */
 
-FFplaySessionHandle ffplay_kit_execute(const char *command, int timeout) {
+FFplaySessionHandle ffplay_kit_execute(const char *command, int64_t timeout) {
   if (!command)
     return nullptr;
   auto session = FFplayKit::execute(std::string(command), timeout);
@@ -315,7 +315,7 @@ FFplaySessionHandle ffplay_kit_execute(const char *command, int timeout) {
 FFplaySessionHandle
 ffplay_kit_execute_async(const char *command,
                          FFplayKitCompleteCallback complete_cb,
-                         void *user_data, int waitTimeout) {
+                         void *user_data, int64_t waitTimeout) {
   if (!command)
     return nullptr;
   auto lambda = [complete_cb, user_data](std::shared_ptr<Session> s) {
@@ -337,7 +337,7 @@ FFplaySessionHandle ffplay_kit_create_session(const char *command) {
   return create_handle(session);
 }
 
-void ffplay_kit_session_execute(FFplaySessionHandle session, int timeout) {
+void ffplay_kit_session_execute(FFplaySessionHandle session, int64_t timeout) {
   auto ptr = get_ptr<FFplaySession>(session);
   if (ptr) {  
     FFmpegKitConfig::ffplayExecute(ptr, timeout);
@@ -349,7 +349,7 @@ FFplaySessionHandle ffplay_kit_get_current_session(void) {
   return create_handle(std::dynamic_pointer_cast<FFplaySession>(session));
 }
 
-void ffplay_kit_session_execute_async(FFplaySessionHandle session, int timeout) {
+void ffplay_kit_session_execute_async(FFplaySessionHandle session, int64_t timeout) {
   auto ptr = get_ptr<FFplaySession>(session);
   if (ptr) {
     FFmpegKitConfig::asyncFFplayExecute(ptr, timeout);
@@ -421,30 +421,30 @@ double ffplay_kit_session_get_duration(FFplaySessionHandle session) {
   return 0.0;
 }
 
-int ffplay_kit_session_is_playing(FFplaySessionHandle session) {
+bool ffplay_kit_session_is_playing(FFplaySessionHandle session) {
   auto ptr = get_ptr<FFplaySession>(session);
   if (ptr) {
-    return ptr->isPlaying() ? 1 : 0;
+    return ptr->isPlaying();
   }
-  return 0;
+  return false;
 }
 
-int ffplay_kit_session_is_paused(FFplaySessionHandle session) {
+bool ffplay_kit_session_is_paused(FFplaySessionHandle session) {
   auto ptr = get_ptr<FFplaySession>(session);
   if (ptr) {
-    return ptr->isPaused() ? 1 : 0;
+    return ptr->isPaused();
   }
-  return 0;
+  return false;
 }
 
-void ffplay_kit_session_set_volume(FFplaySessionHandle session, float volume) {
+void ffplay_kit_session_set_volume(FFplaySessionHandle session, double volume) {
   auto ptr = get_ptr<FFplaySession>(session);
   if (ptr) {
     ptr->setVolume(volume);
   }
 }
 
-float ffplay_kit_session_get_volume(FFplaySessionHandle session) {
+double ffplay_kit_session_get_volume(FFplaySessionHandle session) {
   auto ptr = get_ptr<FFplaySession>(session);
   if (ptr) {
     return ptr->getVolume();
@@ -470,13 +470,13 @@ void ffplay_kit_set_position(double seconds) { FFplayKit::setPosition(seconds); 
 
 double ffplay_kit_get_duration(void) { return FFplayKit::getDuration(); }
 
-int ffplay_kit_is_playing(void) { return FFplayKit::isPlaying() ? 1 : 0; }
+bool ffplay_kit_is_playing(void) { return FFplayKit::isPlaying(); }
 
-int ffplay_kit_is_paused(void) { return FFplayKit::isPaused() ? 1 : 0; }
+bool ffplay_kit_is_paused(void) { return FFplayKit::isPaused(); }
 
-void ffplay_kit_set_volume(float volume) { FFplayKit::setVolume(volume); }
+void ffplay_kit_set_volume(double volume) { FFplayKit::setVolume(volume); }
 
-float ffplay_kit_get_volume(void) { return FFplayKit::getVolume(); }
+double ffplay_kit_get_volume(void) { return FFplayKit::getVolume(); }
 
 /* Config */
 
@@ -508,7 +508,7 @@ void ffmpeg_kit_config_set_font_directory(const char *path,
   FFmpegKitConfig::setFontDirectory(path ? std::string(path) : "", map);
 }
 
-int ffmpeg_kit_config_set_environment_variable(const char *name,
+int64_t ffmpeg_kit_config_set_environment_variable(const char *name,
                                                const char *value) {
   if (!name || !value)
     return -1;
@@ -570,7 +570,7 @@ char *ffmpeg_kit_packages_get_external_libraries(void) {
 
 /* Session Management */
 
-long ffmpeg_kit_session_get_session_id(void *session_handle) {
+int64_t ffmpeg_kit_session_get_session_id(void *session_handle) {
   if (!session_handle)
     return -1;
   return get_ptr<Session>(session_handle)->getSessionId();
@@ -582,7 +582,7 @@ FFmpegKitSessionState ffmpeg_kit_session_get_state(void *session_handle) {
   return (FFmpegKitSessionState)get_ptr<Session>(session_handle)->getState();
 }
 
-int ffmpeg_kit_session_get_return_code(void *session_handle) {
+int64_t ffmpeg_kit_session_get_return_code(void *session_handle) {
   if (!session_handle)
     return -1;
   auto obj = get_ptr<Session>(session_handle)->getReturnCode();
@@ -618,7 +618,7 @@ MediaInformationSessionHandle media_information_create_session(
   return create_handle(session);
 }
 
-void media_information_session_execute(MediaInformationSessionHandle session, int timeout) {
+void media_information_session_execute(MediaInformationSessionHandle session, int64_t timeout) {
   auto ptr = get_ptr<MediaInformationSession>(session);
   if (ptr) {
     FFmpegKitConfig::getMediaInformationExecute(ptr, timeout);
@@ -626,7 +626,7 @@ void media_information_session_execute(MediaInformationSessionHandle session, in
 }
 
 void media_information_session_execute_async(
-    MediaInformationSessionHandle session, int timeout) {
+    MediaInformationSessionHandle session, int64_t timeout) {
   auto ptr = get_ptr<MediaInformationSession>(session);
   if (ptr) {
     FFmpegKitConfig::asyncGetMediaInformationExecute(ptr, timeout);
@@ -675,7 +675,7 @@ char *media_information_get_tags_json(MediaInformationHandle handle) {
   return tags ? strdup_cpp(tags->toStyledString()) : nullptr;
 }
 
-int media_information_get_streams_count(MediaInformationHandle handle) {
+int64_t media_information_get_streams_count(MediaInformationHandle handle) {
   if (!handle)
     return 0;
   auto streams = get_ptr<MediaInformation>(handle)->getStreams();
@@ -683,7 +683,7 @@ int media_information_get_streams_count(MediaInformationHandle handle) {
 }
 
 StreamInformationHandle
-media_information_get_stream_at(MediaInformationHandle handle, int index) {
+media_information_get_stream_at(MediaInformationHandle handle, int64_t index) {
   if (!handle)
     return nullptr;
   auto streams = get_ptr<MediaInformation>(handle)->getStreams();
@@ -693,7 +693,7 @@ media_information_get_stream_at(MediaInformationHandle handle, int index) {
   return nullptr;
 }
 
-int media_information_get_chapters_count(MediaInformationHandle handle) {
+int64_t media_information_get_chapters_count(MediaInformationHandle handle) {
   if (!handle)
     return 0;
   auto chapters = get_ptr<MediaInformation>(handle)->getChapters();
@@ -701,7 +701,7 @@ int media_information_get_chapters_count(MediaInformationHandle handle) {
 }
 
 ChapterHandle media_information_get_chapter_at(MediaInformationHandle handle,
-                                               int index) {
+                                               int64_t index) {
   if (!handle)
     return nullptr;
   auto chapters = get_ptr<MediaInformation>(handle)->getChapters();
@@ -757,19 +757,19 @@ char *stream_information_get_time_base(StreamInformationHandle handle) {
   return strdup_safe_ptr(get_ptr<StreamInformation>(handle)->getTimeBase());
 }
 
-int stream_information_get_width(StreamInformationHandle handle) {
+int64_t stream_information_get_width(StreamInformationHandle handle) {
   if (!handle)
     return 0;
   auto val = get_ptr<StreamInformation>(handle)->getWidth();
   return val ? *val : 0;
 }
-int stream_information_get_height(StreamInformationHandle handle) {
+int64_t stream_information_get_height(StreamInformationHandle handle) {
   if (!handle)
     return 0;
   auto val = get_ptr<StreamInformation>(handle)->getHeight();
   return val ? *val : 0;
 }
-int stream_information_get_index(StreamInformationHandle handle) {
+int64_t stream_information_get_index(StreamInformationHandle handle) {
   if (!handle)
     return -1;
   auto val = get_ptr<StreamInformation>(handle)->getIndex();
@@ -781,7 +781,7 @@ char *stream_information_get_tags_json(StreamInformationHandle handle) {
 }
 
 /* Chapter */
-long chapter_get_id(ChapterHandle handle) {
+int64_t chapter_get_id(ChapterHandle handle) {
   if (!handle)
     return -1;
   auto val = get_ptr<Chapter>(handle)->getId();
@@ -790,7 +790,7 @@ long chapter_get_id(ChapterHandle handle) {
 char *chapter_get_time_base(ChapterHandle handle) {
   return strdup_safe_ptr(get_ptr<Chapter>(handle)->getTimeBase());
 }
-long chapter_get_start(ChapterHandle handle) {
+int64_t chapter_get_start(ChapterHandle handle) {
   if (!handle)
     return -1;
   auto val = get_ptr<Chapter>(handle)->getStart();
@@ -799,7 +799,7 @@ long chapter_get_start(ChapterHandle handle) {
 char *chapter_get_start_time(ChapterHandle handle) {
   return strdup_safe_ptr(get_ptr<Chapter>(handle)->getStartTime());
 }
-long chapter_get_end(ChapterHandle handle) {
+int64_t chapter_get_end(ChapterHandle handle) {
   if (!handle)
     return -1;
   auto val = get_ptr<Chapter>(handle)->getEnd();
@@ -848,7 +848,7 @@ MediaInformationSessionHandle *media_information_kit_list_sessions(void) {
   return ffmpeg_kit_get_media_information_sessions();
 }
 
-FFmpegSessionHandle ffmpeg_kit_get_session(long session_id) {
+FFmpegSessionHandle ffmpeg_kit_get_session(int64_t session_id) {
   return create_handle(FFmpegKitConfig::getSession(session_id));
 }
 
@@ -888,11 +888,11 @@ FFmpegSessionHandle ffmpeg_kit_get_last_completed_session(void) {
   return create_handle(FFmpegKitConfig::getLastCompletedSession());
 }
 
-int ffmpeg_kit_get_session_history_size(void) {
+int64_t ffmpeg_kit_get_session_history_size(void) {
   return FFmpegKitConfig::getSessionHistorySize();
 }
 
-void ffmpeg_kit_set_session_history_size(int size) {
+void ffmpeg_kit_set_session_history_size(int64_t size) {
   FFmpegKitConfig::setSessionHistorySize(size);
 }
 
@@ -1048,11 +1048,11 @@ void ffmpeg_kit_config_close_ffmpeg_pipe(const char *pipe_path) {
 }
 
 void ffmpeg_kit_config_set_font_directory_list(const char **font_directory_list,
-                                               int list_size,
+                                               int64_t list_size,
                                                const char *name_mappings_json) {
   std::list<std::string> fonts;
   if (font_directory_list) {
-    for (int i = 0; i < list_size; i++) {
+    for (int64_t i = 0; i < list_size; i++) {
       if (font_directory_list[i]) {
         fonts.push_back(std::string(font_directory_list[i]));
       }
@@ -1070,7 +1070,7 @@ char *ffmpeg_kit_config_session_state_to_string(FFmpegKitSessionState state) {
   return strdup_cpp(FFmpegKitConfig::sessionStateToString((SessionState)state));
 }
 
-char **ffmpeg_kit_config_parse_arguments(const char *command, int *arg_count) {
+char **ffmpeg_kit_config_parse_arguments(const char *command, int64_t *arg_count) {
   if (!command)
     return nullptr;
   auto list = FFmpegKitConfig::parseArguments(std::string(command));
@@ -1089,11 +1089,11 @@ char **ffmpeg_kit_config_parse_arguments(const char *command, int *arg_count) {
   return array;
 }
 
-char *ffmpeg_kit_config_arguments_to_string(char **arguments, int arg_count) {
+char *ffmpeg_kit_config_arguments_to_string(char **arguments, int64_t arg_count) {
   if (!arguments)
     return nullptr;
   auto list = std::make_shared<std::list<std::string>>();
-  for (int i = 0; i < arg_count; i++) {
+  for (int64_t i = 0; i < arg_count; i++) {
     if (arguments[i]) {
       list->push_back(std::string(arguments[i]));
     }
@@ -1101,12 +1101,12 @@ char *ffmpeg_kit_config_arguments_to_string(char **arguments, int arg_count) {
   return strdup_cpp(FFmpegKitConfig::argumentsToString(list));
 }
 
-int ffmpeg_kit_config_messages_in_transmit(long session_id) {
+int64_t ffmpeg_kit_config_messages_in_transmit(int64_t session_id) {
   return FFmpegKitConfig::messagesInTransmit(session_id);
 }
 
 /* Session Management Extended */
-long ffmpeg_kit_session_get_create_time(void *session_handle) {
+int64_t ffmpeg_kit_session_get_create_time(void *session_handle) {
   if (!session_handle)
     return 0;
   auto tp = get_ptr<Session>(session_handle)->getCreateTime();
@@ -1115,7 +1115,7 @@ long ffmpeg_kit_session_get_create_time(void *session_handle) {
       .count();
 }
 
-long ffmpeg_kit_session_get_start_time(void *session_handle) {
+int64_t ffmpeg_kit_session_get_start_time(void *session_handle) {
   if (!session_handle)
     return 0;
   auto tp = get_ptr<Session>(session_handle)->getStartTime();
@@ -1124,7 +1124,7 @@ long ffmpeg_kit_session_get_start_time(void *session_handle) {
       .count();
 }
 
-long ffmpeg_kit_session_get_end_time(void *session_handle) {
+int64_t ffmpeg_kit_session_get_end_time(void *session_handle) {
   if (!session_handle)
     return 0;
   auto tp = get_ptr<Session>(session_handle)->getEndTime();
@@ -1133,7 +1133,7 @@ long ffmpeg_kit_session_get_end_time(void *session_handle) {
       .count();
 }
 
-long ffmpeg_kit_session_get_duration(void *session_handle) {
+int64_t ffmpeg_kit_session_get_duration(void *session_handle) {
   if (!session_handle)
     return 0;
   return get_ptr<Session>(session_handle)->getDuration();
@@ -1145,14 +1145,14 @@ char *ffmpeg_kit_session_get_command(void *session_handle) {
   return strdup_cpp(get_ptr<Session>(session_handle)->getCommand());
 }
 
-int ffmpeg_kit_session_get_logs_count(void *session_handle) {
+int64_t ffmpeg_kit_session_get_logs_count(void *session_handle) {
   if (!session_handle)
     return 0;
   auto logs = get_ptr<Session>(session_handle)->getLogs();
   return logs ? logs->size() : 0;
 }
 
-char *ffmpeg_kit_session_get_log_at(void *session_handle, int index) {
+char *ffmpeg_kit_session_get_log_at(void *session_handle, int64_t index) {
   if (!session_handle)
     return nullptr;
   auto logs = get_ptr<Session>(session_handle)->getLogs();
@@ -1165,19 +1165,19 @@ char *ffmpeg_kit_session_get_log_at(void *session_handle, int index) {
   return nullptr;
 }
 
-int ffmpeg_kit_session_get_log_level_at(void *session_handle, int index) {
+int64_t ffmpeg_kit_session_get_log_level_at(void *session_handle, int64_t index) {
   if (!session_handle)
     return 0;
   auto logs = get_ptr<Session>(session_handle)->getLogs();
   if (logs && index >= 0 && index < logs->size()) {
     auto it = logs->begin();
     std::advance(it, index);
-    return (int)(*it)->getLevel();
+    return (int64_t)(*it)->getLevel();
   }
   return 0;
 }
 
-int ffmpeg_kit_session_get_statistics_count(void *session_handle) {
+int64_t ffmpeg_kit_session_get_statistics_count(void *session_handle) {
   if (!session_handle)
     return 0;
   auto stats = get_ptr<FFmpegSession>(session_handle)->getStatistics();
@@ -1185,7 +1185,7 @@ int ffmpeg_kit_session_get_statistics_count(void *session_handle) {
 }
 
 StatisticsHandle ffmpeg_kit_session_get_statistics_at(void *session_handle,
-                                                      int index) {
+                                                      int64_t index) {
   if (!session_handle)
     return nullptr;
   auto stats = get_ptr<FFmpegSession>(session_handle)->getStatistics();
@@ -1199,17 +1199,17 @@ StatisticsHandle ffmpeg_kit_session_get_statistics_at(void *session_handle,
 
 
 /* Statistics Getters */
-int ffmpeg_kit_statistics_get_video_frame_number(StatisticsHandle handle) {
+int64_t ffmpeg_kit_statistics_get_video_frame_number(StatisticsHandle handle) {
   return get_ptr<Statistics>(handle)->getVideoFrameNumber();
 }
-float ffmpeg_kit_statistics_get_video_fps(StatisticsHandle handle) {
+double ffmpeg_kit_statistics_get_video_fps(StatisticsHandle handle) {
   return get_ptr<Statistics>(handle)->getVideoFps();
 }
-float ffmpeg_kit_statistics_get_video_quality(StatisticsHandle handle) {
+double ffmpeg_kit_statistics_get_video_quality(StatisticsHandle handle) {
   return get_ptr<Statistics>(handle)->getVideoQuality();
 }
-long ffmpeg_kit_statistics_get_size(StatisticsHandle handle) {
-  return (long)get_ptr<Statistics>(handle)->getSize();
+int64_t ffmpeg_kit_statistics_get_size(StatisticsHandle handle) {
+  return (int64_t)get_ptr<Statistics>(handle)->getSize();
 }
 double ffmpeg_kit_statistics_get_time(StatisticsHandle handle) {
   return get_ptr<Statistics>(handle)->getTime();
@@ -1234,7 +1234,7 @@ char *media_information_get_string_property(MediaInformationHandle handle,
       get_ptr<MediaInformation>(handle)->getStringProperty(key));
 }
 
-long media_information_get_number_property(MediaInformationHandle handle,
+int64_t media_information_get_number_property(MediaInformationHandle handle,
                                            const char *key) {
   auto val = get_ptr<MediaInformation>(handle)->getNumberProperty(key);
   return val ? *val : -1;
@@ -1268,7 +1268,7 @@ char *stream_information_get_string_property(StreamInformationHandle handle,
       get_ptr<StreamInformation>(handle)->getStringProperty(key));
 }
 
-long stream_information_get_number_property(StreamInformationHandle handle,
+int64_t stream_information_get_number_property(StreamInformationHandle handle,
                                             const char *key) {
   auto val = get_ptr<StreamInformation>(handle)->getNumberProperty(key);
   return val ? *val : -1;
@@ -1285,7 +1285,7 @@ char *chapter_get_string_property(ChapterHandle handle, const char *key) {
   return strdup_safe_ptr(get_ptr<Chapter>(handle)->getStringProperty(key));
 }
 
-long chapter_get_number_property(ChapterHandle handle, const char *key) {
+int64_t chapter_get_number_property(ChapterHandle handle, const char *key) {
   auto val = get_ptr<Chapter>(handle)->getNumberProperty(key);
   return val ? *val : -1;
 }
@@ -1295,27 +1295,27 @@ char *chapter_get_all_properties_json(ChapterHandle handle) {
   return props ? strdup_cpp(props->toStyledString()) : nullptr;
 }
 
-int session_is_ffmpeg_session(void *session) {
+bool session_is_ffmpeg_session(void *session) {
   if (!session)
-    return 0;
+    return false;
   return get_ptr<AbstractSession>(session)->isFFmpeg();
 }
 
-int session_is_ffprobe_session(void *session) {
+bool session_is_ffprobe_session(void *session) {
   if (!session)
-    return 0;
+    return false;
   return get_ptr<AbstractSession>(session)->isFFprobe();
 }
 
-int session_is_ffplay_session(void *session) {
+bool session_is_ffplay_session(void *session) {
   if (!session)
-    return 0;
+    return false;
   return get_ptr<AbstractSession>(session)->isFFplay();
 }
 
-int session_is_media_information_session(void *session) {
+bool session_is_media_information_session(void *session) {
   if (!session)
-    return 0;
+    return false;
   return get_ptr<AbstractSession>(session)->isMediaInformation();
 }
 
@@ -1337,9 +1337,9 @@ void session_disable_debug_log(void *session) {
   get_ptr<AbstractSession>(session)->disableDebugLog();
 }
 
-int session_is_debug_log_enabled(void *session) {
+bool session_is_debug_log_enabled(void *session) {
   if (!session)
-    return 0;
+    return false;
   return get_ptr<AbstractSession>(session)->isDebugLogEnabled();
 }
 
@@ -1367,9 +1367,9 @@ void ffmpeg_kit_config_disable_debug_log(void *session) {
   get_ptr<AbstractSession>(session)->disableDebugLog();
 }
 
-int ffmpeg_kit_config_is_debug_log_enabled(void *session) {
+bool ffmpeg_kit_config_is_debug_log_enabled(void *session) {
   if (!session)
-    return 0;
+    return false;
   return get_ptr<AbstractSession>(session)->isDebugLogEnabled();
 }
 

@@ -50,10 +50,10 @@ typedef void (*FFmpegKitCompleteCallback)(FFmpegSessionHandle session,
 typedef void (*FFmpegKitLogCallback)(FFmpegSessionHandle session,
                                      const char *log, void *user_data);
 typedef void (*FFmpegKitStatisticsCallback)(FFmpegSessionHandle session,
-                                            int time, int64_t size,
+                                            int64_t time, int64_t size,
                                             double bitrate, double speed,
-                                            int videoFrameNumber,
-                                            float videoFps, float videoQuality,
+                                            int64_t videoFrameNumber,
+                                            double videoFps, double videoQuality,
                                             void *user_data);
 typedef void (*FFprobeKitCompleteCallback)(FFprobeSessionHandle session,
                                            void *user_data);
@@ -144,7 +144,7 @@ FFMPEG_KIT_C_EXPORT FFmpegSessionHandle ffmpeg_kit_execute_async(
 FFMPEG_KIT_C_EXPORT FFmpegSessionHandle ffmpeg_kit_execute_async_full(
     const char *command, FFmpegKitCompleteCallback complete_cb,
     FFmpegKitLogCallback log_cb, FFmpegKitStatisticsCallback stats_cb,
-    void *user_data, int waitTimeout);
+    void *user_data, int64_t waitTimeout);
 
 /**
  * Cancels all running FFmpeg sessions.
@@ -156,7 +156,7 @@ FFMPEG_KIT_C_EXPORT void ffmpeg_kit_cancel(void);
  *
  * @param session_id the session ID of the FFmpeg session to cancel
  */
-FFMPEG_KIT_C_EXPORT void ffmpeg_kit_cancel_session(long session_id);
+FFMPEG_KIT_C_EXPORT void ffmpeg_kit_cancel_session(int64_t session_id);
 
 
 // Session Creation and Execution Separation
@@ -222,7 +222,7 @@ FFMPEG_KIT_C_EXPORT void ffprobe_kit_cancel(void);
  *
  * @param session_id the session ID of the FFprobe session to cancel
  */
-FFMPEG_KIT_C_EXPORT void ffprobe_kit_cancel_session(long session_id);
+FFMPEG_KIT_C_EXPORT void ffprobe_kit_cancel_session(int64_t session_id);
 
 
 // FFprobe Session Creation and Execution Separation
@@ -287,7 +287,7 @@ ffprobe_kit_get_media_information_async(
  * @return the FFplay session handle
  */
 FFMPEG_KIT_C_EXPORT FFplaySessionHandle
-ffplay_kit_execute(const char *command, int timeout);
+ffplay_kit_execute(const char *command, int64_t timeout);
 
 /**
  * Executes the given FFplay command asynchronously.
@@ -303,7 +303,7 @@ ffplay_kit_execute(const char *command, int timeout);
  */
 FFMPEG_KIT_C_EXPORT FFplaySessionHandle ffplay_kit_execute_async(
     const char *command, FFplayKitCompleteCallback complete_cb,
-    void *user_data, int waitTimeout);
+    void *user_data, int64_t waitTimeout);
 
 // FFplay Session Creation and Execution Separation
 
@@ -323,7 +323,7 @@ ffplay_kit_create_session(const char *command);
  * @param timeout the timeout in milliseconds
  */
 FFMPEG_KIT_C_EXPORT void
-ffplay_kit_session_execute(FFplaySessionHandle session, int timeout);
+ffplay_kit_session_execute(FFplaySessionHandle session, int64_t timeout);
 
 /**
  * Gets the current FFplay session.
@@ -340,7 +340,7 @@ ffplay_kit_get_current_session(void);
  * @param timeout the timeout in milliseconds
  */
 FFMPEG_KIT_C_EXPORT void
-ffplay_kit_session_execute_async(FFplaySessionHandle session, int timeout);
+ffplay_kit_session_execute_async(FFplaySessionHandle session, int64_t timeout);
 
 /**
  * Seeks to the given position in the FFplay session.
@@ -420,18 +420,18 @@ ffplay_kit_session_get_duration(FFplaySessionHandle session);
  * Checks if the FFplay session is playing.
  *
  * @param session the FFplay session to check
- * @return 1 if the FFplay session is playing, 0 otherwise
+ * @return true if the FFplay session is playing, false otherwise
  */
-FFMPEG_KIT_C_EXPORT int
+FFMPEG_KIT_C_EXPORT bool
 ffplay_kit_session_is_playing(FFplaySessionHandle session);
 
 /**
  * Checks if the FFplay session is paused.
  *
  * @param session the FFplay session to check
- * @return 1 if the FFplay session is paused, 0 otherwise
+ * @return true if the FFplay session is paused, false otherwise
  */
-FFMPEG_KIT_C_EXPORT int
+FFMPEG_KIT_C_EXPORT bool
 ffplay_kit_session_is_paused(FFplaySessionHandle session);
 
 /**
@@ -441,7 +441,7 @@ ffplay_kit_session_is_paused(FFplaySessionHandle session);
  * @param volume the volume to set
  */
 FFMPEG_KIT_C_EXPORT void
-ffplay_kit_session_set_volume(FFplaySessionHandle session, float volume);
+ffplay_kit_session_set_volume(FFplaySessionHandle session, double volume);
 
 /**
  * Gets the volume of the FFplay session.
@@ -449,7 +449,7 @@ ffplay_kit_session_set_volume(FFplaySessionHandle session, float volume);
  * @param session the FFplay session to get the volume of
  * @return the volume of the FFplay session
  */
-FFMPEG_KIT_C_EXPORT float
+FFMPEG_KIT_C_EXPORT double
 ffplay_kit_session_get_volume(FFplaySessionHandle session);
 
 /* FFplayKit Global Proxies */
@@ -510,30 +510,30 @@ FFMPEG_KIT_C_EXPORT double ffplay_kit_get_duration(void);
 /**
  * Checks if the current FFplay session is playing.
  *
- * @return 1 if playing, 0 otherwise
+ * @return true if playing, false otherwise
  */
-FFMPEG_KIT_C_EXPORT int ffplay_kit_is_playing(void);
+FFMPEG_KIT_C_EXPORT bool ffplay_kit_is_playing(void);
 
 /**
  * Checks if the current FFplay session is paused.
  *
- * @return 1 if paused, 0 otherwise
+ * @return true if paused, false otherwise
  */
-FFMPEG_KIT_C_EXPORT int ffplay_kit_is_paused(void);
+FFMPEG_KIT_C_EXPORT bool ffplay_kit_is_paused(void);
 
 /**
  * Sets the volume of the current FFplay session.
  *
  * @param volume the volume (0.0 to 1.0)
  */
-FFMPEG_KIT_C_EXPORT void ffplay_kit_set_volume(float volume);
+FFMPEG_KIT_C_EXPORT void ffplay_kit_set_volume(double volume);
 
 /**
  * Gets the volume of the current FFplay session.
  *
  * @return the volume of the current FFplay session
  */
-FFMPEG_KIT_C_EXPORT float ffplay_kit_get_volume(void);
+FFMPEG_KIT_C_EXPORT double ffplay_kit_get_volume(void);
 
 /* Config & Global Functions */
 
@@ -586,7 +586,7 @@ FFMPEG_KIT_C_EXPORT void ffmpeg_kit_config_set_font_directory(
  * @param name the name of the environment variable
  * @param value the value of the environment variable
  */
-FFMPEG_KIT_C_EXPORT int
+FFMPEG_KIT_C_EXPORT int64_t
 ffmpeg_kit_config_set_environment_variable(const char *name, const char *value);
 
 /**
@@ -664,7 +664,7 @@ FFMPEG_KIT_C_EXPORT char *ffmpeg_kit_packages_get_external_libraries(
  * @param session_handle the session handle
  * @return the session ID
  */
-FFMPEG_KIT_C_EXPORT long
+FFMPEG_KIT_C_EXPORT int64_t
 ffmpeg_kit_session_get_session_id(void *session_handle);
 
 /**
@@ -682,7 +682,7 @@ ffmpeg_kit_session_get_state(void *session_handle);
  * @param session_handle the session handle
  * @return the return code of the session
  */
-FFMPEG_KIT_C_EXPORT int
+FFMPEG_KIT_C_EXPORT int64_t
 ffmpeg_kit_session_get_return_code(void *session_handle);
 
 /**
@@ -742,7 +742,7 @@ media_information_create_session(const char *command);
  * @param timeout the timeout in milliseconds
  */
 FFMPEG_KIT_C_EXPORT void
-media_information_session_execute(MediaInformationSessionHandle session, int timeout);
+media_information_session_execute(MediaInformationSessionHandle session, int64_t timeout);
 
 /**
  * Executes the MediaInformation session asynchronously.
@@ -751,7 +751,7 @@ media_information_session_execute(MediaInformationSessionHandle session, int tim
  * @param timeout the timeout in milliseconds
  */
 FFMPEG_KIT_C_EXPORT void
-media_information_session_execute_async(MediaInformationSessionHandle session, int timeout);
+media_information_session_execute_async(MediaInformationSessionHandle session, int64_t timeout);
 
 /**
  * Gets the media information from the session.
@@ -784,10 +784,10 @@ FFMPEG_KIT_C_EXPORT char *
 media_information_get_format(MediaInformationHandle handle);
 
 /**
- * Gets the long format of the media information.
+ * Gets the int64_t format of the media information.
  *
  * @param handle the media information handle
- * @return the long format of the media information
+ * @return the int64_t format of the media information
  */
 FFMPEG_KIT_C_EXPORT char *
 media_information_get_long_format(MediaInformationHandle handle);
@@ -834,7 +834,7 @@ FFMPEG_KIT_C_EXPORT char *media_information_get_tags_json(
  * @param handle the media information handle
  * @return the number of streams in the media information
  */
-FFMPEG_KIT_C_EXPORT int
+FFMPEG_KIT_C_EXPORT int64_t
 media_information_get_streams_count(MediaInformationHandle handle);
 
 /**
@@ -845,7 +845,7 @@ media_information_get_streams_count(MediaInformationHandle handle);
  * @return the stream at the given index
  */
 FFMPEG_KIT_C_EXPORT StreamInformationHandle
-media_information_get_stream_at(MediaInformationHandle handle, int index);
+media_information_get_stream_at(MediaInformationHandle handle, int64_t index);
 
 /**
  * Gets the number of chapters in the media information.
@@ -853,7 +853,7 @@ media_information_get_stream_at(MediaInformationHandle handle, int index);
  * @param handle the media information handle
  * @return the number of chapters in the media information
  */
-FFMPEG_KIT_C_EXPORT int
+FFMPEG_KIT_C_EXPORT int64_t
 media_information_get_chapters_count(MediaInformationHandle handle);
 
 /**
@@ -864,7 +864,7 @@ media_information_get_chapters_count(MediaInformationHandle handle);
  * @return the chapter at the given index
  */
 FFMPEG_KIT_C_EXPORT ChapterHandle
-media_information_get_chapter_at(MediaInformationHandle handle, int index);
+media_information_get_chapter_at(MediaInformationHandle handle, int64_t index);
 
 /* StreamInformation */
 
@@ -874,7 +874,7 @@ media_information_get_chapter_at(MediaInformationHandle handle, int index);
  * @param handle the stream information handle
  * @return the index of the stream information
  */
-FFMPEG_KIT_C_EXPORT int
+FFMPEG_KIT_C_EXPORT int64_t
 stream_information_get_index(StreamInformationHandle handle);
 
 /**
@@ -896,10 +896,10 @@ FFMPEG_KIT_C_EXPORT char *
 stream_information_get_codec(StreamInformationHandle handle);
 
 /**
- * Gets the long codec of the stream information.
+ * Gets the int64_t codec of the stream information.
  *
  * @param handle the stream information handle
- * @return the long codec of the stream information
+ * @return the int64_t codec of the stream information
  */
 FFMPEG_KIT_C_EXPORT char *
 stream_information_get_codec_long(StreamInformationHandle handle);
@@ -919,7 +919,7 @@ stream_information_get_format(StreamInformationHandle handle);
  * @param handle the stream information handle
  * @return the width of the stream information
  */
-FFMPEG_KIT_C_EXPORT int
+FFMPEG_KIT_C_EXPORT int64_t
 stream_information_get_width(StreamInformationHandle handle);
 
 /**
@@ -928,7 +928,7 @@ stream_information_get_width(StreamInformationHandle handle);
  * @param handle the stream information handle
  * @return the height of the stream information
  */
-FFMPEG_KIT_C_EXPORT int
+FFMPEG_KIT_C_EXPORT int64_t
 stream_information_get_height(StreamInformationHandle handle);
 
 /**
@@ -1011,7 +1011,7 @@ stream_information_get_tags_json(StreamInformationHandle handle);
  * @param handle the chapter handle
  * @return the ID of the chapter
  */
-FFMPEG_KIT_C_EXPORT long chapter_get_id(ChapterHandle handle);
+FFMPEG_KIT_C_EXPORT int64_t chapter_get_id(ChapterHandle handle);
 
 /**
  * Gets the time base of the chapter.
@@ -1027,7 +1027,7 @@ FFMPEG_KIT_C_EXPORT char *chapter_get_time_base(ChapterHandle handle);
  * @param handle the chapter handle
  * @return the start of the chapter
  */
-FFMPEG_KIT_C_EXPORT long chapter_get_start(ChapterHandle handle);
+FFMPEG_KIT_C_EXPORT int64_t chapter_get_start(ChapterHandle handle);
 
 /**
  * Gets the start time of the chapter.
@@ -1043,7 +1043,7 @@ FFMPEG_KIT_C_EXPORT char *chapter_get_start_time(ChapterHandle handle);
  * @param handle the chapter handle
  * @return the end of the chapter
  */
-FFMPEG_KIT_C_EXPORT long chapter_get_end(ChapterHandle handle);
+FFMPEG_KIT_C_EXPORT int64_t chapter_get_end(ChapterHandle handle);
 
 /**
  * Gets the end time of the chapter.
@@ -1134,7 +1134,7 @@ media_information_kit_list_sessions(void);
  * @param session_id the session ID
  * @return the session
  */
-FFMPEG_KIT_C_EXPORT FFmpegSessionHandle ffmpeg_kit_get_session(long session_id);
+FFMPEG_KIT_C_EXPORT FFmpegSessionHandle ffmpeg_kit_get_session(int64_t session_id);
 
 /**
  * Gets the last session.
@@ -1201,14 +1201,14 @@ ffmpeg_kit_get_last_completed_session(void);
  *
  * @return the session history size
  */
-FFMPEG_KIT_C_EXPORT int ffmpeg_kit_get_session_history_size(void);
+FFMPEG_KIT_C_EXPORT int64_t ffmpeg_kit_get_session_history_size(void);
 
 /**
  * Sets the session history size.
  *
  * @param size the session history size
  */
-FFMPEG_KIT_C_EXPORT void ffmpeg_kit_set_session_history_size(int size);
+FFMPEG_KIT_C_EXPORT void ffmpeg_kit_set_session_history_size(int64_t size);
 
 /**
  * Clears the sessions.
@@ -1312,7 +1312,7 @@ ffmpeg_kit_config_close_ffmpeg_pipe(const char *pipe_path);
  */
 FFMPEG_KIT_C_EXPORT void
 ffmpeg_kit_config_set_font_directory_list(const char **font_directory_list,
-                                          int list_size,
+                                          int64_t list_size,
                                           const char *name_mappings_json);
 
 /**
@@ -1339,7 +1339,7 @@ ffmpeg_kit_config_session_state_to_string(FFmpegKitSessionState state);
  * @return the parsed arguments
  */
 FFMPEG_KIT_C_EXPORT char **
-ffmpeg_kit_config_parse_arguments(const char *command, int *arg_count);
+ffmpeg_kit_config_parse_arguments(const char *command, int64_t *arg_count);
 
 /**
  * Converts the arguments to string.
@@ -1349,7 +1349,7 @@ ffmpeg_kit_config_parse_arguments(const char *command, int *arg_count);
  * @return the arguments to string
  */
 FFMPEG_KIT_C_EXPORT char *
-ffmpeg_kit_config_arguments_to_string(char **arguments, int arg_count);
+ffmpeg_kit_config_arguments_to_string(char **arguments, int64_t arg_count);
 
 /**
  * Gets the messages in transmit.
@@ -1357,7 +1357,7 @@ ffmpeg_kit_config_arguments_to_string(char **arguments, int arg_count);
  * @param session_id the session ID
  * @return the messages in transmit
  */
-FFMPEG_KIT_C_EXPORT int ffmpeg_kit_config_messages_in_transmit(long session_id);
+FFMPEG_KIT_C_EXPORT int64_t ffmpeg_kit_config_messages_in_transmit(int64_t session_id);
 
 /* Session Management Extended */
 
@@ -1367,7 +1367,7 @@ FFMPEG_KIT_C_EXPORT int ffmpeg_kit_config_messages_in_transmit(long session_id);
  * @param session_handle the session handle
  * @return the create time
  */
-FFMPEG_KIT_C_EXPORT long
+FFMPEG_KIT_C_EXPORT int64_t
 ffmpeg_kit_session_get_create_time(void *session_handle);
 
 /**
@@ -1376,7 +1376,7 @@ ffmpeg_kit_session_get_create_time(void *session_handle);
  * @param session_handle the session handle
  * @return the start time
  */
-FFMPEG_KIT_C_EXPORT long
+FFMPEG_KIT_C_EXPORT int64_t
 ffmpeg_kit_session_get_start_time(void *session_handle);
 
 /**
@@ -1385,7 +1385,7 @@ ffmpeg_kit_session_get_start_time(void *session_handle);
  * @param session_handle the session handle
  * @return the end time
  */
-FFMPEG_KIT_C_EXPORT long ffmpeg_kit_session_get_end_time(void *session_handle);
+FFMPEG_KIT_C_EXPORT int64_t ffmpeg_kit_session_get_end_time(void *session_handle);
 
 /**
  * Gets the duration.
@@ -1393,7 +1393,7 @@ FFMPEG_KIT_C_EXPORT long ffmpeg_kit_session_get_end_time(void *session_handle);
  * @param session_handle the session handle
  * @return the duration
  */
-FFMPEG_KIT_C_EXPORT long ffmpeg_kit_session_get_duration(void *session_handle);
+FFMPEG_KIT_C_EXPORT int64_t ffmpeg_kit_session_get_duration(void *session_handle);
 
 /**
  * Gets the command.
@@ -1409,7 +1409,7 @@ FFMPEG_KIT_C_EXPORT char *ffmpeg_kit_session_get_command(void *session_handle);
  * @param session_handle the session handle
  * @return the logs count
  */
-FFMPEG_KIT_C_EXPORT int ffmpeg_kit_session_get_logs_count(void *session_handle);
+FFMPEG_KIT_C_EXPORT int64_t ffmpeg_kit_session_get_logs_count(void *session_handle);
 
 /**
  * Gets the log at.
@@ -1420,7 +1420,7 @@ FFMPEG_KIT_C_EXPORT int ffmpeg_kit_session_get_logs_count(void *session_handle);
  */
 FFMPEG_KIT_C_EXPORT char *
 ffmpeg_kit_session_get_log_at(void *session_handle,
-                              int index); // Returns log message
+                              int64_t index); // Returns log message
 
 /**
  * Gets the log level at.
@@ -1429,8 +1429,8 @@ ffmpeg_kit_session_get_log_at(void *session_handle,
  * @param index the index
  * @return the log level at
  */
-FFMPEG_KIT_C_EXPORT int
-ffmpeg_kit_session_get_log_level_at(void *session_handle, int index);
+FFMPEG_KIT_C_EXPORT int64_t
+ffmpeg_kit_session_get_log_level_at(void *session_handle, int64_t index);
 
 /**
  * Gets the statistics count.
@@ -1438,7 +1438,7 @@ ffmpeg_kit_session_get_log_level_at(void *session_handle, int index);
  * @param session_handle the session handle
  * @return the statistics count
  */
-FFMPEG_KIT_C_EXPORT int
+FFMPEG_KIT_C_EXPORT int64_t
 ffmpeg_kit_session_get_statistics_count(void *session_handle);
 
 /**
@@ -1449,7 +1449,7 @@ ffmpeg_kit_session_get_statistics_count(void *session_handle);
  * @return the statistics at
  */
 FFMPEG_KIT_C_EXPORT StatisticsHandle
-ffmpeg_kit_session_get_statistics_at(void *session_handle, int index);
+ffmpeg_kit_session_get_statistics_at(void *session_handle, int64_t index);
 
 /* Statistics Getters */
 
@@ -1459,7 +1459,7 @@ ffmpeg_kit_session_get_statistics_at(void *session_handle, int index);
  * @param handle the statistics handle
  * @return the video frame number
  */
-FFMPEG_KIT_C_EXPORT int ffmpeg_kit_statistics_get_video_frame_number(StatisticsHandle handle);
+FFMPEG_KIT_C_EXPORT int64_t ffmpeg_kit_statistics_get_video_frame_number(StatisticsHandle handle);
 
 /**
  * Gets the video FPS.
@@ -1467,7 +1467,7 @@ FFMPEG_KIT_C_EXPORT int ffmpeg_kit_statistics_get_video_frame_number(StatisticsH
  * @param handle the statistics handle
  * @return the video FPS
  */
-FFMPEG_KIT_C_EXPORT float ffmpeg_kit_statistics_get_video_fps(StatisticsHandle handle);
+FFMPEG_KIT_C_EXPORT double ffmpeg_kit_statistics_get_video_fps(StatisticsHandle handle);
 
 /**
  * Gets the video quality.
@@ -1475,7 +1475,7 @@ FFMPEG_KIT_C_EXPORT float ffmpeg_kit_statistics_get_video_fps(StatisticsHandle h
  * @param handle the statistics handle
  * @return the video quality
  */
-FFMPEG_KIT_C_EXPORT float ffmpeg_kit_statistics_get_video_quality(StatisticsHandle handle);
+FFMPEG_KIT_C_EXPORT double ffmpeg_kit_statistics_get_video_quality(StatisticsHandle handle);
 
 /**
  * Gets the size.
@@ -1483,7 +1483,7 @@ FFMPEG_KIT_C_EXPORT float ffmpeg_kit_statistics_get_video_quality(StatisticsHand
  * @param handle the statistics handle
  * @return the size
  */
-FFMPEG_KIT_C_EXPORT long ffmpeg_kit_statistics_get_size(StatisticsHandle handle);
+FFMPEG_KIT_C_EXPORT int64_t ffmpeg_kit_statistics_get_size(StatisticsHandle handle);
 
 /**
  * Gets the time.
@@ -1538,7 +1538,7 @@ media_information_get_string_property(MediaInformationHandle handle,
  * @param key the key
  * @return the number property
  */
-FFMPEG_KIT_C_EXPORT long
+FFMPEG_KIT_C_EXPORT int64_t
 media_information_get_number_property(MediaInformationHandle handle,
                                       const char *key);
 
@@ -1596,7 +1596,7 @@ stream_information_get_string_property(StreamInformationHandle handle,
  * @param key the key
  * @return the number property
  */
-FFMPEG_KIT_C_EXPORT long
+FFMPEG_KIT_C_EXPORT int64_t
 stream_information_get_number_property(StreamInformationHandle handle,
                                        const char *key);
 
@@ -1626,7 +1626,7 @@ FFMPEG_KIT_C_EXPORT char *chapter_get_string_property(ChapterHandle handle,
  * @param key the key
  * @return the number property
  */
-FFMPEG_KIT_C_EXPORT long chapter_get_number_property(ChapterHandle handle,
+FFMPEG_KIT_C_EXPORT int64_t chapter_get_number_property(ChapterHandle handle,
                                                      const char *key);
 
 /**
@@ -1641,36 +1641,36 @@ FFMPEG_KIT_C_EXPORT char *chapter_get_all_properties_json(ChapterHandle handle);
  * Checks if the session is a FFmpeg session.
  *
  * @param session the session to check
- * @return 1 if the session is a FFmpeg session, 0 otherwise
+ * @return true if the session is a FFmpeg session, false otherwise
  */
-FFMPEG_KIT_C_EXPORT int
+FFMPEG_KIT_C_EXPORT bool
 session_is_ffmpeg_session(void *session);
 
 /**
  * Checks if the session is a FFprobe session.
  *
  * @param session the session to check
- * @return 1 if the session is a FFprobe session, 0 otherwise
+ * @return true if the session is a FFprobe session, false otherwise
  */
-FFMPEG_KIT_C_EXPORT int
+FFMPEG_KIT_C_EXPORT bool
 session_is_ffprobe_session(void *session);
 
 /**
  * Checks if the session is a FFplay session.
  *
  * @param session the session to check
- * @return 1 if the session is a FFplay session, 0 otherwise
+ * @return true if the session is a FFplay session, false otherwise
  */
-FFMPEG_KIT_C_EXPORT int
+FFMPEG_KIT_C_EXPORT bool
 session_is_ffplay_session(void *session);
 
 /**
  * Checks if the session is a FFmpegKit session.
  *
  * @param session the session to check
- * @return 1 if the session is a MediaInformation session, 0 otherwise
+ * @return true if the session is a MediaInformation session, false otherwise
  */
-FFMPEG_KIT_C_EXPORT int
+FFMPEG_KIT_C_EXPORT bool
 session_is_media_information_session(void *session);
 
 /**
@@ -1691,9 +1691,9 @@ FFMPEG_KIT_C_EXPORT void session_disable_debug_log(void *session);
  * Checks if the debug log is enabled.
  *
  * @param session the session to check
- * @return 1 if the debug log is enabled, 0 otherwise
+ * @return true if the debug log is enabled, false otherwise
  */
-FFMPEG_KIT_C_EXPORT int session_is_debug_log_enabled(void *session);
+FFMPEG_KIT_C_EXPORT bool session_is_debug_log_enabled(void *session);
 
 /**
  * Gets the debug log.
@@ -1730,9 +1730,9 @@ FFMPEG_KIT_C_EXPORT void ffmpeg_kit_config_disable_debug_log(void *session);
 /**
  * Checks if the debug log is enabled for the session.
  *
- * @return 1 if the debug log is enabled, 0 otherwise
+ * @return true if the debug log is enabled, false otherwise
  */
-FFMPEG_KIT_C_EXPORT int ffmpeg_kit_config_is_debug_log_enabled(void *session);
+FFMPEG_KIT_C_EXPORT bool ffmpeg_kit_config_is_debug_log_enabled(void *session);
 
 /**
  * Gets the debug log for the session.

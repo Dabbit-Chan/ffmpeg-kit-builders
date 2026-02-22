@@ -428,7 +428,7 @@ TEST(FFplayKitTest, FFplaySession) {
     }
     printf("State: %d\n", state);
     EXPECT_EQ(state, FFMPEG_KIT_SESSION_STATE_COMPLETED);
-    printf("Return Code: %d\n", ffmpeg_kit_session_get_return_code(play_session));
+    printf("Return Code: %ld\n", ffmpeg_kit_session_get_return_code(play_session));
     EXPECT_EQ(ffmpeg_kit_session_get_return_code(play_session), 0);
 
     ffmpeg_kit_handle_release(play_session);
