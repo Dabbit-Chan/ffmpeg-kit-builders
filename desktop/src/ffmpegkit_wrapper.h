@@ -21,6 +21,7 @@
 #define FFMPEG_KIT_WRAPPER_H
 
 #include <stdint.h>
+#include <stdbool.h>
 
 #ifndef FFMPEG_KIT_C_EXPORT
   #if defined(_WIN32)
