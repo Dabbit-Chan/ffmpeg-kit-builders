@@ -82,7 +82,7 @@ file(COPY "${CMAKE_CURRENT_SOURCE_DIR}/src/fftools.tmp/"
 # remove fftools.tmp
 file(REMOVE_RECURSE "${CMAKE_CURRENT_SOURCE_DIR}/src/fftools.tmp")
 # copy stdbit to src
-file(COPY "${FFMPEG_SRC_DIR}/compat/stdbit/stdbit.h" DESTINATION "${CMAKE_CURRENT_SOURCE_DIR}/src/compat/")
+file(COPY "${FFMPEG_SRC_DIR}/compat/stdbit/stdbit.h" DESTINATION "${CMAKE_CURRENT_SOURCE_DIR}/src/")
 # copy va_copy.h to src
 file(COPY "${FFMPEG_SRC_DIR}/compat/va_copy.h" DESTINATION "${CMAKE_CURRENT_SOURCE_DIR}/src/compat/")
 # copy w32dlfcn.h to src
