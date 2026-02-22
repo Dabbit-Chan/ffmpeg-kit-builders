@@ -270,14 +270,44 @@ if(WIN32)
     )
 
     if(MINGW)
-        target_compile_definitions(ffmpegkit PRIVATE
+        target_compile_definitions(ffmpegkit PRIVATE 
             _WIN32_WINNT=0x0600
+            _FORTIFY_SOURCE=2
         )
+
+        # Standard robust stack protection
+        target_compile_options(ffmpegkit PRIVATE 
+            -fstack-protector-strong
+        )
+
         target_link_options(ffmpegkit PRIVATE 
-            -static-libgcc 
-            -static-libstdc++ 
-            -Wl,--enable-auto-import 
-            -Wl,--allow-multiple-definition
+            "-static-libgcc" 
+            "-static-libstdc++" 
+            "-Wl,-Bstatic" 
+            "-lssp" 
+            "-lssp_nonshared"
+            "-Wl,-Bdynamic"
+            "-Wl,--nxcompat"        # Data Execution Prevention (DEP)
+            "-Wl,--dynamicbase"     # ASLR
+            "-Wl,--high-entropy-va"   # 64-bit ASLR
+            "-Wl,--enable-auto-import"
+            "-Wl,--allow-multiple-definition"
+        )
+    elseif(CMAKE_SYSTEM_NAME MATCHES "Linux")
+        target_compile_definitions(ffmpegkit PRIVATE TARGET_OS_LINUX _FORTIFY_SOURCE=2)
+    
+        # Compilation flags for hardening
+        target_compile_options(ffmpegkit PRIVATE 
+            -fstack-protector-strong 
+            -fvisibility=default
+            -fPIC # Required for shared libraries on Linux 
+        )
+
+        # Linker hardening (RELRO and Bind Now)
+        target_link_options(ffmpegkit PRIVATE 
+            "-Wl,-z,relro"   # Read-only relocations
+            "-Wl,-z,now"     # Immediate symbol resolution (Complete RELRO)
+            "-Wl,-z,noexecstack" # DEP equivalent for Linux
         )
     endif()
 else()

@@ -197,8 +197,8 @@ configure_ffmpeg_kit() {
 
 	if truthy "$do_debug_build"; then
 		cmake_params+=" -DCMAKE_BUILD_TYPE=Debug"
-    CFLAGS+=" -Og -fno-omit-frame-pointer -ggdb -fstack-protector-all"
-    CXXFLAGS+=" -Og -fno-omit-frame-pointer -ggdb -D_GLIBCXX_DEBUG -fstack-protector-all"
+    CFLAGS+=" -Og -fno-omit-frame-pointer -ggdb"
+    CXXFLAGS+=" -Og -fno-omit-frame-pointer -ggdb -D_GLIBCXX_DEBUG"
 	else
 		cmake_params+=" -DCMAKE_BUILD_TYPE=Release"
 	fi
