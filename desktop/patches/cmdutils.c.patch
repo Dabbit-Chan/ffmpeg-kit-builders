@@ -1,6 +1,8 @@
+diff --git a/src/cmdutils.c b/src/cmdutils.c
+index dc093b0..40645c1 100755
 --- a/src/cmdutils.c
 +++ b/src/cmdutils.c
-@@ -183,6 +183,10 @@ static char** win32_argv_utf8 = NULL;
+@@ -183,6 +183,10 @@ static int win32_argc = 0;
  static void prepare_app_arguments(int *argc_ptr, char ***argv_ptr)
  {
      char *argstr_flat;

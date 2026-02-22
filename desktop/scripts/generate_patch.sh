@@ -10,13 +10,15 @@
 ##
 
 set -e
-
+SCRIPT_DIR="$(realpath "$(dirname "${BASH_SOURCE[0]}")")" # desktop/scripts
+PROJECT_ROOT="$(realpath "$(dirname "$SCRIPT_DIR")")" # desktop
+FFMPEG_KIT_ROOT="$(realpath "$(dirname "$PROJECT_ROOT")")" # ffmpeg-kit-builders
 INPUT_FILE="$1"
 FILE_NAME=${INPUT_FILE%.*}
 FILE_EXT=${INPUT_FILE##*.}
-FFMPEG_SRC_DIR="${2:-/home/vscode/ffmpeg-kit-builders/prebuilt/src/ffmpeg}"
-CURRENT_SOURCE_DIR="${3:-/home/vscode/ffmpeg-kit-builders/desktop/src}"
-PATCH_DIR="$(dirname $CURRENT_SOURCE_DIR)/patches"
+FFMPEG_SRC_DIR="${2:-$FFMPEG_KIT_ROOT/prebuilt/src/ffmpeg}"
+CURRENT_SOURCE_DIR="${3:-$PROJECT_ROOT/src}"
+PATCH_DIR="$PROJECT_ROOT/patches"
 
 ffmpeg_src_dir="$FFMPEG_SRC_DIR/fftools"
 

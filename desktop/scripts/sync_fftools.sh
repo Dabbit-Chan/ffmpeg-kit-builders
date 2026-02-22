@@ -1,15 +1,28 @@
 #!/bin/bash
 
-FFMPEG_SRC_DIR="${1:-/home/vscode/ffmpeg-kit-builders/prebuilt/src/ffmpeg}"
-CURRENT_SOURCE_DIR="${2:-/home/vscode/ffmpeg-kit-builders/desktop}"
+SCRIPT_DIR="$(realpath "$(dirname "${BASH_SOURCE[0]}")")" # desktop/scripts
+PROJECT_ROOT="$(realpath "$(dirname "$SCRIPT_DIR")")" # desktop
+FFMPEG_KIT_ROOT="$(realpath "$(dirname "$PROJECT_ROOT")")" # ffmpeg-kit-builders
+FFMPEG_SRC_DIR="${1:-$FFMPEG_KIT_ROOT/prebuilt/src/ffmpeg}"
+CURRENT_SOURCE_DIR="${2:-$PROJECT_ROOT}"
 PATCH_DIR="${CURRENT_SOURCE_DIR}/patches"
 
 rsync -am --include='*/' \
       --include='*.c' --include='*.h' --include='*.css' --include='*.html' \
       --exclude='*' \
-      "$FFMPEG_SRC_DIR/fftools/" "$CURRENT_SOURCE_DIR/src/"
+      "$FFMPEG_SRC_DIR/fftools/" "$CURRENT_SOURCE_DIR/fftools.tmp"
+
+# remove "fftools/" from includes
+find "$CURRENT_SOURCE_DIR/fftools.tmp" -type f -name "*.c" -o -name "*.h" -exec sed -i 's|#include "fftools/|#include "|g' {} + 
+
+# move from fftools to src
+cp -r "$CURRENT_SOURCE_DIR/fftools.tmp/"* "$CURRENT_SOURCE_DIR/src/"
+
+# remove fftools.tmp
+rm -rf "$CURRENT_SOURCE_DIR/fftools.tmp"
 
 if [ -d "$PATCH_DIR" ]; then
+    cd "$PROJECT_ROOT"
     echo "-- Checking for patches in 'patches' directory..."
     
     # Ensure patch utility is installed
@@ -52,8 +65,10 @@ if [ -d "$PATCH_DIR" ]; then
     done
 fi
 
+cd "$CURRENT_SOURCE_DIR"
+
 # exec $CURRENT_SOURCE_DIR/scripts/audit_cmds.sh
 
-exec python3 $CURRENT_SOURCE_DIR/scripts/tls_patch.py
+exec python3 $SCRIPT_DIR/tls_patch.py
 
-exec python3 $CURRENT_SOURCE_DIR/scripts/options_patch.py
+exec python3 $SCRIPT_DIR/options_patch.py
