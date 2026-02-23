@@ -131,6 +131,21 @@ public:
   getStatistics();
 
   /**
+   * Returns the number of statistics entries received for this session.
+   *
+   * @return number of statistics entries received
+   */
+  int64_t getStatisticsCount();
+
+  /**
+   * Returns the statistics entry at the given index.
+   *
+   * @param index statistics index
+   * @return statistics entry at the given index or nullptr if it does not exist
+   */
+  std::shared_ptr<ffmpegkit::Statistics> getStatisticsAt(int64_t index);
+
+  /**
    * Returns the last received statistics entry.
    *
    * @return the last received statistics entry or nullptr if there are not any
@@ -193,7 +208,6 @@ private:
                 ffmpegkit::LogCallback logCallback,
                 ffmpegkit::StatisticsCallback statisticsCallback,
                 ffmpegkit::LogRedirectionStrategy logRedirectionStrategy);
-  mutable std::mutex _stateMutex;
   ffmpegkit::StatisticsCallback _statisticsCallback;
   FFmpegSessionCompleteCallback _completeCallback;
   std::shared_ptr<std::list<std::shared_ptr<ffmpegkit::Statistics>>>

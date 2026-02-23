@@ -83,7 +83,22 @@ std::shared_ptr<std::list<std::shared_ptr<ffmpegkit::Statistics>>> ffmpegkit::FF
 
 std::shared_ptr<std::list<std::shared_ptr<ffmpegkit::Statistics>>> ffmpegkit::FFmpegSession::getStatistics() {
     std::lock_guard<std::mutex> lock(_stateMutex);
-    return _statistics;
+    return std::make_shared<std::list<std::shared_ptr<ffmpegkit::Statistics>>>(*_statistics);
+}
+
+int64_t ffmpegkit::FFmpegSession::getStatisticsCount() {
+    std::lock_guard<std::mutex> lock(_stateMutex);
+    return _statistics->size();
+}
+
+std::shared_ptr<ffmpegkit::Statistics> ffmpegkit::FFmpegSession::getStatisticsAt(int64_t index) {
+    std::lock_guard<std::mutex> lock(_stateMutex);
+    if (index >= 0 && index < _statistics->size()) {
+        auto it = _statistics->begin();
+        std::advance(it, index);
+        return *it;
+    }
+    return nullptr;
 }
 
 std::shared_ptr<ffmpegkit::Statistics> ffmpegkit::FFmpegSession::getLastReceivedStatistics() {

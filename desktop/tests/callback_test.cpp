@@ -47,6 +47,7 @@ public:
         auto* capturer = static_cast<CallbackCapturer*>(user_data);
         if (log) {
             capturer->logs.push_back(log);
+            printf("%s\n", log);
         }
         capturer->log_called = true;
     }
@@ -86,8 +87,9 @@ TEST_F(CallbackTest, FFmpegAsyncExecute) {
 
 TEST_F(CallbackTest, FFmpegAsyncExecuteFull) {
     CallbackCapturer capturer;
+    ffmpeg_kit_config_set_log_level(FFMPEG_KIT_LOG_LEVEL_VERBOSE);
     // Use a command that generates output and takes a bit of time (testsrc)
-    std::string cmd = "-loglevel fatal -hide_banner -f lavfi -i testsrc=duration=1:size=128x128:rate=30 -f null -";
+    std::string cmd = "-hide_banner -loglevel info -f lavfi -i testsrc=duration=30:size=512x512:rate=30 -vcodec mpeg4 -y test_stats.mp4";
     
     FFmpegSessionHandle session = ffmpeg_kit_execute_async_full(
         cmd.c_str(), 
@@ -97,6 +99,7 @@ TEST_F(CallbackTest, FFmpegAsyncExecuteFull) {
         &capturer, 
         0 // No specific timeout for session start
     );
+    int stats_count = ffmpeg_kit_session_get_statistics_count(session);
     ASSERT_NE(session, nullptr);
 
     // Wait for completion
@@ -107,13 +110,15 @@ TEST_F(CallbackTest, FFmpegAsyncExecuteFull) {
     }
 
     EXPECT_TRUE(capturer.complete_called);
-    
+    EXPECT_TRUE(capturer.log_called);
+    EXPECT_TRUE(capturer.stats_called);
     if (capturer.session) {
         ffmpeg_kit_handle_release(capturer.session);
     }
-    
+
     EXPECT_EQ(ffmpeg_kit_session_get_state(session), FFMPEG_KIT_SESSION_STATE_COMPLETED);
     ffmpeg_kit_handle_release(session);
+    remove("test_stats.mp4");
 }
 
 // FFprobe Callback Tests

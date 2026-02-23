@@ -121,7 +121,6 @@ public:
 
 private:
   struct PublicMediaInformationSession;
-  mutable std::mutex _stateMutex;
   /**
    * Creates a new media information session.
    *

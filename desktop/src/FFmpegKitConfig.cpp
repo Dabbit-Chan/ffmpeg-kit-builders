@@ -829,9 +829,9 @@ executeFFmpeg(const long sessionId,
   registerSessionId(sessionId);
   resetMessagesInTransmit(sessionId);
 
-  // SETS DEFAULT LOG LEVEL BEFORE STARTING A NEW RUN
   av_log_set_level(configuredLogLevel);
   av_log_set_callback(ffmpegkit_log_callback_function);
+  set_report_callback(ffmpegkit_statistics_callback_function);
   
   // 1. Construct command string for the library init
   std::string fullCommand = buildCommandString("ffmpeg", arguments);
@@ -871,6 +871,7 @@ int executeFFprobe(const long sessionId,
   // SETS DEFAULT LOG LEVEL BEFORE STARTING A NEW RUN
   av_log_set_level(configuredLogLevel);
   av_log_set_callback(ffmpegkit_log_callback_function);
+  set_report_callback(ffmpegkit_statistics_callback_function);
 
   // 1. Construct command string
   std::string fullCommand = buildCommandString("ffprobe", arguments);
@@ -941,6 +942,7 @@ int executeFFplay(const long sessionId,
   // SETS DEFAULT LOG LEVEL BEFORE STARTING A NEW RUN
   av_log_set_level(configuredLogLevel);
   av_log_set_callback(ffmpegkit_log_callback_function);
+  set_report_callback(ffmpegkit_statistics_callback_function);
 
   // 1. Construct command string
   std::string fullCommand = buildCommandString("ffplay", arguments);
@@ -1078,7 +1080,7 @@ void ffmpegkit::FFmpegKitConfig::disableRedirection() {
 
   lock.lock();
 
-  if (redirectionEnabled != 1) {
+  if (redirectionEnabled == 0) {
     lock.unlock();
     return;
   }
@@ -1088,7 +1090,10 @@ void ffmpegkit::FFmpegKitConfig::disableRedirection() {
 
   callbackNotify();
 
-  pthread_detach(callbackThread);
+  if (callbackThread != 0) {
+    pthread_join(callbackThread, NULL);
+    callbackThread = 0;
+  }
 
   av_log_set_callback(av_log_default_callback);
   set_report_callback(NULL);
@@ -1431,7 +1436,7 @@ void ffmpegkit::FFmpegKitConfig::getMediaInformationExecute(
       std::string ffprobeJsonOutput;
       std::for_each(allLogs->cbegin(), allLogs->cend(),
                     [&](std::shared_ptr<ffmpegkit::Log> log) {
-                      if (log->getLevel() == LevelAVLogStdErr) {
+                      if (log->getLevel() == LevelAVLogStdErr || log->getLevel() == LevelAVLogInfo) {
                         ffprobeJsonOutput.append(log->getMessage());
                       }
                     });
@@ -2129,7 +2134,10 @@ std::string ffmpegkit::FFmpegKitConfig::listAudioOutputDevices() {
 }
 
 ffmpegkit::FFmpegKitConfig::~FFmpegKitConfig() {
-  // 1. Clear session history
+  // 1. Stop background redirection thread first to prevent races on sessions
+  disableRedirection();
+
+  // 2. Clear session history
   clearSessions();
   // 2. Reset global callbacks with lock
   {

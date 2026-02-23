@@ -133,6 +133,21 @@ public:
   getLogs() const = 0;
 
   /**
+   * Returns the number of logs received for this session.
+   *
+   * @return number of logs received
+   */
+  virtual int64_t getLogsCount() const = 0;
+
+  /**
+   * Returns the log at the given index.
+   *
+   * @param index log index
+   * @return log at the given index or nullptr if it does not exist
+   */
+  virtual std::shared_ptr<ffmpegkit::Log> getLogAt(int64_t index) const = 0;
+
+  /**
    * Returns all log entries generated for this session as a concatenated
    * string. If there are asynchronous messages that are not delivered yet, this
    * method waits for them until the given timeout.

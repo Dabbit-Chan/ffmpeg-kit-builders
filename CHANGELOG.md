@@ -1,5 +1,15 @@
 # FFmpegKit Changelog
 
+## Version 0.7.0
+
+- **Thread Safety**: Fixed a critical data race issue by resolving shadowed mutex synchronization between `AbstractSession` and its subclasses. All session operations now share a unified, protected `_stateMutex`.
+- **Statistics Callback**: Ensured statistics reporting is correctly initialized across worker threads by explicitly registering the thread-local `report_callback` during `executeFFmpeg`, `executeFFprobe`, and `executeFFplay`.
+- **Snapshot Accessors**: Introduced `getLogsCount()`, `getLogAt()`, `getStatisticsCount()`, and `getStatisticsAt()` to the Session API. Updated the C wrapper to use these indexed accessors for more efficient and thread-safe data retrieval.
+- **Improved Synchronization**: Refactored `getLogs()` and `getStatistics()` to return snapshot-style copies of internal data, preventing race conditions during concurrent iteration and modification.
+- **Robust Shutdown**: Updated `FFmpegKitConfig::disableRedirection()` to perform a full `pthread_join()` on the background redirection thread, ensuring a clean shutdown and preventing use-after-free races during process termination.
+- **Diagnostic Enhancements**: Added comprehensive `try/catch` handlers and a cross-platform (Windows bitwise stack trace and Linux backtrace) crash reporting mechanism to the C wrapper.
+- **Windows Portability**: Added `dbghelp` linking to handle stack trace generation on Windows systems.
+
 ## Version 0.6.0
 
 - **Thread Safety**: Comprehensive refactoring of session management and global configurations to ensure thread-safe operations. Added mutex protection to `FFmpegSession`, `MediaInformationSession`, and global callback handlers to eliminate data races identified by ThreadSanitizer.

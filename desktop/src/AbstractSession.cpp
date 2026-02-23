@@ -22,7 +22,6 @@
 #include "FFmpegKitConfig.hpp"
 #include "LogCallback.hpp"
 #include "ReturnCode.hpp"
-#include <algorithm>
 #include <atomic>
 #include <condition_variable>
 #include <iostream>
@@ -48,16 +47,10 @@ ffmpegkit::AbstractSession::AbstractSession(
 
 
 ffmpegkit::AbstractSession::~AbstractSession() {
-  // Establish a strict happens-before memory barrier between the final
-  // session execution steps (e.g., inside complete() or fail()) and this destructor.
-  // Prevents ThreadSanitizer from flagging data races on condition variables
-  // and return codes when the final shared_ptr is dropped by an un-synchronized
-  // thread (like the session history cleanup).
-  std::unique_lock<std::mutex> stateLock(_stateMutex);
-  stateLock.unlock();
-  
-  std::unique_lock<std::mutex> debugLock(_debugLogMutex);
-  debugLock.unlock();
+  // Synchronize destruction with any final operations in other threads.
+  // This helps ThreadSanitizer understand the happens-before relationship
+  // between session completion and its eventual cleanup.
+  std::lock_guard<std::mutex> lock(_stateMutex);
 }
 
 
@@ -141,7 +134,23 @@ ffmpegkit::AbstractSession::getAllLogs() const {
 
 std::shared_ptr<std::list<std::shared_ptr<ffmpegkit::Log>>>
 ffmpegkit::AbstractSession::getLogs() const {
-  return _logs;
+  std::lock_guard<std::mutex> lock(_stateMutex);
+  return std::make_shared<std::list<std::shared_ptr<ffmpegkit::Log>>>(*_logs);
+}
+
+int64_t ffmpegkit::AbstractSession::getLogsCount() const {
+  std::lock_guard<std::mutex> lock(_stateMutex);
+  return _logs->size();
+}
+
+std::shared_ptr<ffmpegkit::Log> ffmpegkit::AbstractSession::getLogAt(int64_t index) const {
+  std::lock_guard<std::mutex> lock(_stateMutex);
+  if (index >= 0 && index < _logs->size()) {
+      auto it = _logs->begin();
+      std::advance(it, index);
+      return *it;
+  }
+  return nullptr;
 }
 
 std::string ffmpegkit::AbstractSession::getAllLogsAsStringWithTimeout(
@@ -164,12 +173,14 @@ std::string ffmpegkit::AbstractSession::getAllLogsAsString() const {
 }
 
 std::string ffmpegkit::AbstractSession::getLogsAsString() const {
+  std::lock_guard<std::mutex> lock(_stateMutex);
   std::string concatenatedString;
 
-  std::for_each(_logs->cbegin(), _logs->cend(),
-                [&](std::shared_ptr<ffmpegkit::Log> log) {
-                  concatenatedString.append(log->getMessage());
-                });
+  if (_logs) {
+      for (const auto& log : *_logs) {
+          concatenatedString.append(log->getMessage());
+      }
+  }
 
   return concatenatedString;
 }

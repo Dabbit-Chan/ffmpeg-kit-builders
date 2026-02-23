@@ -154,6 +154,21 @@ public:
   getLogs() const override;
 
   /**
+   * Returns the number of logs received for this session.
+   *
+   * @return number of logs received
+   */
+  int64_t getLogsCount() const override;
+
+  /**
+   * Returns the log at the given index.
+   *
+   * @param index log index
+   * @return log at the given index or nullptr if it does not exist
+   */
+  std::shared_ptr<ffmpegkit::Log> getLogAt(int64_t index) const override;
+
+  /**
    * Returns all log entries generated for this session as a concatenated
    * string. If there are asynchronous messages that are not delivered yet, this
    * method waits for them until the given timeout.
@@ -354,8 +369,11 @@ private:
   bool _debuggingEnabled;
   std::string _debugLog;
 
+protected:
   mutable std::mutex _stateMutex;
   mutable std::condition_variable _stateConditionVariable;
+
+private:
 
   std::chrono::time_point<std::chrono::system_clock> _createTime;
   std::chrono::time_point<std::chrono::system_clock> _startTime;
