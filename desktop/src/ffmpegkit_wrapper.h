@@ -181,6 +181,41 @@ ffmpeg_kit_create_session_with_callbacks(const char *command,
                                          FFmpegKitLogCallback log_cb,
                                          FFmpegKitStatisticsCallback stats_cb,
                                          void *user_data);
+/**
+ * Sets the log callback for all FFmpeg sessions.
+ *
+ * @param log_cb the callback to be called when a log is generated
+ * @param user_data the user data to be passed to the callback
+ */
+void FFMPEG_KIT_C_EXPORT ffmpeg_kit_set_log_callback(FFmpegSessionHandle session, FFmpegKitLogCallback log_cb, void *user_data);
+
+/**
+ * Sets the statistics callback for all FFmpeg sessions.
+ *
+ * @param stats_cb the callback to be called when statistics are generated
+ * @param user_data the user data to be passed to the callback
+ */
+void FFMPEG_KIT_C_EXPORT ffmpeg_kit_set_statistics_callback(FFmpegSessionHandle session, FFmpegKitStatisticsCallback stats_cb, void *user_data);
+
+/**
+ * Sets the complete callback for all FFmpeg sessions.
+ *
+ * @param complete_cb the callback to be called when the FFmpeg session is
+ * completed
+ * @param user_data the user data to be passed to the callback
+ */
+void FFMPEG_KIT_C_EXPORT ffmpeg_kit_set_complete_callback(FFmpegSessionHandle session, FFmpegKitCompleteCallback complete_cb, void *user_data);
+
+/**
+ * Sets the complete callback, log callback, statistics callback, and user data for all FFmpeg sessions.
+ *
+ * @param complete_cb the callback to be called when the FFmpeg session is
+ * completed
+ * @param log_cb the callback to be called when a log is generated
+ * @param stats_cb the callback to be called when statistics are generated
+ * @param user_data the user data to be passed to the callbacks
+ */
+void FFMPEG_KIT_C_EXPORT ffmpeg_kit_set_callbacks(FFmpegSessionHandle session, FFmpegKitCompleteCallback complete_cb, FFmpegKitLogCallback log_cb, FFmpegKitStatisticsCallback stats_cb, void *user_data);
 
 /**
  * Executes the FFmpeg session.
@@ -257,6 +292,33 @@ FFMPEG_KIT_C_EXPORT FFprobeSessionHandle
 ffprobe_kit_create_session_with_callbacks(
     const char *command, FFprobeKitCompleteCallback complete_cb,
     FFmpegKitLogCallback log_cb, void *user_data);
+
+/**
+ * Sets the log callback for all FFprobe sessions.
+ *
+ * @param log_cb the callback to be called when a log is generated
+ * @param user_data the user data to be passed to the callback
+ */
+void FFMPEG_KIT_C_EXPORT ffprobe_kit_set_log_callback(FFprobeSessionHandle session, FFmpegKitLogCallback log_cb, void *user_data);
+
+/**
+ * Sets the complete callback for all FFprobe sessions.
+ *
+ * @param complete_cb the callback to be called when the FFprobe session is
+ * completed
+ * @param user_data the user data to be passed to the callback
+ */
+void FFMPEG_KIT_C_EXPORT ffprobe_kit_set_complete_callback(FFprobeSessionHandle session, FFprobeKitCompleteCallback complete_cb, void *user_data);
+
+/**
+ * Sets the complete callback, log callback, and user data for all FFprobe sessions.
+ *
+ * @param complete_cb the callback to be called when the FFprobe session is
+ * completed
+ * @param log_cb the callback to be called when a log is generated
+ * @param user_data the user data to be passed to the callbacks
+ */
+void FFMPEG_KIT_C_EXPORT ffprobe_kit_set_callbacks(FFprobeSessionHandle session, FFprobeKitCompleteCallback complete_cb, FFmpegKitLogCallback log_cb, void *user_data);
 
 /**
  * Executes the FFprobe session.
@@ -349,6 +411,33 @@ ffplay_kit_create_session_with_callbacks(const char *command,
                                          FFplayKitCompleteCallback complete_cb,
                                          FFmpegKitLogCallback log_cb,
                                          void *user_data);
+
+/**
+ * Sets the log callback for all FFplay sessions.
+ *
+ * @param log_cb the callback to be called when a log is generated
+ * @param user_data the user data to be passed to the callback
+ */
+void FFMPEG_KIT_C_EXPORT ffplay_kit_set_log_callback(FFplaySessionHandle session, FFmpegKitLogCallback log_cb, void *user_data);
+
+/**
+ * Sets the complete callback for all FFplay sessions.
+ *
+ * @param complete_cb the callback to be called when the FFplay session is
+ * completed
+ * @param user_data the user data to be passed to the callback
+ */
+void FFMPEG_KIT_C_EXPORT ffplay_kit_set_complete_callback(FFplaySessionHandle session, FFplayKitCompleteCallback complete_cb, void *user_data);
+
+/**
+ * Sets the complete callback, log callback, and user data for all FFplay sessions.
+ *
+ * @param complete_cb the callback to be called when the FFplay session is
+ * completed
+ * @param log_cb the callback to be called when a log is generated
+ * @param user_data the user data to be passed to the callbacks
+ */
+void FFMPEG_KIT_C_EXPORT ffplay_kit_set_callbacks(FFplaySessionHandle session, FFplayKitCompleteCallback complete_cb, FFmpegKitLogCallback log_cb, void *user_data);
 
 /**
  * Executes the FFplay session.
@@ -776,6 +865,33 @@ FFMPEG_KIT_C_EXPORT MediaInformationSessionHandle
 media_information_create_session_with_callbacks(
     const char *command, MediaInformationSessionCompleteCallback complete_cb,
     FFmpegKitLogCallback log_cb, void *user_data);
+
+/**
+ * Sets the log callback for all MediaInformation sessions.
+ *
+ * @param log_cb the callback to be called when a log is generated
+ * @param user_data the user data to be passed to the callback
+ */
+void FFMPEG_KIT_C_EXPORT media_information_kit_set_log_callback(MediaInformationSessionHandle session, FFmpegKitLogCallback log_cb, void *user_data);
+
+/**
+ * Sets the complete callback for all MediaInformation sessions.
+ *
+ * @param complete_cb the callback to be called when the MediaInformation session is
+ * completed
+ * @param user_data the user data to be passed to the callback
+ */
+void FFMPEG_KIT_C_EXPORT media_information_kit_set_complete_callback(MediaInformationSessionHandle session, MediaInformationSessionCompleteCallback complete_cb, void *user_data);
+
+/**
+ * Sets the complete callback, log callback, and user data for all MediaInformation sessions.
+ *
+ * @param complete_cb the callback to be called when the MediaInformation session is
+ * completed
+ * @param log_cb the callback to be called when a log is generated
+ * @param user_data the user data to be passed to the callbacks
+ */
+void FFMPEG_KIT_C_EXPORT media_information_kit_set_callbacks(MediaInformationSessionHandle session, MediaInformationSessionCompleteCallback complete_cb, FFmpegKitLogCallback log_cb, void *user_data);
 
 /**
  * Executes the MediaInformation session.

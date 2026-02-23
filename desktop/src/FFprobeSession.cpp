@@ -90,6 +90,7 @@ ffmpegkit::FFprobeSession::FFprobeSession(
 
 ffmpegkit::FFprobeSessionCompleteCallback
 ffmpegkit::FFprobeSession::getCompleteCallback() {
+  std::lock_guard<std::mutex> lock(_stateMutex);
   return _completeCallback;
 }
 

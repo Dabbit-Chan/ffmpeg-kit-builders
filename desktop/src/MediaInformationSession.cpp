@@ -92,6 +92,7 @@ void ffmpegkit::MediaInformationSession::setMediaInformation(
 
 ffmpegkit::MediaInformationSessionCompleteCallback
 ffmpegkit::MediaInformationSession::getCompleteCallback() {
+  std::lock_guard<std::mutex> lock(_stateMutex);
   return _completeCallback;
 }
 

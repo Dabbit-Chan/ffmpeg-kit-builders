@@ -90,6 +90,7 @@ ffmpegkit::FFplaySession::FFplaySession(
 
 ffmpegkit::FFplaySessionCompleteCallback
 ffmpegkit::FFplaySession::getCompleteCallback() {
+  std::lock_guard<std::mutex> lock(_stateMutex);
   return _completeCallback;
 }
 

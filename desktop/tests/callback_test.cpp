@@ -14,20 +14,6 @@
 #define TEST_VIDEO_FILE FFMPEG_KIT_TEST_DIR "/dummy_video.mp4"
 #define TEST_AUDIO_FILE FFMPEG_KIT_TEST_DIR "/dummy_audio.wav"
 
-class CallbackTest : public ::testing::Test {
-protected:
-    void TearDown() override {
-        ffmpeg_kit_config_clear_sessions();
-        ffmpeg_kit_config_enable_log_callback(nullptr, nullptr);
-        ffmpeg_kit_config_enable_statistics_callback(nullptr, nullptr);
-        ffmpeg_kit_config_enable_ffmpeg_session_complete_callback(nullptr, nullptr);
-        ffmpeg_kit_config_enable_ffprobe_session_complete_callback(nullptr, nullptr);
-        ffmpeg_kit_config_enable_ffplay_session_complete_callback(nullptr, nullptr);
-        ffmpeg_kit_config_enable_media_information_session_complete_callback(nullptr, nullptr);
-    }
-};
-
-// ... and update test definitions to use CallbackTest ...
 // Helper class to capture callback data
 class CallbackCapturer {
 public:
@@ -35,6 +21,7 @@ public:
     std::atomic<bool> log_called{false};
     std::atomic<bool> stats_called{false};
     std::vector<std::string> logs;
+    mutable std::mutex logs_mutex;
     FFmpegSessionHandle session = nullptr;
 
     static void CompleteCallback(FFmpegSessionHandle session, void* user_data) {
@@ -46,6 +33,7 @@ public:
     static void LogCallback(FFmpegSessionHandle session, const char* log, void* user_data) {
         auto* capturer = static_cast<CallbackCapturer*>(user_data);
         if (log) {
+            std::lock_guard<std::mutex> lock(capturer->logs_mutex);
             capturer->logs.push_back(log);
             printf("%s\n", log);
         }
@@ -55,6 +43,21 @@ public:
     static void StatisticsCallback(FFmpegSessionHandle session, int64_t time, int64_t size, double bitrate, double speed, int64_t videoFrameNumber, double videoFps, double videoQuality, void* user_data) {
         auto* capturer = static_cast<CallbackCapturer*>(user_data);
         capturer->stats_called = true;
+    }
+};
+
+class CallbackTest : public ::testing::Test {
+protected:
+    std::shared_ptr<CallbackCapturer> capturer_ptr;
+
+    void TearDown() override {
+        ffmpeg_kit_config_clear_sessions();
+        ffmpeg_kit_config_enable_log_callback(nullptr, nullptr);
+        ffmpeg_kit_config_enable_statistics_callback(nullptr, nullptr);
+        ffmpeg_kit_config_enable_ffmpeg_session_complete_callback(nullptr, nullptr);
+        ffmpeg_kit_config_enable_ffprobe_session_complete_callback(nullptr, nullptr);
+        ffmpeg_kit_config_enable_ffplay_session_complete_callback(nullptr, nullptr);
+        ffmpeg_kit_config_enable_media_information_session_complete_callback(nullptr, nullptr);
     }
 };
 
@@ -342,13 +345,13 @@ TEST_F(CallbackTest, GlobalCallbacks) {
 
 // Tests for new create session with callbacks methods
 TEST_F(CallbackTest, FFmpegCreateSessionWithCallbacks) {
-    CallbackCapturer capturer;
+    capturer_ptr = std::make_shared<CallbackCapturer>();
     FFmpegSessionHandle session = ffmpeg_kit_create_session_with_callbacks(
         "-version", 
         CallbackCapturer::CompleteCallback, 
         CallbackCapturer::LogCallback, 
         CallbackCapturer::StatisticsCallback, 
-        &capturer
+        capturer_ptr.get()
     );
     ASSERT_NE(session, nullptr);
     EXPECT_EQ(ffmpeg_kit_session_get_state(session), FFMPEG_KIT_SESSION_STATE_CREATED);
@@ -356,13 +359,16 @@ TEST_F(CallbackTest, FFmpegCreateSessionWithCallbacks) {
     ffmpeg_kit_session_execute_async(session);
 
     int64_t timeout_ms = 5000;
-    while (!capturer.complete_called && timeout_ms > 0) {
+    while (!capturer_ptr->complete_called && timeout_ms > 0) {
         std::this_thread::sleep_for(std::chrono::milliseconds(10));
         timeout_ms -= 10;
     }
 
-    EXPECT_TRUE(capturer.complete_called);
-    EXPECT_TRUE(capturer.log_called);
+    // Give background thread a moment to finish late-arriving logs/stats
+    std::this_thread::sleep_for(std::chrono::milliseconds(100));
+
+    EXPECT_TRUE(capturer_ptr->complete_called);
+    EXPECT_TRUE(capturer_ptr->log_called);
     EXPECT_EQ(ffmpeg_kit_session_get_state(session), FFMPEG_KIT_SESSION_STATE_COMPLETED);
     
     ffmpeg_kit_handle_release(session);
@@ -416,6 +422,53 @@ TEST_F(CallbackTest, MediaInformationCreateSessionWithCallbacks) {
     // Allow either COMPLETED or FAILED, as long as it finished and called the callback
     FFmpegKitSessionState state = ffmpeg_kit_session_get_state(session);
     EXPECT_TRUE(state == FFMPEG_KIT_SESSION_STATE_COMPLETED || state == FFMPEG_KIT_SESSION_STATE_FAILED);
+    
+    ffmpeg_kit_handle_release(session);
+}
+
+// Stress test for updating callbacks while session is running
+TEST_F(CallbackTest, SessionCallbackStressTest) {
+    CallbackCapturer capturer1;
+    CallbackCapturer capturer2;
+    
+    // Use a command that takes some time to allow for concurrent updates
+    std::string cmd = "-hide_banner -loglevel info -f lavfi -i testsrc=duration=2:size=128x128:rate=30 -f null -";
+    
+    FFmpegSessionHandle session = ffmpeg_kit_execute_async_full(
+        cmd.c_str(), 
+        CallbackCapturer::CompleteCallback, 
+        CallbackCapturer::LogCallback, 
+        CallbackCapturer::StatisticsCallback, 
+        &capturer1, 
+        0
+    );
+    ASSERT_NE(session, nullptr);
+
+    std::atomic<bool> stop_stress{false};
+    std::thread stress_thread([&]() {
+        int i = 0;
+        while (!stop_stress) {
+            if (i % 2 == 0) {
+                ffmpeg_kit_set_callbacks(session, CallbackCapturer::CompleteCallback, CallbackCapturer::LogCallback, CallbackCapturer::StatisticsCallback, &capturer1);
+            } else {
+                ffmpeg_kit_set_callbacks(session, CallbackCapturer::CompleteCallback, CallbackCapturer::LogCallback, CallbackCapturer::StatisticsCallback, &capturer2);
+            }
+            i++;
+            std::this_thread::yield();
+        }
+    });
+
+    // Wait for completion
+    int64_t timeout_ms = 10000;
+    while (ffmpeg_kit_session_get_state(session) < FFMPEG_KIT_SESSION_STATE_COMPLETED && timeout_ms > 0) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(10));
+        timeout_ms -= 10;
+    }
+
+    stop_stress = true;
+    stress_thread.join();
+
+    EXPECT_EQ(ffmpeg_kit_session_get_state(session), FFMPEG_KIT_SESSION_STATE_COMPLETED);
     
     ffmpeg_kit_handle_release(session);
 }

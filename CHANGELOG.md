@@ -1,5 +1,18 @@
 # FFmpegKit Changelog
 
+## Version 0.8.1
+
+- **Race Condition Fixes**: Added `std::lock_guard<std::mutex>` protection to `getLogCallback()`, `getStatisticsCallback()`, and `getCompleteCallback()` across all session types (`AbstractSession`, `FFmpegSession`, `FFprobeSession`, `FFplaySession`, `MediaInformationSession`) to eliminate data races on callback accessor reads.
+- **Callback Ordering Fix**: Moved `std::atomic_fetch_add` for `sessionInTransitMessageCountMap` to occur *before* enqueuing `CallbackData` in both `logCallbackDataAdd` and `statisticsCallbackDataAdd`, ensuring the in-transit counter is always incremented before the data is visible to the consumer thread.
+- **MediaInformation Drain**: Added a `waitForAsynchronousMessagesInTransmit` call after `executeFFprobe` in `getMediaInformationExecute`, guaranteeing all pending log messages are processed before the session is marked complete.
+- **New Setter APIs**: Exposed per-session callback setters for FFmpeg, FFprobe, FFplay, and MediaInformation sessions in the C API:
+  - `ffmpeg_kit_set_log_callback`, `ffmpeg_kit_set_statistics_callback`, `ffmpeg_kit_set_complete_callback`, `ffmpeg_kit_set_callbacks`
+  - `ffprobe_kit_set_log_callback`, `ffprobe_kit_set_complete_callback`, `ffprobe_kit_set_callbacks`
+  - `ffplay_kit_set_log_callback`, `ffplay_kit_set_complete_callback`, `ffplay_kit_set_callbacks`
+  - `media_information_kit_set_log_callback`, `media_information_kit_set_complete_callback`, `media_information_kit_set_callbacks`
+- **Log Message Lifetime**: Changed log message capture in all lambda callbacks from `const std::string&` (dangling reference risk) to `std::string` by value, ensuring message lifetime is safe across async C callback boundaries.
+- **Test Hardening**: Moved `CallbackTest` fixture definition after `CallbackCapturer` to fix declaration order; promoted `CallbackCapturer` to a `shared_ptr` member in the fixture to prevent use-after-free in async tests; added a `logs_mutex` to `CallbackCapturer` to protect concurrent `logs` vector writes; added `SessionCallbackStressTest` to verify concurrent callback swapping during active execution.
+
 ## Version 0.8.0
 
 - **Memory Leak Fixes**: Pair `strdup_cpp` allocations with `malloc` instead of `new char[]` to ensure compatibility with C-style `free()` used in the wrapper and tests, resolving significant memory leaks detected by ASAN/LSAN.

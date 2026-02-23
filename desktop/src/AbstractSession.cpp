@@ -69,6 +69,7 @@ void ffmpegkit::AbstractSession::waitForAsynchronousMessagesInTransmit(
 }
 
 ffmpegkit::LogCallback ffmpegkit::AbstractSession::getLogCallback() const {
+  std::lock_guard<std::mutex> lock(_stateMutex);
   return _logCallback;
 }
 

@@ -399,14 +399,14 @@ static void logCallbackDataAdd(int level, AVBPrint *data) {
                                               std::defer_lock);
   CallbackData *callbackData = new CallbackData(sessionId, level, data);
 
+  std::atomic_fetch_add(
+      &sessionInTransitMessageCountMap[sessionId % SESSION_MAP_SIZE], 1);
+
   lock.lock();
   getCallbackDataList().push_back(callbackData);
   lock.unlock();
 
   callbackNotify();
-
-  std::atomic_fetch_add(
-      &sessionInTransitMessageCountMap[sessionId % SESSION_MAP_SIZE], 1);
 }
 
 /**
@@ -427,14 +427,14 @@ static void statisticsCallbackDataAdd(int frameNumber, float fps, float quality,
   CallbackData *callbackData = new CallbackData(
       sessionId, frameNumber, fps, quality, size, time, bitrate, speed);
 
+  std::atomic_fetch_add(
+      &sessionInTransitMessageCountMap[sessionId % SESSION_MAP_SIZE], 1);
+
   lock.lock();
   getCallbackDataList().push_back(callbackData);
   lock.unlock();
 
   callbackNotify();
-
-  std::atomic_fetch_add(
-      &sessionInTransitMessageCountMap[sessionId % SESSION_MAP_SIZE], 1);
 }
 
 /**
@@ -1428,6 +1428,9 @@ void ffmpegkit::FFmpegKitConfig::getMediaInformationExecute(
     int returnCodeValue =
         executeFFprobe(mediaInformationSession->getSessionId(),
                        mediaInformationSession->getArguments());
+    // Wait for all logs/stats to be processed by the callback thread
+    mediaInformationSession->waitForAsynchronousMessagesInTransmit(AbstractSession::DefaultTimeoutForAsynchronousMessagesInTransmit);
+
     auto returnCode = std::make_shared<ffmpegkit::ReturnCode>(returnCodeValue);
     mediaInformationSession->complete(returnCode);
     if (returnCode->isValueSuccess()) {

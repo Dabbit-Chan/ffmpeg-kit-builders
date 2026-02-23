@@ -283,14 +283,14 @@ FFmpegSessionHandle ffmpeg_kit_execute_async_full(
     FFmpegSessionHandle handle = create_handle(session);
 
     auto complete = [complete_cb, user_data,
-                        handle](std::shared_ptr<Session> s) {
+                     handle](std::shared_ptr<Session> s) {
       if (complete_cb) {
         complete_cb(handle, user_data);
       }
     };
     auto log = [log_cb, user_data, handle](std::shared_ptr<Log> l) {
       if (log_cb && l) {
-        const std::string &message = l->getMessage();
+        std::string message = l->getMessage(); // copy to ensure lifetime during C callback
         log_cb(handle, message.c_str(), user_data);
       }
     };
@@ -344,14 +344,14 @@ FFmpegSessionHandle ffmpeg_kit_create_session_with_callbacks(
     FFmpegSessionHandle handle = create_handle(session);
 
     auto complete = [complete_cb, user_data,
-                        handle](std::shared_ptr<Session> s) {
+                     handle](std::shared_ptr<Session> s) {
       if (complete_cb) {
         complete_cb(handle, user_data);
       }
     };
     auto log = [log_cb, user_data, handle](std::shared_ptr<Log> l) {
       if (log_cb && l) {
-        const std::string &message = l->getMessage();
+        std::string message = l->getMessage(); // copy to ensure lifetime during C callback
         log_cb(handle, message.c_str(), user_data);
       }
     };
@@ -372,6 +372,113 @@ FFmpegSessionHandle ffmpeg_kit_create_session_with_callbacks(
               << e.what() << std::endl;
     PRINT_STACK_TRACE();
     return nullptr;
+  }
+}
+
+void ffmpeg_kit_set_log_callback(FFmpegSessionHandle session,
+                                 FFmpegKitLogCallback log_cb, void *user_data) {
+  try {
+    auto ptr = get_ptr<FFmpegSession>(session);
+    if (ptr) {
+      auto log = [log_cb, user_data, session](std::shared_ptr<Log> l) {
+        if (log_cb && l) {
+          std::string message = l->getMessage(); // copy to ensure lifetime during C callback
+          log_cb(session, message.c_str(), user_data);
+        }
+      };
+      ptr->setLogCallback(log);
+    }
+  } catch (const std::exception &e) {
+    // Handle or log the exception
+    std::cerr << "[Exception] in ffmpeg_kit_set_log_callback: " << e.what()
+              << std::endl;
+    PRINT_STACK_TRACE();
+  }
+}
+
+void ffmpeg_kit_set_statistics_callback(FFmpegSessionHandle session,
+                                        FFmpegKitStatisticsCallback stats_cb,
+                                        void *user_data) {
+  try {
+    auto ptr = get_ptr<FFmpegSession>(session);
+    if (ptr) {
+      auto stats = [stats_cb, user_data,
+                    session](std::shared_ptr<Statistics> s) {
+        if (stats_cb && s) {
+          stats_cb(session, s->getTime(), s->getSize(), s->getBitrate(),
+                   s->getSpeed(), s->getVideoFrameNumber(), s->getVideoFps(),
+                   s->getVideoQuality(), user_data);
+        }
+      };
+      ptr->setStatisticsCallback(stats);
+    }
+  } catch (const std::exception &e) {
+    // Handle or log the exception
+    std::cerr << "[Exception] in ffmpeg_kit_set_statistics_callback: "
+              << e.what() << std::endl;
+    PRINT_STACK_TRACE();
+  }
+}
+
+void ffmpeg_kit_set_complete_callback(FFmpegSessionHandle session,
+                                      FFmpegKitCompleteCallback complete_cb,
+                                      void *user_data) {
+  try {
+    auto ptr = get_ptr<FFmpegSession>(session);
+    if (ptr) {
+      auto complete = [complete_cb, user_data,
+                       session](std::shared_ptr<Session> s) {
+        if (complete_cb && s) {
+          complete_cb(session, user_data);
+        }
+      };
+      ptr->setCompleteCallback(complete);
+    }
+  } catch (const std::exception &e) {
+    // Handle or log the exception
+    std::cerr << "[Exception] in ffmpeg_kit_set_complete_callback: " << e.what()
+              << std::endl;
+    PRINT_STACK_TRACE();
+  }
+}
+
+void ffmpeg_kit_set_callbacks(FFmpegSessionHandle session,
+                              FFmpegKitCompleteCallback complete_cb,
+                              FFmpegKitLogCallback log_cb,
+                              FFmpegKitStatisticsCallback stats_cb,
+                              void *user_data) {
+  try {
+    auto ptr = get_ptr<FFmpegSession>(session);
+    if (ptr) {
+      auto complete = [complete_cb, user_data,
+                       session](std::shared_ptr<Session> s) {
+        if (complete_cb && s) {
+          complete_cb(session, user_data);
+        }
+      };
+      auto log = [log_cb, user_data, session](std::shared_ptr<Log> l) {
+        if (log_cb && l) {
+          std::string message = l->getMessage(); // copy to ensure lifetime during C callback
+          log_cb(session, message.c_str(), user_data);
+        }
+      };
+      auto stats = [stats_cb, user_data,
+                    session](std::shared_ptr<Statistics> s) {
+        if (stats_cb && s) {
+          stats_cb(session, s->getTime(), s->getSize(), s->getBitrate(),
+                   s->getSpeed(), s->getVideoFrameNumber(), s->getVideoFps(),
+                   s->getVideoQuality(), user_data);
+        }
+      };
+      ptr->setCompleteCallback(complete);
+      ptr->setLogCallback(log);
+      ptr->setStatisticsCallback(stats);
+    }
+  } catch (const std::exception &e) {
+    // Handle or log the exception
+    std::cerr << "[Exception] in ffmpeg_kit_set_callbacks: " << e.what()
+              << std::endl;
+    PRINT_STACK_TRACE();
   }
 }
 
@@ -495,14 +602,14 @@ FFprobeSessionHandle ffprobe_kit_create_session_with_callbacks(
     FFprobeSessionHandle handle = create_handle(session);
 
     auto complete = [complete_cb, user_data,
-                        handle](std::shared_ptr<Session> s) {
+                     handle](std::shared_ptr<Session> s) {
       if (complete_cb) {
         complete_cb(handle, user_data);
       }
     };
     auto log = [log_cb, user_data, handle](std::shared_ptr<Log> l) {
       if (log_cb && l) {
-        const std::string &message = l->getMessage();
+        std::string message = l->getMessage(); // copy to ensure lifetime during C callback
         log_cb(handle, message.c_str(), user_data);
       }
     };
@@ -515,6 +622,79 @@ FFprobeSessionHandle ffprobe_kit_create_session_with_callbacks(
               << e.what() << std::endl;
     PRINT_STACK_TRACE();
     return nullptr;
+  }
+}
+
+void ffprobe_kit_set_log_callback(FFprobeSessionHandle session,
+                                  FFmpegKitLogCallback log_cb,
+                                  void *user_data) {
+  try {
+    auto ptr = get_ptr<FFprobeSession>(session);
+    if (ptr) {
+      auto log = [log_cb, user_data, session](std::shared_ptr<Log> l) {
+        if (log_cb && l) {
+          std::string message = l->getMessage(); // copy to ensure lifetime during C callback
+          log_cb(session, message.c_str(), user_data);
+        }
+      };
+      ptr->setLogCallback(log);
+    }
+  } catch (const std::exception &e) {
+    // Handle or log the exception
+    std::cerr << "[Exception] in ffprobe_kit_set_log_callback: " << e.what()
+              << std::endl;
+    PRINT_STACK_TRACE();
+  }
+}
+
+void ffprobe_kit_set_complete_callback(FFprobeSessionHandle session,
+                                       FFprobeKitCompleteCallback complete_cb,
+                                       void *user_data) {
+  try {
+    auto ptr = get_ptr<FFprobeSession>(session);
+    if (ptr) {
+      auto complete = [complete_cb, user_data,
+                       session](std::shared_ptr<Session> s) {
+        if (complete_cb && s) {
+          complete_cb(session, user_data);
+        }
+      };
+      ptr->setCompleteCallback(complete);
+    }
+  } catch (const std::exception &e) {
+    // Handle or log the exception
+    std::cerr << "[Exception] in ffprobe_kit_set_complete_callback: "
+              << e.what() << std::endl;
+    PRINT_STACK_TRACE();
+  }
+}
+
+void ffprobe_kit_set_callbacks(FFprobeSessionHandle session,
+                               FFprobeKitCompleteCallback complete_cb,
+                               FFmpegKitLogCallback log_cb, void *user_data) {
+  try {
+    auto ptr = get_ptr<FFprobeSession>(session);
+    if (ptr) {
+      auto complete = [complete_cb, user_data,
+                       session](std::shared_ptr<Session> s) {
+        if (complete_cb && s) {
+          complete_cb(session, user_data);
+        }
+      };
+      auto log = [log_cb, user_data, session](std::shared_ptr<Log> l) {
+        if (log_cb && l) {
+          std::string message = l->getMessage(); // copy to ensure lifetime during C callback
+          log_cb(session, message.c_str(), user_data);
+        }
+      };
+      ptr->setCompleteCallback(complete);
+      ptr->setLogCallback(log);
+    }
+  } catch (const std::exception &e) {
+    // Handle or log the exception
+    std::cerr << "[Exception] in ffprobe_kit_set_callbacks: " << e.what()
+              << std::endl;
+    PRINT_STACK_TRACE();
   }
 }
 
@@ -571,8 +751,8 @@ MediaInformationSessionHandle ffprobe_kit_get_media_information_async(
     auto session = MediaInformationSession::create(
         FFmpegKitConfig::parseArguments(std::string(path)));
     MediaInformationSessionHandle handle = create_handle(session);
-    auto lambda = [complete_cb,
-                   user_data, handle](std::shared_ptr<MediaInformationSession> s) {
+    auto lambda = [complete_cb, user_data,
+                   handle](std::shared_ptr<MediaInformationSession> s) {
       if (complete_cb) {
         complete_cb(handle, user_data);
       }
@@ -659,14 +839,14 @@ FFplaySessionHandle ffplay_kit_create_session_with_callbacks(
     FFplaySessionHandle handle = create_handle(session);
 
     auto complete = [complete_cb, user_data,
-                        handle](std::shared_ptr<Session> s) {
+                     handle](std::shared_ptr<Session> s) {
       if (complete_cb) {
         complete_cb(handle, user_data);
       }
     };
     auto log = [log_cb, user_data, handle](std::shared_ptr<Log> l) {
       if (log_cb && l) {
-        const std::string &message = l->getMessage();
+        std::string message = l->getMessage(); // copy to ensure lifetime during C callback
         log_cb(handle, message.c_str(), user_data);
       }
     };
@@ -679,6 +859,78 @@ FFplaySessionHandle ffplay_kit_create_session_with_callbacks(
               << e.what() << std::endl;
     PRINT_STACK_TRACE();
     return nullptr;
+  }
+}
+
+void ffplay_kit_set_log_callback(FFplaySessionHandle session,
+                                 FFmpegKitLogCallback log_cb, void *user_data) {
+  try {
+    auto ptr = get_ptr<FFplaySession>(session);
+    if (ptr) {
+      auto log = [log_cb, user_data, session](std::shared_ptr<Log> l) {
+        if (log_cb && l) {
+          std::string message = l->getMessage(); // copy to ensure lifetime during C callback
+          log_cb(session, message.c_str(), user_data);
+        }
+      };
+      ptr->setLogCallback(log);
+    }
+  } catch (const std::exception &e) {
+    // Handle or log the exception
+    std::cerr << "[Exception] in ffplay_kit_set_log_callback: " << e.what()
+              << std::endl;
+    PRINT_STACK_TRACE();
+  }
+}
+
+void ffplay_kit_set_complete_callback(FFplaySessionHandle session,
+                                      FFplayKitCompleteCallback complete_cb,
+                                      void *user_data) {
+  try {
+    auto ptr = get_ptr<FFplaySession>(session);
+    if (ptr) {
+      auto complete = [complete_cb, user_data,
+                       session](std::shared_ptr<Session> s) {
+        if (complete_cb && s) {
+          complete_cb(session, user_data);
+        }
+      };
+      ptr->setCompleteCallback(complete);
+    }
+  } catch (const std::exception &e) {
+    // Handle or log the exception
+    std::cerr << "[Exception] in ffplay_kit_set_complete_callback: " << e.what()
+              << std::endl;
+    PRINT_STACK_TRACE();
+  }
+}
+
+void ffplay_kit_set_callbacks(FFplaySessionHandle session,
+                              FFplayKitCompleteCallback complete_cb,
+                              FFmpegKitLogCallback log_cb, void *user_data) {
+  try {
+    auto ptr = get_ptr<FFplaySession>(session);
+    if (ptr) {
+      auto complete = [complete_cb, user_data,
+                       session](std::shared_ptr<Session> s) {
+        if (complete_cb && s) {
+          complete_cb(session, user_data);
+        }
+      };
+      auto log = [log_cb, user_data, session](std::shared_ptr<Log> l) {
+        if (log_cb && l) {
+          std::string message = l->getMessage(); // copy to ensure lifetime during C callback
+          log_cb(session, message.c_str(), user_data);
+        }
+      };
+      ptr->setCompleteCallback(complete);
+      ptr->setLogCallback(log);
+    }
+  } catch (const std::exception &e) {
+    // Handle or log the exception
+    std::cerr << "[Exception] in ffplay_kit_set_callbacks: " << e.what()
+              << std::endl;
+    PRINT_STACK_TRACE();
   }
 }
 
@@ -1396,14 +1648,14 @@ MediaInformationSessionHandle media_information_create_session_with_callbacks(
     MediaInformationSessionHandle handle = create_handle(session);
 
     auto complete = [complete_cb, user_data,
-                        handle](std::shared_ptr<Session> s) {
+                     handle](std::shared_ptr<Session> s) {
       if (complete_cb) {
         complete_cb(handle, user_data);
       }
     };
     auto log = [log_cb, user_data, handle](std::shared_ptr<Log> l) {
       if (log_cb && l) {
-        const std::string &message = l->getMessage();
+        std::string message = l->getMessage(); // copy to ensure lifetime during C callback
         log_cb(handle, message.c_str(), user_data);
       }
     };
@@ -1417,6 +1669,80 @@ MediaInformationSessionHandle media_information_create_session_with_callbacks(
         << e.what() << std::endl;
     PRINT_STACK_TRACE();
     return nullptr;
+  }
+}
+
+void media_information_kit_set_log_callback(
+    MediaInformationSessionHandle session, FFmpegKitLogCallback log_cb,
+    void *user_data) {
+  try {
+    auto ptr = get_ptr<MediaInformationSession>(session);
+    if (ptr) {
+      auto log = [log_cb, user_data, session](std::shared_ptr<Log> l) {
+        if (log_cb && l) {
+          std::string message = l->getMessage(); // copy to ensure lifetime during C callback
+          log_cb(session, message.c_str(), user_data);
+        }
+      };
+      ptr->setLogCallback(log);
+    }
+  } catch (const std::exception &e) {
+    // Handle or log the exception
+    std::cerr << "[Exception] in media_information_kit_set_log_callback: "
+              << e.what() << std::endl;
+    PRINT_STACK_TRACE();
+  }
+}
+
+void media_information_kit_set_complete_callback(
+    MediaInformationSessionHandle session,
+    ::MediaInformationSessionCompleteCallback complete_cb, void *user_data) {
+  try {
+    auto ptr = get_ptr<MediaInformationSession>(session);
+    if (ptr) {
+      auto complete = [complete_cb, user_data,
+                       session](std::shared_ptr<Session> s) {
+        if (complete_cb && s) {
+          complete_cb(session, user_data);
+        }
+      };
+      ptr->setCompleteCallback(complete);
+    }
+  } catch (const std::exception &e) {
+    // Handle or log the exception
+    std::cerr << "[Exception] in media_information_kit_set_complete_callback: "
+              << e.what() << std::endl;
+    PRINT_STACK_TRACE();
+  }
+}
+
+void media_information_kit_set_callbacks(
+    MediaInformationSessionHandle session,
+    ::MediaInformationSessionCompleteCallback complete_cb,
+    FFmpegKitLogCallback log_cb, void *user_data) {
+  try {
+    auto ptr = get_ptr<MediaInformationSession>(session);
+    if (ptr) {
+      auto complete = [complete_cb, user_data,
+                       session](std::shared_ptr<Session> s) {
+        if (complete_cb && s) {
+          complete_cb(session, user_data);
+        }
+      };
+      auto log = [log_cb, user_data, session](std::shared_ptr<Log> l) {
+        if (log_cb && l) {
+          std::string message = l->getMessage(); // copy to ensure lifetime during C callback
+          log_cb(session, message.c_str(), user_data);
+        }
+      };
+      ptr->setCompleteCallback(complete);
+      ptr->setLogCallback(log);
+    }
+  } catch (const std::exception &e) {
+    // Handle or log the exception
+    std::cerr << "[Exception] in media_information_kit_set_callbacks: "
+              << e.what() << std::endl;
+    PRINT_STACK_TRACE();
   }
 }
 
@@ -2979,7 +3305,8 @@ void session_enable_debug_log(void *session) {
     if (!session)
       return;
     auto ptr = get_ptr<AbstractSession>(session);
-    if (ptr) ptr->enableDebugLog();
+    if (ptr)
+      ptr->enableDebugLog();
   } catch (const std::exception &e) {
     // Handle or log the exception
     std::cerr << "[Exception] in session_enable_debug_log: " << e.what()
@@ -2993,7 +3320,8 @@ void session_disable_debug_log(void *session) {
     if (!session)
       return;
     auto ptr = get_ptr<AbstractSession>(session);
-    if (ptr) ptr->disableDebugLog();
+    if (ptr)
+      ptr->disableDebugLog();
   } catch (const std::exception &e) {
     // Handle or log the exception
     std::cerr << "[Exception] in session_disable_debug_log: " << e.what()
@@ -3037,7 +3365,8 @@ void session_clear_debug_log(void *session) {
     if (!session)
       return;
     auto ptr = get_ptr<AbstractSession>(session);
-    if (ptr) ptr->clearDebugLog();
+    if (ptr)
+      ptr->clearDebugLog();
   } catch (const std::exception &e) {
     // Handle or log the exception
     std::cerr << "[Exception] in session_clear_debug_log: " << e.what()
@@ -3051,7 +3380,8 @@ void ffmpeg_kit_config_enable_debug_log(void *session) {
     if (!session)
       return;
     auto ptr = get_ptr<AbstractSession>(session);
-    if (ptr) ptr->enableDebugLog();
+    if (ptr)
+      ptr->enableDebugLog();
   } catch (const std::exception &e) {
     // Handle or log the exception
     std::cerr << "[Exception] in ffmpeg_kit_config_enable_debug_log: "
@@ -3065,7 +3395,8 @@ void ffmpeg_kit_config_disable_debug_log(void *session) {
     if (!session)
       return;
     auto ptr = get_ptr<AbstractSession>(session);
-    if (ptr) ptr->disableDebugLog();
+    if (ptr)
+      ptr->disableDebugLog();
   } catch (const std::exception &e) {
     // Handle or log the exception
     std::cerr << "[Exception] in ffmpeg_kit_config_disable_debug_log: "
@@ -3109,7 +3440,8 @@ void ffmpeg_kit_config_clear_debug_log(void *session) {
     if (!session)
       return;
     auto ptr = get_ptr<AbstractSession>(session);
-    if (ptr) ptr->clearDebugLog();
+    if (ptr)
+      ptr->clearDebugLog();
   } catch (const std::exception &e) {
     // Handle or log the exception
     std::cerr << "[Exception] in ffmpeg_kit_config_clear_debug_log: "

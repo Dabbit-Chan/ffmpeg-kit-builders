@@ -104,11 +104,13 @@ ffmpegkit::FFmpegSession::FFmpegSession(
 
 ffmpegkit::StatisticsCallback
 ffmpegkit::FFmpegSession::getStatisticsCallback() {
+  std::lock_guard<std::mutex> lock(_stateMutex);
   return _statisticsCallback;
 }
 
 ffmpegkit::FFmpegSessionCompleteCallback
 ffmpegkit::FFmpegSession::getCompleteCallback() {
+  std::lock_guard<std::mutex> lock(_stateMutex);
   return _completeCallback;
 }
 
