@@ -345,3 +345,8 @@ void ffmpegkit::AbstractSession::disableDebugLog() {
 bool ffmpegkit::AbstractSession::isDebugLogEnabled() const {
     return _debuggingEnabled;
 }
+
+void ffmpegkit::AbstractSession::setLogCallback(const LogCallback logCallback) {
+    std::lock_guard<std::mutex> lock(_stateMutex);
+    _logCallback = logCallback;
+}

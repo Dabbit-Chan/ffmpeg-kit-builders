@@ -100,3 +100,9 @@ bool ffmpegkit::FFprobeSession::isFFprobe() const { return true; }
 bool ffmpegkit::FFprobeSession::isFFplay() const { return false; }
 
 bool ffmpegkit::FFprobeSession::isMediaInformation() const { return false; }
+
+void ffmpegkit::FFprobeSession::setCompleteCallback(
+    const FFprobeSessionCompleteCallback completeCallback) {
+  std::lock_guard<std::mutex> lock(_stateMutex);
+  _completeCallback = completeCallback;
+}

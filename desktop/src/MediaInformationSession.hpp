@@ -117,6 +117,14 @@ public:
    */
   bool isMediaInformation() const override;
 
+  /**
+   * Sets the session specific complete callback.
+   *
+   * @param completeCallback session specific complete callback
+   */
+  void setCompleteCallback(
+      const MediaInformationSessionCompleteCallback completeCallback);
+
   ~MediaInformationSession();
 
 private:

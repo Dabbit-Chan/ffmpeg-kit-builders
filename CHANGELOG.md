@@ -1,5 +1,15 @@
 # FFmpegKit Changelog
 
+## Version 0.8.0
+
+- **Memory Leak Fixes**: Pair `strdup_cpp` allocations with `malloc` instead of `new char[]` to ensure compatibility with C-style `free()` used in the wrapper and tests, resolving significant memory leaks detected by ASAN/LSAN.
+- **Robust Handle Management**: Enhanced the C wrapper with handle recycling and validity checks. Asynchronous sessions now reuse their initial handles in callbacks, preventing handle leaks and ensuring safe cleanup.
+- **Session API Enhancements**: Implemented missing `setCompleteCallback`, `setLogCallback`, and `setStatisticsCallback` methods across all session types (`FFmpegSession`, `FFprobeSession`, `FFplaySession`, `MediaInformationSession`) to support manual lifecycle configuration.
+- **Null Safety**: Added comprehensive `nullptr` guards to all session utility functions in the C wrapper, preventing crashes when invalid or released handles are passed.
+- **Handle Validation**: Improved `get_ptr_internal` to validate handles against an active handle registry and added support for using session IDs as "temporary" handles in global callbacks.
+- **Improved Test Stability**: Updated the test suite to correctly manage the lifecycles of recycled handles and relaxed state checks for environmental failures, ensuring reliable CI runs under AddressSanitizer and ThreadSanitizer.
+- **Extended Test Coverage**: Added new test suites for session creation with manual callback registration (`create_session_with_callbacks`) to verify the split creation-execution flow.
+
 ## Version 0.7.0
 
 - **Thread Safety**: Fixed a critical data race issue by resolving shadowed mutex synchronization between `AbstractSession` and its subclasses. All session operations now share a unified, protected `_stateMutex`.

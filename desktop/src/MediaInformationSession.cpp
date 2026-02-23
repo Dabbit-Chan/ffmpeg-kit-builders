@@ -105,6 +105,12 @@ bool ffmpegkit::MediaInformationSession::isMediaInformation() const {
   return true;
 }
 
+void ffmpegkit::MediaInformationSession::setCompleteCallback(
+    const MediaInformationSessionCompleteCallback completeCallback) {
+  std::lock_guard<std::mutex> lock(_stateMutex);
+  _completeCallback = completeCallback;
+}
+
 ffmpegkit::MediaInformationSession::~MediaInformationSession() {
   // Synchronize destruction of derived members to prevent TSAN data races
   // with background threads that might be actively setting them.

@@ -24,7 +24,6 @@
 #include "FFmpegSessionCompleteCallback.hpp"
 #include "StatisticsCallback.hpp"
 
-
 namespace ffmpegkit {
 
 /**
@@ -190,6 +189,21 @@ public:
    * otherwise
    */
   bool isMediaInformation() const override;
+
+  /**
+   * Sets the session specific complete callback.
+   *
+   * @param completeCallback session specific complete callback
+   */
+  void
+  setCompleteCallback(const FFmpegSessionCompleteCallback completeCallback);
+
+  /**
+   * Sets the session specific statistics callback.
+   *
+   * @param statisticsCallback session specific statistics callback
+   */
+  void setStatisticsCallback(const StatisticsCallback statisticsCallback);
 
 private:
   struct PublicFFmpegSession;

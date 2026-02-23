@@ -362,6 +362,13 @@ public:
    */
   bool waitFor(int timeout) override;
 
+  /**
+   * Sets the session specific log callback.
+   *
+   * @param logCallback session specific log callback
+   */
+  void setLogCallback(const LogCallback logCallback);
+
 private:
   const long _sessionId;
   ffmpegkit::LogCallback _logCallback;

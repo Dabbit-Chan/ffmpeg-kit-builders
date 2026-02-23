@@ -23,110 +23,171 @@
 #include "StatisticsCallback.hpp"
 #include <mutex>
 
-extern void addSessionToSessionHistory(const std::shared_ptr<ffmpegkit::Session> session);
+extern void
+addSessionToSessionHistory(const std::shared_ptr<ffmpegkit::Session> session);
 
-std::shared_ptr<ffmpegkit::FFmpegSession> ffmpegkit::FFmpegSession::create(const std::list<std::string>& arguments) {
-    std::shared_ptr<ffmpegkit::FFmpegSession> session = std::static_pointer_cast<ffmpegkit::FFmpegSession>(std::make_shared<ffmpegkit::FFmpegSession::PublicFFmpegSession>(arguments, nullptr, nullptr, nullptr, ffmpegkit::FFmpegKitConfig::getLogRedirectionStrategy()));
-    addSessionToSessionHistory(session);
-    return session;
+std::shared_ptr<ffmpegkit::FFmpegSession>
+ffmpegkit::FFmpegSession::create(const std::list<std::string> &arguments) {
+  std::shared_ptr<ffmpegkit::FFmpegSession> session =
+      std::static_pointer_cast<ffmpegkit::FFmpegSession>(
+          std::make_shared<ffmpegkit::FFmpegSession::PublicFFmpegSession>(
+              arguments, nullptr, nullptr, nullptr,
+              ffmpegkit::FFmpegKitConfig::getLogRedirectionStrategy()));
+  addSessionToSessionHistory(session);
+  return session;
 }
 
-std::shared_ptr<ffmpegkit::FFmpegSession> ffmpegkit::FFmpegSession::create(const std::list<std::string>& arguments, FFmpegSessionCompleteCallback completeCallback) {
-    std::shared_ptr<ffmpegkit::FFmpegSession> session = std::static_pointer_cast<ffmpegkit::FFmpegSession>(std::make_shared<ffmpegkit::FFmpegSession::PublicFFmpegSession>(arguments, completeCallback, nullptr, nullptr, ffmpegkit::FFmpegKitConfig::getLogRedirectionStrategy()));
-    addSessionToSessionHistory(session);
-    return session;
+std::shared_ptr<ffmpegkit::FFmpegSession> ffmpegkit::FFmpegSession::create(
+    const std::list<std::string> &arguments,
+    FFmpegSessionCompleteCallback completeCallback) {
+  std::shared_ptr<ffmpegkit::FFmpegSession> session =
+      std::static_pointer_cast<ffmpegkit::FFmpegSession>(
+          std::make_shared<ffmpegkit::FFmpegSession::PublicFFmpegSession>(
+              arguments, completeCallback, nullptr, nullptr,
+              ffmpegkit::FFmpegKitConfig::getLogRedirectionStrategy()));
+  addSessionToSessionHistory(session);
+  return session;
 }
 
-std::shared_ptr<ffmpegkit::FFmpegSession> ffmpegkit::FFmpegSession::create(const std::list<std::string>& arguments, FFmpegSessionCompleteCallback completeCallback, ffmpegkit::LogCallback logCallback, ffmpegkit::StatisticsCallback statisticsCallback) {
-    std::shared_ptr<ffmpegkit::FFmpegSession> session = std::static_pointer_cast<ffmpegkit::FFmpegSession>(std::make_shared<ffmpegkit::FFmpegSession::PublicFFmpegSession>(arguments, completeCallback, logCallback, statisticsCallback, ffmpegkit::FFmpegKitConfig::getLogRedirectionStrategy()));
-    addSessionToSessionHistory(session);
-    return session;
+std::shared_ptr<ffmpegkit::FFmpegSession> ffmpegkit::FFmpegSession::create(
+    const std::list<std::string> &arguments,
+    FFmpegSessionCompleteCallback completeCallback,
+    ffmpegkit::LogCallback logCallback,
+    ffmpegkit::StatisticsCallback statisticsCallback) {
+  std::shared_ptr<ffmpegkit::FFmpegSession> session =
+      std::static_pointer_cast<ffmpegkit::FFmpegSession>(
+          std::make_shared<ffmpegkit::FFmpegSession::PublicFFmpegSession>(
+              arguments, completeCallback, logCallback, statisticsCallback,
+              ffmpegkit::FFmpegKitConfig::getLogRedirectionStrategy()));
+  addSessionToSessionHistory(session);
+  return session;
 }
 
-std::shared_ptr<ffmpegkit::FFmpegSession> ffmpegkit::FFmpegSession::create(const std::list<std::string>& arguments, FFmpegSessionCompleteCallback completeCallback, ffmpegkit::LogCallback logCallback, ffmpegkit::StatisticsCallback statisticsCallback, LogRedirectionStrategy logRedirectionStrategy) {
-    std::shared_ptr<ffmpegkit::FFmpegSession> session = std::static_pointer_cast<ffmpegkit::FFmpegSession>(std::make_shared<ffmpegkit::FFmpegSession::PublicFFmpegSession>(arguments, completeCallback, logCallback, statisticsCallback, logRedirectionStrategy));
-    addSessionToSessionHistory(session);
-    return session;
+std::shared_ptr<ffmpegkit::FFmpegSession> ffmpegkit::FFmpegSession::create(
+    const std::list<std::string> &arguments,
+    FFmpegSessionCompleteCallback completeCallback,
+    ffmpegkit::LogCallback logCallback,
+    ffmpegkit::StatisticsCallback statisticsCallback,
+    LogRedirectionStrategy logRedirectionStrategy) {
+  std::shared_ptr<ffmpegkit::FFmpegSession> session =
+      std::static_pointer_cast<ffmpegkit::FFmpegSession>(
+          std::make_shared<ffmpegkit::FFmpegSession::PublicFFmpegSession>(
+              arguments, completeCallback, logCallback, statisticsCallback,
+              logRedirectionStrategy));
+  addSessionToSessionHistory(session);
+  return session;
 }
 
-struct ffmpegkit::FFmpegSession::PublicFFmpegSession : public ffmpegkit::FFmpegSession {
-    PublicFFmpegSession(const std::list<std::string>& arguments, FFmpegSessionCompleteCallback completeCallback, ffmpegkit::LogCallback logCallback, ffmpegkit::StatisticsCallback statisticsCallback, LogRedirectionStrategy logRedirectionStrategy) :
-      FFmpegSession(arguments, completeCallback, logCallback, statisticsCallback, logRedirectionStrategy) {
-    }
+struct ffmpegkit::FFmpegSession::PublicFFmpegSession
+    : public ffmpegkit::FFmpegSession {
+  PublicFFmpegSession(const std::list<std::string> &arguments,
+                      FFmpegSessionCompleteCallback completeCallback,
+                      ffmpegkit::LogCallback logCallback,
+                      ffmpegkit::StatisticsCallback statisticsCallback,
+                      LogRedirectionStrategy logRedirectionStrategy)
+      : FFmpegSession(arguments, completeCallback, logCallback,
+                      statisticsCallback, logRedirectionStrategy) {}
 };
 
-ffmpegkit::FFmpegSession::FFmpegSession(const std::list<std::string>& arguments, FFmpegSessionCompleteCallback completeCallback, ffmpegkit::LogCallback logCallback, ffmpegkit::StatisticsCallback statisticsCallback, LogRedirectionStrategy logRedirectionStrategy) :
-    ffmpegkit::AbstractSession(arguments, logCallback, logRedirectionStrategy), _completeCallback{completeCallback}, _statisticsCallback{statisticsCallback}, _statistics{std::make_shared<std::list<std::shared_ptr<ffmpegkit::Statistics>>>()} {
+ffmpegkit::FFmpegSession::FFmpegSession(
+    const std::list<std::string> &arguments,
+    FFmpegSessionCompleteCallback completeCallback,
+    ffmpegkit::LogCallback logCallback,
+    ffmpegkit::StatisticsCallback statisticsCallback,
+    LogRedirectionStrategy logRedirectionStrategy)
+    : ffmpegkit::AbstractSession(arguments, logCallback,
+                                 logRedirectionStrategy),
+      _completeCallback{completeCallback},
+      _statisticsCallback{statisticsCallback},
+      _statistics{std::make_shared<
+          std::list<std::shared_ptr<ffmpegkit::Statistics>>>()} {}
+
+ffmpegkit::StatisticsCallback
+ffmpegkit::FFmpegSession::getStatisticsCallback() {
+  return _statisticsCallback;
 }
 
-ffmpegkit::StatisticsCallback ffmpegkit::FFmpegSession::getStatisticsCallback() {
-    return _statisticsCallback;
+ffmpegkit::FFmpegSessionCompleteCallback
+ffmpegkit::FFmpegSession::getCompleteCallback() {
+  return _completeCallback;
 }
 
-ffmpegkit::FFmpegSessionCompleteCallback ffmpegkit::FFmpegSession::getCompleteCallback() {
-    return _completeCallback;
+std::shared_ptr<std::list<std::shared_ptr<ffmpegkit::Statistics>>>
+ffmpegkit::FFmpegSession::getAllStatisticsWithTimeout(const int waitTimeout) {
+  this->waitForAsynchronousMessagesInTransmit(waitTimeout);
+
+  if (this->thereAreAsynchronousMessagesInTransmit()) {
+    std::cout
+        << "getAllStatisticsWithTimeout was called to return all statistics "
+           "but there are still statistics being transmitted for session id "
+        << this->getSessionId() << "." << std::endl;
+  }
+
+  return this->getStatistics();
 }
 
-std::shared_ptr<std::list<std::shared_ptr<ffmpegkit::Statistics>>> ffmpegkit::FFmpegSession::getAllStatisticsWithTimeout(const int waitTimeout) {
-    this->waitForAsynchronousMessagesInTransmit(waitTimeout);
-
-    if (this->thereAreAsynchronousMessagesInTransmit()) {
-        std::cout << "getAllStatisticsWithTimeout was called to return all statistics but there are still statistics being transmitted for session id " << this->getSessionId() << "." << std::endl;
-    }
-
-    return this->getStatistics();
+std::shared_ptr<std::list<std::shared_ptr<ffmpegkit::Statistics>>>
+ffmpegkit::FFmpegSession::getAllStatistics() {
+  return this->getAllStatisticsWithTimeout(
+      ffmpegkit::AbstractSession::
+          DefaultTimeoutForAsynchronousMessagesInTransmit);
 }
 
-std::shared_ptr<std::list<std::shared_ptr<ffmpegkit::Statistics>>> ffmpegkit::FFmpegSession::getAllStatistics() {
-    return this->getAllStatisticsWithTimeout(ffmpegkit::AbstractSession::DefaultTimeoutForAsynchronousMessagesInTransmit);
-}
-
-std::shared_ptr<std::list<std::shared_ptr<ffmpegkit::Statistics>>> ffmpegkit::FFmpegSession::getStatistics() {
-    std::lock_guard<std::mutex> lock(_stateMutex);
-    return std::make_shared<std::list<std::shared_ptr<ffmpegkit::Statistics>>>(*_statistics);
+std::shared_ptr<std::list<std::shared_ptr<ffmpegkit::Statistics>>>
+ffmpegkit::FFmpegSession::getStatistics() {
+  std::lock_guard<std::mutex> lock(_stateMutex);
+  return std::make_shared<std::list<std::shared_ptr<ffmpegkit::Statistics>>>(
+      *_statistics);
 }
 
 int64_t ffmpegkit::FFmpegSession::getStatisticsCount() {
-    std::lock_guard<std::mutex> lock(_stateMutex);
-    return _statistics->size();
+  std::lock_guard<std::mutex> lock(_stateMutex);
+  return _statistics->size();
 }
 
-std::shared_ptr<ffmpegkit::Statistics> ffmpegkit::FFmpegSession::getStatisticsAt(int64_t index) {
-    std::lock_guard<std::mutex> lock(_stateMutex);
-    if (index >= 0 && index < _statistics->size()) {
-        auto it = _statistics->begin();
-        std::advance(it, index);
-        return *it;
-    }
+std::shared_ptr<ffmpegkit::Statistics>
+ffmpegkit::FFmpegSession::getStatisticsAt(int64_t index) {
+  std::lock_guard<std::mutex> lock(_stateMutex);
+  if (index >= 0 && index < _statistics->size()) {
+    auto it = _statistics->begin();
+    std::advance(it, index);
+    return *it;
+  }
+  return nullptr;
+}
+
+std::shared_ptr<ffmpegkit::Statistics>
+ffmpegkit::FFmpegSession::getLastReceivedStatistics() {
+  std::lock_guard<std::mutex> lock(_stateMutex);
+  if (_statistics->size() > 0) {
+    return _statistics->back();
+  } else {
     return nullptr;
+  }
 }
 
-std::shared_ptr<ffmpegkit::Statistics> ffmpegkit::FFmpegSession::getLastReceivedStatistics() {
-    std::lock_guard<std::mutex> lock(_stateMutex);
-    if (_statistics->size() > 0) {
-        return _statistics->back();
-    } else {
-        return nullptr;
-    }
+void ffmpegkit::FFmpegSession::addStatistics(
+    const std::shared_ptr<ffmpegkit::Statistics> statistics) {
+  std::lock_guard<std::mutex> lock(_stateMutex);
+  _statistics->push_back(statistics);
 }
 
-void ffmpegkit::FFmpegSession::addStatistics(const std::shared_ptr<ffmpegkit::Statistics> statistics) {
-    std::lock_guard<std::mutex> lock(_stateMutex);
-    _statistics->push_back(statistics);
+bool ffmpegkit::FFmpegSession::isFFmpeg() const { return true; }
+
+bool ffmpegkit::FFmpegSession::isFFprobe() const { return false; }
+
+bool ffmpegkit::FFmpegSession::isFFplay() const { return false; }
+
+bool ffmpegkit::FFmpegSession::isMediaInformation() const { return false; }
+
+void ffmpegkit::FFmpegSession::setCompleteCallback(
+    const FFmpegSessionCompleteCallback completeCallback) {
+  std::lock_guard<std::mutex> lock(_stateMutex);
+  _completeCallback = completeCallback;
 }
 
-bool ffmpegkit::FFmpegSession::isFFmpeg() const {
-    return true;
-}
-
-bool ffmpegkit::FFmpegSession::isFFprobe() const {
-    return false;
-}
-
-bool ffmpegkit::FFmpegSession::isFFplay() const {
-    return false;
-}
-
-bool ffmpegkit::FFmpegSession::isMediaInformation() const {
-    return false;
+void ffmpegkit::FFmpegSession::setStatisticsCallback(
+    const StatisticsCallback statisticsCallback) {
+  std::lock_guard<std::mutex> lock(_stateMutex);
+  _statisticsCallback = statisticsCallback;
 }

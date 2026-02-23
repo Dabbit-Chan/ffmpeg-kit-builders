@@ -1215,3 +1215,35 @@ TEST(FFmpegKitTest, ConcurrentHandleRelease) {
     // If we reached here without crashing/hanging, the test passed
     SUCCEED();
 }
+
+TEST(FFmpegKitTest, RobustnessTest) {
+    // 1. Create a session and execute it to ensure it's in history
+    FFmpegSessionHandle session = ffmpeg_kit_create_session("-version");
+    ASSERT_NE(session, nullptr);
+    ffmpeg_kit_session_execute(session);
+    
+    // 2. Get session ID
+    int64_t id = ffmpeg_kit_session_get_session_id(session);
+    EXPECT_GT(id, 0);
+    
+    // 3. Release handle
+    ffmpeg_kit_handle_release(session);
+    
+    // 4. Try to use released handle (should NOT crash)
+    // It should return -1 or nullptr because the handle is no longer in g_active_handles
+    // and it's too large to be a "fake" ID.
+    EXPECT_EQ(ffmpeg_kit_session_get_session_id(session), -1);
+    EXPECT_EQ(ffmpeg_kit_session_get_output(session), nullptr);
+    
+    // 5. Try with "fake" handle (ID as pointer)
+    // This should work because get_ptr_internal now supports looking up by ID in history
+    void* fake_handle = (void*)(uintptr_t)id;
+    EXPECT_EQ(ffmpeg_kit_session_get_session_id(fake_handle), id);
+    
+    char* output = ffmpeg_kit_session_get_output(fake_handle);
+    EXPECT_NE(output, nullptr);
+    if (output) {
+        printf("Output from fake handle: %s\n", output);
+        free(output);
+    }
+}

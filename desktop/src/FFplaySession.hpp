@@ -219,6 +219,14 @@ public:
    */
   void cancel() override;
 
+  /**
+   * Sets the session specific complete callback.
+   *
+   * @param completeCallback session specific complete callback
+   */
+  void
+  setCompleteCallback(const FFplaySessionCompleteCallback completeCallback);
+
   virtual ~FFplaySession();
 
 private:

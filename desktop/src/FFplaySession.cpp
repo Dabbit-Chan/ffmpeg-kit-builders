@@ -72,11 +72,11 @@ std::shared_ptr<ffmpegkit::FFplaySession> ffmpegkit::FFplaySession::create(
 struct ffmpegkit::FFplaySession::PublicFFplaySession
     : public ffmpegkit::FFplaySession {
   PublicFFplaySession(const std::list<std::string> &arguments,
-                       const FFplaySessionCompleteCallback completeCallback,
-                       const ffmpegkit::LogCallback logCallback,
-                       const LogRedirectionStrategy logRedirectionStrategy)
+                      const FFplaySessionCompleteCallback completeCallback,
+                      const ffmpegkit::LogCallback logCallback,
+                      const LogRedirectionStrategy logRedirectionStrategy)
       : FFplaySession(arguments, completeCallback, logCallback,
-                       logRedirectionStrategy) {}
+                      logRedirectionStrategy) {}
 };
 
 ffmpegkit::FFplaySession::FFplaySession(
@@ -217,18 +217,20 @@ void ffmpegkit::FFplaySession::setContext(FFplayContext *context) {
 void ffmpegkit::FFplaySession::close() {
   if (_context != nullptr) {
     ffplay_stop(_context);
-    // Do not set _context to nullptr here immediately if we want to allow the thread to clear it, 
-    // but typically close() implies we detach. 
-    // However, if we set it to nullptr, executeFFplay won't be able to clear it (which is fine).
-    // But importantly, we MUST NOT free it.
+    // Do not set _context to nullptr here immediately if we want to allow the
+    // thread to clear it, but typically close() implies we detach. However, if
+    // we set it to nullptr, executeFFplay won't be able to clear it (which is
+    // fine). But importantly, we MUST NOT free it.
     _context = nullptr;
   }
 }
 
-void ffmpegkit::FFplaySession::cancel() {
-  close();
-}
+void ffmpegkit::FFplaySession::cancel() { close(); }
 
-ffmpegkit::FFplaySession::~FFplaySession() {
-  close();
+ffmpegkit::FFplaySession::~FFplaySession() { close(); }
+
+void ffmpegkit::FFplaySession::setCompleteCallback(
+    const FFplaySessionCompleteCallback completeCallback) {
+  std::lock_guard<std::mutex> lock(_stateMutex);
+  _completeCallback = completeCallback;
 }

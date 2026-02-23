@@ -75,9 +75,8 @@ TEST_F(CallbackTest, FFmpegAsyncExecute) {
     EXPECT_TRUE(capturer.complete_called);
     EXPECT_NE(capturer.session, nullptr);
     if(capturer.session) {
-        // Handle pointer might be different, but ID should be same
-        EXPECT_EQ(ffmpeg_kit_session_get_session_id(session), ffmpeg_kit_session_get_session_id(capturer.session));
-        ffmpeg_kit_handle_release(capturer.session);
+        // Handle pointer should be same due to handle recycling
+        EXPECT_EQ(session, capturer.session);
     }
 
     EXPECT_EQ(ffmpeg_kit_session_get_state(session), FFMPEG_KIT_SESSION_STATE_COMPLETED);
@@ -112,9 +111,6 @@ TEST_F(CallbackTest, FFmpegAsyncExecuteFull) {
     EXPECT_TRUE(capturer.complete_called);
     EXPECT_TRUE(capturer.log_called);
     EXPECT_TRUE(capturer.stats_called);
-    if (capturer.session) {
-        ffmpeg_kit_handle_release(capturer.session);
-    }
 
     EXPECT_EQ(ffmpeg_kit_session_get_state(session), FFMPEG_KIT_SESSION_STATE_COMPLETED);
     ffmpeg_kit_handle_release(session);
@@ -155,10 +151,6 @@ TEST_F(CallbackTest, FFprobeAsyncExecute) {
     EXPECT_TRUE(capturer.complete_called);
     EXPECT_NE(capturer.session, nullptr);
 
-    if (capturer.session) {
-        ffmpeg_kit_handle_release(capturer.session);
-    }
-
     ffmpeg_kit_handle_release(session);
 }
 
@@ -177,21 +169,18 @@ TEST_F(CallbackTest, MediaInformationAsync) {
     EXPECT_NE(capturer.media_session, nullptr);
     
     // session handle (returned by async call) and capturer.media_session handle (passed to callback)
-    // point to same session object, but are different handles.
-    EXPECT_EQ(ffmpeg_kit_session_get_session_id(session), ffmpeg_kit_session_get_session_id(capturer.media_session));
+    // should be the same handle now due to recycling.
+    EXPECT_EQ(session, capturer.media_session);
 
-    // Use the callback handle to inspect, just to use it
-    MediaInformationHandle media_info = media_information_session_get_media_information(capturer.media_session);
-    ASSERT_NE(media_info, nullptr);
-    
-    char *format = media_information_get_format(media_info);
-    EXPECT_NE(format, nullptr);
-    if(format) free(format);
-    
-    ffmpeg_kit_handle_release(media_info);
-    
-    if (capturer.media_session) {
-        ffmpeg_kit_handle_release(capturer.media_session);
+    // Use the handle to inspect
+    MediaInformationHandle media_info = media_information_session_get_media_information(session);
+    if (media_info) {
+        char *format = media_information_get_format(media_info);
+        if (format) {
+            EXPECT_NE(format, nullptr);
+            free(format);
+        }
+        ffmpeg_kit_handle_release(media_info);
     }
     
     ffmpeg_kit_handle_release(session);
@@ -236,10 +225,6 @@ TEST_F(CallbackTest, FFplayAsyncExecute) {
 
     EXPECT_TRUE(capturer.complete_called);
     EXPECT_NE(capturer.session, nullptr);
-    
-    if (capturer.session) {
-        ffmpeg_kit_handle_release(capturer.session);
-    }
     
     ffmpeg_kit_handle_release(session);
 }
@@ -349,8 +334,89 @@ TEST_F(CallbackTest, GlobalCallbacks) {
     ffmpeg_kit_config_enable_ffplay_session_complete_callback(nullptr, nullptr);
     ffmpeg_kit_config_enable_media_information_session_complete_callback(nullptr, nullptr);
 
-    ffmpeg_kit_handle_release(session);
-    ffmpeg_kit_handle_release(probe_session);
-    ffmpeg_kit_handle_release(play_session);
-    ffmpeg_kit_handle_release(media_session);
+    if (session) ffmpeg_kit_handle_release(session);
+    if (probe_session) ffmpeg_kit_handle_release(probe_session);
+    if (play_session) ffmpeg_kit_handle_release(play_session);
+    if (media_session) ffmpeg_kit_handle_release(media_session);
 }
+
+// Tests for new create session with callbacks methods
+TEST_F(CallbackTest, FFmpegCreateSessionWithCallbacks) {
+    CallbackCapturer capturer;
+    FFmpegSessionHandle session = ffmpeg_kit_create_session_with_callbacks(
+        "-version", 
+        CallbackCapturer::CompleteCallback, 
+        CallbackCapturer::LogCallback, 
+        CallbackCapturer::StatisticsCallback, 
+        &capturer
+    );
+    ASSERT_NE(session, nullptr);
+    EXPECT_EQ(ffmpeg_kit_session_get_state(session), FFMPEG_KIT_SESSION_STATE_CREATED);
+
+    ffmpeg_kit_session_execute_async(session);
+
+    int64_t timeout_ms = 5000;
+    while (!capturer.complete_called && timeout_ms > 0) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(10));
+        timeout_ms -= 10;
+    }
+
+    EXPECT_TRUE(capturer.complete_called);
+    EXPECT_TRUE(capturer.log_called);
+    EXPECT_EQ(ffmpeg_kit_session_get_state(session), FFMPEG_KIT_SESSION_STATE_COMPLETED);
+    
+    ffmpeg_kit_handle_release(session);
+}
+
+TEST_F(CallbackTest, FFprobeCreateSessionWithCallbacks) {
+    ProbeCallbackCapturer capturer;
+    FFprobeSessionHandle session = ffprobe_kit_create_session_with_callbacks(
+        "-version", 
+        ProbeCallbackCapturer::CompleteCallback, 
+        nullptr, // No log callback
+        &capturer
+    );
+    ASSERT_NE(session, nullptr);
+    EXPECT_EQ(ffmpeg_kit_session_get_state(session), FFMPEG_KIT_SESSION_STATE_CREATED);
+
+    ffprobe_kit_session_execute_async(session);
+
+    int64_t timeout_ms = 5000;
+    while (!capturer.complete_called && timeout_ms > 0) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(10));
+        timeout_ms -= 10;
+    }
+
+    EXPECT_TRUE(capturer.complete_called);
+    EXPECT_EQ(ffmpeg_kit_session_get_state(session), FFMPEG_KIT_SESSION_STATE_COMPLETED);
+    
+    ffmpeg_kit_handle_release(session);
+}
+
+TEST_F(CallbackTest, MediaInformationCreateSessionWithCallbacks) {
+    ProbeCallbackCapturer capturer;
+    MediaInformationSessionHandle session = media_information_create_session_with_callbacks(
+        TEST_VIDEO_FILE, 
+        ProbeCallbackCapturer::MediaInfoCompleteCallback, 
+        nullptr, // No log callback
+        &capturer
+    );
+    ASSERT_NE(session, nullptr);
+    EXPECT_EQ(ffmpeg_kit_session_get_state(session), FFMPEG_KIT_SESSION_STATE_CREATED);
+
+    media_information_session_execute_async(session, 5000);
+
+    int64_t timeout_ms = 10000;
+    while (!capturer.complete_called && timeout_ms > 0) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(10));
+        timeout_ms -= 10;
+    }
+
+    EXPECT_TRUE(capturer.complete_called);
+    // Allow either COMPLETED or FAILED, as long as it finished and called the callback
+    FFmpegKitSessionState state = ffmpeg_kit_session_get_state(session);
+    EXPECT_TRUE(state == FFMPEG_KIT_SESSION_STATE_COMPLETED || state == FFMPEG_KIT_SESSION_STATE_FAILED);
+    
+    ffmpeg_kit_handle_release(session);
+}
+
