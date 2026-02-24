@@ -1,5 +1,11 @@
 # FFmpegKit Changelog
 
+## Version 0.8.2
+
+- **MediaInformation Improvements**: Refactored `ffprobe_kit_get_media_information_async` in the C wrapper to use the specialized `FFprobeKit::getMediaInformationAsync` helper, improving implementation clarity and consistency.
+- **Enhanced Test Coverage**: Added comprehensive verification for `media_information_get_all_properties_json` in both `CallbackTest` and `FFmpegKitTest`, ensuring the full metadata retrieval pipeline is functional.
+- **Bug Fix**: Corrected `media_information_create_session_with_callbacks` test case to properly provide a full `ffprobe` command string instead of just a file path, fixing an initialization failure in the test environment.
+
 ## Version 0.8.1
 
 - **Race Condition Fixes**: Added `std::lock_guard<std::mutex>` protection to `getLogCallback()`, `getStatisticsCallback()`, and `getCompleteCallback()` across all session types (`AbstractSession`, `FFmpegSession`, `FFprobeSession`, `FFplaySession`, `MediaInformationSession`) to eliminate data races on callback accessor reads.

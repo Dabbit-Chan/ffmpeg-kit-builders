@@ -391,7 +391,14 @@ TEST(FFmpegKitTest, MediaInformationSessionAPIs) {
     std::this_thread::sleep_for(std::chrono::seconds(2));
     printf("Media Information Session State: %d\n", ffmpeg_kit_session_get_state(session));
     EXPECT_EQ(ffmpeg_kit_session_get_state(session), FFMPEG_KIT_SESSION_STATE_COMPLETED);
-
+    MediaInformationHandle info = media_information_session_get_media_information(session);
+    printf("Media Information: %p\n", info);
+    ASSERT_NE(info, nullptr);
+    char* all_props = media_information_get_all_properties_json(info);
+    printf("All Props: %s\n", all_props);
+    EXPECT_NE(all_props, nullptr);
+    if (all_props) free(all_props);
+    ffmpeg_kit_handle_release(info);
     ffmpeg_kit_handle_release(session);
 }
 

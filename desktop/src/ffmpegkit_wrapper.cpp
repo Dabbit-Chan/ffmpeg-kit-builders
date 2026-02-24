@@ -748,17 +748,16 @@ MediaInformationSessionHandle ffprobe_kit_get_media_information_async(
   try {
     if (!path)
       return nullptr;
-    auto session = MediaInformationSession::create(
-        FFmpegKitConfig::parseArguments(std::string(path)));
+    auto session =
+        FFprobeKit::getMediaInformationAsync(std::string(path), nullptr);
     MediaInformationSessionHandle handle = create_handle(session);
-    auto lambda = [complete_cb, user_data,
-                   handle](std::shared_ptr<MediaInformationSession> s) {
-      if (complete_cb) {
+    if (complete_cb) {
+      auto lambda = [complete_cb, user_data,
+                     handle](std::shared_ptr<MediaInformationSession> s) {
         complete_cb(handle, user_data);
-      }
-    };
-    session->setCompleteCallback(lambda);
-    FFmpegKitConfig::asyncGetMediaInformationExecute(session, 5000);
+      };
+      session->setCompleteCallback(lambda);
+    }
     return handle;
   } catch (const std::exception &e) {
     // Handle or log the exception

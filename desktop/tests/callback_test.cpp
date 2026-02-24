@@ -177,6 +177,12 @@ TEST_F(CallbackTest, MediaInformationAsync) {
 
     // Use the handle to inspect
     MediaInformationHandle media_info = media_information_session_get_media_information(session);
+    printf("Media Information: %p\n", media_info);
+    ASSERT_NE(media_info, nullptr);
+    char* all_props = media_information_get_all_properties_json(media_info);
+    printf("All Props: %s\n", all_props);
+    EXPECT_NE(all_props, nullptr);
+
     if (media_info) {
         char *format = media_information_get_format(media_info);
         if (format) {
@@ -185,7 +191,7 @@ TEST_F(CallbackTest, MediaInformationAsync) {
         }
         ffmpeg_kit_handle_release(media_info);
     }
-    
+    if (all_props) free(all_props);
     ffmpeg_kit_handle_release(session);
 }
 
@@ -401,8 +407,10 @@ TEST_F(CallbackTest, FFprobeCreateSessionWithCallbacks) {
 
 TEST_F(CallbackTest, MediaInformationCreateSessionWithCallbacks) {
     ProbeCallbackCapturer capturer;
+    char command[512];
+    snprintf(command, sizeof(command), "-v error -hide_banner -print_format json -show_format -show_streams -show_chapters -i %s", TEST_VIDEO_FILE);
     MediaInformationSessionHandle session = media_information_create_session_with_callbacks(
-        TEST_VIDEO_FILE, 
+        command, 
         ProbeCallbackCapturer::MediaInfoCompleteCallback, 
         nullptr, // No log callback
         &capturer
