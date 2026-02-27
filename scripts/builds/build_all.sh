@@ -130,20 +130,18 @@ if [[ -n "$deps" ]]; then
   BUILD_STEPS+=("./scripts/builds/64-full.sh|1 gfy${p}")
 fi
 
+# Debug builds
+BUILD_STEPS+=(
+  "./scripts/builds/64-debug.sh|23 gfy${p}"
+  "./scripts/builds/64-debug.sh|23 fy${p}"
+)
+
 # Base builds
 BUILD_STEPS+=(
   "./scripts/builds/64-base.sh|23 gfy${p}"
   "./scripts/builds/64-base.sh|23 fy${p}"
   "./scripts/builds/64-base.sh|23 sgfy${p}"
   "./scripts/builds/64-base.sh|23 sfy${p}"
-)
-
-# Full builds
-BUILD_STEPS+=(
-  "./scripts/builds/64-full.sh|23 gfy${p}"
-  "./scripts/builds/64-full.sh|23 fy${p}"
-  "./scripts/builds/64-full.sh|23 sgfy${p}"
-  "./scripts/builds/64-full.sh|23 sfy${p}"
 )
 
 # Audio builds
@@ -176,6 +174,14 @@ BUILD_STEPS+=(
   "./scripts/builds/64-video-hw.sh|23 fy${p}"
   "./scripts/builds/64-video-hw.sh|23 sgfy${p}"
   "./scripts/builds/64-video-hw.sh|23 sfy${p}"
+)
+
+# Full builds
+BUILD_STEPS+=(
+  "./scripts/builds/64-full.sh|23 gfy${p}"
+  "./scripts/builds/64-full.sh|23 fy${p}"
+  "./scripts/builds/64-full.sh|23 sgfy${p}"
+  "./scripts/builds/64-full.sh|23 sfy${p}"
 )
 
 # Calculate progress
