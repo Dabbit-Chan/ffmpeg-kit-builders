@@ -369,6 +369,7 @@ setup_build_environment() {
     case "$host_platform" in
         "windows") setup_windows_environment ;;
         "linux") setup_linux_environment ;;
+        "android") setup_android_environment ;;
         *) exit_message 1 "setup_build_environment: Unknown host platform '$host_platform'" ;;
     esac
     create_dir "$src_dir"
@@ -405,8 +406,8 @@ setup_build_environment() {
 
 calculate_bits_target() {
     case "$host_arch" in
-        "i686") echo "32" ;;
-        "x86_64") echo "64" ;;
+        "i686"|"armv7a") echo "32" ;;
+        "x86_64"|"aarch64") echo "64" ;;
         *) exit_message 1 "calculate_bits_target: Unknown host arch '$host_arch'" ;;
     esac
 }
@@ -456,7 +457,7 @@ setup_windows_environment() {
     export CXXFLAGS="$windows_cxxflags"
     export windows_cppflags="$original_cppflags -U_FORTIFY_SOURCE -D_FORTIFY_SOURCE=3 -I${dependency_install_prefix}/include "
     export CPPFLAGS="$windows_cppflags"
-    export windows_ldflags="$original_ldflags -L${dependency_install_prefix}/lib "
+    export windows_ldflags="-static-libgcc $original_ldflags -L${dependency_install_prefix}/lib "
     export LDFLAGS="$windows_ldflags"
     # disable windres by default
     cross_windres
@@ -478,21 +479,11 @@ setup_linux_environment() {
     export CPPFLAGS="$linux_cppflags"
     export linux_cxxflags="$original_cxxflags -I${dependency_install_prefix}/include "
     export CXXFLAGS="$linux_cxxflags"
-    export linux_ldflags="$original_ldflags -L${dependency_install_prefix}/lib -Wl,-rpath,${dependency_install_prefix}/lib "
+    export linux_ldflags="-static-libgcc $original_ldflags -L${dependency_install_prefix}/lib -Wl,-rpath,${dependency_install_prefix}/lib "
     export LDFLAGS="$linux_ldflags"
     export LD_LIBRARY_PATH="${dependency_install_prefix}/lib:$LD_LIBRARY_PATH"
     
     source /opt/rh/gcc-toolset-14/enable
-
-    # export toolchain_root_dir="/opt/rh/gcc-toolset-14/root/usr/"
-    # export toolchain_bin_path="/opt/rh/gcc-toolset-14/root/usr/bin/"
-    # export CC="${toolchain_bin_path}gcc"
-    # export CXX="${toolchain_bin_path}g++"
-    # export AR="${toolchain_bin_path}ar"
-    # export AS="${toolchain_bin_path}as"
-    # export RANLIB="${toolchain_bin_path}ranlib"
-    # export LD="${toolchain_bin_path}ld"
-    # export STRIP="${toolchain_bin_path}strip"
     
     export NASM=nasm
 
@@ -500,6 +491,116 @@ setup_linux_environment() {
     create_dir "$work_dir/pkgconfig"
     create_dir "$dependency_install_prefix/{bin,lib/pkgconfig,include,usr/include}"
 }
+
+setup_android_environment() {
+    export PATCHDIR="$SCRIPTDIR/android/patches"
+
+    # Detect Android SDK/NDK
+    if [[ -z "$ANDROID_HOME" ]]; then
+        export ANDROID_HOME="/usr/local/android-sdk"
+    fi
+
+    # Try to find NDK
+    if [[ -z "$ANDROID_NDK_ROOT" ]]; then
+        if [[ -d "$ANDROID_HOME/ndk-bundle" ]]; then
+            export ANDROID_NDK_ROOT="$ANDROID_HOME/ndk-bundle"
+        else
+            local latest_ndk=$(ls -v "$ANDROID_HOME/ndk" 2>/dev/null | tail -n 1)
+            if [[ -n "$latest_ndk" ]]; then
+                export ANDROID_NDK_ROOT="$ANDROID_HOME/ndk/$latest_ndk"
+            fi
+        fi
+    fi
+
+    if [[ -z "$ANDROID_NDK_ROOT" ]] || [[ ! -d "$ANDROID_NDK_ROOT" ]]; then
+        echo "WARNING: Android NDK not found in $ANDROID_HOME/ndk. Attempting to install latest NDK..."
+        yes | sdkmanager "ndk-bundle"
+        export ANDROID_NDK_ROOT="$ANDROID_HOME/ndk-bundle"
+    fi
+
+    export ANDROID_API_LEVEL="${ANDROID_API_LEVEL:-24}"
+
+    # Map host_arch to Android target triples
+    case "$host_arch" in
+        "x86_64")
+            export host_target="x86_64-linux-android"
+            export rust_target="x86_64-linux-android"
+            ;;
+        "i686")
+            export host_target="i686-linux-android"
+            export rust_target="i686-linux-android"
+            ;;
+        "aarch64"|"arm64")
+            export host_arch="aarch64"
+            export host_target="aarch64-linux-android"
+            export rust_target="aarch64-linux-android"
+            ;;
+        "armv7a"|"arm")
+            export host_arch="armv7a"
+            export host_target="armv7a-linux-androideabi"
+            export rust_target="armv7-linux-androideabi"
+            ;;
+        *)
+            exit_message 1 "setup_android_environment: Unsupported host arch '$host_arch' for Android"
+            ;;
+    esac
+
+    export dependency_install_prefix="$work_dir/libraries"
+    export install_pkgconfig_dir="${dependency_install_prefix}/lib/pkgconfig"
+
+    local os_type=$(uname -s | tr '[:upper:]' '[:lower:]')
+    export toolchain_bin_path="$ANDROID_NDK_ROOT/toolchains/llvm/prebuilt/${os_type}-x86_64/bin"
+
+    # For Android, cross_prefix points to the clang wrapper which includes the API level
+    export clang_target="$host_target"
+    if [[ "$host_arch" == "armv7a" ]]; then
+        export clang_target="armv7a-linux-androideabi"
+    fi
+    export cross_prefix="${toolchain_bin_path}/${clang_target}${ANDROID_API_LEVEL}-"
+
+    export PKG_CONFIG_PATH="$install_pkgconfig_dir:$ffmpeg_install_prefix/lib/pkgconfig"
+    export PATH="$toolchain_bin_path:$original_path:$ffmpeg_install_prefix/bin"
+
+    create_dir "$install_pkgconfig_dir"
+    create_dir "$work_dir/pkgconfig"
+    create_dir "$dependency_install_prefix/{bin,lib/pkgconfig,include,usr/include}"
+
+    reset_cross_vars
+    # Override standard GCC/G++ with Clang wrappers
+    export CC="${toolchain_bin_path}/${clang_target}${ANDROID_API_LEVEL}-clang"
+    export CXX="${toolchain_bin_path}/${clang_target}${ANDROID_API_LEVEL}-clang++"
+    export AR="${toolchain_bin_path}/llvm-ar"
+    export AS="${toolchain_bin_path}/llvm-as"
+    export NM="${toolchain_bin_path}/llvm-nm"
+    export RANLIB="${toolchain_bin_path}/llvm-ranlib"
+    export STRIP="${toolchain_bin_path}/llvm-strip"
+    export LD="${toolchain_bin_path}/ld.lld"
+
+    export PREFIX="$dependency_install_prefix"
+    export build_cross_compile=y
+
+    export make_prefix_options="--cc=${CC} \
+--ar=${AR} \
+--as=${AS} \
+--nm=${NM} \
+--ranlib=${RANLIB} \
+--ld=${LD} \
+--strip=${STRIP} \
+--cxx=${CXX}"
+
+    export android_cflags="$original_cflags -Dnl_langinfo\(x\)=NULL -fPIC -Wno-error=implicit-function-declaration -Wno-error=int-conversion -I${dependency_install_prefix}/include"
+    [[ "$host_arch" == "armv7a" ]] && android_cflags+=" -march=armv7-a -mfloat-abi=softfp -mfpu=vfpv3-d16 "
+    
+    export CFLAGS="$android_cflags"
+    export android_cxxflags="$original_cxxflags $android_cflags"
+    export CXXFLAGS="$android_cxxflags"
+    export android_cppflags="$original_cppflags -I${dependency_install_prefix}/include"
+    export CPPFLAGS="$android_cppflags"
+    export android_ldflags="$original_ldflags -L${dependency_install_prefix}/lib "
+    export LDFLAGS="$android_ldflags"
+}
+
+
 
 iswindows() {
   if [[ "$host_platform" == "windows" ]]; then
@@ -510,6 +611,13 @@ iswindows() {
 
 islinux() {
   if [[ "$host_platform" == "linux" ]]; then
+    return 0
+  fi
+  return 1
+}
+
+isandroid() {
+  if [[ "$host_platform" == "android" ]]; then
     return 0
   fi
   return 1
@@ -559,17 +667,28 @@ clear_cross_vars() {
 }
 
 reset_cross_vars() {
-  export CROSS_COMPILE="$host_target-"
-  export CC=${cross_prefix}gcc
-  export CXX=${cross_prefix}g++
-  export AR=${cross_prefix}ar
-  export AS=${cross_prefix}as
-  export RANLIB=${cross_prefix}ranlib
-  export LD=${cross_prefix}ld
-  export STRIP=${cross_prefix}strip
-  export WINDRES="/usr/bin/true"
-  export RC="/usr/bin/true"
-  export CMAKE_OPTS="-DCMAKE_RC_COMPILER=/bin/false"
+  if iswindows; then
+    export CROSS_COMPILE="$host_target-"
+    export CC=${cross_prefix}gcc
+    export CXX=${cross_prefix}g++
+    export AR=${cross_prefix}ar
+    export AS=${cross_prefix}as
+    export RANLIB=${cross_prefix}ranlib
+    export LD=${cross_prefix}ld
+    export STRIP=${cross_prefix}strip
+    export WINDRES="/usr/bin/true"
+    export RC="/usr/bin/true"
+    export CMAKE_OPTS="-DCMAKE_RC_COMPILER=/bin/false"
+  elif isandroid; then
+    export CC="${toolchain_bin_path}/${clang_target}${ANDROID_API_LEVEL}-clang"
+    export CXX="${toolchain_bin_path}/${clang_target}${ANDROID_API_LEVEL}-clang++"
+    export AR="${toolchain_bin_path}/llvm-ar"
+    export AS="${toolchain_bin_path}/llvm-as"
+    export NM="${toolchain_bin_path}/llvm-nm"
+    export RANLIB="${toolchain_bin_path}/llvm-ranlib"
+    export STRIP="${toolchain_bin_path}/llvm-strip"
+    export LD="${toolchain_bin_path}/ld.lld"
+  fi
 }
 
 reset_cflags() {
@@ -577,6 +696,8 @@ reset_cflags() {
     export CFLAGS="$windows_cflags"
   elif islinux; then
     export CFLAGS="$linux_cflags"
+  elif isandroid; then
+    export CFLAGS="$android_cflags"
   elif [[ -n "$original_cflags" ]]; then
     export CFLAGS="$original_cflags"
   else
@@ -589,6 +710,8 @@ reset_cxxflags() {
     export CXXFLAGS="$windows_cxxflags"
   elif islinux; then
     export CXXFLAGS="$linux_cxxflags"
+  elif isandroid; then
+    export CXXFLAGS="$android_cxxflags"
   elif [[ -n "$original_cxxflags" ]]; then
     export CXXFLAGS="$original_cxxflags"
   else
@@ -601,6 +724,8 @@ reset_cppflags() {
     export CPPFLAGS="$windows_cppflags"
   elif islinux; then
     export CPPFLAGS="$linux_cppflags"
+  elif isandroid; then
+    export CPPFLAGS="$android_cppflags"
   elif [[ -n "$original_cppflags" ]]; then
     export CPPFLAGS="$original_cppflags"
   else
@@ -613,6 +738,8 @@ reset_ldflags() {
     export LDFLAGS="$windows_ldflags"
   elif islinux; then
     export LDFLAGS="$linux_ldflags"
+  elif isandroid; then
+    export LDFLAGS="$android_ldflags"
   elif [[ -n "$original_ldflags" ]]; then
     export LDFLAGS="$original_ldflags"
   else
@@ -2426,7 +2553,7 @@ generic_cmake() {
   if iswindows; then
   [[ "$extra_args" != *"-DENABLE_STATIC_RUNTIME"* ]] && extra_args+=" -DENABLE_STATIC_RUNTIME=1"
   [[ "$extra_args" != *"-DCMAKE_CROSSCOMPILING"* ]] && extra_args+=" -DCMAKE_CROSSCOMPILING=1"
-  [[ "$extra_args" != *"-DCMAKE_TOOLCHAIN_FILE"* ]] && extra_args+=" -DCMAKE_TOOLCHAIN_FILE=$(get_generic_windows_cmake_toolchain)"
+  [[ "$extra_args" != *"-DCMAKE_TOOLCHAIN_FILE"* ]] && extra_args+=" -DCMAKE_TOOLCHAIN_FILE=$(get_generic_cmake_toolchain)"
   fi
 	[[ $extra_args != *"-DCMAKE_FIND_ROOT_PATH"* ]] && extra_args+=" -DCMAKE_FIND_ROOT_PATH=$dependency_install_prefix"
   [[ $extra_args != *"-DCMAKE_FIND_ROOT_PATH_MODE_PROGRAM"* ]] && extra_args+=" -DCMAKE_FIND_ROOT_PATH_MODE_PROGRAM=NEVER"
@@ -2486,7 +2613,7 @@ do_meson() {
 	if [[ -z "${input_configure[*]}" || "${input_configure[*]}" == "setup build" ]]; then
     echo "INFO: Adding cross file to meson = $build_cross_compile" >>"$LOG_FILE"
     if truthy "$build_cross_compile"; then
-      local cross_file="$(get_generic_windows_meson_cross_file)"
+      local cross_file="$(get_generic_meson_cross_file)"
       configure_name+=("setup")
       configure_name+=("--cross-file $cross_file")
       configure_name+=("build")
@@ -3137,7 +3264,7 @@ run_valid_function() {
   local arg=()
   arg+=("$@")
   reset_allflags
-  export LDFLAGS=" $LDFLAGS -static-libgcc -static-libstdc++ "
+  export LDFLAGS=" $LDFLAGS -static-libstdc++ "
   iswindows && export LDFLAGS=" -static $LDFLAGS"
 	if [[ -n "$step" ]]; then
     if [[ "$step" == build_* ]] && check_if_built "$step"; then
@@ -3194,15 +3321,22 @@ configure_ffmpeg() {
     export LD=${cross_prefix}gcc # ld weirdness with windows
 	  init_options+=" --target-os=mingw32"
     init_options+=" --enable-w32threads"
+  elif isandroid; then
+	  init_options+=" --target-os=android"
+    init_options+=" --enable-jni"
+    init_options+=" --enable-pthreads"
   else
     init_options+=" --target-os=$host_platform"
     init_options+=" --enable-pthreads"
   fi
-  if [[ $bits_target == 64 ]]; then
-    export ARCH=amd64
-  else
-    export ARCH=x86
-  fi
+
+  case "$host_arch" in
+    "x86_64") export ARCH=x86_64 ;;
+    "i686") export ARCH=x86 ;;
+    "aarch64") export ARCH=aarch64 ;;
+    "armv7a") export ARCH=arm ;;
+    *) export ARCH=$host_arch ;;
+  esac
   init_options+=" --pkg-config=pkg-config"
 	init_options+=" --pkg-config-flags=--static"
 	init_options+=" --enable-version3"
@@ -3261,7 +3395,7 @@ configure_ffmpeg() {
   #------------------------------------------------------------------------------     
   # ----------------------------- android features ------------------------------     
   #------------------------------------------------------------------------------      
-  if [[ $host_platform == "android" ]]; then
+  if isandroid; then
   truthy "$disable_jni" && config_options+=" --disable-jni"                           # enable JNI support [no]
   truthy "$disable_mediacodec" && config_options+=" --disable-mediacodec"             # enable Android MediaCodec support [no]
   fi
@@ -3313,10 +3447,14 @@ configure_ffmpeg() {
   truthy "$enable_libmfx" && config_options+=" --enable-libmfx"                       # enable Intel MediaSDK (AKA Quick Sync Video) code via libmfx [no]
   truthy "$enable_libvpl" && config_options+=" --enable-libvpl"                       # enable Intel oneVPL code via libvpl if libmfx is not used [no]
   truthy "$enable_vulkan_static" && config_options+=" --enable-vulkan-static"         # enable statically link to libvulkan [no]
+  if iswindows || islinux; then
   truthy "$enable_cuvid" && config_options+=" --enable-cuvid"                         # enable Nvidia CUVID support [autodetect]
   truthy "$enable_ffnvcodec" && config_options+=" --enable-ffnvcodec"                 # enable dynamically linked Nvidia code [autodetect]
   truthy "$enable_nvdec" && config_options+=" --enable-nvdec"                         # enable Nvidia video decoding acceleration (via hwaccel) [autodetect]
   truthy "$enable_nvenc" && config_options+=" --enable-nvenc"                         # enable Nvidia video encoding code [autodetect]
+  truthy "$enable_libopenvino" && config_options+=" --enable-libopenvino"             # enable OpenVINO as a DNN module backend for DNN based filters like dnn_processing [no]
+  truthy "$enable_libtensorflow" && config_options+=" --enable-libtensorflow"         # enable TensorFlow as a DNN module backend for DNN based filters like sr [no]
+  fi
   if islinux; then
   truthy "$enable_cuda_nvcc" && config_options+=" --enable-cuda-nvcc"
   truthy "$enable_cuda_nvcc" && config_options+=" \
@@ -3396,7 +3534,6 @@ configure_ffmpeg() {
   truthy "$enable_libopenh264" && config_options+=" --enable-libopenh264"             # enable H.264 encoding via OpenH264 [no]
   truthy "$enable_libopenjpeg" && config_options+=" --enable-libopenjpeg"             # enable JPEG 2000 encoding via OpenJPEG [no]
   truthy "$enable_libopenmpt" && config_options+=" --enable-libopenmpt"               # enable decoding tracked files via libopenmpt [no]
-  truthy "$enable_libopenvino" && config_options+=" --enable-libopenvino"             # enable OpenVINO as a DNN module backend for DNN based filters like dnn_processing [no]
   truthy "$enable_libopus" && config_options+=" --enable-libopus"                     # enable Opus de/encoding via libopus [no]
   truthy "$enable_libplacebo" && config_options+=" --enable-libplacebo"               # enable libplacebo library [no]
   truthy "$enable_libqrencode" && config_options+=" --enable-libqrencode"             # enable QR encode generation via libqrencode [no]
@@ -3415,7 +3552,6 @@ configure_ffmpeg() {
   truthy "$enable_libsrt" && config_options+=" --enable-libsrt"                       # enable Haivision SRT protocol via libsrt [no]
   truthy "$enable_libssh" && config_options+=" --enable-libssh"                       # enable SFTP protocol via libssh [no]
   truthy "$enable_libsvtav1" && config_options+=" --enable-libsvtav1"                 # enable AV1 encoding via SVT [no]
-  truthy "$enable_libtensorflow" && config_options+=" --enable-libtensorflow"         # enable TensorFlow as a DNN module backend for DNN based filters like sr [no]
   truthy "$enable_libtesseract" && config_options+=" --enable-libtesseract \
    --extra-libs=\"-ltesseract -lleptonica -lz -larchive -ltiff -lpng16 \
    -ljpeg -lgif -lwebpmux -lwebp -lopenjp2 -ljbig -lLerc -lsharpyuv \
@@ -3448,6 +3584,8 @@ configure_ffmpeg() {
   truthy "$enable_openal" && config_options+=" --enable-openal"                       # enable OpenAL 1.1 capture support [no]
   truthy "$enable_opencl" && config_options+=" --enable-opencl"                       # enable OpenCL processing [no]
   truthy "$enable_opengl" && config_options+=" --enable-opengl"                       # enable OpenGL rendering [no]
+  truthy "$enable_opengl" && isandroid && config_options+=" \
+  --enable-gles --extra-libs=\"-lGLESv2 -lEGL -landroid\""                            # enable EGL and GLES support [no]
   truthy "$enable_openssl" && config_options+=" --enable-openssl"                     # enable openssl, needed for https support if gnutls, libtls or mbedtls is not used [no]
   truthy "$enable_pocketsphinx" && config_options+=" --enable-pocketsphinx"           # enable PocketSphinx, needed for asr filter [no]
   truthy "$enable_vapoursynth" && config_options+=" --enable-vapoursynth"             # enable VapourSynth demuxer [no]
@@ -4094,7 +4232,7 @@ pick_host_platform() {
     return 0
   fi
   export host_platform=${1:-host_platform}
-	while [[ ! "${host_platform,,}" =~ ^([1-3]|linux|windows)$ ]]; do
+	while [[ ! "${host_platform,,}" =~ ^([1-4]|linux|windows|android)$ ]]; do
 		# shellcheck disable=SC2199
 		if [[ -n "${unknown_opts[@]}" ]]; then
 			echo -e -n 'Unknown option(s)'
@@ -4108,9 +4246,10 @@ pick_host_platform() {
 Which host platform are you trying to build, update, or clean for?
   1. Linux [default]
   2. Windows
-  3. Exit
+  3. Android
+  4. Exit
 EOF
-		echo -e -n 'Input your choice [1-3]: '
+		echo -e -n 'Input your choice [1-4]: '
 		read -r host_platform
 	done
   if [[ -z "$host_platform" ]] && truthy "$accept_defaults"; then
@@ -4128,7 +4267,12 @@ EOF
   echo "$host_platform"
   return 0
   ;;
-	3|exit)
+	3|android) export host_platform="android"
+  apply_preset "$CONFIG_ANDROID"
+  echo "$host_platform"
+  return 0
+  ;;
+	4|exit)
 		exit_message 0 "user picked exit"
 		;;
 	*)
@@ -4145,7 +4289,7 @@ pick_host_arch() {
     return 0
   fi
   export host_arch=${1:-host_arch}
-	while [[ ! "${host_arch,,}" =~ ^([1-3]|i686|x86_64|x86|x64|x32)$ ]]; do
+	while [[ ! "${host_arch,,}" =~ ^([1-5]|i686|x86_64|x86|x64|x32|aarch64|arm64|armv7a|arm)$ ]]; do
 		# shellcheck disable=SC2199
 		if [[ -n "${unknown_opts[@]}" ]]; then
 			echo -e -n 'Unknown option(s)'
@@ -4157,11 +4301,13 @@ pick_host_arch() {
 		fi
 		cat <<'EOF'
 Which host platform are you trying to build, update, or clean for?
-  1. x86_64 (64-bit) [default]
-  2. i686 (32-bit)
-  3. Exit
+  1. x86_64 (64-bit AMD/Intel) [default]
+  2. i686 (32-bit AMD/Intel)
+  3. aarch64 (64-bit ARM)
+  4. armv7a (32-bit ARM)
+  5. Exit
 EOF
-		echo -e -n 'Input your choice [1-3]: '
+		echo -e -n 'Input your choice [1-5]: '
 		read -r host_arch
 	done
   if [[ -z "$host_arch" ]] && truthy "$accept_defaults"; then
@@ -4177,7 +4323,15 @@ EOF
   echo "$host_arch"
   return 0
   ;;
-	3|exit)
+	3|aarch64|arm64) export host_arch="aarch64"
+  echo "$host_arch"
+  return 0
+  ;;
+	4|armv7a|arm) export host_arch="armv7a"
+  echo "$host_arch"
+  return 0
+  ;;
+	5|exit)
 		exit_message 0 "user picked exit"
 		;;
 	*)

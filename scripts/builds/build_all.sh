@@ -4,7 +4,7 @@ set -e
 # shellcheck disable=SC2317,SC2129,SC1091,SC2120,SC2035,SC2016,SC2310,SC2155,SC2154,SC2034
 
 # State management configuration
-STATE_DIR="${STATE_DIR:-${HOME}/.ffmpeg-kit-build-state}"
+STATE_DIR="${STATE_DIR:-${PWD}/.ffmpeg-kit-build-state}"
 STATE_FILE="${STATE_DIR}/build_all.state"
 LOCK_FILE="${STATE_DIR}/build_all.lock"
 
@@ -34,7 +34,7 @@ reset_state=false
 
 for arg; do
   case "${arg}" in
-    linux|windows) 
+    linux|windows|android) 
       p="${arg:0:1}"
       shift;;
     d) 
@@ -44,10 +44,10 @@ for arg; do
       reset_state=true
       shift;;
     --help)
-      echo "Usage: $0 [linux|windows] [d] [--reset] [--help]"
+      echo "Usage: $0 [linux|windows|android] [d] [--reset] [--help]"
       echo ""
       echo "Options:"
-      echo "  linux|windows  Target platform (required)"
+      echo "  linux|windows|android  Target platform (required)"
       echo "  d              Build dependencies first"
       echo "  --reset        Reset build state and start from beginning"
       echo "  --help         Show this help message"
@@ -63,7 +63,7 @@ done
 
 # Validate platform selection
 if [[ -z "$p" ]]; then
-  echo "Error: Platform (linux|windows) is required"
+  echo "Error: Platform (linux|windows|android) is required"
   echo "Use --help for usage information"
   exit 1
 fi

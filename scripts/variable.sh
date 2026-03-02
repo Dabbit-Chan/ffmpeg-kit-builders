@@ -65,7 +65,7 @@ CONFIG_AUDIO_AI="\
 --enable-pocketsphinx \
 --enable-whisper"
 
-# Android general NON-FREE
+# Android general
 CONFIG_ANDROID="--enable-jni"
 
 # Apple general NON-FREE
@@ -472,3 +472,21 @@ CONFIG_AUTODETECT="\
 # build_metal             # config_options+= --disable-metal              # Video  # disable Apple Metal framework [autodetect]
 # build_securetransport   # config_options+= --disable-securetransport    # System # disable Secure Transport, needed for TLS support on OSX if openssl and gnutls are not used [autodetect]
 # build_videotoolbox      # config_options+= --disable-videotoolbox       # Video  # disable VideoToolbox code [autodetect]
+
+# disabled on android
+# build_alsa
+# build_xlib
+# build_libxcb
+# build_libxcb_shm
+# build_libxcb_xfixes
+# build_libxcb_shape
+# build_vaapi
+# build_vdpau
+# build_sndio
+# build_libpulse
+# build_libjack
+# build_libdc1394
+# build_libiec61883
+# build_libtensorflow
+# build_libopenvino
+# build_libtorch

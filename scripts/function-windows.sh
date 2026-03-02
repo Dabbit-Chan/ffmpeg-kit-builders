@@ -282,9 +282,9 @@ fix_pkgconfig_flags() {
 
 # 1. variant
 # @. custom values
-# Usage: get_generic_windows_cmake_toolchain [variant_suffix] [VAR="VALUE" ...]
-# Example: get_generic_windows_cmake_toolchain "rabbitmq" CMAKE_C_FLAGS_INIT="-static -Wno-error"
-get_generic_windows_cmake_toolchain() {
+# Usage: get_generic_cmake_toolchain [variant_suffix] [VAR="VALUE" ...]
+# Example: get_generic_cmake_toolchain "rabbitmq" CMAKE_C_FLAGS_INIT="-static -Wno-error"
+get_generic_cmake_toolchain() {
 		local variant="$1"
 		local base_filename="$host_name-toolchain.cmake"
 		local base_filepath="$src_dir/$base_filename"
@@ -334,7 +334,7 @@ get_generic_windows_cmake_toolchain() {
 						echo "DEBUG: adding KEY:$key and VALUE:$value to cmake toolchain file for $variant" >>"$LOG_FILE"
 						cmake_config["$key"]="$value"
 				done
-				echo "# Generated via get_generic_windows_cmake_toolchain" > "$toolchain_path"
+				echo "# Generated via get_generic_cmake_toolchain" > "$toolchain_path"
 				# Write CMAKE_SYSTEM_NAME first (convention)
 				echo "set(CMAKE_SYSTEM_NAME \"${cmake_config[CMAKE_SYSTEM_NAME]}\")" >> "$toolchain_path"
 				unset 'cmake_config[CMAKE_SYSTEM_NAME]'
@@ -346,7 +346,7 @@ get_generic_windows_cmake_toolchain() {
 		echo "$toolchain_path"
 }
 
-get_generic_windows_meson_cross_file() {
+get_generic_meson_cross_file() {
 		local variant_name="$1"      # e.g., "librist"
 		local extra_content="$2"     # e.g., "[built-in options]..."
 		local base_filename="$host_name-meson-cross.mingw.txt"

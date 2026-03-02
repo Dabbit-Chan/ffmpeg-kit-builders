@@ -150,7 +150,10 @@ RUN mkdir -p ${ANDROID_HOME}/cmdline-tools && \
     curl -o /tmp/cmdline-tools.zip -L https://dl.google.com/android/repository/commandlinetools-linux-13114758_latest.zip && \
     unzip -q /tmp/cmdline-tools.zip -d ${ANDROID_HOME}/cmdline-tools && \
     mv ${ANDROID_HOME}/cmdline-tools/cmdline-tools ${ANDROID_HOME}/cmdline-tools/latest && \
-    rm /tmp/cmdline-tools.zip
+    rm /tmp/cmdline-tools.zip && \
+    sdkmanager "ndk;29.0.14206865" && \
+    rustup target add x86_64-linux-android i686-linux-android aarch64-linux-android armv7-linux-androideabi
+
 
 RUN chown -R vscode:vscode ${ANDROID_HOME}
 

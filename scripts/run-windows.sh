@@ -2159,7 +2159,7 @@ build_libxeve() {
 	change_dir "$src_dir"
 	do_git_checkout "$repo" "$src_dir/$lib" "$repo_ver"
 	change_dir "$src_dir/$lib/build" 1
-	local cmake_params=" -DCMAKE_TOOLCHAIN_FILE=$(get_generic_windows_cmake_toolchain)"
+	local cmake_params=" -DCMAKE_TOOLCHAIN_FILE=$(get_generic_cmake_toolchain)"
 # needs a version.txt file but git repo doesnt have one for some reason
 	if [ -d .git ]; then
 			# Get version from git tags
@@ -2596,7 +2596,7 @@ build_pocketsphinx() {
 #	change_dir "$src_dir"
 #   do_git_checkout "$repo" "$src_dir/$lib" "$repo_ver"
 # 	change_dir "$src_dir/$lib/build" 1
-# 	local cmake_params=" -DCMAKE_TOOLCHAIN_FILE=$(get_generic_windows_cmake_toolchain) -DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=OFF"
+# 	local cmake_params=" -DCMAKE_TOOLCHAIN_FILE=$(get_generic_cmake_toolchain) -DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=OFF"
 # 	do_cmake_from_build_dir "$src_dir/$lib" "$cmake_params"
 # 	do_make_and_make_install
 #   #	change_dir "$src_dir"
@@ -2664,7 +2664,7 @@ build_librist() {
   change_dir "$src_dir/$lib"
   [[ ! -f "contrib/time-shim.c.bak" ]] && copy_path "contrib/time-shim.c" "contrib/time-shim.c.bak" "-fv" >>"$LOG_FILE" 2>&1
   apply_patch "$PATCHDIR/librist_time-shim.diff"
-  local cross_file=$(get_generic_windows_meson_cross_file)
+  local cross_file=$(get_generic_meson_cross_file)
   local meson_options="-Ddefault_library=static -Duse_mbedtls=true -Dbuilt_tools=false -Dtest=false"
 	meson_options+=" --cross-file=$cross_file"
   do_meson "$meson_options"
@@ -2731,7 +2731,7 @@ build_librabbitmq() {
     "$src_dir/$lib/CMakeLists.txt"
   sed -i 's/OUTPUT_NAME librabbitmq\.\${RMQ_SOVERSION}/OUTPUT_NAME rabbitmq/' \
     "$src_dir/$lib/librabbitmq/CMakeLists.txt"
-  local cmake_params="-DCMAKE_TOOLCHAIN_FILE=$(get_generic_windows_cmake_toolchain) \
+  local cmake_params="-DCMAKE_TOOLCHAIN_FILE=$(get_generic_cmake_toolchain) \
 -DCMAKE_BUILD_TYPE=Release \
 -DBUILD_SHARED_LIBS=OFF \
 -DBUILD_STATIC_LIBS=ON \
@@ -3309,7 +3309,7 @@ build_liboapv() {
 	change_dir "$src_dir"
   do_git_checkout "$repo" "$src_dir/$lib" "$repo_ver"
   change_dir "$src_dir/$lib/build" 1
-	local cmake_params=" -DCMAKE_TOOLCHAIN_FILE=$(get_generic_windows_cmake_toolchain) \
+	local cmake_params=" -DCMAKE_TOOLCHAIN_FILE=$(get_generic_cmake_toolchain) \
 -DCMAKE_BUILD_TYPE=Release \
 -DOAPV_BUILD_APPS=OFF \
 -DOAPV_BUILD_STATIC_LIB=ON \

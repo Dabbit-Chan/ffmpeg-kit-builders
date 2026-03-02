@@ -18,3 +18,4 @@ linux/src/Makefile.in
 my_test_env
 ~*
 .agent/
+.ffmpeg-kit-build-state/*
