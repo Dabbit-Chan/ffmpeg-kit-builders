@@ -406,8 +406,8 @@ setup_build_environment() {
 
 calculate_bits_target() {
     case "$host_arch" in
-        "i686"|"armv7a") echo "32" ;;
-        "x86_64"|"aarch64") echo "64" ;;
+        "armv7a"|"armeabi-v7a"|"arm") echo "32" ;;
+        "x86_64"|"aarch64"|"arm64-v8a"|"arm64") echo "64" ;;
         *) exit_message 1 "calculate_bits_target: Unknown host arch '$host_arch'" ;;
     esac
 }
@@ -521,21 +521,22 @@ setup_android_environment() {
     export ANDROID_API_LEVEL="${ANDROID_API_LEVEL:-24}"
 
     # Map host_arch to Android target triples
+    # Market Analysis 2026:
+    # 1. arm64-v8a (aarch64): Modern standard for 64-bit devices, AI processing, and security.
+    # 2. armeabi-v7a (armv7a): Legacy/budget tier. Dropped by flagships but persists in IoT/ultra-budget.
+    # 3. x86_64: Primarily for Android Studio emulators and specialized ChromeOS devices.
+    # 4. x86 (i686): Removed as native x86 devices are effectively extinct.
     case "$host_arch" in
         "x86_64")
             export host_target="x86_64-linux-android"
             export rust_target="x86_64-linux-android"
             ;;
-        "i686")
-            export host_target="i686-linux-android"
-            export rust_target="i686-linux-android"
-            ;;
-        "aarch64"|"arm64")
+        "aarch64"|"arm64"|"arm64-v8a")
             export host_arch="aarch64"
             export host_target="aarch64-linux-android"
             export rust_target="aarch64-linux-android"
             ;;
-        "armv7a"|"arm")
+        "armv7a"|"arm"|"armeabi-v7a")
             export host_arch="armv7a"
             export host_target="armv7a-linux-androideabi"
             export rust_target="armv7-linux-androideabi"
@@ -588,7 +589,7 @@ setup_android_environment() {
 --strip=${STRIP} \
 --cxx=${CXX}"
 
-    export android_cflags="$original_cflags -Dnl_langinfo\(x\)=NULL -fPIC -Wno-error=implicit-function-declaration -Wno-error=int-conversion -I${dependency_install_prefix}/include"
+    export android_cflags="$original_cflags -Dnl_langinfo=NULL -fPIC -Wno-error=implicit-function-declaration -Wno-error=int-conversion -I${dependency_install_prefix}/include"
     [[ "$host_arch" == "armv7a" ]] && android_cflags+=" -march=armv7-a -mfloat-abi=softfp -mfpu=vfpv3-d16 "
     
     export CFLAGS="$android_cflags"
@@ -2555,18 +2556,21 @@ generic_cmake() {
   [[ "$extra_args" != *"-DCMAKE_CROSSCOMPILING"* ]] && extra_args+=" -DCMAKE_CROSSCOMPILING=1"
   [[ "$extra_args" != *"-DCMAKE_TOOLCHAIN_FILE"* ]] && extra_args+=" -DCMAKE_TOOLCHAIN_FILE=$(get_generic_cmake_toolchain)"
   fi
-	[[ $extra_args != *"-DCMAKE_FIND_ROOT_PATH"* ]] && extra_args+=" -DCMAKE_FIND_ROOT_PATH=$dependency_install_prefix"
-  [[ $extra_args != *"-DCMAKE_FIND_ROOT_PATH_MODE_PROGRAM"* ]] && extra_args+=" -DCMAKE_FIND_ROOT_PATH_MODE_PROGRAM=NEVER"
-  [[ $extra_args != *"-DCMAKE_INSTALL_LIBDIR"* ]] && extra_args+=" -DCMAKE_INSTALL_LIBDIR=lib"
-  [[ $extra_args != *"-DCMAKE_INSTALL_PREFIX"* ]] && extra_args+=" -DCMAKE_INSTALL_PREFIX=$dependency_install_prefix"
-  [[ $extra_args != *"-DCMAKE_FIND_ROOT_PATH_MODE_LIBRARY"* ]] && extra_args+=" -DCMAKE_FIND_ROOT_PATH_MODE_LIBRARY=ONLY"
-  [[ $extra_args != *"-DCMAKE_FIND_ROOT_PATH_MODE_INCLUDE"* ]] && extra_args+=" -DCMAKE_FIND_ROOT_PATH_MODE_INCLUDE=ONLY"
-  [[ $extra_args != *"-DCMAKE_FIND_ROOT_PATH_MODE_PACKAGE"* ]] && extra_args+=" -DCMAKE_FIND_ROOT_PATH_MODE_PACKAGE=ONLY"
-  [[ $extra_args != *"-DBUILD_STATIC_LIBS"* ]] && extra_args+=" -DBUILD_STATIC_LIBS=ON"
-  [[ $extra_args != *"-DBUILD_SHARED_LIBS"* ]] && extra_args+=" -DBUILD_SHARED_LIBS=OFF"
-  [[ $extra_args != *"-DENABLE_STATIC"* ]] && extra_args+=" -DENABLE_STATIC=ON"
-  [[ $extra_args != *"-DENABLE_SHARED"* ]] && extra_args+=" -DENABLE_SHARED=OFF"
-  [[ $extra_args != *"-DCMAKE_POSITION_INDEPENDENT_CODE"* ]] && extra_args+=" -DCMAKE_POSITION_INDEPENDENT_CODE=1"
+  [[ "$extra_args" != *"-DCMAKE_SYSTEM_PROCESSOR"* ]] && extra_args+=" -DCMAKE_SYSTEM_PROCESSOR=$host_arch"
+  [[ "$extra_args" != *"-DCMAKE_BUILD_TYPE"* ]] && extra_args+=" -DCMAKE_BUILD_TYPE=Release"
+  [[ "$extra_args" != *"-DCMAKE_SYSTEM_NAME"* ]] && extra_args+=" -DCMAKE_SYSTEM_NAME=${host_platform^}"
+	[[ "$extra_args" != *"-DCMAKE_FIND_ROOT_PATH"* ]] && extra_args+=" -DCMAKE_FIND_ROOT_PATH=$dependency_install_prefix"
+  [[ "$extra_args" != *"-DCMAKE_FIND_ROOT_PATH_MODE_PROGRAM"* ]] && extra_args+=" -DCMAKE_FIND_ROOT_PATH_MODE_PROGRAM=NEVER"
+  [[ "$extra_args" != *"-DCMAKE_INSTALL_LIBDIR"* ]] && extra_args+=" -DCMAKE_INSTALL_LIBDIR=lib"
+  [[ "$extra_args" != *"-DCMAKE_INSTALL_PREFIX"* ]] && extra_args+=" -DCMAKE_INSTALL_PREFIX=$dependency_install_prefix"
+  [[ "$extra_args" != *"-DCMAKE_FIND_ROOT_PATH_MODE_LIBRARY"* ]] && extra_args+=" -DCMAKE_FIND_ROOT_PATH_MODE_LIBRARY=ONLY"
+  [[ "$extra_args" != *"-DCMAKE_FIND_ROOT_PATH_MODE_INCLUDE"* ]] && extra_args+=" -DCMAKE_FIND_ROOT_PATH_MODE_INCLUDE=ONLY"
+  [[ "$extra_args" != *"-DCMAKE_FIND_ROOT_PATH_MODE_PACKAGE"* ]] && extra_args+=" -DCMAKE_FIND_ROOT_PATH_MODE_PACKAGE=ONLY"
+  [[ "$extra_args" != *"-DBUILD_STATIC_LIBS"* ]] && extra_args+=" -DBUILD_STATIC_LIBS=ON"
+  [[ "$extra_args" != *"-DBUILD_SHARED_LIBS"* ]] && extra_args+=" -DBUILD_SHARED_LIBS=OFF"
+  [[ "$extra_args" != *"-DENABLE_STATIC"* ]] && extra_args+=" -DENABLE_STATIC=ON"
+  [[ "$extra_args" != *"-DENABLE_SHARED"* ]] && extra_args+=" -DENABLE_SHARED=OFF"
+  [[ "$extra_args" != *"-DCMAKE_POSITION_INDEPENDENT_CODE"* ]] && extra_args+=" -DCMAKE_POSITION_INDEPENDENT_CODE=1"
   do_cmake "$extra_args" "$source_dir" "$touch_postfix"
 }
 # 1. source_dir
@@ -4315,23 +4319,23 @@ EOF
       export host_arch="x86_64"
   fi
 	case "${host_arch,,}" in
-	1|x86_64|x64) export host_arch="x86_64"
+	1|"x86_64"|"x64") export host_arch="x86_64"
   echo "$host_arch"
   return 0
   ;;
-	2|i386|i686|x86|x32) export host_arch="i686"
+	2|"i386"|"i686"|"x86"|"x32") export host_arch="i686"
   echo "$host_arch"
   return 0
   ;;
-	3|aarch64|arm64) export host_arch="aarch64"
+	3|"aarch64"|"arm64"|"arm64-v8a") export host_arch="aarch64"
   echo "$host_arch"
   return 0
   ;;
-	4|armv7a|arm) export host_arch="armv7a"
+	4|"armv7a"|"arm"|"armeabi-v7a") export host_arch="armv7a"
   echo "$host_arch"
   return 0
   ;;
-	5|exit)
+	5|"exit")
 		exit_message 0 "user picked exit"
 		;;
 	*)
