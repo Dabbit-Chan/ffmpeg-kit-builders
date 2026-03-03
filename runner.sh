@@ -201,12 +201,10 @@ while [ $# -gt 0 ]; do
     ;;
   --host-platform=*|--host=*)
     export host_platform="${1#*=}"
-    pick_host_platform "$host_platform"
     shift
     ;;
   --host-arch=*|--arch=*)
     export host_arch="${1#*=}"
-    pick_host_arch "$host_arch"
     shift
     ;;
 	--ffmpeg-git-checkout-version=*)
@@ -582,9 +580,10 @@ else
   parse_arguments "$@"
 fi
 
-
-[[ -z $host_platform ]] && pick_host_platform
-[[ -z $host_arch ]] && pick_host_arch
+if ! truthy "$accept_defaults"; then
+  [[ -z $host_platform ]] && pick_host_platform
+  [[ -z $host_arch ]] && pick_host_arch
+fi
 
 truthy "$enable_clean_builds" && { clean_ffmpeg_builds; exit 0; }
 

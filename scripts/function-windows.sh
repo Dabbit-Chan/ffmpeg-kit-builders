@@ -347,17 +347,16 @@ get_generic_cmake_toolchain() {
 }
 
 get_generic_meson_cross_file() {
-		local variant_name="$1"      # e.g., "librist"
-		local extra_content="$2"     # e.g., "[built-in options]..."
-		local base_filename="$host_name-meson-cross.mingw.txt"
-		local base_filepath="$src_dir/$base_filename"
-		# 1. Generate the BASE file if it doesn't exist (Standard Logic)
-		if [[ ! -e "$base_filepath" ]]; then
-				local cpu_family="x86_64"
-				if [ "$bits_target" = 32 ]; then
-						cpu_family="x86"
-				fi
-				cat >"$base_filepath" <<EOF
+	local variant_name="$1"      # e.g., "librist"
+	local extra_content="$2"     # e.g., "[built-in options]..."
+	local base_filename="$host_name-meson-cross.mingw.txt"
+	local base_filepath="$src_dir/$base_filename"
+	# 1. Generate the BASE file if it doesn't exist (Standard Logic)
+	local cpu_family="x86_64"
+	if [ "$bits_target" = 32 ]; then
+			cpu_family="x86"
+	fi
+	cat >"$base_filepath" <<EOF
 [built-in options]
 buildtype = 'release'
 wrap_mode = 'nofallback'
@@ -391,24 +390,23 @@ endian = 'little'
 pkg_config_libdir = '$pkg_config_sysroot_dir/lib/pkgconfig'
 needs_exe_wrapper = true
 EOF
-		fi
-		# 2. Handle Custom Variant logic
-		if [[ -n "$variant_name" ]]; then
-				local custom_filepath="$(pwd)/$host_name-meson-cross.mingw.${variant_name}.txt"
-				# Always overwrite the variant with a fresh copy of the base
-				cp "$base_filepath" "$custom_filepath" 2>"$LOG_FILE"
-				# Append custom options if provided
-				if [[ -n "$extra_content" ]]; then
-						# Add a newline for safety
-						echo "" >> "$custom_filepath"
-						echo -e "$extra_content" >> "$custom_filepath"
-				fi
-				# Return the path to the NEW custom file
-				echo "$custom_filepath"
-		else
-				# No customization requested, return the standard base file
-				echo "$base_filepath"
-		fi
+	# 2. Handle Custom Variant logic
+	if [[ -n "$variant_name" ]]; then
+			local custom_filepath="$(pwd)/$host_name-meson-cross.mingw.${variant_name}.txt"
+			# Always overwrite the variant with a fresh copy of the base
+			cp "$base_filepath" "$custom_filepath" 2>"$LOG_FILE"
+			# Append custom options if provided
+			if [[ -n "$extra_content" ]]; then
+					# Add a newline for safety
+					echo "" >> "$custom_filepath"
+					echo -e "$extra_content" >> "$custom_filepath"
+			fi
+			# Return the path to the NEW custom file
+			echo "$custom_filepath"
+	else
+			# No customization requested, return the standard base file
+			echo "$base_filepath"
+	fi
 }
 
 ffmpeg_windows_patches() {

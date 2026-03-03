@@ -9,6 +9,17 @@
 
 Cross-platform build system for FFmpeg and FFmpegKit supporting Linux and Windows platforms.
 
+## Features
+
+- **Pure C API** - Provides pure C api to make it easy to use in any language.
+- **FFmpeg, FFprobe, and FFplay** - Full FFmpeg, FFprobe, and FFplay support.
+- **Asynchronous Execution** - Run long-running tasks without blocking the main thread.
+- **Parallel Execution** - Run multiple tasks in parallel.
+- **Callback Support** - Detailed hooks for logs, statistics, and session completion.
+- **Extensible** - Designed to allow custom native library loading and configuration.
+- **Deploy Custom Builds** - You can deploy custom builds of ffmpeg-kit-extended.
+- **Cross-Platform Support** - Works on Windows, and Linux. Android coming soon!
+
 ## Overview
 
 This repository provides a comprehensive build system for FFmpeg and FFmpegKit that supports multiple platforms and architectures. The system handles the complete build pipeline from toolchain installation through dependency compilation to final bundle creation, with support for both native Linux builds and cross-compilation to Windows from Linux hosts.
@@ -16,18 +27,18 @@ This repository provides a comprehensive build system for FFmpeg and FFmpegKit t
 ## Platform Support
 
 - **Linux**: Native builds for x86_64 and i686 architecture with shared libraries (.so) and static libraries (.a).
-- **Windows**: Cross-compilation from Linux hosts using MinGW-w64 toolchain with shared libraries (.dll) and static mingw libraries (.a). 
+- **Windows**: Cross-compilation from Linux hosts using MinGW-w64 toolchain with shared libraries (.dll) and static mingw libraries (.a).
   - *Note: MSVC ABI is not supported.*
 - **Android**: Currently not support - WIP
 - **Apple**: Apple platforms are not currently planned as I dont have one of those to develop and test. The framework is there so you are welcome to contribute!
-  - **MacOS**: Not planned 
+  - **MacOS**: Not planned
   - **iOS**: Not planned
 
 ## Quick Start
 
 ### Prerequisites
 
-- **OS**: Linux host or WSL2 (<a href="https://quay.io/organization/pypa">manylinux</a> recommended for maximum compatibility - use docker/devcontainer if unsure).
+- **OS**: Linux host or WSL2 ([manylinux](https://quay.io/organization/pypa) recommended for maximum compatibility - use docker/devcontainer if unsure).
 - **RAM**: 8GB+ recommended for linking static binaries.
 - **Disk Space**: ~285GB available disk space for a full build with all dependencies and intermediate object files.
 - **Custom Build**: bundle build sequence has already been organized in a way that accounts for dependencey tree. I have done my best to include dependencies in individual build steps but if you make a custom build with custom components enables/disabled you may run into dependency issues. You will have to troubleshoot those on your own.
@@ -44,6 +55,7 @@ apt-get install -qq --no-install-recommends ragel pkg-config make autoconf autom
 ## Compiler Toolchain
 
 ### Windows (Cross-Compile)
+
 Windows builds use the MinGW-w64 GCC 15.x toolchain. If running on a native Linux host (not a pre-configured Docker container), you **must** install the toolchain manually:
 
 ```bash
@@ -63,6 +75,7 @@ chmod -R 775 /usr/local/mingw-w64
 ```
 
 ### Rust Toolchain
+
 Many modern multimedia libraries (rav1e, dovi_tool) require Rust.
 
 ```bash
@@ -168,6 +181,7 @@ prebuilt/
 ## Command-Line Options
 
 ### General & Platform
+
 | Option | Description |
 |--------|-------------|
 | `-h, --help` | Display help |
@@ -181,12 +195,14 @@ prebuilt/
 | `--arch=*` | Target architecture: `x86_64` or `i686` |
 
 ### Licensing
+
 | Option | Description |
 |--------|-------------|
 | `--enable-gpl` | Enables GPL libraries (x264, xvid, etc.). Resulting binary is **GPLv3**. Cannot be combined with `--enable-nonfree`. |
 | `--enable-nonfree` | Enables non-free libraries (fdk-aac, decklink). Resulting binary is **Non-Redistributable**. Cannot be combined with `--enable-gpl`. |
 
 ### Feature presets
+
 | Option | Description |
 |--------|-------------|
 |`--enable-base`|enable only base built-in ffmpeg libraries (cannot be combined with other presets)
@@ -207,6 +223,7 @@ prebuilt/
 |`--enable-mq`|enable distributed systems support
 
 ### Bundle presets
+
 | Option | Description |
 |--------|-------------|
 |`--audio-bundle`|contains https + audio only libraries in the final bundle
@@ -244,7 +261,7 @@ prebuilt/
 | `--build-deps-only`                      |   | Only build dependency binaries. Will not build app binaries. (static or shared build only affects ffmpeg and ffmpeg-kit. Dependencies are always built statically.) |
 |`--build-ffmpeg-kit-only\|--kit\|--ffmpeg-kit=[shared]\|static`|   | build ffmpeg-kit library and bundle only of type [shared] or static. By default ffmpeg-kit always needs a static build of ffmpeg to be present already. Does not (re)build ext-library dependencies. Missing dependencies will cause a failure.
 |`--build-ffmpeg-only\|--ffmpeg=[shared]\|static`    |   | build ffmpeg binaries only of type [shared] or static. Does not (re)build ext-library dependencies. By default ffmpeg-kit always needs a static build of ffmpeg to be present already. Missing dependencies will cause a failure
-|`--build-tests\|--test\|--tests`          |   | Build tests. By default tests are not built. 
+|`--build-tests\|--test\|--tests`          |   | Build tests. By default tests are not built.
 |`--clean-builds=[shared]\|static`         |   | clean ffmpeg and ffmpeg-kit builds of type [shared] or static and exit
 |`--reset-and-clean(=ARG)`                 |   | reset and clean all source directories of touch files and build artifacts. ARG=library src dir name
 | `--list-libraries`                       |   | Lists ffmpeg configuration including extra libraries and exit |
@@ -266,6 +283,7 @@ prebuilt/
 ## Supported External Libraries
 
 You can also get the full list of supported external libraries by running `--list-libraries`
+
 | Library            | Description | Platform<sup>[1](#platform-info)</sup> | Extra<sup>[2](#extra-info)</sup> | Audio    | Video    | Streaming | Audio+AI | Video+AI | Video+Hardware | Video+AI+Hardware |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | jni<sup>[8](#install-info)</sup> | Enables Java Native Interface interactions on Android | Android |  | x | x | x | x | x | x | x |
@@ -444,40 +462,44 @@ libglslang -> libshaderc*</br>
 
 ## Troubleshooting
 
-1.  **WSL Issues**:
-    *   If using WSL, **WSL 2** is strongly recommended for build performance.
-    *   If cross-compiling, you may need to disable binfmt interop:
+1. **WSL Issues**:
+    - If using WSL, **WSL 2** is strongly recommended for build performance.
+    - If cross-compiling, you may need to disable binfmt interop:
+
         ```bash
         sudo bash -c 'echo 0 > /proc/sys/fs/binfmt_misc/WSLInterop'
         ```
-2.  **Insufficient Memory**:
-    *   Linking static `libtensorflow` or `libtorch` requires significant RAM. If the build crashes during the final link step, increase swap space or allocated RAM to at least 8GB.
-3.  **Missing "Configure"**:
-    *   If a library fails because it cannot find `./configure`, ensure `autoconf`, `automake`, and `libtool` are installed. The script attempts to generate them via `autoreconf -fiv` if missing.
-4.  **Build Failures**:
-    *   Most of the dependencies are built from source and pinned to a spcific version to avoid failures due to code changes; however some are not. Since things are being built from source, there is always a chance that source changes could affect hard coded build parameters in the script. If you run into any build failures, its possible its because of this reason. Unfortunately this is unavoidable, so open an issue if you encounter any issues.
+
+2. **Insufficient Memory**:
+    - Linking static `libtensorflow` or `libtorch` requires significant RAM. If the build crashes during the final link step, increase swap space or allocated RAM to at least 8GB.
+3. **Missing "Configure"**:
+    - If a library fails because it cannot find `./configure`, ensure `autoconf`, `automake`, and `libtool` are installed. The script attempts to generate them via `autoreconf -fiv` if missing.
+4. **Build Failures**:
+    - Most of the dependencies are built from source and pinned to a spcific version to avoid failures due to code changes; however some are not. Since things are being built from source, there is always a chance that source changes could affect hard coded build parameters in the script. If you run into any build failures, its possible its because of this reason. Unfortunately this is unavoidable, so open an issue if you encounter any issues.
 
 ## License
 
-The build scripts in this repository are licensed under GPL 3.0 license (refer to `LICENSE` file). 
+The build scripts in this repository are licensed under GPL 3.0 license (refer to `LICENSE` file).
 
-**Important**: The **binaries** you build will be subject to the licenses of the enabled libraries. 
-*   Enabling `--enable-gpl` makes the resulting FFmpeg binary **GPLv3**.
-*   Enabling `--enable-nonfree` makes the resulting binary **unredistributable** in many jurisdictions.
-*   Check the `prebuilt/.../licenses` folder in your output bundle for details on dependencies used.## Troubleshooting
+**Important**: The **binaries** you build will be subject to the licenses of the enabled libraries.
 
-1.  **WSL Issues**:
-    *   If using WSL, **WSL 2** is strongly recommended for build performance.
-2.  **Insufficient Memory**:
-    *   Linking static `libtensorflow` or `libtorch` requires significant RAM. If the build crashes during the final link step, increase swap space or allocated RAM to at least 8GB.
-3.  **Missing "Configure"**:
-    *   If a library fails because it cannot find `./configure`, ensure `autoconf`, `automake`, and `libtool` are installed. The script attempts to generate them via `autoreconf -fiv` if missing.
+- Enabling `--enable-gpl` makes the resulting FFmpeg binary **GPLv3**.
+- Enabling `--enable-nonfree` makes the resulting binary **unredistributable** in many jurisdictions.
+- Check the `prebuilt/.../licenses` folder in your output bundle for details on dependencies used.## Troubleshooting
+
+1. **WSL Issues**:
+    - If using WSL, **WSL 2** is strongly recommended for build performance.
+2. **Insufficient Memory**:
+    - Linking static `libtensorflow` or `libtorch` requires significant RAM. If the build crashes during the final link step, increase swap space or allocated RAM to at least 8GB.
+3. **Missing "Configure"**:
+    - If a library fails because it cannot find `./configure`, ensure `autoconf`, `automake`, and `libtool` are installed. The script attempts to generate them via `autoreconf -fiv` if missing.
 
 ## License
 
-The build scripts in this repository are licensed under the MIT License or Apache 2.0 (refer to `LICENSE` file). 
+The build scripts in this repository are licensed under the MIT License or Apache 2.0 (refer to `LICENSE` file).
 
-**Important**: The **binaries** you build will be subject to the licenses of the enabled libraries. 
-*   Enabling `--enable-gpl` makes the resulting FFmpeg binary **GPLv3**.
-*   Enabling `--enable-nonfree` makes the resulting binary **unredistributable** in many jurisdictions.
-*   Check the `prebuilt/.../licenses` folder in your output bundle for details on dependencies used.
+**Important**: The **binaries** you build will be subject to the licenses of the enabled libraries.
+
+- Enabling `--enable-gpl` makes the resulting FFmpeg binary **GPLv3**.
+- Enabling `--enable-nonfree` makes the resulting binary **unredistributable** in many jurisdictions.
+- Check the `prebuilt/.../licenses` folder in your output bundle for details on dependencies used.

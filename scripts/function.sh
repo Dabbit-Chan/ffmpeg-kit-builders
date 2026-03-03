@@ -518,7 +518,7 @@ setup_android_environment() {
         export ANDROID_NDK_ROOT="$ANDROID_HOME/ndk-bundle"
     fi
 
-    export ANDROID_API_LEVEL="${ANDROID_API_LEVEL:-24}"
+    export ANDROID_API_LEVEL="${ANDROID_API_LEVEL:-26}"
 
     # Map host_arch to Android target triples
     # Market Analysis 2026:
@@ -528,16 +528,20 @@ setup_android_environment() {
     # 4. x86 (i686): Removed as native x86 devices are effectively extinct.
     case "$host_arch" in
         "x86_64")
+            export host_arch="x86_64"
+            export cmake_host_arch="x86_64"
             export host_target="x86_64-linux-android"
             export rust_target="x86_64-linux-android"
             ;;
         "aarch64"|"arm64"|"arm64-v8a")
             export host_arch="aarch64"
+            export cmake_host_arch="aarch64"
             export host_target="aarch64-linux-android"
             export rust_target="aarch64-linux-android"
             ;;
         "armv7a"|"arm"|"armeabi-v7a")
             export host_arch="armv7a"
+            export cmake_host_arch="armv7-a"
             export host_target="armv7a-linux-androideabi"
             export rust_target="armv7-linux-androideabi"
             ;;
@@ -589,7 +593,14 @@ setup_android_environment() {
 --strip=${STRIP} \
 --cxx=${CXX}"
 
-    export android_cflags="$original_cflags -Dnl_langinfo=NULL -fPIC -Wno-error=implicit-function-declaration -Wno-error=int-conversion -I${dependency_install_prefix}/include"
+    export android_cflags="$original_cflags -D__ANDROID_API__=$ANDROID_API_LEVEL \
+-fPIC \
+-Wno-error=implicit-function-declaration \
+-Wno-error=int-conversion \
+-Wno-error=macro-redefined \
+-Wno-macro-redefined \
+-Wno-unused-command-line-argument \
+-I${dependency_install_prefix}/include"
     [[ "$host_arch" == "armv7a" ]] && android_cflags+=" -march=armv7-a -mfloat-abi=softfp -mfpu=vfpv3-d16 "
     
     export CFLAGS="$android_cflags"
@@ -2529,11 +2540,6 @@ do_cmake() {
     { clean_cmake_cache "$cur_dir2" "$(validate_path "$source_dir")" || true; }
     [[ ! -d "$cur_dir2" ]] && create_dir "$cur_dir2"
 		local config_options=""
-		if [ "$bits_target" = 32 ]; then
-			local config_options+="-DCMAKE_SYSTEM_PROCESSOR=x86"
-		else
-			local config_options+="-DCMAKE_SYSTEM_PROCESSOR=AMD64"
-		fi
     local command="${source_dir} -DCMAKE_MESSAGE_LOG_LEVEL=ERROR"
 		command+=" $extra_args"
 		echo -e "INFO: do_cmake() nice running:\n  DIR=$cur_dir2\n  PATH=$PATH\n  PKG_CONFIG_PATH=$PKG_CONFIG_PATH\n  CFLAGS:$CFLAGS\n  CXXFLAGS:$CXXFLAGS\n  CPPFLAGS:$CPPFLAGS\n  LDFLAGS:$LDFLAGS\n  \"${cmake_command} -G\"Unix Makefiles\" $command\"\n  $(get_compiler_flags)" >>"$LOG_FILE"
@@ -2556,7 +2562,10 @@ generic_cmake() {
   [[ "$extra_args" != *"-DCMAKE_CROSSCOMPILING"* ]] && extra_args+=" -DCMAKE_CROSSCOMPILING=1"
   [[ "$extra_args" != *"-DCMAKE_TOOLCHAIN_FILE"* ]] && extra_args+=" -DCMAKE_TOOLCHAIN_FILE=$(get_generic_cmake_toolchain)"
   fi
-  [[ "$extra_args" != *"-DCMAKE_SYSTEM_PROCESSOR"* ]] && extra_args+=" -DCMAKE_SYSTEM_PROCESSOR=$host_arch"
+  if isandroid; then
+    [[ "$extra_args" != *"-DCMAKE_ANDROID_API"* ]] && extra_args+=" -DCMAKE_ANDROID_API=$ANDROID_API_LEVEL"
+  fi
+  [[ "$extra_args" != *"-DCMAKE_SYSTEM_PROCESSOR"* ]] && extra_args+=" -DCMAKE_SYSTEM_PROCESSOR=\"$cmake_host_arch\""
   [[ "$extra_args" != *"-DCMAKE_BUILD_TYPE"* ]] && extra_args+=" -DCMAKE_BUILD_TYPE=Release"
   [[ "$extra_args" != *"-DCMAKE_SYSTEM_NAME"* ]] && extra_args+=" -DCMAKE_SYSTEM_NAME=${host_platform^}"
 	[[ "$extra_args" != *"-DCMAKE_FIND_ROOT_PATH"* ]] && extra_args+=" -DCMAKE_FIND_ROOT_PATH=$dependency_install_prefix"
@@ -4319,19 +4328,27 @@ EOF
       export host_arch="x86_64"
   fi
 	case "${host_arch,,}" in
-	1|"x86_64"|"x64") export host_arch="x86_64"
+	1|"x86_64"|"x64") 
+  export host_arch="x86_64"
+  export cmake_host_arch="x86_64"
   echo "$host_arch"
   return 0
   ;;
-	2|"i386"|"i686"|"x86"|"x32") export host_arch="i686"
+	2|"i386"|"i686"|"x86"|"x32") 
+  export host_arch="i686"
+  export cmake_host_arch="x86"
   echo "$host_arch"
   return 0
   ;;
-	3|"aarch64"|"arm64"|"arm64-v8a") export host_arch="aarch64"
+	3|"aarch64"|"arm64"|"arm64-v8a") 
+  export host_arch="aarch64"
+  export cmake_host_arch="aarch64"
   echo "$host_arch"
   return 0
   ;;
-	4|"armv7a"|"arm"|"armeabi-v7a") export host_arch="armv7a"
+	4|"armv7a"|"arm"|"armeabi-v7a") 
+  export host_arch="armv7a"
+  export cmake_host_arch="armv7-a"
   echo "$host_arch"
   return 0
   ;;

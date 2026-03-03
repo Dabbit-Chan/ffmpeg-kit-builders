@@ -158,18 +158,17 @@ EOF
 }
 
 get_generic_meson_cross_file() {
-		local variant_name="$1"      # e.g., "librist"
-		local extra_content="$2"     # e.g., "[built-in options]..."
-		local base_filename="$host_name-meson-cross.android.txt"
-		local base_filepath="$src_dir/$base_filename"
-		# 1. Generate the BASE file if it doesn't exist (Android Logic)
-		if [[ ! -e "$base_filepath" ]]; then
-				local cpu_family="$host_arch"
-				case "$host_arch" in
-						"armv7a"|"arm") cpu_family="arm" ;;
-						"i686"|"x86")   cpu_family="x86" ;;
-				esac
-				cat >"$base_filepath" <<EOF
+	local variant_name="$1"      # e.g., "librist"
+	local extra_content="$2"     # e.g., "[built-in options]..."
+	local base_filename="$host_name-meson-cross.android.txt"
+	local base_filepath="$src_dir/$base_filename"
+	# 1. Generate the BASE file if it doesn't exist (Android Logic)
+	local cpu_family="$host_arch"
+	case "$host_arch" in
+			"armv7a"|"arm") cpu_family="arm" ;;
+			"i686"|"x86")   cpu_family="x86" ;;
+	esac
+	cat >"$base_filepath" <<EOF
 [built-in options]
 buildtype = 'release'
 wrap_mode = 'nofallback'
@@ -201,22 +200,21 @@ endian = 'little'
 pkg_config_libdir = '$dependency_install_prefix/lib/pkgconfig'
 needs_exe_wrapper = true
 EOF
-		fi
-		# 2. Handle Custom Variant logic
-		if [[ -n "$variant_name" ]]; then
-				local custom_filepath="$(pwd)/$host_name-meson-cross.android.${variant_name}.txt"
-				# Always overwrite the variant with a fresh copy of the base
-				cp "$base_filepath" "$custom_filepath" 2>"$LOG_FILE"
-				# Append custom options if provided
-				if [[ -n "$extra_content" ]]; then
-						# Add a newline for safety
-						echo "" >> "$custom_filepath"
-						echo -e "$extra_content" >> "$custom_filepath"
-				fi
-				# Return the path to the NEW custom file
-				echo "$custom_filepath"
-		else
-				# No customization requested, return the standard base file
-				echo "$base_filepath"
-		fi
+	# 2. Handle Custom Variant logic
+	if [[ -n "$variant_name" ]]; then
+			local custom_filepath="$(pwd)/$host_name-meson-cross.android.${variant_name}.txt"
+			# Always overwrite the variant with a fresh copy of the base
+			cp "$base_filepath" "$custom_filepath" 2>"$LOG_FILE"
+			# Append custom options if provided
+			if [[ -n "$extra_content" ]]; then
+					# Add a newline for safety
+					echo "" >> "$custom_filepath"
+					echo -e "$extra_content" >> "$custom_filepath"
+			fi
+			# Return the path to the NEW custom file
+			echo "$custom_filepath"
+	else
+			# No customization requested, return the standard base file
+			echo "$base_filepath"
+	fi
 }
