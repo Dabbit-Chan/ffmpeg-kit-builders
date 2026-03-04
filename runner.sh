@@ -48,7 +48,7 @@ Feature Presets:
   --enable-audio                                                enable all audio processing libraries
   --enable-audio-ai                                             enable all audio processing ai libraries
   --enable-video                                                enable all video processing libraries
-  --enable-video-streaming                                      enable all video streaming libraries
+  --enable-streaming                                            enable all streaming libraries
   --enable-video-ai-cpu                                         enable all video ai cpu based libraries
   --enable-video-ai-gpu[-cuda|-rocm]                            enable all video ai gpu:- interactive, 
                                                                 cuda or rocm based libraries
@@ -73,7 +73,6 @@ Bundle Presets (pre-defined collections of libraries to include in ffmpeg-kit bu
                                                                 + ai (cpu) libraries in the final bundle
   --video-hw-ai-gpu[-cuda|-rocm]-bundle                         contains https + audio + video + hardware 
                                                                 + ai (gpu [cuda|rocm]) libraries in the final bundle
-  --streaming-bundle                                            contains https + audio + video + streaming 
                                                                 libraries in the final bundle
   --full-bundle                                                 contains https + audio + video + hardware + ai + streaming 
                                                                 + ssh + smb + mq libraries in the final bundle
@@ -500,10 +499,6 @@ while [ $# -gt 0 ]; do
     pick_gpu_type "rocm"
     shift
     ;;
-  --streaming-bundle)
-    export streaming_bundle=y
-    shift
-    ;;
 	--enable-*)
     enable_library "${1#--enable-}"
     shift
@@ -634,28 +629,33 @@ if ! truthy "$enable_base"; then
   if truthy "$audio_bundle" || truthy "$enable_full"; then
     enable_audio=y
     enable_https=y
+    enable_streaming=y
   fi
   if truthy "$audio_ai_bundle" || truthy "$enable_full"; then
     enable_audio=y
     enable_audio_ai=y
     enable_https=y
+    enable_streaming=y
   fi
   if truthy "$video_bundle" || truthy "$enable_full"; then
     enable_audio=y
     enable_video=y
     enable_https=y
+    enable_streaming=y
   fi
   if truthy "$video_ai_bundle" || truthy "$enable_full"; then
     enable_audio=y
     enable_video=y
     enable_video_ai=y
     enable_https=y
+    enable_streaming=y
   fi
   if truthy "$video_hw_bundle" || truthy "$enable_full"; then
     enable_audio=y
     enable_video=y
     enable_hardware=y
     enable_https=y
+    enable_streaming=y
   fi
   if truthy "$video_ai_hw_bundle" || truthy "$enable_full"; then
     enable_audio=y
@@ -664,12 +664,7 @@ if ! truthy "$enable_base"; then
     enable_video_ai=y
     enable_hardware=y
     enable_https=y
-  fi
-  if truthy "$streaming_bundle" || truthy "$enable_full"; then
-    enable_audio=y
-    enable_video=y
     enable_streaming=y
-    enable_https=y
   fi
 
   if truthy "$build_nonfree"; then
