@@ -351,7 +351,6 @@ setup_build_environment() {
     export host_name="$host_platform-$host_arch"
     echo -e "\n************** Setting up environment for $host_name build... **************" | tee -a "$LOG_FILE"
     
-    export bits_target=$(calculate_bits_target)
     export work_dir="$(validate_path "$WORKDIR"/"$host_name")"
     export build_triple="${build_triple:-$(gcc -dumpmachine)}"
     # Common setup for all platforms
@@ -406,7 +405,7 @@ setup_build_environment() {
 
 calculate_bits_target() {
     case "$host_arch" in
-        "armv7a"|"armeabi-v7a"|"arm") echo "32" ;;
+        "armv7a"|"armeabi-v7a"|"arm"|"i686") echo "32" ;;
         "x86_64"|"aarch64"|"arm64-v8a"|"arm64") echo "64" ;;
         *) exit_message 1 "calculate_bits_target: Unknown host arch '$host_arch'" ;;
     esac
@@ -432,12 +431,21 @@ setup_windows_environment() {
     create_dir "$work_dir/pkgconfig"
     create_dir "$dependency_install_prefix/{bin,lib/pkgconfig,include,usr/include}"
 
-    # Common compiler flags for Windows    
-    if [[ $bits_target == 64 ]]; then
-      export ARCH=amd64
-    else
-      export ARCH=x86
-    fi
+    case "$host_arch" in
+        "x86_64")
+            export host_arch="x86_64"
+            export cmake_host_arch="x86_64"
+            ;;
+        # TODO: Add support for aarch64
+        # "aarch64"|"arm64"|"arm64-v8a")
+        #     export host_arch="aarch64"
+        #     export cmake_host_arch="aarch64"
+        #     ;;
+        *)
+            exit_message 1 "setup_windows_environment: Unsupported host arch '$host_arch' for $host_platform"
+            ;;
+    esac
+    
     reset_cross_vars
     export PREFIX="$dependency_install_prefix"
     export build_cross_compile=y
@@ -482,6 +490,21 @@ setup_linux_environment() {
     export linux_ldflags="-static-libgcc $original_ldflags -L${dependency_install_prefix}/lib -Wl,-rpath,${dependency_install_prefix}/lib "
     export LDFLAGS="$linux_ldflags"
     export LD_LIBRARY_PATH="${dependency_install_prefix}/lib:$LD_LIBRARY_PATH"
+
+    case "$host_arch" in
+        "x86_64")
+            export host_arch="x86_64"
+            export cmake_host_arch="x86_64"
+            ;;
+        # TODO: Add support for aarch64
+        # "aarch64"|"arm64"|"arm64-v8a")
+        #     export host_arch="aarch64"
+        #     export cmake_host_arch="aarch64"
+        #     ;;
+        *)
+            exit_message 1 "setup_linux_environment: Unsupported host arch '$host_arch' for $host_platform"
+            ;;
+    esac
     
     source /opt/rh/gcc-toolset-14/enable
     
@@ -4296,8 +4319,28 @@ EOF
 }
 
 pick_host_arch() {
-	if truthy "$accept_defaults"; then
+  function set_x86_64() {
     export host_arch="x86_64"
+    export cmake_host_arch="x86_64"
+    export bits_target=64
+  }
+  function set_i686() {
+    export host_arch="i686"
+    export cmake_host_arch="x86"
+    export bits_target=32
+  }
+  function set_aarch64() {
+    export host_arch="aarch64"
+    export cmake_host_arch="aarch64"
+    export bits_target=64
+  }
+  function set_armv7a() {
+    export host_arch="armv7a"
+    export cmake_host_arch="armv7-a"
+    export bits_target=32
+  }
+	if truthy "$accept_defaults"; then
+    set_x86_64
     echo "$host_arch"
     return 0
   fi
@@ -4325,30 +4368,26 @@ EOF
 	done
   if [[ -z "$host_arch" ]] && truthy "$accept_defaults"; then
       echo "Defaulting to 'x86_64'."
-      export host_arch="x86_64"
+      set_x86_64
   fi
 	case "${host_arch,,}" in
 	1|"x86_64"|"x64") 
-  export host_arch="x86_64"
-  export cmake_host_arch="x86_64"
+  set_x86_64
   echo "$host_arch"
   return 0
   ;;
 	2|"i386"|"i686"|"x86"|"x32") 
-  export host_arch="i686"
-  export cmake_host_arch="x86"
+  set_i686
   echo "$host_arch"
   return 0
   ;;
 	3|"aarch64"|"arm64"|"arm64-v8a") 
-  export host_arch="aarch64"
-  export cmake_host_arch="aarch64"
+  set_aarch64
   echo "$host_arch"
   return 0
   ;;
 	4|"armv7a"|"arm"|"armeabi-v7a") 
-  export host_arch="armv7a"
-  export cmake_host_arch="armv7-a"
+  set_armv7a
   echo "$host_arch"
   return 0
   ;;
