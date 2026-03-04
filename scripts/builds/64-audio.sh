@@ -19,31 +19,31 @@ fi
 
 case "$1" in
   1)
-  ./runner.sh --host=${platform} --arch=x86_64 $default --audio-bundle --build-deps  --skip --skip-pkg-check $small $force $lic
+  ./runner.sh --host=${platform} --arch=x86_64 $default --audio-bundle --build-deps  --skip $small $force $lic
   exit 0
   ;;
   2)
-  ./runner.sh --host=${platform} --arch=x86_64 $default --audio-bundle --build-ffmpeg=static  --skip --skip-pkg-check $small $force $lic
+  ./runner.sh --host=${platform} --arch=x86_64 $default --audio-bundle --build-ffmpeg=static  --skip $small $force $lic
   exit 0
   ;;
   3)
-  ./runner.sh --host=${platform} --arch=x86_64 $default --audio-bundle --build-ffmpeg-kit --clean --release=remote  --skip --skip-pkg-check $small $force $lic
+  ./runner.sh --host=${platform} --arch=x86_64 $default --audio-bundle --build-ffmpeg-kit --clean --release=remote  --skip $small $force $lic
   exit 0
   ;;
   12)
-  ./runner.sh --host=${platform} --arch=x86_64 $default --audio-bundle --build-deps --build-ffmpeg=static  --skip --skip-pkg-check $small $force $lic
+  ./runner.sh --host=${platform} --arch=x86_64 $default --audio-bundle --build-deps --build-ffmpeg=static  --skip $small $force $lic
   exit 0
   ;;
   23)
-  ./runner.sh --host=${platform} --arch=x86_64 $default --audio-bundle --build-ffmpeg --build-ffmpeg-kit --clean --release=remote --skip --skip-pkg-check $small $force $lic
+  ./runner.sh --host=${platform} --arch=x86_64 $default --audio-bundle --build-ffmpeg --build-ffmpeg-kit --clean --release=remote --skip $small $force $lic
   exit 0
   ;;
   123)
-  ./runner.sh --host=${platform} --arch=x86_64 $default --audio-bundle --build-deps --build-ffmpeg --build-ffmpeg-kit --clean --release=remote --skip --skip-pkg-check $small $force $lic
+  ./runner.sh --host=${platform} --arch=x86_64 $default --audio-bundle --build-deps --build-ffmpeg --build-ffmpeg-kit --clean --release=remote --skip $small $force $lic
   exit 0
   ;;
   *)
-  ./runner.sh --host=${platform} --arch=x86_64 $default --audio-bundle $small $force --clean --release=remote  --skip --skip-pkg-check $lic
+  ./runner.sh --host=${platform} --arch=x86_64 $default --audio-bundle $small $force --clean --release=remote  --skip $lic
   exit 0
   ;;
 esac

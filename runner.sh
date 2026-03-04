@@ -167,12 +167,17 @@ while [ $# -gt 0 ]; do
   --resume)
     shift
     ;;
-  --skip-pkg-check)
+  --skip-pkg-check|--skip-pkg)
     export skip_pkg_check=y
     shift
     ;;
-  --skip-validation|--skip-val|--skip)
+  --skip-validation|--skip-val)
     export skip_validation=y
+    shift
+    ;;
+  --skip)
+    export skip_validation=y
+    export skip_pkg_check=y
     shift
     ;;
   --release=*)
