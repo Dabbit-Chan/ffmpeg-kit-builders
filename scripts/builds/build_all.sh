@@ -44,16 +44,22 @@ for arg; do
       reset_state=true
       shift;;
     --help)
-      echo "Usage: $0 [linux|windows|android] [d] [--reset] [--help]"
+      echo "Usage: $0 [linux|windows|android] [d] [--reset] [--bundles=*) ] [--help]"
       echo ""
       echo "Options:"
       echo "  linux|windows|android  Target platform (required)"
       echo "  d              Build dependencies first"
       echo "  --reset        Reset build state and start from beginning"
+      echo "  --bundles=*)   Comma separated list of bundles to build (e.g. --bundles=base,video,audio)"
       echo "  --help         Show this help message"
       echo ""
       echo "State file location: ${STATE_FILE}"
       exit 0;;
+    --bundles=*) 
+      #comma separated list of bundles to build
+      bundles="${arg#*=}"
+      IFS=',' read -ra BUNDLE_ARRAY <<< "$bundles"
+      shift;;
     *)  
       echo "Invalid argument: ${arg}"
       echo "Use --help for usage information"
@@ -201,9 +207,15 @@ echo ""
 current_step=0
 for step in "${BUILD_STEPS[@]}"; do
   current_step=$((current_step + 1))
-  script="${step%%|*}"
-  args="${step#*|}"
-  
+  if [[ -n "$bundles" ]]; then
+    if [[ "${BUNDLE_ARRAY[@]}" =~ "${step%%|*}" ]]; then
+      script="${step%%|*}"
+      args="${step#*|}"
+    fi
+  else
+    script="${step%%|*}"
+    args="${step#*|}"
+  fi
   echo ""
   echo "========================================"
   echo "Step ${current_step}/${total_steps}"
