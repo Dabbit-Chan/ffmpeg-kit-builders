@@ -27,38 +27,116 @@ fi
 # Create lock file
 touch "${LOCK_FILE}"
 
+# Update sudo timestamp to avoid interruption later
+echo "Requesting administrative privileges..."
+sudo -v
+
+# Keep the timestamp alive in the background for long-running builds
+while true; do sudo -n v; sleep 60; kill -0 "$$" || exit; done 2>/dev/null &
+
 # Parse arguments
 p=""
+p_args=""
 deps=""
 reset_state=false
+VALID_TYPES=("debug" "full" "base" "audio" "video" "video_hw")
+VALID_PLATFORMS=("linux" "windows" "android")
+VALID_ARCHS=("x86_64" "aarch64" "armv7a")
+VALID_PLATFORM_ARCHS=("linux-x86_64" "windows-x86_64" "android-aarch64" "android-armv7a" "android-x86_64")
+declare -A PLATFORMS
+
+parse_platforms() {
+  p_args="${1}"
+  # Ensure p_args is populated if empty
+  if [[ -z "${p_args}" ]]; then
+    p_args=$(IFS=,; echo "${VALID_PLATFORM_ARCHS[*]}")
+  fi
+  echo "DEBUG: p_args: ${p_args}"
+  # Use IFS local to the read command
+  IFS=',' read -ra P_ARRAY <<< "$p_args"
+  for p in "${P_ARRAY[@]}"; do
+    # Skip empty elements resulting from trailing/double commas
+    [[ -z "$p" ]] && continue
+    # Validate against whitelist
+    local valid=false
+    for valid_p in "${VALID_PLATFORM_ARCHS[@]}"; do
+      [[ "$p" == "$valid_p" ]] && valid=true && break
+    done
+    if [[ "$valid" == false ]]; then
+      echo "Error: Invalid platform and arch: ${p}"
+      echo "Use --help for usage information"
+      exit 1
+    fi
+    local key="${p%-*}"
+    local value="${p#*-}"
+    # Always quote the key within the brackets
+    if [[ -z "${PLATFORMS["$key"]}" ]]; then
+      PLATFORMS["$key"]="${value}"
+    else
+      PLATFORMS["$key"]="${PLATFORMS["$key"]},${value}"
+    fi
+  done
+}
+
+parse_bundles() {
+  bundles="${1}"
+  # Ensure bundles is populated if empty
+  if [[ -z "${bundles}" ]]; then
+    bundles=$(IFS=,; echo "${VALID_TYPES[*]}")
+  fi
+  echo "DEBUG: bundles: ${bundles}"
+  # Use IFS local to the read command
+  IFS=',' read -ra BUNDLE_ARRAY <<< "${bundles}"
+  for b in "${BUNDLE_ARRAY[@]}"; do
+    # Skip empty elements resulting from trailing/double commas
+    [[ -z "$b" ]] && continue
+    # Validate against whitelist
+    local valid=false
+    for valid_b in "${VALID_TYPES[@]}"; do
+      [[ "$b" == "$valid_b" ]] && valid=true && break
+    done
+    if [[ "$valid" == false ]]; then
+      echo "Error: Invalid bundle type: ${b}"
+      echo "Use --help for usage information"
+      exit 1
+    fi
+  done
+}
 
 for arg; do
   case "${arg}" in
-    linux|windows|android) 
-      p="${arg:0:1}"
-      shift;;
-    d) 
-      deps="y"
+    --platform=*)
+     # input format: platform-arch ex: linux-x86_64 or android-aarch64. Comma separated (without spaces) list of platforms.
+     # output format: platform ex: linux or android
+     p_args="${arg#*=}"
+     parse_platforms "${p_args}"
+     shift;;
+    --deps) 
+      deps="--deps"
+      build_deps=true
       shift;;
     --reset)
       reset_state=true
       shift;;
     --help)
-      echo "Usage: $0 [linux|windows|android] [d] [--reset] [--bundles=*) ] [--help]"
+      echo "Usage: $0 [--platform=linux-x86_64|windows-x86_64|android-aarch64|android-armv7a|android-x86_64] [--deps] [--reset] [--bundles=*) ] [--help]"
       echo ""
       echo "Options:"
-      echo "  linux|windows|android  Target platform (required)"
-      echo "  d              Build dependencies first"
-      echo "  --reset        Reset build state and start from beginning"
-      echo "  --bundles=*)   Comma separated (without spaces) list of bundles to build (e.g. --bundles=base,video,audio)"
-      echo "  --help         Show this help message"
+      echo "  --platform=*  Comma separated (without spaces) list of platforms and architectures (e.g. --platform=linux-x86_64,windows-x86_64,android-aarch64,android-armv7a,android-x86_64)"
+      echo "                Valid platforms: ${VALID_PLATFORMS[*]}"
+      echo "                Valid architectures: ${VALID_ARCHS[*]}"
+      echo "                Valid platform and arch combinations: ${VALID_PLATFORM_ARCHS[*]}"
+      echo "  --deps        Build dependencies first"
+      echo "  --reset       Reset build state and start from beginning"
+      echo "  --bundles=*   Comma separated (without spaces) list of bundles to build (e.g. --bundles=debug,full,base,audio,video,video_hw)"
+      echo "                Valid bundles: ${VALID_TYPES[*]}"
+      echo "  --help        Show this help message"
       echo ""
       echo "State file location: ${STATE_FILE}"
       exit 0;;
     --bundles=*) 
       #comma separated list of bundles to build
-      bundles="${arg#*=}"
-      IFS=',' read -ra BUNDLE_ARRAY <<< "$bundles"
+      parse_bundles "${arg#*=}"
       shift;;
     *)  
       echo "Invalid argument: ${arg}"
@@ -67,11 +145,13 @@ for arg; do
   esac
 done
 
-# Validate platform selection
-if [[ -z "$p" ]]; then
-  echo "Error: Platform (linux|windows|android) is required"
-  echo "Use --help for usage information"
-  exit 1
+# Check if the number of elements is 0
+if [[ ${#PLATFORMS[@]} -eq 0 ]]; then
+  parse_platforms ""
+fi
+
+if [[ ${#BUNDLE_ARRAY[@]} -eq 0 ]]; then
+  parse_bundles ""
 fi
 
 # Reset state if requested
@@ -88,41 +168,31 @@ fi
 
 # Check if a build step is already completed
 is_completed() {
-  local script="$1"
-  local args="$2"
-  grep -qxF "${script} ${args}" "${STATE_FILE}" 2>/dev/null
+  grep -qxF "$1" "${STATE_FILE}" 2>/dev/null
 }
 
 # Mark a build step as completed
 mark_completed() {
-  local script="$1"
-  local args="$2"
-  echo "${script} ${args}" >> "${STATE_FILE}"
+  echo "$1" >> "${STATE_FILE}"
 }
 
 # Execute a build step with state tracking
 execute_build() {
-  local script="$1"
-  local args="$2"
-  local step_name="${script} ${args}"
-  if [[ -z "${script}" ]]; then
-    echo "[SKIP] No script to run"
-    return 0
-  fi
-  if is_completed "${script}" "${args}"; then
-    echo "[SKIP] Already completed: ${step_name}"
+  local cmd_string="$1"
+  if is_completed "${cmd_string}"; then
+    echo "[SKIP] Already completed: ${cmd_string}"
     return 0
   fi
   
-  echo "[BUILD] Starting: ${step_name}"
+  echo "[BUILD] Starting: ${cmd_string}"
   
-  if sudo "${script}" ${args}; then
-    mark_completed "${script}" "${args}"
-    echo "[DONE] Completed: ${step_name}"
+  if sudo -E bash -c "${cmd_string}"; then
+    mark_completed "${cmd_string}"
+    echo "[DONE] Completed: ${cmd_string}"
     return 0
   else
     local exit_code=$?
-    echo "[FAIL] Failed: ${step_name} (exit code: ${exit_code})"
+    echo "[FAIL] Failed: ${cmd_string} (exit code: ${exit_code})"
     echo ""
     echo "Build failed. You can:"
     echo "  1. Fix the issue and re-run this script to resume from this step"
@@ -134,56 +204,24 @@ execute_build() {
 # Define all build steps
 declare -a BUILD_STEPS
 
-# Dependencies (optional)
-if [[ -n "$deps" ]]; then
-  BUILD_STEPS+=("./scripts/builds/64-full.sh|1 gfy${p}")
-fi
-
-# Debug builds
-BUILD_STEPS+=(
-  "./scripts/builds/64-debug.sh|23 gfy${p}"
-  "./scripts/builds/64-debug.sh|23 fy${p}"
-)
-
-# Base builds
-BUILD_STEPS+=(
-  "./scripts/builds/64-base.sh|23 gfy${p}"
-  "./scripts/builds/64-base.sh|23 fy${p}"
-  "./scripts/builds/64-base.sh|23 sgfy${p}"
-  "./scripts/builds/64-base.sh|23 sfy${p}"
-)
-
-# Audio builds
-BUILD_STEPS+=(
-  "./scripts/builds/64-audio.sh|23 gfy${p}"
-  "./scripts/builds/64-audio.sh|23 fy${p}"
-  "./scripts/builds/64-audio.sh|23 sgfy${p}"
-  "./scripts/builds/64-audio.sh|23 sfy${p}"
-)
-
-# Video builds
-BUILD_STEPS+=(
-  "./scripts/builds/64-video.sh|23 gfy${p}"
-  "./scripts/builds/64-video.sh|23 fy${p}"
-  "./scripts/builds/64-video.sh|23 sgfy${p}"
-  "./scripts/builds/64-video.sh|23 sfy${p}"
-)
-
-# Video hardware builds
-BUILD_STEPS+=(
-  "./scripts/builds/64-video_hw.sh|23 gfy${p}"
-  "./scripts/builds/64-video_hw.sh|23 fy${p}"
-  "./scripts/builds/64-video_hw.sh|23 sgfy${p}"
-  "./scripts/builds/64-video_hw.sh|23 sfy${p}"
-)
-
-# Full builds
-BUILD_STEPS+=(
-  "./scripts/builds/64-full.sh|23 gfy${p}"
-  "./scripts/builds/64-full.sh|23 fy${p}"
-  "./scripts/builds/64-full.sh|23 sgfy${p}"
-  "./scripts/builds/64-full.sh|23 sfy${p}"
-)
+for key in "${!PLATFORMS[@]}"; do
+  platform=${key}
+  # comma separated list of architectures
+  IFS=',' read -ra arch_array <<< "${PLATFORMS[$key]}"
+  for arch in "${arch_array[@]}"; do
+    for bundle in "${BUNDLE_ARRAY[@]}"; do
+      if [[ "${bundle}" == "debug" ]]; then
+        BUILD_STEPS+=("./runner.sh --host=${platform} --arch=${arch} -y ${deps} --base-bundle --build-debug --build-ffmpeg --build-ffmpeg-kit --clean --release=remote --skip --gpl -f")
+        BUILD_STEPS+=("./runner.sh --host=${platform} --arch=${arch} -y ${deps} --base-bundle --build-debug --build-ffmpeg --build-ffmpeg-kit --clean --release=remote --skip -f")
+      else
+        BUILD_STEPS+=("./runner.sh --host=${platform} --arch=${arch} -y ${deps} --${bundle}-bundle --build-ffmpeg --build-ffmpeg-kit --clean --release=remote --skip --gpl -f")
+        BUILD_STEPS+=("./runner.sh --host=${platform} --arch=${arch} -y ${deps} --${bundle}-bundle --build-ffmpeg --build-ffmpeg-kit --clean --release=remote --skip -f")
+        BUILD_STEPS+=("./runner.sh --host=${platform} --arch=${arch} -y ${deps} --${bundle}-bundle --build-ffmpeg --build-ffmpeg-kit --clean --release=remote --skip --gpl -f --small")
+        BUILD_STEPS+=("./runner.sh --host=${platform} --arch=${arch} -y ${deps} --${bundle}-bundle --build-ffmpeg --build-ffmpeg-kit --clean --release=remote --skip -f --small")
+      fi
+    done
+  done
+done
 
 # Calculate progress
 total_steps=${#BUILD_STEPS[@]}
@@ -197,7 +235,8 @@ fi
 echo "========================================"
 echo "FFmpeg Kit Build All - State Management"
 echo "========================================"
-echo "Platform: ${p}"
+echo "Platform: ${p_args}"
+echo "Bundles: ${bundles}"
 echo "Dependencies: ${deps:-no}"
 echo "Total steps: ${total_steps}"
 echo "Completed steps: ${completed_steps}"
@@ -210,28 +249,13 @@ echo ""
 current_step=0
 for step in "${BUILD_STEPS[@]}"; do
   current_step=$((current_step + 1))
-  if [[ -n "$bundles" ]]; then
-    # if step is 64-<BUNDLE>.sh
-    for bundle in "${BUNDLE_ARRAY[@]}"; do
-      if [[ "${step%%|*}" == *"64-${bundle}.sh"* ]]; then
-        script="${step%%|*}"
-        args="${step#*|}"
-        break
-      fi
-    done
-  else
-    script="${step%%|*}"
-    args="${step#*|}"
-  fi
   echo ""
   echo "========================================"
   echo "Step ${current_step}/${total_steps}"
   echo "========================================"
-  echo "Executing ${script} ${args}"
-  if [[ -z "${script}" ]]; then
-    continue
-  fi
-  execute_build "${script}" "${args}"
+  echo "Executing ${step}"
+  [[ -z "${step}" ]] && continue
+  execute_build "${step}"
 done
 
 echo ""
