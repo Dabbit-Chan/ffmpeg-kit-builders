@@ -545,7 +545,7 @@ build_sdl2() {
   change_dir "$src_dir"
   do_git_checkout "$repo" "$src_dir/$lib" "$repo_ver"
   change_dir "$src_dir/$lib"
-  generic_configure "--enable-static --disable-shared"
+  generic_configure "--enable-static --disable-shared --disable-hidapi"
   disable_nonessential "$src_dir/$lib"
   do_make_and_make_install
   change_dir "$src_dir"

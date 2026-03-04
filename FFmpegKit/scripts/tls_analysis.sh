@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Run from ffmpeg-kit-builders project root
-TARGET_DIR="desktop/src"
+TARGET_DIR="FFmpegKit/src"
 
 if [ ! -d "$TARGET_DIR" ]; then
     echo "Error: $TARGET_DIR not found"
@@ -9,8 +9,8 @@ if [ ! -d "$TARGET_DIR" ]; then
 fi
 
 EXCLUDE_FILES=(
-    "desktop/src/ffmpeg_tls.h"
-    "desktop/src/FFmpegKitConfig.cpp"
+    "FFmpegKit/src/ffmpeg_tls.h"
+    "FFmpegKit/src/FFmpegKitConfig.cpp"
 )
 
 mapfile -t FILE_LIST < <(grep -rl "FFMPEG_THREAD_LOCAL" "$TARGET_DIR")

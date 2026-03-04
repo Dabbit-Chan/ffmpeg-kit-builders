@@ -44,6 +44,56 @@
 #include <unistd.h>
 #endif
 
+#include <iostream>
+
+#ifdef _WIN32
+#include <dbghelp.h>
+#include <windows.h>
+#elif defined(__ANDROID__)
+#include <android/log.h>
+#include <dlfcn.h>
+#include <iomanip>
+#include <sstream>
+#include <unwind.h>
+
+#define LOG_TAG "ffmpeg-kit"
+
+struct AndroidUnwindState {
+  int count;
+};
+
+static _Unwind_Reason_Code
+android_unwind_callback(struct _Unwind_Context *context, void *arg) {
+  AndroidUnwindState *state = (AndroidUnwindState *)arg;
+  uintptr_t pc = _Unwind_GetIP(context);
+
+  if (pc) {
+    Dl_info info;
+    std::stringstream ss;
+    ss << "#" << std::setw(2) << std::setfill('0') << state->count << " pc "
+       << std::hex << std::setw(16) << pc;
+
+    // Use dli_saddr to calculate the offset within the specific function
+    if (dladdr((void *)pc, &info) && info.dli_sname) {
+      ss << " " << info.dli_fname << " (" << info.dli_sname << "+0x"
+         << (pc - (uintptr_t)info.dli_saddr) << ")";
+    } else {
+      ss << " <unknown>";
+    }
+
+    std::string line = ss.str();
+    std::cerr << line << std::endl;
+    __android_log_print(ANDROID_LOG_ERROR, LOG_TAG, "%s", line.c_str());
+  }
+
+  state->count++;
+  return (state->count >= 30) ? _URC_END_OF_STACK : _URC_NO_REASON;
+}
+#else
+#include <execinfo.h>
+#include <unistd.h>
+#endif
+
 // Macro to wrap the call with a header
 #define PRINT_STACK_TRACE()                                                    \
   do {                                                                         \
@@ -56,11 +106,7 @@ void internal_print_stack_trace() {
 #ifdef _WIN32
   void *stack[100];
   HANDLE process = GetCurrentProcess();
-
-  // Initialize symbols for the current process
   SymInitialize(process, NULL, TRUE);
-
-  // Capture the backtrace
   WORD frames = CaptureStackBackTrace(0, 100, stack, NULL);
 
   SYMBOL_INFO *symbol =
@@ -73,16 +119,14 @@ void internal_print_stack_trace() {
     std::cerr << i << ": " << symbol->Name << " - 0x" << symbol->Address
               << std::endl;
   }
-
   free(symbol);
-  // Note: SymCleanup(process) is omitted here so symbols stay cached for future
-  // crashes
+#elif defined(__ANDROID__)
+  __android_log_print(ANDROID_LOG_ERROR, LOG_TAG, "--- Native Stack Trace ---");
+  AndroidUnwindState state = {0};
+  _Unwind_Backtrace(android_unwind_callback, &state);
 #else
   void *array[20];
   size_t size = backtrace(array, 20);
-
-  // backtrace_symbols_fd writes directly to a file descriptor (2 = stderr)
-  // This is the safest way during a crash because it avoids malloc
   backtrace_symbols_fd(array, size, STDERR_FILENO);
 #endif
 }
@@ -290,7 +334,8 @@ FFmpegSessionHandle ffmpeg_kit_execute_async_full(
     };
     auto log = [log_cb, user_data, handle](std::shared_ptr<Log> l) {
       if (log_cb && l) {
-        std::string message = l->getMessage(); // copy to ensure lifetime during C callback
+        std::string message =
+            l->getMessage(); // copy to ensure lifetime during C callback
         log_cb(handle, message.c_str(), user_data);
       }
     };
@@ -351,7 +396,8 @@ FFmpegSessionHandle ffmpeg_kit_create_session_with_callbacks(
     };
     auto log = [log_cb, user_data, handle](std::shared_ptr<Log> l) {
       if (log_cb && l) {
-        std::string message = l->getMessage(); // copy to ensure lifetime during C callback
+        std::string message =
+            l->getMessage(); // copy to ensure lifetime during C callback
         log_cb(handle, message.c_str(), user_data);
       }
     };
@@ -382,7 +428,8 @@ void ffmpeg_kit_set_log_callback(FFmpegSessionHandle session,
     if (ptr) {
       auto log = [log_cb, user_data, session](std::shared_ptr<Log> l) {
         if (log_cb && l) {
-          std::string message = l->getMessage(); // copy to ensure lifetime during C callback
+          std::string message =
+              l->getMessage(); // copy to ensure lifetime during C callback
           log_cb(session, message.c_str(), user_data);
         }
       };
@@ -458,7 +505,8 @@ void ffmpeg_kit_set_callbacks(FFmpegSessionHandle session,
       };
       auto log = [log_cb, user_data, session](std::shared_ptr<Log> l) {
         if (log_cb && l) {
-          std::string message = l->getMessage(); // copy to ensure lifetime during C callback
+          std::string message =
+              l->getMessage(); // copy to ensure lifetime during C callback
           log_cb(session, message.c_str(), user_data);
         }
       };
@@ -609,7 +657,8 @@ FFprobeSessionHandle ffprobe_kit_create_session_with_callbacks(
     };
     auto log = [log_cb, user_data, handle](std::shared_ptr<Log> l) {
       if (log_cb && l) {
-        std::string message = l->getMessage(); // copy to ensure lifetime during C callback
+        std::string message =
+            l->getMessage(); // copy to ensure lifetime during C callback
         log_cb(handle, message.c_str(), user_data);
       }
     };
@@ -633,7 +682,8 @@ void ffprobe_kit_set_log_callback(FFprobeSessionHandle session,
     if (ptr) {
       auto log = [log_cb, user_data, session](std::shared_ptr<Log> l) {
         if (log_cb && l) {
-          std::string message = l->getMessage(); // copy to ensure lifetime during C callback
+          std::string message =
+              l->getMessage(); // copy to ensure lifetime during C callback
           log_cb(session, message.c_str(), user_data);
         }
       };
@@ -683,7 +733,8 @@ void ffprobe_kit_set_callbacks(FFprobeSessionHandle session,
       };
       auto log = [log_cb, user_data, session](std::shared_ptr<Log> l) {
         if (log_cb && l) {
-          std::string message = l->getMessage(); // copy to ensure lifetime during C callback
+          std::string message =
+              l->getMessage(); // copy to ensure lifetime during C callback
           log_cb(session, message.c_str(), user_data);
         }
       };
@@ -845,7 +896,8 @@ FFplaySessionHandle ffplay_kit_create_session_with_callbacks(
     };
     auto log = [log_cb, user_data, handle](std::shared_ptr<Log> l) {
       if (log_cb && l) {
-        std::string message = l->getMessage(); // copy to ensure lifetime during C callback
+        std::string message =
+            l->getMessage(); // copy to ensure lifetime during C callback
         log_cb(handle, message.c_str(), user_data);
       }
     };
@@ -868,7 +920,8 @@ void ffplay_kit_set_log_callback(FFplaySessionHandle session,
     if (ptr) {
       auto log = [log_cb, user_data, session](std::shared_ptr<Log> l) {
         if (log_cb && l) {
-          std::string message = l->getMessage(); // copy to ensure lifetime during C callback
+          std::string message =
+              l->getMessage(); // copy to ensure lifetime during C callback
           log_cb(session, message.c_str(), user_data);
         }
       };
@@ -918,7 +971,8 @@ void ffplay_kit_set_callbacks(FFplaySessionHandle session,
       };
       auto log = [log_cb, user_data, session](std::shared_ptr<Log> l) {
         if (log_cb && l) {
-          std::string message = l->getMessage(); // copy to ensure lifetime during C callback
+          std::string message =
+              l->getMessage(); // copy to ensure lifetime during C callback
           log_cb(session, message.c_str(), user_data);
         }
       };
@@ -1654,7 +1708,8 @@ MediaInformationSessionHandle media_information_create_session_with_callbacks(
     };
     auto log = [log_cb, user_data, handle](std::shared_ptr<Log> l) {
       if (log_cb && l) {
-        std::string message = l->getMessage(); // copy to ensure lifetime during C callback
+        std::string message =
+            l->getMessage(); // copy to ensure lifetime during C callback
         log_cb(handle, message.c_str(), user_data);
       }
     };
@@ -1679,7 +1734,8 @@ void media_information_kit_set_log_callback(
     if (ptr) {
       auto log = [log_cb, user_data, session](std::shared_ptr<Log> l) {
         if (log_cb && l) {
-          std::string message = l->getMessage(); // copy to ensure lifetime during C callback
+          std::string message =
+              l->getMessage(); // copy to ensure lifetime during C callback
           log_cb(session, message.c_str(), user_data);
         }
       };
@@ -1730,7 +1786,8 @@ void media_information_kit_set_callbacks(
       };
       auto log = [log_cb, user_data, session](std::shared_ptr<Log> l) {
         if (log_cb && l) {
-          std::string message = l->getMessage(); // copy to ensure lifetime during C callback
+          std::string message =
+              l->getMessage(); // copy to ensure lifetime during C callback
           log_cb(session, message.c_str(), user_data);
         }
       };

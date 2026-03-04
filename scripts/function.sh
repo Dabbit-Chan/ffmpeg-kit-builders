@@ -359,11 +359,7 @@ setup_build_environment() {
     export ffmpeg_kit_install="${work_dir}/$(get_ffmpeg_kit_directory)"
     export ffmpeg_kit_bundle="${work_dir}/$(get_bundle_directory)"
     export host_touch="${host_name}_src_state.touch"
-    if iswindows || islinux; then
-      export ffmpeg_kit_src_dir="${BASEDIR}/desktop"
-    else
-      export ffmpeg_kit_src_dir="${BASEDIR}/$host_platform"
-    fi
+    export ffmpeg_kit_src_dir="${BASEDIR}/FFmpegKit"
     
     case "$host_platform" in
         "windows") setup_windows_environment ;;
@@ -3358,6 +3354,10 @@ configure_ffmpeg() {
 	  init_options+=" --target-os=mingw32"
     init_options+=" --enable-w32threads"
   elif isandroid; then
+    export AS="$CC"
+    export LD="$CC"
+    init_options+=" --ranlib=$RANLIB"
+    init_options+=" --nm=$NM"
 	  init_options+=" --target-os=android"
     init_options+=" --enable-jni"
     init_options+=" --enable-pthreads"
@@ -3755,12 +3755,12 @@ install_ffmpeg() {
 	create_dir "$ffmpeg_install_prefix"
   
   cross_windres y
-  unset RC
+  iswindows && unset RC
   iswindows && ffmpeg_windows_patches
   iswindows && export LD=${cross_prefix}gcc # ld weirdness with windows
-
-	do_make "PREFIX=$ffmpeg_install_prefix" "${touch_postfix}" 1 || exit_message 1 "install_ffmpeg: unable to make ffmpeg. see $LOG_FILE for details."
-  do_make_install "PREFIX=$ffmpeg_install_prefix" "" "${touch_postfix}" 1 || exit_message 1 "install_ffmpeg: unable to make install ffmpeg. see $LOG_FILE for details."
+  isandroid && export AS="$CC" && export LD="$CC"
+	do_make "PREFIX=\"$ffmpeg_install_prefix\"" "${touch_postfix}" 1 || exit_message 1 "install_ffmpeg: unable to make ffmpeg. see $LOG_FILE for details."
+  do_make_install "PREFIX=\"$ffmpeg_install_prefix\"" "" "${touch_postfix}" 1 || exit_message 1 "install_ffmpeg: unable to make install ffmpeg. see $LOG_FILE for details."
 
 	echo -e "INFO: Moving all binaries" | tee -a "$LOG_FILE"
 

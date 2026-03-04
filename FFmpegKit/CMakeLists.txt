@@ -174,8 +174,8 @@ if(NOT FFMPEG_KIT_BUNDLE_TYPE)
     set(FFMPEG_KIT_BUNDLE_TYPE "custom")
 endif()
 
-file(WRITE "${CMAKE_CURRENT_SOURCE_DIR}/src/config.c" 
-    "const char program_name[] = \"ffmpeg-kit\";\nconst int program_birth_year = 2025;\n")
+# file(WRITE "${CMAKE_CURRENT_SOURCE_DIR}/src/config.c" 
+#     "const char program_name[] = \"ffmpeg-kit\";\nconst int program_birth_year = 2025;\n")
 
 # Find all sources
 file(GLOB_RECURSE KIT_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/src/*.c" "${CMAKE_CURRENT_SOURCE_DIR}/src/*.cpp")
@@ -239,6 +239,7 @@ target_include_directories(ffmpegkit PRIVATE
     "${CMAKE_CURRENT_SOURCE_DIR}/src"
     "${FFMPEG_BUILD_DIR}/include"
 )
+link_directories("${FFMPEG_BUILD_DIR}/lib")
 target_include_directories(ffmpegkit PUBLIC ${FFMPEG_INCLUDE_DIRS})
 
 # Set C++ Standard to 17 (Required by prebuilt GoogleTest headers)
@@ -309,6 +310,46 @@ if(WIN32)
             "-Wl,-z,now"     # Immediate symbol resolution (Complete RELRO)
             "-Wl,-z,noexecstack" # DEP equivalent for Linux
         )
+    elseif(ANDROID)
+        # Define Android-specific macros for source code compatibility
+        target_compile_definitions(ffmpegkit PRIVATE 
+            TARGET_OS_ANDROID 
+            __ANDROID_API__=${ANDROID_NATIVE_API_LEVEL}
+            _FORTIFY_SOURCE=2
+        )
+
+        # Link essential Android system libraries
+        # 'log' is required for av_log redirection to logcat
+        # 'android' and 'jnigraphics' provide native window and bitmap support
+        target_link_libraries(ffmpegkit PRIVATE 
+            log 
+            android 
+            jnigraphics 
+            m 
+            z 
+            atomic 
+            dl
+        )
+
+        # Android-specific hardening and visibility
+        target_compile_options(ffmpegkit PRIVATE 
+            -fstack-protector-strong 
+            -fvisibility=default
+            -fPIC
+        )
+
+        # Linker flags for Android (using LLD)
+        target_link_options(ffmpegkit PRIVATE 
+            "-Wl,-z,relro"
+            "-Wl,-z,now"
+            "-Wl,-z,noexecstack"
+            "-Wl,--warn-shared-textrel" # Warn if text relocations are found
+            "-Wl,--fatal-warnings"
+            "-Wl,--allow-multiple-definition"
+        )
+
+        # Ensure JNI symbols are kept global in the version script
+        # The existing LINKER_SCRIPT logic will work if Java_* symbols are added
     endif()
 else()
     target_compile_definitions(ffmpegkit PRIVATE TARGET_OS_LINUX)
@@ -318,27 +359,76 @@ endif()
 # ==============================================================================
 # 7. Linking & Scripts
 # ==============================================================================
-target_link_libraries(ffmpegkit PRIVATE PkgConfig::FFMPEG)
+option(FFMPEG_STATIC "Link against static FFmpeg libraries" ON)
+
+target_link_directories(ffmpegkit PRIVATE "${FFMPEG_BUILD_DIR}/lib")
 
 if(BUILD_SHARED_LIBS)
     target_compile_definitions(ffmpegkit PRIVATE DLL_EXPORT PIC)
-    
     target_link_options(ffmpegkit PRIVATE -Wl,--no-undefined)
 
-    if(MINGW OR CMAKE_SYSTEM_NAME MATCHES "Linux")
-    target_link_libraries(ffmpegkit PRIVATE 
-            "-Wl,--whole-archive"
-            PkgConfig::FFMPEG
-            "-Wl,--no-whole-archive"
+    if(FFMPEG_STATIC)
+        # Static Link Path: Use absolute paths and whole-archive to prevent symbol stripping
+        set(FFMPEG_STATIC_LIBS
+            "${FFMPEG_BUILD_DIR}/lib/libavdevice.a"
+            "${FFMPEG_BUILD_DIR}/lib/libavfilter.a"
+            "${FFMPEG_BUILD_DIR}/lib/libavformat.a"
+            "${FFMPEG_BUILD_DIR}/lib/libavcodec.a"
+            "${FFMPEG_BUILD_DIR}/lib/libswresample.a"
+            "${FFMPEG_BUILD_DIR}/lib/libswscale.a"
+            "${FFMPEG_BUILD_DIR}/lib/libavutil.a"
         )
+
+        if(MINGW OR CMAKE_SYSTEM_NAME MATCHES "Linux" OR ANDROID)
+            target_link_libraries(ffmpegkit PRIVATE 
+                "-Wl,--whole-archive"
+                ${FFMPEG_STATIC_LIBS}
+                "-Wl,--no-whole-archive"
+                PkgConfig::FFMPEG
+            )
+        else()
+            target_link_libraries(ffmpegkit PRIVATE ${FFMPEG_STATIC_LIBS} PkgConfig::FFMPEG)
+        endif()
     else()
-        # macOS / Standard fallback
+        # Shared Link Path: Let PkgConfig handle -lavcodec etc. for .so files
         target_link_libraries(ffmpegkit PRIVATE PkgConfig::FFMPEG)
+    endif()
+
+    # Append platform-specific trailing dependencies
+    if(ANDROID)
+        target_link_libraries(ffmpegkit PRIVATE OpenSLES)
     endif()
 
     # Linker Script
     set(LINKER_SCRIPT "${CMAKE_CURRENT_BINARY_DIR}/ffmpeg-linker-script.map")
-    file(WRITE ${LINKER_SCRIPT} "{\n    global:\n        av*;\n        swr*;\n        sws*;\n        ffmpeg*;\n        ffprobe*;\n        ffplay*;\n        media_information*;\n        stream_information*;\n        chapter*;\n        extern \"C++\" {\n            ffmpegkit::*;\n            typeinfo*for*ffmpegkit::*;\n            typeinfo*name*for*ffmpegkit::*;\n            vtable*for*ffmpegkit::*;\n            Json::*;\n            typeinfo*for*Json::*;\n            typeinfo*name*for*Json::*;\n            vtable*for*Json::*;\n        };\n    local:\n        *;\n};\n")
+    file(WRITE ${LINKER_SCRIPT} "
+{
+    global:
+        av*;
+        swr*;
+        sws*;
+        ffmpeg*;
+        ffprobe*;
+        ffplay*;
+        media_information*;
+        stream_information*;
+        chapter*;
+        Java_*;
+        JNI_OnLoad;
+        extern \"C++\" {
+            ffmpegkit::*;
+            typeinfo*for*ffmpegkit::*;
+            typeinfo*name*for*ffmpegkit::*;
+            vtable*for*ffmpegkit::*;
+            Json::*;
+            typeinfo*for*Json::*;
+            typeinfo*name*for*Json::*;
+            vtable*for*Json::*;
+        };
+    local:
+        *;
+};
+")
     target_link_options(ffmpegkit PRIVATE "-Wl,--version-script=${LINKER_SCRIPT}")
 
     # Bundling Manifest (Requires shared-library.sh)

@@ -430,6 +430,10 @@ while [ $# -gt 0 ]; do
     export enable_mq=y
     shift
     ;;
+  --base-bundle)
+    export enable_base=y
+    shift
+    ;;
   --audio-bundle)
     export audio_bundle=y
     shift

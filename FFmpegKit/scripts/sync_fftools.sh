@@ -1,7 +1,7 @@
 #!/bin/bash
 
-SCRIPT_DIR="$(realpath "$(dirname "${BASH_SOURCE[0]}")")" # desktop/scripts
-PROJECT_ROOT="$(realpath "$(dirname "$SCRIPT_DIR")")" # desktop
+SCRIPT_DIR="$(realpath "$(dirname "${BASH_SOURCE[0]}")")" # FFmpegKit/scripts
+PROJECT_ROOT="$(realpath "$(dirname "$SCRIPT_DIR")")" # FFmpegKit
 FFMPEG_KIT_ROOT="$(realpath "$(dirname "$PROJECT_ROOT")")" # ffmpeg-kit-builders
 FFMPEG_SRC_DIR="${1:-$FFMPEG_KIT_ROOT/prebuilt/src/ffmpeg}"
 CURRENT_SOURCE_DIR="${2:-$PROJECT_ROOT}"
