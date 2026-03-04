@@ -160,14 +160,6 @@ BUILD_STEPS+=(
   "./scripts/builds/64-video.sh|23 sfy${p}"
 )
 
-# Streaming builds
-BUILD_STEPS+=(
-  "./scripts/builds/64-streaming.sh|23 gfy${p}"
-  "./scripts/builds/64-streaming.sh|23 fy${p}"
-  "./scripts/builds/64-streaming.sh|23 sgfy${p}"
-  "./scripts/builds/64-streaming.sh|23 sfy${p}"
-)
-
 # Video hardware builds
 BUILD_STEPS+=(
   "./scripts/builds/64-video-hw.sh|23 gfy${p}"
