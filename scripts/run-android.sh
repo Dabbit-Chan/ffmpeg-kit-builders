@@ -160,10 +160,13 @@ build_libjsonc() {
   change_dir "$src_dir"
   do_git_checkout "$repo" "$src_dir/$lib" "$repo_ver"
   change_dir "$src_dir/$lib/build" 1
-  export LDFLAGS="${LDFLAGS//-static-libstdc++/}"
+  local extra_ld="$LDFLAGS -lunwind"
   do_cmake_from_build_dir "$src_dir/$lib" "-DCMAKE_BUILD_TYPE=Release \
 -DCMAKE_POLICY_VERSION_MINIMUM=3.5 \
--DBUILD_SHARED_LIBS=OFF"
+-DBUILD_SHARED_LIBS=OFF \
+-DCMAKE_EXE_LINKER_FLAGS=\"$extra_ld\" \
+-DCMAKE_SHARED_LINKER_FLAGS=\"$extra_ld\" \
+-DCMAKE_MODULE_LINKER_FLAGS=\"$extra_ld\""
   disable_nonessential "$src_dir/$lib/build"
   do_make_and_make_install
   change_dir "$src_dir"
@@ -992,7 +995,6 @@ build_libcaca() {
   do_git_checkout "$repo" "$src_dir/$lib" "$repo_ver"
   change_dir "$src_dir/$lib"
   export CFLAGS="$CFLAGS -Wno-ignored-optimization-argument"
-  export LIBS="-lm"
   sed -i 's/AC_PREREQ([2.71])/# AC_PREREQ([2.71])/g' configure.ac
   generic_configure "--libdir=$dependency_install_prefix/lib \
 --disable-csharp \
@@ -1006,6 +1008,7 @@ build_libcaca() {
 --disable-pango \
 --disable-x11 \
 --disable-imlib2 \
+--disable-cxx \
 ac_cv_func_fldln2=no \
 ac_cv_header_fpu_control_h=no"
   disable_nonessential "$src_dir/$lib" "src"
@@ -1354,12 +1357,16 @@ build_spirv_tools() {
   change_dir "$src_dir"
   do_git_checkout "$repo" "$src_dir/$lib" "$repo_ver"
   change_dir "$src_dir/$lib"
+  local extra_ld="$LDFLAGS -lunwind"
   local cmake_params="-DCMAKE_INSTALL_PREFIX=${dependency_install_prefix} \
 -DCMAKE_BUILD_TYPE=Release \
 -DBUILD_SHARED_LIBS=OFF \
 -DSPIRV_SKIP_TESTS=ON \
 -DSPIRV_WERROR=OFF \
 -DSPIRV_SKIP_EXECUTABLES=ON \
+-DCMAKE_SHARED_LINKER_FLAGS=\"$extra_ld\" \
+-DCMAKE_MODULE_LINKER_FLAGS=\"$extra_ld\" \
+-DCMAKE_EXE_LINKER_FLAGS=\"$extra_ld\" \
 -DSPIRV-Headers_SOURCE_DIR=${dependency_install_prefix}"
   change_dir "$src_dir/$lib/build" 1
   do_cmake_from_build_dir "$src_dir/$lib" "$cmake_params"
@@ -2655,11 +2662,13 @@ build_librubberband() {
   change_dir "$src_dir"
   do_git_checkout "$repo" "$src_dir/$lib" "$repo_ver"
   change_dir "$src_dir/$lib"
-  local meson_options="-Dtests=disabled -Dcmdline=disabled"
+  local extra_link_args="-Wl,--whole-archive -lunwind -Wl,--no-whole-archive -llog"
+  local meson_options="-Dtests=disabled -Dcmdline=disabled -Dc_link_args=\"$extra_link_args\" -Dcpp_link_args=\"$extra_link_args\""
   generic_meson "$meson_options"
   disable_nonessential "$src_dir/$lib"
   do_ninja_and_ninja_install
   change_dir "$src_dir"
+  reset_allflags
 }
 # build_libshaderc        # config_options+= --enable-libshaderc          # enable GLSL->SPIRV compilation via libshaderc [no]
 build_libshaderc() {
@@ -3413,7 +3422,9 @@ build_libvmaf() {
   change_dir "$src_dir"
   do_git_checkout "$repo" "$src_dir/$lib" "$repo_ver"
   change_dir "$src_dir/$lib/libvmaf"
-  local meson_options="-Denable_float=true -Dbuilt_in_models=true -Denable_tests=false -Denable_docs=false"
+  local extra_link_args="-Wl,--whole-archive -lunwind -Wl,--no-whole-archive -llog"
+  local extra_meson_options="-Dc_link_args=\"$extra_link_args\" -Dcpp_link_args=\"$extra_link_args\""
+  local meson_options="-Denable_float=true -Dbuilt_in_models=true -Denable_tests=false -Denable_docs=false $extra_meson_options"
   generic_meson "$meson_options"
   disable_nonessential "$src_dir/$lib"
   do_ninja_and_ninja_install
@@ -3544,16 +3555,32 @@ build_libx265() {
   local repo_ver="4.1"
   change_dir "$src_dir"
   do_git_checkout "$repo" "$src_dir/$lib" "$repo_ver"
-  change_dir "$src_dir/$lib/12bit" 1
   # Fix for CMake > 3.0 dropping support for OLD policy behaviors
   sed -i 's/cmake_policy(SET CMP0025 OLD)//g' "$src_dir/$lib/source/CMakeLists.txt"
   sed -i 's/cmake_policy(SET CMP0054 OLD)//g' "$src_dir/$lib/source/CMakeLists.txt"
+  local extra_cmake=""
+  local extra_cmake_high_bit=""
   if [[ "$host_arch" == "aarch64" ]]; then
     sed -i '/if(INTEL_CXX OR CLANG OR (NOT CC_VERSION VERSION_LESS 4.3))/,/endif()/d' "$src_dir/$lib/source/common/CMakeLists.txt"
+    extra_cmake=" -DCROSS_COMPILE_ARM64=ON"
+    extra_cmake_high_bit=" -DENABLE_ASSEMBLY=OFF"
+    # Inject target triple into hardcoded add_custom_command ARGS
+    sed -i 's/ARGS ${ARM_ARGS}/ARGS --target=aarch64-linux-android26 ${ARM_ARGS}/g' "$src_dir/$lib/source/CMakeLists.txt"
+  elif [[ "$host_arch" == "armv7a" ]]; then
+    sed -i '/if(INTEL_CXX OR CLANG OR (NOT CC_VERSION VERSION_LESS 4.3))/,/endif()/d' "$src_dir/$lib/source/common/CMakeLists.txt"
+    extra_cmake=" -DCROSS_COMPILE_ARM=ON"
+    extra_cmake_high_bit=" -DENABLE_ASSEMBLY=OFF"
+    # Inject target triple into hardcoded add_custom_command ARGS
+    sed -i 's/ARGS ${ARM_ARGS}/ARGS --target=armv7a-linux-androideabi26 ${ARM_ARGS}/g' "$src_dir/$lib/source/CMakeLists.txt"
   fi
   sed -i 's/ARGS ${NASM_FLAGS} ${ASM_SRC}/ARGS ${NASM_FLAGS} -DPIC ${ASM_SRC}/g' "$src_dir/$lib/source/CMakeLists.txt"
   sed -i 's/set(ARGS -f elf64)/set(ARGS -f elf64 -DPIC)/g' "$src_dir/$lib/source/cmake/CMakeASM_NASMInformation.cmake"
   sed -i 's/set(ARGS -f elf32)/set(ARGS -f elf32 -DPIC)/g' "$src_dir/$lib/source/cmake/CMakeASM_NASMInformation.cmake"
+  # Purge cache to ensure modified CMakeLists.txt is processed
+  rm -rf "$src_dir/$lib/12bit" "$src_dir/$lib/10bit" "$src_dir/$lib/8bit"
+  mkdir -p "$src_dir/$lib/12bit" "$src_dir/$lib/10bit" "$src_dir/$lib/8bit"
+  # --- 12 BIT ---
+  change_dir "$src_dir/$lib/12bit" 1
   do_cmake_from_build_dir "$src_dir/$lib/source" "-DHIGH_BIT_DEPTH=ON \
 -DEXPORT_C_API=OFF \
 -DENABLE_CLI=OFF \
@@ -3566,9 +3593,10 @@ build_libx265() {
 -DCMAKE_ASM_NASM_FLAGS=\"-DPIC\" \
 -DCMAKE_C_FLAGS:STRING=\"-fPIC -fvisibility=hidden\" \
 -DCMAKE_CXX_FLAGS:STRING=\"-fPIC -fvisibility=hidden\" \
--DCMAKE_POLICY_VERSION_MINIMUM=3.5"
+-DCMAKE_POLICY_VERSION_MINIMUM=3.5 ${extra_cmake}${extra_cmake_high_bit}"
   disable_nonessential "$src_dir/$lib/12bit"
   do_make
+  # --- 10 BIT ---
   change_dir "$src_dir/$lib/10bit" 1
   do_cmake_from_build_dir "$src_dir/$lib/source" "-DHIGH_BIT_DEPTH=ON \
 -DEXPORT_C_API=OFF \
@@ -3581,9 +3609,10 @@ build_libx265() {
 -DCMAKE_ASM_NASM_FLAGS=\"-DPIC\" \
 -DCMAKE_C_FLAGS:STRING=\"-fPIC -fvisibility=hidden\" \
 -DCMAKE_CXX_FLAGS:STRING=\"-fPIC -fvisibility=hidden\" \
--DCMAKE_POLICY_VERSION_MINIMUM=3.5"
+-DCMAKE_POLICY_VERSION_MINIMUM=3.5 ${extra_cmake}${extra_cmake_high_bit}"
   disable_nonessential "$src_dir/$lib/10bit"
   do_make
+  # --- 8 BIT ---
   change_dir "$src_dir/$lib/8bit" 1
   ln -sf "$src_dir/$lib/10bit/libx265.a" libx265_main10.a
   ln -sf "$src_dir/$lib/12bit/libx265.a" libx265_main12.a
@@ -3599,7 +3628,7 @@ build_libx265() {
 -DCMAKE_ASM_NASM_FLAGS=\"-DPIC\" \
 -DCMAKE_C_FLAGS:STRING=\"-fPIC -fvisibility=hidden\" \
 -DCMAKE_CXX_FLAGS:STRING=\"-fPIC -fvisibility=hidden\" \
--DCMAKE_POLICY_VERSION_MINIMUM=3.5"
+-DCMAKE_POLICY_VERSION_MINIMUM=3.5 ${extra_cmake}"
   change_dir "$src_dir/$lib/8bit"
   disable_nonessential "$src_dir/$lib/8bit"
   do_make
