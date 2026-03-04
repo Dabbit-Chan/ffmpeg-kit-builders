@@ -50,7 +50,7 @@ for arg; do
       echo "  linux|windows|android  Target platform (required)"
       echo "  d              Build dependencies first"
       echo "  --reset        Reset build state and start from beginning"
-      echo "  --bundles=*)   Comma separated list of bundles to build (e.g. --bundles=base,video,audio)"
+      echo "  --bundles=*)   Comma separated (without spaces) list of bundles to build (e.g. --bundles=base,video,audio)"
       echo "  --help         Show this help message"
       echo ""
       echo "State file location: ${STATE_FILE}"
@@ -105,7 +105,10 @@ execute_build() {
   local script="$1"
   local args="$2"
   local step_name="${script} ${args}"
-  
+  if [[ -z "${script}" ]]; then
+    echo "[SKIP] No script to run"
+    return 0
+  fi
   if is_completed "${script}" "${args}"; then
     echo "[SKIP] Already completed: ${step_name}"
     return 0
@@ -168,10 +171,10 @@ BUILD_STEPS+=(
 
 # Video hardware builds
 BUILD_STEPS+=(
-  "./scripts/builds/64-video-hw.sh|23 gfy${p}"
-  "./scripts/builds/64-video-hw.sh|23 fy${p}"
-  "./scripts/builds/64-video-hw.sh|23 sgfy${p}"
-  "./scripts/builds/64-video-hw.sh|23 sfy${p}"
+  "./scripts/builds/64-video_hw.sh|23 gfy${p}"
+  "./scripts/builds/64-video_hw.sh|23 fy${p}"
+  "./scripts/builds/64-video_hw.sh|23 sgfy${p}"
+  "./scripts/builds/64-video_hw.sh|23 sfy${p}"
 )
 
 # Full builds
@@ -208,10 +211,14 @@ current_step=0
 for step in "${BUILD_STEPS[@]}"; do
   current_step=$((current_step + 1))
   if [[ -n "$bundles" ]]; then
-    if [[ "${BUNDLE_ARRAY[@]}" =~ "${step%%|*}" ]]; then
-      script="${step%%|*}"
-      args="${step#*|}"
-    fi
+    # if step is 64-<BUNDLE>.sh
+    for bundle in "${BUNDLE_ARRAY[@]}"; do
+      if [[ "${step%%|*}" == *"64-${bundle}.sh"* ]]; then
+        script="${step%%|*}"
+        args="${step#*|}"
+        break
+      fi
+    done
   else
     script="${step%%|*}"
     args="${step#*|}"
@@ -220,7 +227,10 @@ for step in "${BUILD_STEPS[@]}"; do
   echo "========================================"
   echo "Step ${current_step}/${total_steps}"
   echo "========================================"
-  
+  echo "Executing ${script} ${args}"
+  if [[ -z "${script}" ]]; then
+    continue
+  fi
   execute_build "${script}" "${args}"
 done
 
