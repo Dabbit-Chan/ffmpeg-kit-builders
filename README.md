@@ -28,11 +28,19 @@ This repository provides a comprehensive build system for FFmpeg and FFmpegKit t
 
 - **Linux**: Native builds for x86_64 and i686 architecture with shared libraries (.so) and static libraries (.a).
 - **Windows**: Cross-compilation from Linux hosts using MinGW-w64 toolchain with shared libraries (.dll) and static mingw libraries (.a).
-  - *Note: MSVC ABI is not supported.*
-- **Android**: Currently not support - WIP
+  - *Note: Compiling using MSVC ABI is not supported by the build script.*
+- **Android**: Coming soon!
 - **Apple**: Apple platforms are not currently planned as I dont have one of those to develop and test. The framework is there so you are welcome to contribute!
   - **MacOS**: Not planned
   - **iOS**: Not planned
+
+| Platform | Status         | Architecture         |
+|----------|----------------|----------------------|
+| Android  | 🚧 Planned     |armv7, arm64, x86_64  |
+| iOS      | Not Supported  |                      |
+| macOS    | Not Supported  |                      |
+| Linux    | ✅ Supported   | x86_64               |
+| Windows  | ✅ Supported   | x86_64               |
 
 ## Quick Start
 
@@ -271,14 +279,14 @@ prebuilt/
 
 ## Bundle Matrix
 
-|Feature  |Audio   |Video   |Streaming|Video+Hardware
-|---------|--------|--------|-------- |--------
-|Video    ||x|x|
-|Audio    |x|x|x|
-|Streaming|||x|
-|Hardware ||||x|
-|AI       |||||
-|HTTPS    |x|x|x|x|x|x|
+|Feature  |Base    |Audio   |Video   |Video+Hardware|Full|
+|---------|--------|--------|--------|--------------|----|
+|Video    |        |        |x       |              |x   |
+|Audio    |        |x       |x       |              |x   |
+|Streaming|        |x       |x       |x             |x   |
+|Hardware |        |        |        |x             |x   |
+|AI*      |        |        |        |              |    |
+|HTTPS    |        |x       |x       |x             |x   |
 
 ## Supported External Libraries
 
