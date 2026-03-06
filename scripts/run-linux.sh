@@ -2313,17 +2313,14 @@ build_libquirc() {
   change_dir "$src_dir"
   do_git_checkout "$repo" "$src_dir/$lib" "$repo_ver"
   create_dir "$src_dir/$lib/build"
-  # path to remove demo app build because it requires some unnecessary dependencies
-  if git apply --reverse --check --ignore-space-change --ignore-whitespace --verbose "$PATCHDIR/libquirc_Makefile.patch" >/dev/null 2>&1; then
-    echo "INFO: Patch already applied. Skipping." >>"$LOG_FILE"
-  else
-    echo "INFO: Applying patch to remove demo app..." >>"$LOG_FILE"
-    copy_path "Makefile" "Makefile.bak"
-    git apply --ignore-space-change --ignore-whitespace --verbose "$PATCHDIR/libquirc_Makefile.patch" > >(redirect_output) 2>&1 || exit_message 1 "build_libquirc: unable to patch makefile"
-  fi
+  sed -i 's/all: libquirc.$(LIB_SUFFIX) qrtest/all: libquirc.$(LIB_SUFFIX)/g' "$src_dir/$lib/Makefile"
+  sed -i 's|install -o root -g root -m 0755 quirc-demo $(DESTDIR)$(PREFIX)/bin|# install -o root -g root -m 0755 quirc-demo $(DESTDIR)$(PREFIX)/bin|g' "$src_dir/$lib/Makefile"
+  sed -i 's|install -o root -g root -m 0755 quirc-scanner $(DESTDIR)$(PREFIX)/bin|# install -o root -g root -m 0755 quirc-scanner $(DESTDIR)$(PREFIX)/bin|g' "$src_dir/$lib/Makefile"
+  sed -i 's|install: libquirc.a libquirc.$(LIB_SUFFIX) quirc-demo quirc-scanner|install: libquirc.a libquirc.$(LIB_SUFFIX)|g' "$src_dir/$lib/Makefile"
   do_make "libquirc.a LDFLAGS=\"-static\" PREFIX=${dependency_install_prefix}"
   disable_nonessential "$src_dir/$lib"
   do_make_install "PREFIX=${dependency_install_prefix}"
+  find "$dependency_install_prefix/lib" -name "libquirc.so*" -delete
   change_dir "$src_dir"
 }
 # build_librabbitmq       # config_options+= --enable-librabbitmq         # enable RabbitMQ library [no]
@@ -2997,6 +2994,7 @@ build_libdeflate() {
   disable_nonessential "$src_dir/$lib"
   do_make_and_make_install
   change_dir "$src_dir"
+  find "$dependency_install_prefix/lib" -name "libdeflate.so*" -delete
 }
 build_jbig() {
   local lib="jbig"

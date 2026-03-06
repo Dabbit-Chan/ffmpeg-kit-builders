@@ -648,6 +648,7 @@ build_chromaprint() {
   change_dir "$src_dir"
   do_git_checkout "$repo" "$src_dir/$lib" "$repo_ver"
   change_dir "$src_dir/$lib"
+  export CXXFLAGS="$CXXFLAGS -fexceptions"
   generic_cmake "-DCMAKE_BUILD_TYPE=Release \
 -DBUILD_SHARED_LIBS=OFF \
 -DBUILD_TOOLS=OFF \
@@ -657,6 +658,7 @@ build_chromaprint() {
   do_make_and_make_install
   change_dir "$src_dir"
   add_libs_to_pkg -t="$install_pkgconfig_dir/libchromaprint.pc" -l="-lfftw3"
+  reset_allflags
 }
 # build_frei0r            # config_options+= --enable-frei0r              # enable frei0r video filtering [no]
 build_frei0r() {
@@ -1720,6 +1722,7 @@ build_libkvazaar() {
   #do_cmake_from_build_dir "$src_dir/$lib" "$cmake_params"
   generic_configure "--disable-shared --enable-static --enable-pic --with-pic ASFLAGS=\"$ASFLAGS\""
   find . -type f -name "Makefile" -exec sed -i 's/-lrt//g' {} +
+  sed -i 's/-lrt//g' "$install_pkgconfig_dir/kvazaar.pc"
   disable_nonessential "$src_dir/$lib/build"
   do_make_and_make_install
   change_dir "$src_dir"
@@ -1885,6 +1888,7 @@ LDFLAGS=\"$LDFLAGS $LIBS\""
   do_make_and_make_install "$make_config" "$make_config"
   unset LIBS
   reset_allflags
+  change_dir "$src_dir"
 }
 build_libffi() {
   local lib="libffi"
@@ -2079,7 +2083,6 @@ build_libopencv() {
   change_dir "$src_dir"
   do_git_checkout "$repo" "$src_dir/$lib" "$repo_ver"
   change_dir "$src_dir/$lib/build" 1
-  install_missing_packages libpciaccess-dev
   #export LDFLAGS="$LDFLAGS -L${ffmpeg_install_prefix}/lib -L${dependency_install_prefix}/lib -lsharpyuv -ljbig -llzma -ldeflate -lzstd -ljpeg"
   local original_pkg_path=$PKG_CONFIG_PATH
   export PKG_CONFIG_PATH="$install_pkgconfig_dir"
@@ -2095,6 +2098,12 @@ build_libopencv() {
 -DOPENCV_GENERATE_PKGCONFIG=ON \
 -DOPENCV_FORCE_3RDPARTY_BUILD=ON \
 -DOPENCV_INSTALL_APPS_LIST="" \
+-DWITH_IPP=OFF \
+-DHAVE_IPP=OFF \
+-DBUILD_IPP_IW=OFF \
+-DWITH_ITT=OFF \
+-DHAVE_ITT=OFF \
+-DBUILD_ITT=OFF \
 -DBUILD_JAVA=OFF \
 -DBUILD_opencv_java=OFF \
 -DBUILD_opencv_java_bindings_generator=OFF \
@@ -2105,19 +2114,50 @@ build_libopencv() {
 -DINSTALL_PYTHON_EXAMPLES=OFF \
 -DBUILD_C_EXAMPLES=OFF \
 -DINSTALL_C_EXAMPLES=OFF \
+-DWITH_ANDROID_MEDIANDK=OFF \
+-DWITH_ANDROID_NATIVE_CAMERA=OFF \
+-DWITH_CPUFEATURES=OFF \
+-DWITH_OPENCL=OFF \
+-DCV_TRACE=OFF \
+-DWITH_PROTOBUF=OFF \
+-DWITH_FLATBUFFERS=OFF \
+-DWITH_GSTREAMER=OFF \
+-DWITH_OPENGL=OFF \
+-DWITH_OPENEXR=OFF \
+-DBUILD_ZLIB=OFF \
+-DBUILD_TIFF=OFF \
+-DBUILD_JPEG=OFF \
+-DBUILD_PNG=OFF \
+-DBUILD_WEBP=OFF \
 -DCMAKE_SYSTEM_VERSION=$ANDROID_API_LEVEL \
--DOPENCV_INCLUDE_INSTALL_PATH=${dependency_install_prefix}/include \
+-DOPENCV_INCLUDE_INSTALL_PATH=include \
+-D3P_LIBRARY_OUTPUT_PATH=lib/opencv4/3rdparty \
+-DOPENCV_LIB_INSTALL_PATH=lib \
+-DLIBRARY_OUTPUT_PATH=lib \
+-DCMAKE_INSTALL_LIBDIR=lib \
+-DCMAKE_INSTALL_INCLUDEDIR=include \
 -DCMAKE_EXE_LINKER_FLAGS=\"-L${dependency_install_prefix}/lib -lsharpyuv -ljbig -llzma -ldeflate -lzstd -ljpeg\" \
 -DHAVE_DSHOW=0"
   do_cmake_from_build_dir "$src_dir/$lib" "$cmake_params"
   disable_nonessential "$src_dir/$lib/build"
   do_make_and_make_install
-  if [[ -f "$install_pkgconfig_dir/opencv4.pc" ]]; then
-    copy_path "$install_pkgconfig_dir/opencv4.pc" "$install_pkgconfig_dir/opencv.pc" -f
-  else
-    copy_path "$src_dir/$lib/build/unix-install/opencv4.pc" "$install_pkgconfig_dir/opencv.pc" -f
-  fi
+  copy_path "$src_dir/$lib/build/unix-install/opencv4.pc" "$install_pkgconfig_dir/opencv.pc" -f
+  copy_path "$src_dir/$lib/build/unix-install/opencv4.pc" "$install_pkgconfig_dir/opencv4.pc" -f
+  add_libs_to_pkg -t="$install_pkgconfig_dir/opencv.pc" -p="-lopencv_imgproc -lopencv_core -lkleidicv_hal -lkleidicv_thread -lkleidicv -ltegra_hal -lz -lm -llog"
+  add_libs_to_pkg -t="$install_pkgconfig_dir/opencv4.pc" -p="-lopencv_imgproc -lopencv_core -lkleidicv_hal -lkleidicv_thread -lkleidicv -ltegra_hal -lz -lm -llog"
+  find "$install_pkgconfig_dir" -name "opencv*.pc" -exec sed -i -E \
+  -e 's/(^|[[:space:]])-ldl([[:space:]]|$)/ /g' \
+  -e 's/(^|[[:space:]])-lpthread([[:space:]]|$)/ /g' \
+  -e 's/(^|[[:space:]])-l3rdparty([[:space:]]|$)/ /g' {} +
   export PKG_CONFIG_PATH=$original_pkg_path
+  mapfile -t files < <(find "$dependency_install_prefix/sdk/native/staticlibs" "$dependency_install_prefix/sdk/native/3rdparty/libs" -type f -name "*.a*")
+  for file in "${files[@]}"; do
+    filename=$(basename "$file")
+    if [[ -f "$dependency_install_prefix/lib/$filename" ]]; then
+      rm -f "$dependency_install_prefix/lib/$filename"
+    fi
+    ln -sf "$file" "$dependency_install_prefix/lib/"
+  done
   change_dir "$src_dir"
 }
 # build_libopenh264       # config_options+= --enable-libopenh264         # enable H.264 encoding via OpenH264 [no]
@@ -2146,9 +2186,9 @@ build_libopenjpeg() {
   disable_nonessential "$src_dir/$lib"
   do_make_and_make_install
   change_dir "$src_dir"
-  if [[ -f "$install_pkgconfig_dir/libopenjp2.pc" ]]; then
-    sed -i 's/-l-lpthread/-lpthread/g' "$install_pkgconfig_dir/libopenjp2.pc"
-  fi
+  find "$install_pkgconfig_dir" -name "libopenjp2.pc" -exec sed -i \
+  -e 's/-l-lpthread//g' \
+  -e 's/-l-pthread//g' {} +
 }
 build_libogg() {
   local lib="libogg"
@@ -2279,6 +2319,7 @@ build_libxxhash() {
   disable_nonessential "$src_dir/$lib"
   generic_make_install
   change_dir "$src_dir"
+  find "$dependency_install_prefix/lib" -name "libxxhash.so*" -delete
 }
 build_spirv_cross() {
   local lib="SPIRV-Cross"
@@ -2409,6 +2450,7 @@ build_libquirc() {
   do_make "libquirc.a LDFLAGS=\"-static\" PREFIX=${dependency_install_prefix}"
   disable_nonessential "$src_dir/$lib"
   do_make_install "PREFIX=${dependency_install_prefix}"
+  find "$dependency_install_prefix/lib" -name "libquirc.so*" -delete
   change_dir "$src_dir"
 }
 # build_librabbitmq       # config_options+= --enable-librabbitmq         # enable RabbitMQ library [no]
@@ -2432,6 +2474,7 @@ build_librabbitmq() {
   do_cmake_from_build_dir "$src_dir/$lib" "$cmake_params"
   disable_nonessential "$src_dir/$lib/build"
   do_make_and_make_install
+  sed -i -E 's/(^|[[:space:]])-l([[:space:]]|$)/ /g' "$install_pkgconfig_dir/librabbitmq.pc"
   change_dir "$src_dir"
 }
 # build_librav1e          # config_options+= --enable-librav1e            # enable AV1 encoding via rav1e [no]
@@ -2702,14 +2745,16 @@ build_libshaderc() {
 -DCMAKE_C_FLAGS=\"$CFLAGS -I${dependency_install_prefix}/include/glslang\" \
 -DCMAKE_SHARED_LINKER_FLAGS=\"$LDFLAGS\" \
 -DCMAKE_MODULE_LINKER_FLAGS=\"$LDFLAGS\" \
+-DSHADERC_ENABLE_SHARED_CRT=OFF \
+-DSHADERC_ENABLE_INSTALL=ON \
 -DBUILD_SHARED_LIBS=OFF"
   disable_nonessential "$src_dir/$lib"
   do_make_and_make_install
   if [[ -f "$src_dir/$lib/build/libshaderc_util/libshaderc_util.a" ]] ; then
     copy_path "$src_dir/$lib/build/libshaderc_util/libshaderc_util.a" "$dependency_install_prefix/lib/libshaderc_util.a" >>"$LOG_FILE"
   fi
-  sed -i.bak "s/Libs: .*/& -lstdc++/" "$install_pkgconfig_dir/shaderc_combined.pc"
-  sed -i.bak "s/Libs: .*/& -lstdc++/" "$install_pkgconfig_dir/shaderc_static.pc"
+  find "$install_pkgconfig_dir" -name "shaderc*.pc" -exec sed -i 's/-lshaderc_shared/-lshaderc_combined/g' {} +
+  find "$install_pkgconfig_dir" -name "shaderc*.pc" -exec sed -i "s/Libs: .*/& -lglslang -lSPIRV -lSPIRV-Tools -lSPIRV-Tools-opt -lstdc++ -lm/" {} +
   change_dir "$src_dir"
 }
 # build_libshine          # config_options+= --enable-libshine            # enable fixed-point MP3 encoding via libshine [no]
@@ -2978,6 +3023,7 @@ build_libdeflate() {
   disable_nonessential "$src_dir/$lib"
   do_make_and_make_install
   change_dir "$src_dir"
+  find "$dependency_install_prefix/lib" -name "libdeflate.so*" -delete
 }
 build_jbig() {
   local lib="jbig"
@@ -3283,9 +3329,12 @@ build_libtesseract() {
 -DBUILD_SHARED_LIBS=OFF \
 -DBUILD_STATIC_LIBS=ON \
 -DCMAKE_POSITION_INDEPENDENT_CODE=ON \
+-DENABLE_NATIVE=OFF \
 -DLeptonica_DIR=$dependency_install_prefix/lib/cmake/leptonica"
   if [[ "$host_arch" == "x86_64" ]]; then
-    cmake_params="$cmake_params -DHAVE_AVX=OFF -DHAVE_AVX2=OFF -DHAVE_FMA=OFF -DHAVE_SSE4_1=ON"
+    cmake_params="$cmake_params -DOPENMP_SIMD=OFF -DHAVE_AVX:BOOL=OFF -DHAVE_AVX2:BOOL=OFF -DHAVE_FMA:BOOL=OFF -DHAVE_SSE4_1:BOOL=ON"
+    # Update the x86 block to ignore Android
+    sed -i 's/if(CMAKE_SYSTEM_PROCESSOR MATCHES "x86|x86_64|AMD64|amd64|i386|i686")/if(NOT ANDROID AND CMAKE_SYSTEM_PROCESSOR MATCHES "x86|x86_64|AMD64|amd64|i386|i686")/' "$src_dir/$lib/CMakeLists.txt"
   fi
   change_dir "$src_dir/$lib/build" 1
   do_cmake_from_build_dir "$src_dir/$lib" "$cmake_params"
@@ -3300,7 +3349,7 @@ build_libtesseract() {
   add_libs_to_pkg -t="$install_pkgconfig_dir/tesseract.pc" \
   -l="-ltesseract -lleptonica -lz -larchive -ltiff -lpng16 \
       -ljpeg -lgif -lwebpmux -lwebp -lopenjp2 -ljbig -lLerc \
-      -lsharpyuv -llzma -lzstd -ldeflate" \
+      -lsharpyuv -llzma -lzstd -ldeflate -lstdc++ -lm" \
   -rp="lept libarchive liblzma libtiff-4"
   reset_allflags
   reset_cross_vars
@@ -3458,7 +3507,8 @@ build_libvpx() {
 --disable-tools \
 --disable-docs \
 --disable-unit-tests \
---enable-vp9-highbitdepth"
+--enable-vp9-highbitdepth \
+--prefix=\"$dependency_install_prefix\""
   local vpx_target=""
   export LD="${CC}"
   export AS="${CC}"
@@ -3496,7 +3546,19 @@ build_libvvenc() {
   change_dir "$src_dir"
   do_git_checkout "$repo" "$src_dir/$lib" "$repo_ver"
   change_dir "$src_dir/$lib/build" 1
-  do_cmake_from_build_dir "$src_dir/$lib" "-DCMAKE_BUILD_TYPE=Release -DVVENC_ENABLE_LINK_TIME_OPT=OFF -DBUILD_SHARED_LIBS=0 -DVVENC_INSTALL_FULLFEATURE_APP=OFF -DVVENC_LIBRARY_ONLY=ON"
+  local cmake_params="-DCMAKE_BUILD_TYPE=Release \
+-DVVENC_ENABLE_LINK_TIME_OPT=OFF \
+-DBUILD_SHARED_LIBS=0 \
+-DVVENC_INSTALL_FULLFEATURE_APP=OFF \
+-DVVENC_LIBRARY_ONLY=ON"
+  if [[ "$host_arch" == "aarch64" || "$host_arch" == "armv7a" ]]; then
+    cmake_params+=" -DVVENC_ENABLE_X86_SIMD=OFF -DVVENC_ENABLE_ARM_SIMD=ON"
+    export CXXFLAGS="$CXXFLAGS -Droundevenf=roundf"
+    export CFLAGS="$CFLAGS -Droundevenf=roundf"
+  else
+    cmake_params+=" -DVVENC_ENABLE_X86_SIMD=ON"
+  fi
+  do_cmake_from_build_dir "$src_dir/$lib" "$cmake_params"
   disable_nonessential "$src_dir/$lib"
   do_make_and_make_install
   # Fix corrupted pkg-config file generated by static libvvenc install
@@ -3525,18 +3587,18 @@ build_libx264() {
   change_dir "$src_dir"
   do_git_checkout "$repo" "$src_dir/$lib" "$repo_ver"
   change_dir "$src_dir/$lib"
-  local config="--enable-static --disable-shared --disable-cli"
+  local config="--enable-static --disable-shared --disable-cli --enable-pic"
   if [[ "$host_arch" == "x86_64" ]]; then
     export AS=nasm
   elif [[ "$host_arch" == "aarch64" ]]; then
     export AS="${CC}"
-    export ASFLAGS="-x assembler-with-cpp"
+    export ASFLAGS="-x assembler-with-cpp -fPIC"
     config="$config \
 ASFLAGS=\"$ASFLAGS\" \
 AS=\"$CC\""
   elif [[ "$host_arch" == "armv7a" ]]; then
     export AS="${CC}"
-    export ASFLAGS="-march=armv7-a -mfpu=neon"
+    export ASFLAGS="-march=armv7-a -mfpu=neon -fPIC"
     config="$config \
 ASFLAGS=\"$ASFLAGS\" \
 AS=\"$CC\""
@@ -3642,6 +3704,7 @@ SAVE
 END
 EOF
   do_make_install
+  sed -i -E 's/-l+[-:]*libunwind\.a//g' "$install_pkgconfig_dir/x265.pc"
   change_dir "$src_dir"
 }
 # build_libxavs           # config_options+= --enable-libxavs             # enable AVS encoding via xavs [no]
@@ -4180,8 +4243,8 @@ build_opencl() {
 # build_opengl            # config_options+= --enable-opengl              # enable OpenGL rendering [no]
 build_opengl() {
   local lib="opengl"
-  enable_library "gles"
-  enable_library "egl"
+  mkdir -p "$dependency_install_prefix/include/ES2"
+  ln -sf "$toolchain_include_path/GLES2/gl2.h" "$dependency_install_prefix/include/ES2/gl.h"
 }
 # build_openssl           # config_options+= --enable-openssl             # enable openssl, needed for https support if gnutls, libtls or mbedtls is not used [no]
 build_openssl() {
@@ -4212,6 +4275,8 @@ build_openssl() {
   do_configure "$ssl_target --release --prefix=$dependency_install_prefix --openssldir=$dependency_install_prefix/ssl --libdir=lib no-shared no-tests no-docs no-demos no-legacy"
   disable_nonessential "$src_dir/$lib"
   do_make_and_make_install
+  find "$dependency_install_prefix/lib" -name "libssl.so*" -delete
+  find "$dependency_install_prefix/lib" -name "libcrypto.so*" -delete
   change_dir "$src_dir"
 }
 # build_pocketsphinx      # config_options+= --enable-pocketsphinx        # enable PocketSphinx, needed for asr filter [no]
@@ -4396,6 +4461,7 @@ build_whisper() {
 -DGGML_AVX=OFF \
 -DGGML_AVX2=OFF \
 -DGGML_FMA=OFF \
+-DGGML_OPENMP=OFF \
 -DGGML_F16C=OFF"
   if [[ "$host_arch" == "aarch64" ]]; then
     cmake_params="$cmake_params -DCMAKE_SYSTEM_PROCESSOR=aarch64 \
@@ -4407,8 +4473,9 @@ build_whisper() {
   disable_nonessential "$src_dir/$lib/build"
   do_make_and_make_install
   while IFS= read -r -d '' file; do
-    add_libs_to_pkg -t="$file" -l="-lwhisper -lggml -lggml-base -lggml-cpu -lgomp -lpthread"
-  done < <(find "$install_pkgconfig_dir" -name "whisper*.pc" -print0)
+    add_libs_to_pkg -t="$file" -l="-lwhisper -lggml -lggml-base -lggml-cpu -lomp -lstdc++ -lm"
+  done < <(find "$install_pkgconfig_dir" -name "*whisper*.pc" -print0)
+  find "$install_pkgconfig_dir" -name "*whisper*.pc" -exec sed -i -E -e 's/(^|[[:space:]])-lgomp([[:space:]]|$)/ /g' {} +
   change_dir "$src_dir"
 }
 #endregion---------------------------------------------------------------------

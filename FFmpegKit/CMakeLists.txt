@@ -430,42 +430,48 @@ if(BUILD_SHARED_LIBS)
 };
 ")
     target_link_options(ffmpegkit PRIVATE "-Wl,--version-script=${LINKER_SCRIPT}")
-
     # Bundling Manifest (Requires shared-library.sh)
     add_custom_command(TARGET ffmpegkit POST_BUILD
         COMMAND bash "${CMAKE_CURRENT_SOURCE_DIR}/scripts/shared-library.sh" "${FFMPEG_BUILD_DIR}"
         COMMENT "Generating bundle manifest for shared dependencies..."
     )
-
-    # Install Hook for Bundled Libs
-    install(CODE "
-        if(EXISTS \"${CMAKE_CURRENT_BINARY_DIR}/bundle_manifest.txt\")
-            file(STRINGS \"${CMAKE_CURRENT_BINARY_DIR}/bundle_manifest.txt\" BUNDLE_LIBS)
-            foreach(LIB \${BUNDLE_LIBS})
-                message(STATUS \"Bundling: \${LIB}\")
-                if(LIB MATCHES \"\\\\.dll$\")
-                    file(INSTALL DESTINATION \"\${CMAKE_INSTALL_PREFIX}/bin\" FILES \"\${LIB}\")
-                else()
-                    file(INSTALL DESTINATION \"\${CMAKE_INSTALL_PREFIX}/lib\" FILES \"\${LIB}\")
-                endif()
-            endforeach()
-        endif()
-    ")
-
 else()
-    # Static Build Logic
-    if(MINGW)
-        set(OUTPUT_LIB "$<TARGET_FILE:ffmpegkit>")
-        add_custom_command(TARGET ffmpegkit POST_BUILD
-            COMMAND bash "${CMAKE_CURRENT_SOURCE_DIR}/scripts/static-library.sh" 
-                    "${OUTPUT_LIB}" 
-                    "${CMAKE_AR}" 
-                    "${CMAKE_RANLIB}" 
-                    "${FFMPEG_BUILD_DIR}"
-            COMMENT "Merging static libraries into monolithic archive..."
-        )
-    endif()
+    set(OUTPUT_LIB "$<TARGET_FILE:ffmpegkit>")
+    add_custom_command(TARGET ffmpegkit POST_BUILD
+        COMMAND bash "${CMAKE_CURRENT_SOURCE_DIR}/scripts/static-library.sh" 
+                "${OUTPUT_LIB}" 
+                "${CMAKE_AR}" 
+                "${CMAKE_RANLIB}" 
+                "${FFMPEG_BUILD_DIR}"
+        COMMENT "Merging static libraries into monolithic archive..."
+    )
 endif()
+
+# Install Hook for Bundled Libs
+install(CODE "
+    if(EXISTS \"${CMAKE_CURRENT_BINARY_DIR}/bundle_manifest.txt\")
+        file(STRINGS \"${CMAKE_CURRENT_BINARY_DIR}/bundle_manifest.txt\" BUNDLE_LIBS)
+        foreach(LIB \${BUNDLE_LIBS})
+            # Standardize paths for CMake (Backslash to Forward Slash)
+            string(REPLACE \"\\\\\" \"/\" LIB_CLEAN \"\${LIB}\")
+            
+            if(EXISTS \"\${LIB_CLEAN}\")
+                message(STATUS \"Bundling: \${LIB_CLEAN}\")
+                if(LIB_CLEAN MATCHES \"\\\\.dll$\")
+                    # Windows DLLs go to bin
+                    file(INSTALL DESTINATION \"\${CMAKE_INSTALL_PREFIX}/bin\" 
+                        TYPE SHARED_LIBRARY FILES \"\${LIB_CLEAN}\")
+                else()
+                    # Linux/Android .so go to lib
+                    file(INSTALL DESTINATION \"\${CMAKE_INSTALL_PREFIX}/lib\" 
+                        TYPE SHARED_LIBRARY FILES \"\${LIB_CLEAN}\")
+                endif()
+            else()
+                message(WARNING \"Bundle source not found: \${LIB_CLEAN}\")
+            endif()
+        endforeach()
+    endif()
+")
 
 if(WIN32)
     target_link_libraries(ffmpegkit PRIVATE dbghelp)

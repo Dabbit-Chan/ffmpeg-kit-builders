@@ -551,18 +551,21 @@ setup_android_environment() {
             export cmake_host_arch="x86_64"
             export host_target="x86_64-linux-android"
             export rust_target="x86_64-linux-android"
+            export clang_arch="x86_64"
             ;;
         "aarch64"|"arm64"|"arm64-v8a")
             export host_arch="aarch64"
             export cmake_host_arch="aarch64"
             export host_target="aarch64-linux-android"
             export rust_target="aarch64-linux-android"
+            export clang_arch="aarch64"
             ;;
         "armv7a"|"arm"|"armeabi-v7a")
             export host_arch="armv7a"
             export cmake_host_arch="armv7-a"
             export host_target="armv7a-linux-androideabi"
             export rust_target="armv7-linux-androideabi"
+            export clang_arch="arm"
             ;;
         *)
             exit_message 1 "setup_android_environment: Unsupported host arch '$host_arch' for Android"
@@ -574,7 +577,8 @@ setup_android_environment() {
 
     local os_type=$(uname -s | tr '[:upper:]' '[:lower:]')
     export toolchain_bin_path="$ANDROID_NDK_ROOT/toolchains/llvm/prebuilt/${os_type}-x86_64/bin"
-
+    export toolchain_include_path="$ANDROID_NDK_ROOT/toolchains/llvm/prebuilt/${os_type}-x86_64/sysroot/usr/include"
+    export toolchain_lib_path="$ANDROID_NDK_ROOT/toolchains/llvm/prebuilt/${os_type}-x86_64/sysroot/usr/lib"
     # For Android, cross_prefix points to the clang wrapper which includes the API level
     export clang_target="$host_target"
     if [[ "$host_arch" == "armv7a" ]]; then
@@ -582,7 +586,7 @@ setup_android_environment() {
     fi
     export cross_prefix="${toolchain_bin_path}/${clang_target}${ANDROID_API_LEVEL}-"
 
-    export PKG_CONFIG_PATH="$install_pkgconfig_dir:$ffmpeg_install_prefix/lib/pkgconfig"
+    export PKG_CONFIG_PATH="$install_pkgconfig_dir:$ffmpeg_install_prefix/lib/pkgconfig:$toolchain_lib_path/pkgconfig"
     export PATH="$toolchain_bin_path:$original_path:$ffmpeg_install_prefix/bin"
 
     create_dir "$install_pkgconfig_dir"
@@ -619,15 +623,16 @@ setup_android_environment() {
 -Wno-error=macro-redefined \
 -Wno-macro-redefined \
 -Wno-unused-command-line-argument \
+-I${toolchain_include_path} \
 -I${dependency_install_prefix}/include"
     [[ "$host_arch" == "armv7a" ]] && android_cflags+=" -march=armv7-a -mfloat-abi=softfp -mfpu=vfpv3-d16 "
     
     export CFLAGS="$android_cflags"
     export android_cxxflags="$original_cxxflags $android_cflags"
     export CXXFLAGS="$android_cxxflags"
-    export android_cppflags="$original_cppflags -I${dependency_install_prefix}/include"
+    export android_cppflags="$original_cppflags -I${toolchain_include_path} -I${dependency_install_prefix}/include"
     export CPPFLAGS="$android_cppflags"
-    export android_ldflags="$original_ldflags -L${dependency_install_prefix}/lib "
+    export android_ldflags="$original_ldflags -L${dependency_install_prefix}/lib -L${toolchain_lib_path}"
     export LDFLAGS="$android_ldflags"
 }
 
@@ -2315,11 +2320,17 @@ do_configure() {
       echo -e "INFO: config.h.in not found. Running autoheader..." >>"$LOG_FILE"
       autoheader > >(redirect_output) 2>&1
     fi
-		chmod -R a+rwx "$configure_name" # In non-windows environments, with devcontainers, the configuration file doesn't have execution permissions
-		echo -e "INFO: do_configure() with:\n  DIR=$cur_dir2\n  PATH=$PATH\n  PKG_CONFIG_PATH=$PKG_CONFIG_PATH\n  CFLAGS:$CFLAGS\n  CXXFLAGS:$CXXFLAGS\n  CPPFLAGS:$CPPFLAGS\n  LDFLAGS:$LDFLAGS\n nice running: \"$configure_name $configure_options\"\n  $(get_compiler_flags)" >>"$LOG_FILE"
-		eval "nice -n 5 $configure_name $configure_options" > >(redirect_output) 2>&1 || {
-			exit_message 1 "do_configure: failed configure $english_name \n see $(find "$(pwd)" -name "config.log" -print)"
-		} # less nicey than make (since single thread, and what if you're running another ffmpeg nice build elsewhere?)
+		# Check if configure_name contains a space (usually from ENV_OVERRIDES)
+    if [[ "$configure_name" =~ ^[[:space:]] ]] || [[ "$configure_name" == *"="* ]]; then
+      echo -e "INFO: do_configure() with:\n  DIR=$cur_dir2\n  PATH=$PATH\n  PKG_CONFIG_PATH=$PKG_CONFIG_PATH\n  CFLAGS:$CFLAGS\n  CXXFLAGS:$CXXFLAGS\n  CPPFLAGS:$CPPFLAGS\n  LDFLAGS:$LDFLAGS\n running: \"$configure_name $configure_options\"\n  $(get_compiler_flags)" >>"$LOG_FILE"
+      eval "$configure_name $configure_options" > >(redirect_output) 2>&1
+    else
+      chmod -R a+rwx "$configure_name" # In non-windows environments, with devcontainers, the configuration file doesn't have execution permissions
+      echo -e "INFO: do_configure() with:\n  DIR=$cur_dir2\n  PATH=$PATH\n  PKG_CONFIG_PATH=$PKG_CONFIG_PATH\n  CFLAGS:$CFLAGS\n  CXXFLAGS:$CXXFLAGS\n  CPPFLAGS:$CPPFLAGS\n  LDFLAGS:$LDFLAGS\n nice running: \"$configure_name $configure_options\"\n  $(get_compiler_flags)" >>"$LOG_FILE"
+      eval "nice -n 5 $configure_name $configure_options" > >(redirect_output) 2>&1
+    fi || {
+      exit_message 1 "do_configure: failed configure $english_name \n see $(find "$(pwd)" -name "config.log" -print)"
+    }
 		create_touch_file 0 "$touch_name"
     add_src_dir "$cur_dir2"
     find . -maxdepth 1 -name "*_src_state.touch" ! -name "$(basename "$src_touch")" -delete > >(redirect_output) 2>&1 # delete other src_state.touch files
@@ -3346,26 +3357,49 @@ configure_ffmpeg() {
 	# iswindows && apply_patch "$PATCHDIR"/frei0r_load-shared-libraries-dynamically.diff
   local postpend_configure_opts=""
 	local init_options=""
-
+  local extra_libs=""
+  function add_extra_libs() {
+      # local libs="-Wl,--start-group $1 -Wl,--end-group"
+      local libs=" $1"
+      extra_libs+=" $libs"
+  }
+  (iswindows || isandroid) && fix_pkgconfig_flags
   # Common compiler flags for Windows    
   if iswindows; then
-    fix_pkgconfig_flags
     export LD=${cross_prefix}gcc # ld weirdness with windows
 	  init_options+=" --target-os=mingw32"
     init_options+=" --enable-w32threads"
   elif isandroid; then
+    # unset PKG_CONFIG_PATH
+    export PKG_CONFIG_SYSROOT_DIR="/"
+    export PKG_CONFIG_LIBDIR="$install_pkgconfig_dir:$ffmpeg_install_prefix/lib/pkgconfig"
+    UNWIND_STATIC=$($CXX -print-file-name=libunwind.a)
+    BUILTINS_STATIC=$($CXX -print-file-name=libclang_rt.builtins-$clang_arch-android.a)
     export AS="$CC"
-    export LD="$CC"
+    export LD="$CXX"
+    export LDFLAGS="$LDFLAGS -L$toolchain_bin_path/lib -Wl,--allow-multiple-definition -static-libstdc++ -Wl,--start-group $UNWIND_STATIC $BUILTINS_STATIC -latomic -landroid -lm -Wl,--end-group"
     init_options+=" --ranlib=$RANLIB"
     init_options+=" --nm=$NM"
+    init_options+=" --ld=$CXX"
+    init_options+=" --strip=$STRIP"
 	  init_options+=" --target-os=android"
     init_options+=" --enable-jni"
     init_options+=" --enable-pthreads"
+    init_options+=" --extra-ldflags='$LDFLAGS'"
+    init_options+=" --extra-ldexeflags='$LDFLAGS'"
+    if [[ "$host_arch" == "armv7a" ]]; then
+      # these do not support 32bit architecture
+      disable_library "libsvtav1"
+      disable_library "libxevd"
+      disable_library "libxeve"
+    fi
+  elif islinux; then
+    add_extra_libs "-lpthread -lrt -lm -ldl -lstdc++"
   else
     init_options+=" --target-os=$host_platform"
     init_options+=" --enable-pthreads"
   fi
-
+  init_options+=" --extra-ldflags=\" -Wl,--allow-multiple-definition \""
   case "$host_arch" in
     "x86_64") export ARCH=x86_64 ;;
     "i686") export ARCH=x86 ;;
@@ -3378,20 +3412,15 @@ configure_ffmpeg() {
 	init_options+=" --enable-version3"
 	init_options+=" --arch=$ARCH"
 	init_options+=" --prefix=$ffmpeg_install_prefix"
-  init_options+=" --extra-ldflags=\" -Wl,--allow-multiple-definition \""
 	init_options+=" --enable-pic"
 	init_options+=" --enable-swscale"
-  init_options+=" --extra-libs=\"-lstdc++\""
   init_options+=" --extra-cflags=\" -ffunction-sections -fdata-sections \""
   init_options+=" --extra-cxxflags=\" -ffunction-sections -fdata-sections \""
 	truthy "$build_small" && init_options+=" --enable-small"
 
 	if ! islinux; then
     init_options+=" --enable-cross-compile"
-    init_options+=" --cross-prefix=$cross_prefix"
-  else
-    init_options+=" --extra-libs=\"-lpthread -lrt -lm\""
-    init_options+=" --extra-libs=\"-ldl\""
+    ! isandroid && init_options+=" --cross-prefix=$cross_prefix"
   fi
 
   if iswindows; then
@@ -3406,8 +3435,8 @@ configure_ffmpeg() {
 	  init_options+=" --extra-cflags=\" -O3 \""
 	  init_options+=" --extra-cflags=\" -pipe \""
     init_options+=" --extra-cflags=\" $extra_ffmpeg_c_flags \""
-    init_options+=" --extra-libs=\" -static \""
-    init_options+=" --extra-cflags=\" -Wno-pedantic -Wno-cpp \""
+    add_extra_libs "-static -lstdc++"
+    init_options+=" --extra-cflags=\" -Wno-pedantic -Wno-cpp -Wno-variadic-macros \""
   fi
 
 	# can't mix and match --enable-static --enable-shared unfortunately, or the final executable seems to just use shared if the're both present
@@ -3446,11 +3475,11 @@ configure_ffmpeg() {
   #------------------------------------------------------------------------------    
   if islinux; then
   truthy "$disable_alsa" && config_options+=" --disable-alsa"                         # disable ALSA support [autodetect]
-  truthy "$enable_libdc1394" && config_options+=" --enable-libdc1394 \
-  --extra-libs=\"-lusb-1.0\""                                                         # enable IIDC-1394 grabbing using libdc1394 and libraw1394 [no]
+  truthy "$enable_libdc1394" && { config_options+=" --enable-libdc1394" \
+  && add_extra_libs "-lusb-1.0"; }                                                       # enable IIDC-1394 grabbing using libdc1394 and libraw1394 [no]
   truthy "$disable_libdrm" && config_options+=" --disable-libdrm"                     # disable DRM code (Linux) [autodetect]
-  truthy "$enable_libiec61883" && config_options+=" --enable-libiec61883 \
-  --extra-libs=\"-liec61883 -lavc1394 -lrom1394 -lraw1394\""                          # enable iec61883 via libiec61883 [no]
+  truthy "$enable_libiec61883" && { config_options+=" --enable-libiec61883" \
+  && add_extra_libs "-liec61883 -lavc1394 -lrom1394 -lraw1394"; }                        # enable iec61883 via libiec61883 [no]
   truthy "$disable_libv4l2" && config_options+=" --disable-libv4l2"                   # enable libv4l2/v4l-utils [no]
   truthy "$disable_libxcb_shape" && config_options+=" --disable-libxcb-shape"         # enable X11 grabbing shape rendering [autodetect]
   truthy "$disable_libxcb_shm" && config_options+=" --disable-libxcb-shm"             # enable X11 grabbing shm communication [autodetect]
@@ -3469,10 +3498,10 @@ configure_ffmpeg() {
                                                                                       # enable Torch as one DNN backend [no]
   truthy "$disable_ladspa" && config_options+=" --disable-ladspa"                     # enable LADSPA audio filtering [no]
   truthy "$enable_libxvid" && config_options+=" --enable-libxvid"                     # enable Xvid encoding via xvidcore, native MPEG-4/Xvid encoder exists [no]
-  truthy "$enable_libpulse" && config_options+=" --enable-libpulse\
-  --extra-libs=\"-lxcb -lXau -lX11 -liconv -lXdmcp\""                                 # enable Pulseaudio input via libpulse [no]
-  truthy "$enable_libjack" && config_options+=" --enable-libjack \
-  --extra-libs=\"-lxcb -liconv\""                                                     # enable JACK audio sound server [no]
+  truthy "$enable_libpulse" && { config_options+=" --enable-libpulse" \
+  && add_extra_libs "-lxcb -lXau -lX11 -liconv -lXdmcp"; }                            # enable Pulseaudio input via libpulse [no]
+  truthy "$enable_libjack" && { config_options+=" --enable-libjack" \
+  && add_extra_libs "-lxcb -liconv"; }                                                # enable JACK audio sound server [no]
   truthy "$enable_vdpau" && config_options+=" --enable-vdpau"                         # enable Nvidia Video Decode and Presentation API for Unix code [autodetect]
   fi
   #------------------------------------------------------------------------------
@@ -3508,12 +3537,12 @@ configure_ffmpeg() {
   #------------------------------------------------------------------------------
   # -------------------------- cross-platform features --------------------------
   #------------------------------------------------------------------------------ 
-  if ! iswindows; then
+  if ! iswindows && islinux; then
   truthy "$enable_libsmbclient" && config_options+=" --enable-libsmbclient \
   --extra-cflags=\" -I/usr/include/samba-4.0 \" \
   --extra-cxxflags=\" -I/usr/include/samba-4.0 \" \
-  --extra-libs=\"-lsmbclient\" \
   --extra-ldflags=\" -L/usr/lib64 -lsmbclient \""                                       # enable Samba protocol via libsmbclient [no]
+  truthy "$enable_libsmbclient" && add_extra_libs "-lsmbclient"
   fi
   truthy "$disable_bzlib" && config_options+=" --disable-bzlib"                       # disable bzlib [autodetect]
   truthy "$disable_iconv" && config_options+=" --disable-iconv"                       # disable iconv [autodetect]
@@ -3524,8 +3553,8 @@ configure_ffmpeg() {
   truthy "$enable_libopencore_amrnb" && config_options+=" --enable-libopencore-amrnb" # enable AMR-NB de/encoding via libopencore-amrnb [no]
   truthy "$enable_libopencore_amrwb" && config_options+=" --enable-libopencore-amrwb" # enable AMR-WB decoding via libopencore-amrwb [no]
   truthy "$enable_liblcevc_dec" && config_options+=" --enable-liblcevc-dec"           # enable LCEVC decoding via liblcevc-dec [no]
-  truthy "$enable_chromaprint" && config_options+=" --enable-chromaprint \
-  --extra-libs=\"-lfftw3\""                                                           # enable audio fingerprinting with chromaprint [no]
+  truthy "$enable_chromaprint" && { config_options+=" --enable-chromaprint" \
+  && add_extra_libs "-lchromaprint -lfftw3"; }
   truthy "$enable_frei0r" && config_options+=" --enable-frei0r"                       # enable frei0r video filtering [no]
   truthy "$enable_gcrypt" && config_options+=" --enable-gcrypt"                       # enable gcrypt, needed for rtmp(t)e support if openssl, librtmp or gmp is not used [no]
   truthy "$enable_gmp" && config_options+=" --enable-gmp"                             # enable gmp, needed for rtmp(t)e support if openssl or librtmp is not used [no]
@@ -3547,10 +3576,10 @@ configure_ffmpeg() {
   truthy "$enable_libdvdnav" && config_options+=" --enable-libdvdnav"                 # enable libdvdnav, needed for DVD demuxing [no]
   truthy "$enable_libdvdread" && config_options+=" --enable-libdvdread"               # enable libdvdread, needed for DVD demuxing [no]
   truthy "$enable_libflite" && config_options+=" --enable-libflite"                   # enable flite (voice synthesis) support via libflite [no]
-  islinux && truthy "$enable_libflite" && config_options+=" --extra-libs=-lasound"    # extra libs for libflite on linux linux 
+  islinux && truthy "$enable_libflite" && add_extra_libs "-lasound"                   # extra libs for libflite on linux linux 
   truthy "$enable_libfontconfig" && config_options+=" --enable-libfontconfig"         # enable libfontconfig, useful for drawtext filter [no]
   truthy "$enable_libfreetype" && config_options+=" --enable-libfreetype"             # enable libfreetype, needed for drawtext filter [no]
-  truthy "$enable_libfribidi" && config_options+=" --enable-libfribidi"               # enable libfribidi, improves drawtext filter [no]
+  truthy "$enable_libfribidi" && config_options+=" --enable-libfribidi"               # enable libfribidi, improves drawtext filter [no]  
   truthy "$enable_libglslang" && config_options+=" --enable-libglslang"               # enable GLSL->SPIRV compilation via libglslang [no]
   truthy "$enable_libgme" && config_options+=" --enable-libgme"                       # enable Game Music Emu via libgme [no]
   truthy "$enable_libgsm" && config_options+=" --enable-libgsm"                       # enable GSM de/encoding via libgsm [no]
@@ -3565,8 +3594,13 @@ configure_ffmpeg() {
   truthy "$enable_libmp3lame" && config_options+=" --enable-libmp3lame"               # enable MP3 encoding via libmp3lame [no]
   truthy "$enable_libmysofa" && config_options+=" --enable-libmysofa"                 # enable libmysofa, needed for sofalizer filter [no]
   truthy "$enable_liboapv" && config_options+=" --enable-liboapv"                     # enable APV encoding via liboapv [no]
-  truthy "$enable_libopencv" && config_options+=" --enable-libopencv \
-  --extra-libs=\"-lsharpyuv\""                                                        # enable video filtering via libopencv [no]
+  truthy "$enable_libopencv" && { config_options+=" --enable-libopencv" \
+  && add_extra_libs "-lsharpyuv"; }                                                   # enable video filtering via libopencv [no]
+ if isandroid && truthy "$enable_libopencv"; then
+  config_options+=" --extra-cflags=\"-I${dependency_install_prefix}/include\" \
+  --extra-ldflags=\"-L${dependency_install_prefix}/sdk/native/3rdparty/libs\" \
+  --extra-ldflags=\"-L${dependency_install_prefix}/sdk/native/staticlibs\""
+ fi
   truthy "$enable_libopenh264" && config_options+=" --enable-libopenh264"             # enable H.264 encoding via OpenH264 [no]
   truthy "$enable_libopenjpeg" && config_options+=" --enable-libopenjpeg"             # enable JPEG 2000 encoding via OpenJPEG [no]
   truthy "$enable_libopenmpt" && config_options+=" --enable-libopenmpt"               # enable decoding tracked files via libopenmpt [no]
@@ -3588,10 +3622,10 @@ configure_ffmpeg() {
   truthy "$enable_libsrt" && config_options+=" --enable-libsrt"                       # enable Haivision SRT protocol via libsrt [no]
   truthy "$enable_libssh" && config_options+=" --enable-libssh"                       # enable SFTP protocol via libssh [no]
   truthy "$enable_libsvtav1" && config_options+=" --enable-libsvtav1"                 # enable AV1 encoding via SVT [no]
-  truthy "$enable_libtesseract" && config_options+=" --enable-libtesseract \
-   --extra-libs=\"-ltesseract -lleptonica -lz -larchive -ltiff -lpng16 \
-   -ljpeg -lgif -lwebpmux -lwebp -lopenjp2 -ljbig -lLerc -lsharpyuv \
-   -llzma -lzstd -ldeflate\""                                                         # enable Tesseract, needed for ocr filter [no]
+  truthy "$enable_libtesseract" && { config_options+=" --enable-libtesseract" \
+  && add_extra_libs "-ltesseract -lleptonica -lz -larchive -ltiff -lpng16 \
+  -ljpeg -lgif -lwebpmux -lwebp -lopenjp2 -ljbig -lLerc -lsharpyuv \
+  -llzma -lzstd -ldeflate"; }                                                         # enable Tesseract, needed for ocr filter [no]
   truthy "$enable_libtheora" && config_options+=" --enable-libtheora"                 # enable Theora encoding via libtheora [no]
   truthy "$enable_libtls" && config_options+=" --enable-libtls"                       # enable LibreSSL (via libtls), needed for https support if openssl, gnutls or mbedtls is not used [no]
   truthy "$enable_libtwolame" && config_options+=" --enable-libtwolame \
@@ -3613,20 +3647,26 @@ configure_ffmpeg() {
   truthy "$enable_libzimg" && config_options+=" --enable-libzimg"                     # enable z.lib, needed for zscale filter [no]
   truthy "$enable_libzmq" && config_options+=" --enable-libzmq"                       # enable message passing via libzmq [no]
   truthy "$enable_libzvbi" && config_options+=" --enable-libzvbi"                     # enable teletext support via libzvbi [no]
-  truthy "$enable_lv2" && config_options+=" --enable-lv2 \
-  --extra-libs=\"-Wl,--start-group -lsratom -lsord \
-  -lzix -lserd -llilv -Wl,--end-group\""                                              # enable LV2 audio filtering [no]
+  truthy "$enable_lv2" && { config_options+=" --enable-lv2" \
+  && add_extra_libs "-lsratom -lsord -lzix -lserd -llilv"; }                          # enable LV2 audio filtering [no]
   truthy "$enable_mbedtls" && config_options+=" --enable-mbedtls"                     # enable mbedTLS, needed for https support if openssl, gnutls or libtls is not used [no]
   truthy "$enable_openal" && config_options+=" --enable-openal"                       # enable OpenAL 1.1 capture support [no]
   truthy "$enable_opencl" && config_options+=" --enable-opencl"                       # enable OpenCL processing [no]
   truthy "$enable_opengl" && config_options+=" --enable-opengl"                       # enable OpenGL rendering [no]
-  truthy "$enable_opengl" && isandroid && config_options+=" \
-  --enable-gles --extra-libs=\"-lGLESv2 -lEGL -landroid\""                            # enable EGL and GLES support [no]
+  if isandroid && truthy "$enable_opengl"; then
+    add_extra_libs "-lGLESv2 -lEGL -llog -lOpenCL -pthread -ldl"               # enable EGL and GLES support [no]
+    config_options+=" --extra-cflags=\"-I$toolchain_include_path\""
+    config_options+=" --extra-cflags=\"-DglXGetProcAddress=eglGetProcAddress\""
+    # patch ffmpeg configure for Android
+    sed -i 's|check_lib opengl ES2/gl.h glGetError "-isysroot=${sysroot} -framework OpenGLES"|check_lib opengl GLES2/gl2.h glGetError "-lGLESv2 -lEGL"|g' configure
+    sed -i 's|check_lib opencl OpenCL/cl.h clEnqueueNDRangeKernel "-framework OpenCL"|check_lib opencl CL/cl.h clEnqueueNDRangeKernel "-lOpenCL"|g' configure
+  fi
   truthy "$enable_openssl" && config_options+=" --enable-openssl"                     # enable openssl, needed for https support if gnutls, libtls or mbedtls is not used [no]
   truthy "$enable_pocketsphinx" && config_options+=" --enable-pocketsphinx"           # enable PocketSphinx, needed for asr filter [no]
   truthy "$enable_vapoursynth" && config_options+=" --enable-vapoursynth"             # enable VapourSynth demuxer [no]
-  truthy "$enable_whisper" && config_options+=" --enable-whisper \
-  --extra-libs=\"-lwhisper -lggml -lggml-cpu -lggml-base -lgomp\""                    # enable whisper filter [no]
+  truthy "$enable_whisper" && { config_options+=" --enable-whisper" \
+  && add_extra_libs "-lwhisper -lggml -lggml-cpu -lggml-base"; }                      # enable whisper filter [no]
+  truthy "$enable_whisper" && ! isandroid && add_extra_libs "-lgomp"
 
   # add any additional ff prefixed flags 
   if [[ -n $ff_flags_values ]]; then
@@ -3675,12 +3715,14 @@ configure_ffmpeg() {
 	else
 		postpend_configure_opts+=" --disable-debug --enable-stripping --enable-optimizations"
 	fi
-  postpend_configure_opts+=" --extra-cflags=\"-std=gnu17\""
+  postpend_configure_opts+=" --extra-cflags=\"-std=gnu17\" --extra-libs=\"-Wl,--start-group $extra_libs -Wl,--end-group\""
   
-  cross_windres y
-  unset RC
+  if iswindows; then
+    cross_windres y
+    unset RC
+  fi
 
-	do_configure "$init_options$config_options$postpend_configure_opts" "./configure" "$(get_ffmpeg_directory)" 1 || exit_message 1 "configure_ffmpeg: unable to configure ffmpeg. see $LOG_FILE for details."
+	do_configure "$init_options$config_options$postpend_configure_opts" "$env_overrides ./configure" "$(get_ffmpeg_directory)" 1 || exit_message 1 "configure_ffmpeg: unable to configure ffmpeg. see $LOG_FILE for details."
 
 	echo -e "INFO: Done configuering ffmpeg" | tee -a "$LOG_FILE"
 }
@@ -3757,6 +3799,7 @@ install_ffmpeg() {
   cross_windres y
   iswindows && unset RC
   iswindows && ffmpeg_windows_patches
+  isandroid && ffmpeg_android_patches
   iswindows && export LD=${cross_prefix}gcc # ld weirdness with windows
   isandroid && export AS="$CC" && export LD="$CC"
 	do_make "PREFIX=\"$ffmpeg_install_prefix\"" "${touch_postfix}" 1 || exit_message 1 "install_ffmpeg: unable to make ffmpeg. see $LOG_FILE for details."
@@ -3838,8 +3881,14 @@ install_ffmpeg_pkg() {
 install_ffmpeg_kit() {
 	echo -e "INFO: Installing ffmpeg kit to ${ffmpeg_kit_install}" | tee -a "$LOG_FILE"
   local touch_postfix="$(get_ffmpeg_kit_directory)"
-  cross_windres y
-  unset RC
+  if iswindows; then
+    cross_windres y
+    unset RC
+  elif isandroid; then
+    CLANG_RT_DIR=$($CC -print-libgcc-file-name | xargs dirname)
+    export LDFLAGS="${LDFLAGS} -Wl,--allow-multiple-definition -L$CLANG_RT_DIR -lclang_rt.builtins-$host_arch-android -Wl,--exclude-libs,libunwind.a"
+    export LDFLAGS=$(echo $LDFLAGS | sed 's/-Wl,--fatal-warnings//g')
+  fi
 	
   change_dir "${ffmpeg_kit_src_dir}/build"
 

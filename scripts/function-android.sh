@@ -25,7 +25,8 @@ configure_ffmpeg_kit() {
 
 	create_dir "$ffmpeg_kit_install"
 
-	export PKG_CONFIG_PATH="${PKG_CONFIG_PATH}:${ffmpeg_install_prefix}/lib/pkgconfig"
+	export PKG_CONFIG_LIBDIR="${install_pkgconfig_dir}:${ffmpeg_install_prefix}/lib/pkgconfig"
+	export PKG_CONFIG_SYSROOT_DIR="/"
 	set_toolchain_paths
 
 	reset_allflags
@@ -37,6 +38,10 @@ configure_ffmpeg_kit() {
 
 	export CFLAGS="${local_cflags}"
 	export CXXFLAGS="${local_cxxfalgs}"
+	UNWIND_STATIC=$($CXX -print-file-name=libunwind.a)
+    BUILTINS_STATIC=$($CXX -print-file-name=libclang_rt.builtins-$clang_arch-android.a)
+    export LDFLAGS="${LDFLAGS} -Wl,--allow-multiple-definition -Wl,--exclude-libs,libunwind.a $UNWIND_STATIC $BUILTINS_STATIC"
+    export LDFLAGS=$(echo $LDFLAGS | sed 's/-Wl,--fatal-warnings//g')
 	export LDFLAGS="${LDFLAGS//-static /} -static-libstdc++ -L${ffmpeg_install_prefix}/lib -L${dependency_install_prefix}/lib"
 
 	local cmake_params="-DCMAKE_SYSTEM_NAME=Android \
@@ -51,6 +56,8 @@ configure_ffmpeg_kit() {
 -DFFMPEG_BUILD_DIR=\"$ffmpeg_install_prefix\" \
 -DCMAKE_INSTALL_PREFIX=\"$ffmpeg_kit_install\" \
 -DFFMPEG_KIT_BUNDLE_TYPE=\"$(get_bundle_type)\" \
+-DCMAKE_SHARED_LINKER_FLAGS=\"-Wl,--allow-multiple-definition -Wl,--exclude-libs,libunwind.a $UNWIND_STATIC $BUILTINS_STATIC\" \
+-DCMAKE_FIND_LIBRARY_SUFFIXES=\".a;.so\" \
 -DFFMPEG_KIT_VERSION=\"$(get_latest_version_from_changelog)\""
 
 	if [[ "$build_ffmpeg_kit_type" == "static" ]]; then
@@ -221,5 +228,24 @@ EOF
 	else
 		# No customization requested, return the standard base file
 		echo "$base_filepath"
+	fi
+}
+
+fix_pkgconfig_flags() {
+	echo "INFO: Fixing pkgconfig files for Android in $install_pkgconfig_dir"
+	find "$install_pkgconfig_dir" -name "*.pc" -exec sed -i -E \
+	-e 's/(^|[[:space:]])-lrt([[:space:]]|$)/ /g' \
+	-e 's/(^|[[:space:]])-lpthread([[:space:]]|$)/ -pthread /g' \
+	-e 's/(^|[[:space:]])-l([[:space:]]|$)/ /g' \{} +
+	find "$dependency_install_prefix/lib" -name "*.la*" -delete
+}
+
+ffmpeg_android_patches() {
+	if isandroid && [[ "$host_arch" == "armv7a" ]]; then
+		echo "INFO: Patching ffmpeg for Android armv7a..." >>"$LOG_FILE"
+		if [[ -f "$ffmpeg_source_dir/libavutil/hwcontext_vulkan.c" ]]; then
+			sed -i 's/static VkBool32 VKAPI_CALL vk_dbg_callback/static VKAPI_ATTR VkBool32 VKAPI_CALL vk_dbg_callback/' "$ffmpeg_source_dir/libavutil/hwcontext_vulkan.c"
+		fi
+		echo "INFO: Done patching ffmpeg for Android armv7a." >>"$LOG_FILE"
 	fi
 }

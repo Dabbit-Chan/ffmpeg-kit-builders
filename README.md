@@ -26,7 +26,7 @@ This repository provides a comprehensive build system for FFmpeg and FFmpegKit t
 
 ## Platform Support
 
-- **Linux**: Native builds for x86_64 and i686 architecture with shared libraries (.so) and static libraries (.a).
+- **Linux**: Native builds for x86_64 architecture with shared libraries (.so) and static libraries (.a).
 - **Windows**: Cross-compilation from Linux hosts using MinGW-w64 toolchain with shared libraries (.dll) and static mingw libraries (.a).
   - *Note: Compiling using MSVC ABI is not supported by the build script.*
 - **Android**: Coming soon!
