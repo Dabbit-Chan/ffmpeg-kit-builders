@@ -315,7 +315,7 @@ concat_array() {
 truthy() {
   local value="$1"
   case "${value,,}" in
-    y|yes|1|true|on) return 0 ;;
+    true|1|T|t|True|TRUE|y|Y|yes|Yes|YES|on|On|ON) return 0 ;;
     *) return 1 ;;
   esac
 }
@@ -325,7 +325,7 @@ truthy() {
 falsey() {
   local value="$1"
   case "${value,,}" in
-    y|yes|1|true|on) return 1 ;;
+    false|0|F|f|False|FALSE|n|N|no|No|NO|off|Off|OFF) return 1 ;;
     *) return 0 ;;
   esac
 }
@@ -533,8 +533,8 @@ setup_android_environment() {
 
     if [[ -z "$ANDROID_NDK_ROOT" ]] || [[ ! -d "$ANDROID_NDK_ROOT" ]]; then
         echo "WARNING: Android NDK not found in $ANDROID_HOME/ndk. Attempting to install latest NDK..."
-        yes | sdkmanager "ndk-bundle"
-        export ANDROID_NDK_ROOT="$ANDROID_HOME/ndk-bundle"
+        yes | sdkmanager "ndk;29.0.14206865"
+        export ANDROID_NDK_ROOT="$ANDROID_HOME/ndk/29.0.14206865"
     fi
 
     export ANDROID_API_LEVEL="${ANDROID_API_LEVEL:-26}"
@@ -3930,57 +3930,59 @@ install_pkg_config_file() {
 }
 
 create_ffmpeg_kit_bundle() {
-	echo -e "INFO: Creating bundle" | tee -a "$LOG_FILE"
-	local touch_postfix="$host_name"
+  if [[ -d "${ffmpeg_kit_install}" ]] && truthy "$create_bundle"; then
+    echo -e "INFO: Creating bundle" | tee -a "$LOG_FILE"
+    local touch_postfix="$host_name"
 
-  local touch_prefix="${touch_postfix}_already"
+    local touch_prefix="${touch_postfix}_already"
 
-  remove_path -rf "${ffmpeg_kit_bundle}"
-  echo "INFO: (Re-)create_ffmpeg_kit_bundle() because $touch_name not found with \"ffmpeg-kit-bundle $(get_bundle_directory)\"." >>"$LOG_FILE"
-  
-  create_dir "${ffmpeg_kit_bundle}/{include,lib/pkgconfig,bin}"
-  
-  {
-    # COPY HEADERS
-    [[ -d "${ffmpeg_kit_install}/include" ]] && cp -rP "${ffmpeg_kit_install}/include/"* "${ffmpeg_kit_bundle}/include"
-    [[ -d "${dependency_install_prefix}/include/json" ]] && cp -rP "${dependency_install_prefix}/include/json" "${ffmpeg_kit_bundle}/include/json"
+    remove_path -rf "${ffmpeg_kit_bundle}"
+    echo "INFO: (Re-)create_ffmpeg_kit_bundle() because $touch_name not found with \"ffmpeg-kit-bundle $(get_bundle_directory)\"." >>"$LOG_FILE"
+    
+    create_dir "${ffmpeg_kit_bundle}/{include,lib/pkgconfig,bin}"
+    
+    {
+      # COPY HEADERS
+      [[ -d "${ffmpeg_kit_install}/include" ]] && cp -rP "${ffmpeg_kit_install}/include/"* "${ffmpeg_kit_bundle}/include"
+      [[ -d "${dependency_install_prefix}/include/json" ]] && cp -rP "${dependency_install_prefix}/include/json" "${ffmpeg_kit_bundle}/include/json"
 
-    # COPY LIBS
-    [[ -d "${ffmpeg_kit_install}/lib" ]] && cp -rP "${ffmpeg_kit_install}/lib/"* "${ffmpeg_kit_bundle}/lib"
+      # COPY LIBS
+      [[ -d "${ffmpeg_kit_install}/lib" ]] && cp -rP "${ffmpeg_kit_install}/lib/"* "${ffmpeg_kit_bundle}/lib"
 
-    # COPY BINARIES
-    [[ -d "${ffmpeg_kit_install}/bin" ]] && cp -rP "${ffmpeg_kit_install}/bin/"* "${ffmpeg_kit_bundle}/bin"
-  } >>"$LOG_FILE"
+      # COPY BINARIES
+      [[ -d "${ffmpeg_kit_install}/bin" ]] && cp -rP "${ffmpeg_kit_install}/bin/"* "${ffmpeg_kit_bundle}/bin"
+    } >>"$LOG_FILE"
 
-  find "${ffmpeg_kit_bundle}/lib/pkgconfig" -type f -name "*.pc" -exec sed -i \
-  -e "s|prefix=.*|prefix=${ffmpeg_kit_bundle}|g" \
-  -e "s|exec_prefix=.*|exec_prefix=\${prefix}|g" \
-  -e "s|libdir=.*|libdir=\${prefix}/lib|g" \
-  -e "s|includedir=.*|includedir=\${prefix}/include|g" {} +
+    find "${ffmpeg_kit_bundle}/lib/pkgconfig" -type f -name "*.pc" -exec sed -i \
+    -e "s|prefix=.*|prefix=${ffmpeg_kit_bundle}|g" \
+    -e "s|exec_prefix=.*|exec_prefix=\${prefix}|g" \
+    -e "s|libdir=.*|libdir=\${prefix}/lib|g" \
+    -e "s|includedir=.*|includedir=\${prefix}/include|g" {} +
 
-  local LICENSE_BASEDIR="${ffmpeg_kit_bundle}/licenses"
+    local LICENSE_BASEDIR="${ffmpeg_kit_bundle}/licenses"
 
-  create_dir "${LICENSE_BASEDIR}"
-  
-  get_licenses
+    create_dir "${LICENSE_BASEDIR}"
+    
+    get_licenses
 
-  copy_path "${BASEDIR}"/LICENSE "${LICENSE_BASEDIR}"/ffmpeg-kit_license.txt
+    copy_path "${BASEDIR}"/LICENSE "${LICENSE_BASEDIR}"/ffmpeg-kit_license.txt
 
-  create_touch_file 0 "$touch_name"
-  echo -e "INFO: Done creating bundle at $ffmpeg_kit_bundle" | tee -a "$LOG_FILE"
-	
-  if [[ -n "$create_release" ]]; then
-    echo -e "INFO: Creating release bundle" | tee -a "$LOG_FILE"
-    create_dir "$work_dir/releases"
-    local out_dir=$(basename "$ffmpeg_kit_bundle")
-    zip_dir "$ffmpeg_kit_bundle" "$work_dir/releases/$out_dir"
-    echo -e "INFO: Done creating release bundle at $work_dir/releases/$out_dir.zip" | tee -a "$LOG_FILE"
-    truthy "$create_release_clean" && clean_builds "all"
-    if [[ "$create_release" == "remote" ]]; then
-      create_github_release "$work_dir/releases/$out_dir.zip"
+    create_touch_file 0 "$touch_name"
+    echo -e "INFO: Done creating bundle at $ffmpeg_kit_bundle" | tee -a "$LOG_FILE"
+    
+    if [[ -n "$create_release" ]]; then
+      echo -e "INFO: Creating release bundle" | tee -a "$LOG_FILE"
+      create_dir "$work_dir/releases"
+      local out_dir=$(basename "$ffmpeg_kit_bundle")
+      zip_dir "$ffmpeg_kit_bundle" "$work_dir/releases/$out_dir"
+      echo -e "INFO: Done creating release bundle at $work_dir/releases/$out_dir.zip" | tee -a "$LOG_FILE"
+      truthy "$create_release_clean" && clean_builds "all"
+      if [[ "$create_release" == "remote" ]]; then
+        create_github_release "$work_dir/releases/$out_dir.zip"
+      fi
     fi
+    chmod -R a+rwx "$work_dir"
   fi
-  chmod -R a+rwx "$work_dir"
 }
 uninstall_manifest() {
   local manifest="$1"
@@ -5950,6 +5952,56 @@ get_changes_from_changelog() {
   echo "$changes" | sed -e '/./,$!d' -e :a -e '/^\n*$/{$d;N;ba' -e '}'
 }
 
+get_maven_keystore_file() {
+  if [[ -f "$(realpath ~vscode/.config/keystore/maven/maven)" ]]; then
+    echo "$(realpath ~vscode/.config/keystore/maven/maven)"
+  else
+    exit_message 1 "Keystore file not found. Please create a .env or /home/vscode/.config/keystore/maven/maven file with the following format: \n\
+    OSSRH_USERNAME=<your-maven-username>\n\
+    OSSRH_PASSWORD=<your-maven-password>\n\
+    OSSRH_BASE64=<your-maven-username:password-base64>" | tee -a "$LOG_FILE"
+  fi
+}
+
+get_maven_username() {
+  local keystore="$(get_maven_keystore_file)"
+  if [[ -f "$keystore" ]]; then
+    local maven_username=$(grep '^OSSRH_USERNAME=' "$keystore" | cut -d '=' -f2- | tr -d '\r')
+    if [[ -z "$maven_username" ]]; then
+      exit_message 1 "Maven username not found" | tee -a "$LOG_FILE"
+    fi
+    echo "$maven_username"
+  else
+    exit_message 1 "Maven keystore file not found" | tee -a "$LOG_FILE"
+  fi
+}
+
+get_maven_password() {
+  local keystore="$(get_maven_keystore_file)"
+  if [[ -f "$keystore" ]]; then
+    local maven_password=$(grep '^OSSRH_PASSWORD=' "$keystore" | cut -d '=' -f2- | tr -d '\r')
+    if [[ -z "$maven_password" ]]; then
+      exit_message 1 "Maven password not found" | tee -a "$LOG_FILE"
+    fi
+    echo "$maven_password"
+  else
+    exit_message 1 "Maven keystore file not found" | tee -a "$LOG_FILE"
+  fi
+}
+
+get_maven_base64() {
+  local keystore="$(get_maven_keystore_file)"
+  if [[ -f "$keystore" ]]; then
+    local maven_base64=$(grep '^OSSRH_BASE64=' "$keystore" | cut -d '=' -f2- | tr -d '\r')
+    if [[ -z "$maven_base64" ]]; then
+      exit_message 1 "Maven base64 not found" | tee -a "$LOG_FILE"
+    fi
+    echo "$maven_base64"
+  else
+    exit_message 1 "Maven keystore file not found" | tee -a "$LOG_FILE"
+  fi
+}
+
 get_keystore_file() {
   if [[ -f .env ]]; then
     echo ".env"
@@ -5957,19 +6009,32 @@ get_keystore_file() {
     echo "$(realpath ~vscode/.config/keystore/github)"
   else
     exit_message 1 "Keystore file not found. Please create a .env or /home/vscode/.config/keystore/github file with the following format: \n\
-    <your-github-token>\n\
-    <your-github-owner>\n\
-    <your-github-repo>" | tee -a "$LOG_FILE"
+    GH_TOKEN=<your-github-token>\n\
+    GH_TOKEN_CLASSIC=<your-github-token-classic>\n\
+    GH_OWNER=<your-github-owner>\n\
+    GH_REPO=<your-github-repo>" | tee -a "$LOG_FILE"
   fi
 }
 
 get_github_token() {
   local keystore="$(get_keystore_file)"
   if [[ -f "$keystore" ]]; then
-    local github_token=$(sed '1q;d' "$keystore")
-    github_token=$(echo "$github_token" | tr -d '\r')
+    local github_token=$(grep '^GH_TOKEN=' "$keystore" | cut -d '=' -f2- | tr -d '\r')
     if [[ -z "$github_token" ]]; then
       exit_message 1 "GitHub token not found" | tee -a "$LOG_FILE"
+    fi
+    echo "$github_token"
+  else
+    exit_message 1 "GitHub keystore file not found" | tee -a "$LOG_FILE"
+  fi
+}
+
+get_github_token_classic() {
+  local keystore="$(get_keystore_file)"
+  if [[ -f "$keystore" ]]; then
+    local github_token=$(grep '^GH_TOKEN_CLASSIC=' "$keystore" | cut -d '=' -f2- | tr -d '\r')
+    if [[ -z "$github_token" ]]; then
+      exit_message 1 "GitHub classic token not found" | tee -a "$LOG_FILE"
     fi
     echo "$github_token"
   else
@@ -5980,8 +6045,7 @@ get_github_token() {
 get_github_repo() {
   local keystore="$(get_keystore_file)"
   if [[ -f "$keystore" ]]; then
-    local github_repo=$(sed '3q;d' "$keystore")
-    github_repo=$(echo "$github_repo" | tr -d '\r')
+    local github_repo=$(grep '^GH_REPO=' "$keystore" | cut -d '=' -f2- | tr -d '\r')
     if [[ -z "$github_repo" ]]; then
       exit_message 1 "GitHub repo not found" | tee -a "$LOG_FILE"
     fi
@@ -5994,8 +6058,7 @@ get_github_repo() {
 get_github_owner() {
   local keystore="$(get_keystore_file)"
   if [[ -f "$keystore" ]]; then
-    local github_owner=$(sed '2q;d' "$keystore")
-    github_owner=$(echo "$github_owner" | tr -d '\r')
+    local github_owner=$(grep '^GH_OWNER=' "$keystore" | cut -d '=' -f2- | tr -d '\r')
     if [[ -z "$github_owner" ]]; then
       exit_message 1 "GitHub owner not found" | tee -a "$LOG_FILE"
     fi
@@ -6126,4 +6189,130 @@ upload_release_asset() {
   else
     exit_message 1 "Failed to upload $attachment. Please check the logs."
   fi
+}
+
+check_existing_package() {
+  local package_name="$1"
+  local package_version="$2"
+  local owner="$(get_github_owner)"
+  local github_token="$(get_github_token_classic)"
+  local package_type="maven"
+
+  # Retrieve package versions metadata
+  local versions_json=$(curl -s \
+    -H "Authorization: Bearer $github_token" \
+    -H "Accept: application/vnd.github+json" \
+    -H "X-GitHub-Api-Version: 2022-11-28" \
+    "https://api.github.com/users/$owner/packages/$package_type/$package_name/versions")
+
+  # 1. Safely check for error message ONLY if it's an object
+  # If it's an array, error_msg will be empty
+  local error_msg=$(echo "$versions_json" | jq -r 'if type == "object" then .message else empty end')
+  
+  if [[ -n "$error_msg" && "$error_msg" != "null" ]]; then
+    # Return nothing and exit 1 so the caller knows it doesn't exist/error
+    return 1
+  fi
+
+  # 2. Extract version ID safely from the array
+  local version_id=$(echo "$versions_json" | jq -r ".[]? | select(.name == \"$package_version\") | .id")
+
+  if [[ -n "$version_id" && "$version_id" != "null" ]]; then
+    echo "$version_id"
+    return 0
+  fi
+
+  return 1
+}
+
+delete_existing_package() {
+  local package_name="$1"
+  local package_version="$2"
+  local owner="$(get_github_owner)"
+  local github_token="$(get_github_token_classic)"
+  local package_type="maven"
+
+  echo "Checking for existing package $package_name version $package_version..." | tee -a "$LOG_FILE"
+
+  # 1. Get all versions for the package
+  local versions_json=$(curl -s \
+    -H "Authorization: Bearer $github_token" \
+    -H "Accept: application/vnd.github+json" \
+    -H "X-GitHub-Api-Version: 2022-11-28" \
+    "https://api.github.com/users/$owner/packages/$package_type/$package_name/versions")
+
+  # Check if package exists at all (404/error check)
+  local error_msg=$(echo "$versions_json" | jq -r 'if type == "object" then .message else empty end')
+  if [[ -n "$error_msg" && "$error_msg" != "null" ]]; then
+    echo "Package $package_name does not exist in registry yet. Proceeding..." | tee -a "$LOG_FILE"
+    return 0
+  fi
+
+  # 2. Count total versions and find target version ID
+  local version_count=$(echo "$versions_json" | jq '. | length')
+  local version_id=$(echo "$versions_json" | jq -r ".[] | select(.name == \"$package_version\") | .id")
+
+  if [[ -z "$version_id" || "$version_id" == "null" ]]; then
+    echo "Version $package_version not found. Proceeding..." | tee -a "$LOG_FILE"
+    return 0
+  fi
+
+  # 3. Handle Deletion logic
+  local delete_url
+  if [[ "$version_count" -eq 1 ]]; then
+    echo "Last version detected. Deleting entire package: $package_name..." | tee -a "$LOG_FILE"
+    delete_url="https://api.github.com/users/$owner/packages/$package_type/$package_name"
+  else
+    echo "Multiple versions exist. Deleting specific version ID: $version_id..." | tee -a "$LOG_FILE"
+    delete_url="https://api.github.com/users/$owner/packages/$package_type/$package_name/versions/$version_id"
+  fi
+
+  local http_code=$(curl -s -o /dev/null -w "%{http_code}" -X DELETE \
+    -H "Authorization: Bearer $github_token" \
+    -H "Accept: application/vnd.github+json" \
+    -H "X-GitHub-Api-Version: 2022-11-28" \
+    "$delete_url")
+
+  if [[ "$http_code" == "204" ]]; then
+    echo "Successfully deleted." | tee -a "$LOG_FILE"
+  else
+    echo "Warning: Delete failed with HTTP $http_code. Conflict may occur." | tee -a "$LOG_FILE"
+  fi
+}
+
+check_maven_package_status() {
+  local package_name="$1"
+  local package_version="$2"
+  local username="$(get_maven_username)"
+  local password="$(get_maven_password)"
+  local endpoint="https://central.sonatype.com/api/v1/publisher/published"
+  local namespace="io.github.akashskypatel"
+
+  # Retrieve package versions metadata
+  local status_json=$(curl -s \
+    -H "Authorization: Bearer $(echo -n "$username:$password" | base64)" \
+    -H "Accept: application/json" \
+    "$endpoint" \
+    -d "namespace=$namespace" \
+    -d "name=$package_name" \
+    -d "version=$package_version")
+
+  # 1. Safely check for error message ONLY if it's an object
+  # If it's an array, error_msg will be empty
+  local error_msg=$(echo "$status_json" | jq -r 'if type == "object" then .message else empty end')
+  
+  if [[ -n "$error_msg" && "$error_msg" != "null" ]]; then
+    # Return nothing and exit 1 so the caller knows it doesn't exist/error
+    return 1
+  fi
+
+  # extract satus from json
+  local status=$(echo "$status_json" | jq -r '.published')
+
+  if [[ -n "$status" && "$status" != "null" ]]; then
+    echo "$status"
+    return 0
+  fi
+
+  return 1
 }

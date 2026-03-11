@@ -5,6 +5,29 @@ OUTPUT_LIB="$1"
 AR_CMD="$2"
 RANLIB_CMD="$3"
 FFMPEG_BUILD_DIR="$4"
+verbose=false
+
+truthy() {
+    case "$1" in
+        true|1|T|t|True|TRUE|y|Y|yes|Yes|YES|on|On|ON)
+            return 0
+            ;;
+        *)
+            return 1
+            ;;
+    esac
+}
+
+for arg in "$@"; do
+	case "$arg" in
+		-v|--verbose|-verbose|--v)
+			verbose=true
+			;;
+		*)
+			echo "static-library.sh: Unsupported arg '$arg'. skipping..."
+			;;
+	esac
+done
 
 echo "Generating monolithic static library: $OUTPUT_LIB"
 rm -f lib.mri bundle_manifest.txt libs.txt

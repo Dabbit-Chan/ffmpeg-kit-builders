@@ -3,6 +3,10 @@ set -e
 
 # shellcheck disable=SC2317,SC2129,SC1091,SC2120,SC2035,SC2016,SC2310,SC2155,SC2154,SC2034
 
+# Update sudo timestamp to avoid interruption later
+echo "Requesting administrative privileges..."
+sudo -v
+
 # State management configuration
 STATE_DIR="${STATE_DIR:-${PWD}/.ffmpeg-kit-build-state}"
 STATE_FILE="${STATE_DIR}/build_all.state"
@@ -26,10 +30,6 @@ fi
 
 # Create lock file
 touch "${LOCK_FILE}"
-
-# Update sudo timestamp to avoid interruption later
-echo "Requesting administrative privileges..."
-sudo -v
 
 # Keep the timestamp alive in the background for long-running builds
 while true; do sudo -n v; sleep 60; kill -0 "$$" || exit; done 2>/dev/null &
@@ -210,14 +210,25 @@ for key in "${!PLATFORMS[@]}"; do
   IFS=',' read -ra arch_array <<< "${PLATFORMS[$key]}"
   for arch in "${arch_array[@]}"; do
     for bundle in "${BUNDLE_ARRAY[@]}"; do
-      if [[ "${bundle}" == "debug" ]]; then
-        BUILD_STEPS+=("./runner.sh --host=${platform} --arch=${arch} -y ${deps} --base-bundle --build-debug --build-ffmpeg --build-ffmpeg-kit --clean --release=remote --skip --gpl -f")
-        BUILD_STEPS+=("./runner.sh --host=${platform} --arch=${arch} -y ${deps} --base-bundle --build-debug --build-ffmpeg --build-ffmpeg-kit --clean --release=remote --skip -f")
+      builds=""
+      clean=""
+      remote=""
+      if [[ "${platform}" == "android" ]]; then
+        builds="--ffmpeg"
+        remote="--release=local"
       else
-        BUILD_STEPS+=("./runner.sh --host=${platform} --arch=${arch} -y ${deps} --${bundle}-bundle --build-ffmpeg --build-ffmpeg-kit --clean --release=remote --skip --gpl -f")
-        BUILD_STEPS+=("./runner.sh --host=${platform} --arch=${arch} -y ${deps} --${bundle}-bundle --build-ffmpeg --build-ffmpeg-kit --clean --release=remote --skip -f")
-        BUILD_STEPS+=("./runner.sh --host=${platform} --arch=${arch} -y ${deps} --${bundle}-bundle --build-ffmpeg --build-ffmpeg-kit --clean --release=remote --skip --gpl -f --small")
-        BUILD_STEPS+=("./runner.sh --host=${platform} --arch=${arch} -y ${deps} --${bundle}-bundle --build-ffmpeg --build-ffmpeg-kit --clean --release=remote --skip -f --small")
+        builds="--ffmpeg --kit"
+        clean="--clean"
+        remote="--release=remote"
+      fi
+      if [[ "${bundle}" == "debug" ]]; then
+        BUILD_STEPS+=("./runner.sh --host=${platform} --arch=${arch} -y ${deps} --base-bundle --build-debug $builds $clean $remote --skip --gpl -f")
+        BUILD_STEPS+=("./runner.sh --host=${platform} --arch=${arch} -y ${deps} --base-bundle --build-debug $builds $clean $remote --skip -f")
+      else
+        BUILD_STEPS+=("./runner.sh --host=${platform} --arch=${arch} -y ${deps} --${bundle//_/-}-bundle $builds $clean $remote --skip --gpl -f")
+        BUILD_STEPS+=("./runner.sh --host=${platform} --arch=${arch} -y ${deps} --${bundle//_/-}-bundle $builds $clean $remote --skip -f")
+        BUILD_STEPS+=("./runner.sh --host=${platform} --arch=${arch} -y ${deps} --${bundle//_/-}-bundle $builds $clean $remote --skip --gpl -f --small")
+        BUILD_STEPS+=("./runner.sh --host=${platform} --arch=${arch} -y ${deps} --${bundle//_/-}-bundle $builds $clean $remote --skip -f --small")
       fi
     done
   done
@@ -262,5 +273,5 @@ echo ""
 echo "========================================"
 echo "All builds completed successfully!"
 echo "========================================"
-echo "State file: ${STATE_FILE}"
-echo "You can use --reset to clear the state for a fresh build."
+
+rm -f "${STATE_FILE}"

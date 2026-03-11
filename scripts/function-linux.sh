@@ -6,7 +6,7 @@ get_common_cflags() {
   if [[ -n ${FFMPEG_KIT_LTS_BUILD} ]]; then
     case $1 in
     ffmpeg-kit)
-      echo "${linux_cflags} -DFFMPEG_KIT_LTS ${LLVM_CONFIG_CFLAGS}"
+      echo "${linux_cflags} ${LLVM_CONFIG_CFLAGS}"
       ;;
     *)
       echo "${linux_cflags} ${LLVM_CONFIG_CFLAGS}"

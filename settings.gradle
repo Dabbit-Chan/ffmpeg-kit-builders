@@ -1,0 +1,18 @@
+pluginManagement {
+    repositories {
+        google()        // Required for com.android.library
+        mavenCentral()  // Required for com.vanniktech.maven.publish
+        gradlePluginPortal()
+    }
+}
+
+dependencyResolutionManagement {
+    repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
+    repositories {
+        google()
+        mavenCentral()
+    }
+}
+
+rootProject.name = 'ffmpeg-kit-builders'
+include ':tools', ':tools:android'

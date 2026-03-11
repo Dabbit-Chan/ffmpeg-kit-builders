@@ -5,20 +5,24 @@
 
 </center>
 
+# FFmpeg-Kit Extended
+
+FFmpeg-Kit Extended is a native library that allows programatic access to executing FFmpeg, FFprobe, and FFplay commands for Android, Windows, and Linux. It provides a simple C and C++ API to execute these commands with callbacks for logs, statistics, session completion, media information parsing and more. The pure C API makes it easy to integrate with any language.
+
 # FFmpeg-Kit Builders
 
-Cross-platform build system for FFmpeg and FFmpegKit supporting Linux and Windows platforms.
+Cross-platform build system for FFmpeg and FFmpegKit supporting Linux, Windows, and Android platforms.
 
 ## Features
 
-- **Pure C API** - Provides pure C api to make it easy to use in any language.
+- **Both C++ and Pure C API** - Provides both C++ and pure C api to make it easy to use in any language.
 - **FFmpeg, FFprobe, and FFplay** - Full FFmpeg, FFprobe, and FFplay support.
 - **Asynchronous Execution** - Run long-running tasks without blocking the main thread.
 - **Parallel Execution** - Run multiple tasks in parallel.
 - **Callback Support** - Detailed hooks for logs, statistics, and session completion.
 - **Extensible** - Designed to allow custom native library loading and configuration.
 - **Deploy Custom Builds** - You can deploy custom builds of ffmpeg-kit-extended.
-- **Cross-Platform Support** - Works on Windows, and Linux. Android coming soon!
+- **Cross-Platform Support** - Works on Windows, Linux, and Android!
 
 ## Overview
 
@@ -29,14 +33,14 @@ This repository provides a comprehensive build system for FFmpeg and FFmpegKit t
 - **Linux**: Native builds for x86_64 architecture with shared libraries (.so) and static libraries (.a).
 - **Windows**: Cross-compilation from Linux hosts using MinGW-w64 toolchain with shared libraries (.dll) and static mingw libraries (.a).
   - *Note: Compiling using MSVC ABI is not supported by the build script.*
-- **Android**: Coming soon!
+- **Android**: In beta NOW! Available on armv7, arm64, and x86_64 architectures!
 - **Apple**: Apple platforms are not currently planned as I dont have one of those to develop and test. The framework is there so you are welcome to contribute!
   - **MacOS**: Not planned
   - **iOS**: Not planned
 
 | Platform | Status         | Architecture         |
 |----------|----------------|----------------------|
-| Android  | 🚧 Planned     |armv7, arm64, x86_64  |
+| Android  | ⚠️ Beta        |armv7, arm64, x86_64  |
 | iOS      | Not Supported  |                      |
 | macOS    | Not Supported  |                      |
 | Linux    | ✅ Supported   | x86_64               |

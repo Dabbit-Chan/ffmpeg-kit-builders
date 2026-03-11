@@ -1,0 +1,17 @@
+// ~/ffmpeg-kit-builders/build.gradle
+
+buildscript {
+    repositories {
+        google()
+        mavenCentral()
+    }
+    dependencies {
+        classpath 'com.android.tools.build:gradle:9.1.0'
+        classpath 'com.vanniktech:gradle-maven-publish-plugin:0.36.0'
+    }
+}
+
+plugins {
+    id 'com.android.library' version '9.1.0' apply false
+    id 'com.vanniktech.maven.publish' version '0.36.0' apply false
+}

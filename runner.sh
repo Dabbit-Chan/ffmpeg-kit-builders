@@ -508,6 +508,10 @@ while [ $# -gt 0 ]; do
     pick_gpu_type "rocm"
     shift
     ;;
+  --no-bundle)
+    export create_bundle=n
+    shift
+    ;;
 	--enable-*)
     enable_library "${1#--enable-}"
     shift
@@ -874,7 +878,7 @@ main() {
     truthy "$build_ffmpeg" && install_ffmpeg
     truthy "$build_ffmpeg_kit" && configure_ffmpeg_kit
     truthy "$build_ffmpeg_kit" && install_ffmpeg_kit
-    truthy "$build_ffmpeg_kit" && create_ffmpeg_kit_bundle
+    truthy "$create_bundle" && create_ffmpeg_kit_bundle
   fi
 }
 

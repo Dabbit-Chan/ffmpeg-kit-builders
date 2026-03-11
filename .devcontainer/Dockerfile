@@ -155,6 +155,20 @@ RUN mkdir -p ${ANDROID_HOME}/cmdline-tools && \
     sdkmanager "ndk;29.0.14206865" && \
     rustup target add x86_64-linux-android i686-linux-android aarch64-linux-android armv7-linux-androideabi
 
+SHELL ["/bin/bash", "-c"]
+
+ENV SDKMAN_DIR="/usr/local/sdkman"
+
+RUN curl -s "https://get.sdkman.io" | bash && \
+    source "$SDKMAN_DIR/bin/sdkman-init.sh" && \
+    sdk install gradle && \
+    sdk flush archives && \
+    sdk flush temp
+
+ENV PATH="${SDKMAN_DIR}/candidates/gradle/current/bin:${PATH}"
+
+ENV SDKMAN_CANDIDATES_DIR="${SDKMAN_DIR}/candidates"
+
 RUN chown -R vscode:vscode ${ANDROID_HOME}
 
 RUN wget https://github.com/koalaman/shellcheck/releases/download/v0.11.0/shellcheck-v0.11.0.linux.x86_64.tar.xz && \

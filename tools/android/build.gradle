@@ -1,19 +1,50 @@
-apply plugin: 'com.android.library'
+plugins {
+    id 'com.android.library'
+    id 'com.vanniktech.maven.publish'
+}
+
+/**
+ * Retrieves a project property safely using the Gradle 9.0 compatible Providers API.
+ * Replaces deprecated project.hasProperty() and project.getProperty().
+ */
+def getSafeProperty(propName, defaultValue) {
+    return providers.gradleProperty(propName).getOrElse(defaultValue)
+}
+
+/**
+ * Shared validation logic that can be applied to any task.
+ * Returns true if binaries are found, false otherwise.
+ */
+def hasNativeBinaries() {
+    def jniPathStr = getSafeProperty('FFMPEG_KIT_JNI_LIBS_DIR', "../../prebuilt/android/jniLibs-base/jniLibs")
+    def jniDir = file(jniPathStr)
+    def expectedArches = ['arm64-v8a', 'armeabi-v7a', 'x86_64']
+
+    return expectedArches.any { arch ->
+        def archDir = new File(jniDir, arch)
+        archDir.exists() && archDir.listFiles()?.any { file -> 
+            file.name.endsWith('.so') || file.name.endsWith('.a') 
+        }
+    }
+}
+
+base {
+    archivesName = getSafeProperty('FFMPEG_KIT_OUTPUT_NAME', "bundle")
+}
 
 android {
-    if (project.android.hasProperty("namespace")) {
-        namespace 'com.akashskypatel.ffmpegkit'
-    }
-    compileSdk 33
-    ndkVersion "22.1.7171670"
+    namespace = getSafeProperty('FFMPEG_KIT_NAMESPACE', 'io.github.akashskypatel.ffmpegkit')
+    compileSdk = 33
+    
+    ndkVersion = getSafeProperty('ANDROID_NDK', "29.0.14206865")
 
     defaultConfig {
-        minSdk 24
-        targetSdk 33
-        versionCode 240600
-        versionName "6.0"
-        project.archivesBaseName = "ffmpeg-kit"
-        consumerProguardFiles "consumer-rules.pro"
+        minSdk = getSafeProperty('ANDROID_API_LEVEL', "26").toInteger()
+        targetSdk = 33
+     
+        versionCode = getSafeProperty('FFMPEG_KIT_VERSION_CODE', "1").toInteger()
+        versionName = getSafeProperty('FFMPEG_KIT_VERSION', "1.0.0")
+        
     }
 
     buildTypes {
@@ -30,37 +61,80 @@ android {
 
     sourceSets {
         main {
-            jniLibs.srcDirs = ["../libs"]
-        }
-    }
-
-    testOptions {
-        unitTests.returnDefaultValues = true
-        unitTests.all {
-            systemProperty 'enable.ffmpeg.kit.test.mode', 'true'
-        }
-    }
-
-
-    publishing {
-        singleVariant('release') {
-            withJavadocJar()
-            withSourcesJar()
+            def jniPathStr = getSafeProperty('FFMPEG_KIT_JNI_LIBS_DIR', "../../prebuilt/android/jniLibs-base/jniLibs")
+            def jniDir = file(jniPathStr)
+            
+            println("--> Resolved JNI Directory: ${jniDir.absolutePath}")
+            println("--> Directory Exists: ${jniDir.exists()}")
+             
+            jniLibs.srcDirs = [jniDir]
         }
     }
 }
 
-task javadoc(type: Javadoc) {
-    title = 'FFmpegKit'
-    destinationDir = file("${projectDir}/../../docs/android/javadoc")
-    classpath += project.files(android.getBootClasspath().join(File.pathSeparator))
-    source = android.sourceSets.main.java.srcDirs
-    configurations.implementation.setCanBeResolved(true)
-    classpath += configurations.implementation
+/**
+ * Global skip logic.
+ * If binaries are missing, we skip every task related to the build or publication.
+ */
+def binariesExist = hasNativeBinaries()
+
+if (!binariesExist) {
+    println "--> [GLOBAL SKIP] No native binaries found. Neutralizing all build, metadata, and publish tasks."
+    
+    tasks.configureEach { task ->
+        // Specifically target tasks that require the AAR output to exist
+        if (task.name.contains("Release") || 
+            task.name.contains("Publication") || 
+            task.name.contains("bundle") ||
+            task.name.contains("Metadata")) {
+            
+            task.onlyIf { false }
+        }
+    }
+}
+
+mavenPublishing {
+    def githubUsername = getSafeProperty('GITHUB_USERNAME', 'akashskypatel')
+    def githubRepo = getSafeProperty('GITHUB_REPO', 'ffmpeg-kit-builders')
+
+    coordinates(
+        getSafeProperty('FFMPEG_KIT_NAMESPACE', 'io.github.akashskypatel.ffmpegkit'),
+        getSafeProperty('FFMPEG_KIT_OUTPUT_NAME', 'bundle'),
+        getSafeProperty('FFMPEG_KIT_VERSION', '1.0.0') // Ensure this is NOT a SNAPSHOT
+    )
+    publishToMavenCentral(true)
+    signAllPublications()
+
+    pom {
+        name = 'FFmpegKit Extended'
+        description = 'FFmpeg-Kit Extended is a native library that allows programatic access to executing FFmpeg, FFprobe, and FFplay commands for Android, Windows, and Linux. It provides a simple C and C++ API to execute these commands with callbacks for logs, statistics, session completion, media information parsing and more. The pure C API makes it easy to integrate with any language.'
+        url = "https://github.com/${githubUsername}/${githubRepo}"
+        
+        licenses {
+            license {
+                name = 'LGPL 3.0 License'
+                url = 'https://www.gnu.org/licenses/lgpl-3.0.en.html'
+                distribution = 'repo'
+            }
+        }
+        
+        developers {
+            developer {
+                id = githubUsername
+                name = githubUsername
+                url = "https://github.com/${githubUsername}/${githubRepo}"
+            }
+        }
+        
+        scm {
+            connection = "scm:git:github.com/${githubUsername}/${githubRepo}.git"
+            developerConnection = "scm:git:ssh://github.com/${githubUsername}/${githubRepo}.git"
+            url = "https://github.com/${githubUsername}/${githubRepo}/tree/master"
+        }
+    }
 }
 
 dependencies {
-    api 'com.akashskypatel:smart-exception-java:0.2.1'
-    testImplementation "androidx.test.ext:junit:1.1.5"
-    testImplementation 'org.json:json:20230618'
+    implementation "com.android.support:support-annotations:28.0.0"
+    compileOnly "com.android.tools.lint:lint-api:31.1.0"
 }

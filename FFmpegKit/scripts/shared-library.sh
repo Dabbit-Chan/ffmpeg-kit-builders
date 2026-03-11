@@ -5,6 +5,29 @@ set -e
 FFMPEG_BUILD_DIR="$1"
 FFMPEG_KIT_BUILD_DIR=$(pwd) # Typically the directory containing CMakeCache.txt
 
+truthy() {
+    case "$1" in
+        true|1|T|t|True|TRUE|y|Y|yes|Yes|YES|on|On|ON)
+            return 0
+            ;;
+        *)
+            return 1
+            ;;
+    esac
+}
+
+verbose=false
+for arg in "$@"; do
+	case "$arg" in
+		-v|--verbose|-verbose|--v)
+			verbose=true
+			;;
+		*)
+			echo "shared-library.sh: Unsupported arg '$arg'. skipping..."
+			;;
+	esac
+done
+
 rm -f bundle_manifest.txt
 
 echo "  [SHARED-LIB] Analyzing dependencies in $FFMPEG_BUILD_DIR..."
@@ -44,7 +67,7 @@ for flag in $deps; do
 
 		if [[ -n "$lib_path" && "$lib_path" != *"NOTFOUND"* ]]; then
 			if is_system_path "$lib_path"; then
-				echo "  [SKIPPING SYSTEM] $lib_path"
+				truthy "$verbose" && echo "  [SKIPPING SYSTEM] $lib_path"
 				raw_libs_to_keep="$raw_libs_to_keep -l$name"
 				continue
 			fi
@@ -57,7 +80,7 @@ for flag in $deps; do
 				if [ -h "$lib_path" ]; then
 					target=$(readlink -f "$lib_path")
 					if [[ "$target" == *.a || "$target" == *.lib ]]; then
-						echo "  [SKIPPING SYMLINK] $filename -> $target (Static target)"
+						truthy "$verbose" && echo "  [SKIPPING SYMLINK] $filename -> $target (Static target)"
 						continue
 					fi
 				fi
@@ -73,7 +96,7 @@ for flag in $deps; do
 				if [ -h "$lib_path" ]; then
 					target=$(readlink -f "$lib_path")
 					if [[ "$target" == *.so || "$target" == *.dll || "$target" == *.dylib ]]; then
-						echo "  [FOUND SHARED VIA SYMLINK] $filename -> $(basename "$target")"
+						truthy "$verbose" && echo "  [FOUND SHARED VIA SYMLINK] $filename -> $(basename "$target")"
 						echo "$target" >> bundle_manifest.txt
 						raw_libs_to_keep="$raw_libs_to_keep -l$name"
 						continue
@@ -98,7 +121,7 @@ for flag in $deps; do
 					echo "  [FOUND SHARED] $(basename "$found_dll") (via $filename)"
 					echo "$real_path" >>bundle_manifest.txt
 				else
-					echo "  [STATIC MERGED] $filename"
+					truthy "$verbose" && echo "  [STATIC MERGED] $filename"
 				fi
 				;;
 			esac

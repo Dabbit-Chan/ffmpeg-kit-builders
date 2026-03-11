@@ -19,3 +19,11 @@ my_test_env
 ~*
 .agent/
 .ffmpeg-kit-build-state/*
+.ffmpeg-kit-build-aar-state/*
+gradlew
+gradlew.bat
+.gradle/*
+gradle/*
+build/*
+local.properties
+tools/android/build/*
