@@ -1,10 +1,8 @@
 diff --git a/Makefile b/Makefile
-old mode 100644
-new mode 100755
-index 8327b4e..706b2b6
+index 8327b4e..3d0561b 100755
 --- a/Makefile
 +++ b/Makefile
-@@ -15,12 +15,13 @@
+@@ -15,110 +15,68 @@
  
  CC ?= gcc
  PREFIX ?= /usr/local
@@ -14,15 +12,14 @@ index 8327b4e..706b2b6
  LIB_VERSION = 1.2
  
 -ifeq ($(shell uname), Darwin)
-+ifneq (,$(findstring mingw,$(CC)))
-+    LIB_SUFFIX := dll
-+    VERSIONED_LIB_SUFFIX := $(LIB_SUFFIX)
-+else ifeq ($(shell uname), Darwin)
-     LIB_SUFFIX := dylib
-     VERSIONED_LIB_SUFFIX := $(LIB_VERSION).$(LIB_SUFFIX)
- else
-@@ -29,62 +30,37 @@ else
- endif
+-    LIB_SUFFIX := dylib
+-    VERSIONED_LIB_SUFFIX := $(LIB_VERSION).$(LIB_SUFFIX)
+-else
+-    LIB_SUFFIX := so
+-    VERSIONED_LIB_SUFFIX := $(LIB_SUFFIX).$(LIB_VERSION)
+-endif
++# Define the import library name
++IMPORT_LIB := libquirc.dll.a
  
  CFLAGS ?= -O3 -Wall -fPIC
 -QUIRC_CFLAGS = -Ilib $(CFLAGS) $(SDL_CFLAGS)
@@ -72,8 +69,9 @@ index 8327b4e..706b2b6
 -
 -quirc-scanner: $(DEMO_OBJ) $(DEMO_UTIL_OBJ) demo/scanner.o libquirc.a
 -	$(CC) -o $@ $(DEMO_OBJ) $(DEMO_UTIL_OBJ) demo/scanner.o libquirc.a $(LDFLAGS) -lm -ljpeg
-+all: libquirc.a libquirc.$(LIB_SUFFIX) quirc.pc
++all: libquirc.a $(IMPORT_LIB) quirc.pc
  
++# Static library
  libquirc.a: $(LIB_OBJ)
  	rm -f $@
  	ar cru $@ $(LIB_OBJ)
@@ -84,8 +82,9 @@ index 8327b4e..706b2b6
 -
 -libquirc.$(VERSIONED_LIB_SUFFIX): $(LIB_OBJ)
 -	$(CC) -shared -o $@ $(LIB_OBJ) $(LDFLAGS) -lm
-+libquirc.$(LIB_SUFFIX): $(LIB_OBJ)
-+	$(CC) -shared -o $@ $(LIB_OBJ) $(LDFLAGS) -lm -Wl,--out-implib,libquirc.dll.a
++# Import library only (redirects DLL output to nul)
++$(IMPORT_LIB): $(LIB_OBJ)
++	$(CC) -shared -Wl,--out-implib,$(IMPORT_LIB) -o nul $(LIB_OBJ)
 +
 +quirc.pc:
 +	@echo "Generating $@"
@@ -102,10 +101,11 @@ index 8327b4e..706b2b6
  
  .c.o:
  	$(CC) $(QUIRC_CFLAGS) -o $@ -c $<
-@@ -93,32 +69,27 @@ libquirc.$(VERSIONED_LIB_SUFFIX): $(LIB_OBJ)
- .cxx.o:
- 	$(CXX) $(QUIRC_CXXFLAGS) -o $@ -c $<
  
+-.SUFFIXES: .cxx
+-.cxx.o:
+-	$(CXX) $(QUIRC_CXXFLAGS) -o $@ -c $<
+-
 -install: libquirc.a libquirc.$(LIB_SUFFIX) quirc-demo quirc-scanner
 -	install -o root -g root -m 0644 lib/quirc.h $(DESTDIR)$(PREFIX)/include
 -	install -o root -g root -m 0644 libquirc.a $(DESTDIR)$(PREFIX)/lib
@@ -115,30 +115,29 @@ index 8327b4e..706b2b6
 -	install -o root -g root -m 0755 quirc-demo $(DESTDIR)$(PREFIX)/bin
 -	# install -o root -g root -m 0755 quirc-demo-opencv $(DESTDIR)$(PREFIX)/bin
 -	install -o root -g root -m 0755 quirc-scanner $(DESTDIR)$(PREFIX)/bin
-+install: libquirc.a libquirc.$(LIB_SUFFIX) quirc.pc
++install: libquirc.a $(IMPORT_LIB) quirc.pc
 +	mkdir -p $(DESTDIR)$(PREFIX)/include
 +	mkdir -p $(DESTDIR)$(PREFIX)/lib
 +	mkdir -p $(DESTDIR)$(PREFIX)/lib/pkgconfig
 +	install -m 0644 lib/quirc.h $(DESTDIR)$(PREFIX)/include
 +	install -m 0644 libquirc.a $(DESTDIR)$(PREFIX)/lib
-+	install -m 0755 libquirc.$(LIB_SUFFIX) $(DESTDIR)$(PREFIX)/lib
-+	-install -m 0644 libquirc.dll.a $(DESTDIR)$(PREFIX)/lib
++	install -m 0644 $(IMPORT_LIB) $(DESTDIR)$(PREFIX)/lib
 +	install -m 0644 quirc.pc $(DESTDIR)$(PREFIX)/lib/pkgconfig
  
  uninstall:
  	rm -f $(DESTDIR)$(PREFIX)/include/quirc.h
 -	rm -f $(DESTDIR)$(PREFIX)/lib/libquirc.{$(LIB_SUFFIX),$(VERSIONED_LIB_SUFFIX)}
-+	rm -f $(DESTDIR)$(PREFIX)/lib/libquirc.$(LIB_SUFFIX)
  	rm -f $(DESTDIR)$(PREFIX)/lib/libquirc.a
 -	rm -f $(DESTDIR)$(PREFIX)/bin/quirc-demo
 -	rm -f $(DESTDIR)$(PREFIX)/bin/quirc-demo-opencv
 -	rm -f $(DESTDIR)$(PREFIX)/bin/quirc-scanner
-+	rm -f $(DESTDIR)$(PREFIX)/lib/libquirc.dll.a
++	rm -f $(DESTDIR)$(PREFIX)/lib/$(IMPORT_LIB)
 +	rm -f $(DESTDIR)$(PREFIX)/lib/pkgconfig/quirc.pc
  
  clean:
- 	rm -f */*.o
- 	rm -f */*.lo
+-	rm -f */*.o
+-	rm -f */*.lo
++	rm -f lib/*.o
  	rm -f libquirc.a
 -	rm -f libquirc.{$(LIB_SUFFIX),$(VERSIONED_LIB_SUFFIX)}
 -	rm -f qrtest
@@ -147,6 +146,7 @@ index 8327b4e..706b2b6
 -	rm -f quirc-demo
 -	rm -f quirc-demo-opencv
 -	rm -f quirc-scanner
-+	rm -f libquirc.$(LIB_SUFFIX)
-+	rm -f libquirc.dll.a
++	rm -f $(IMPORT_LIB)
 +	rm -f quirc.pc
++	rm -f nul
+\ No newline at end of file

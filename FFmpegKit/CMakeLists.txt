@@ -13,7 +13,11 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS_DEBUG ON)
 set(CMAKE_EXPORT_COMPILE_COMMANDS_RELEASE ON)
 option(BUILD_TESTS "Build tests" OFF)
 option(ENABLE_LIBPLACEBO "Enable libplacebo" OFF)
-option(CMAKE_BUILD_TYPE "Build type" "Release")
+# CMAKE_BUILD_TYPE is a CMake built-in string variable, not a boolean option.
+# Using option() on it silently converts it to OFF. Use set() instead.
+if(NOT CMAKE_BUILD_TYPE)
+    set(CMAKE_BUILD_TYPE "Release" CACHE STRING "Build type (Debug, Release, RelWithDebInfo, MinSizeRel)" FORCE)
+endif()
 # ==============================================================================
 # 1. Options & Configuration
 # ==============================================================================
@@ -196,14 +200,101 @@ message(STATUS "KIT_HEADERS: ${KIT_HEADERS}")
 # ==============================================================================
 # 5. Dependency Detection
 # ==============================================================================
+add_library(ffmpegkit ${KIT_SOURCES} ${KIT_HEADERS})
+
 find_package(PkgConfig REQUIRED)
 
 # Force PkgConfig to check the build dir first
+message(STATUS "Setting PKG_CONFIG_PATH to: \"${FFMPEG_BUILD_DIR}/lib/pkgconfig:$ENV{PKG_CONFIG_PATH}\"")
 set(ENV{PKG_CONFIG_PATH} "${FFMPEG_BUILD_DIR}/lib/pkgconfig:$ENV{PKG_CONFIG_PATH}")
+
+set(PKG_CONFIG_USE_STATIC_LIBS ON)
 
 pkg_check_modules(FFMPEG REQUIRED IMPORTED_TARGET 
     libavdevice libavfilter libavformat libavcodec libswresample libswscale libavutil jsoncpp sdl2
 )
+
+function(replace_dll_a_with_static INPUT_LIB OUTPUT_VAR)
+    if(INPUT_LIB MATCHES "\\.dll\\.a$")
+        string(REPLACE ".dll.a" ".a" STATIC_PATH "${INPUT_LIB}")
+        if(EXISTS "${STATIC_PATH}")
+            set(${OUTPUT_VAR} "${STATIC_PATH}" PARENT_SCOPE)
+        else()
+            set(${OUTPUT_VAR} "${INPUT_LIB}" PARENT_SCOPE)
+        endif()
+    else()
+        set(${OUTPUT_VAR} "${INPUT_LIB}" PARENT_SCOPE)
+    endif()
+endfunction()
+
+# if(MINGW)
+#     pkg_check_modules(PTW32 REQUIRED IMPORTED_TARGET pthreadGC3)
+#     list(GET PTW32_LIBRARY_DIRS 0 PTW32_PRIMARY_LIB_DIR)
+#     set(PTW32_STATIC_LIB "${PTW32_PRIMARY_LIB_DIR}/libpthreadGC3.a")
+
+#     add_compile_definitions(
+#         PTW32_STATIC_LIB
+#         _POSIX_THREADS
+#         __PTHREAD_INTERFACE_H__
+#         __PTW32_CLEANUP_C
+#         HAVE_STRUCT_TIMESPEC=1
+#     )
+
+#     get_target_property(FFMPEG_LIBS PkgConfig::FFMPEG INTERFACE_LINK_LIBRARIES)
+
+#     message(STATUS "Starting pthread and dll.a interception loop for FFMPEG...")
+#     set(FIXED_LIBS "${PTW32_STATIC_LIB}")
+#     foreach(LIB_PATH IN LISTS FFMPEG_LIBS)
+#         set(RESOLVED_LIB "")
+#         replace_dll_a_with_static("${LIB_PATH}" RESOLVED_LIB)
+#         if(LIB_PATH MATCHES "pthread")
+#             message(NOTICE "   [INTERCEPT] Removed pthread library from ${TARGET_NAME}: ${LIB_PATH}")
+#             continue()
+#         endif()
+#         list(APPEND FIXED_LIBS "${RESOLVED_LIB}")
+#     endforeach()
+#     message(STATUS "Finished pthread and dll.a interception loop.")
+#     set_target_properties(PkgConfig::FFMPEG PROPERTIES INTERFACE_LINK_LIBRARIES "${FIXED_LIBS}")
+# endif()
+
+if(MINGW)
+    # Allow FFmpeg to natively use the MinGW winpthreads it was designed for
+    get_target_property(FFMPEG_LIBS PkgConfig::FFMPEG INTERFACE_LINK_LIBRARIES)
+    set(FIXED_LIBS "")
+    foreach(LIB_PATH IN LISTS FFMPEG_LIBS)
+        set(RESOLVED_LIB "")
+        replace_dll_a_with_static("${LIB_PATH}" RESOLVED_LIB)
+        list(APPEND FIXED_LIBS "${RESOLVED_LIB}")
+    endforeach()
+    set_target_properties(PkgConfig::FFMPEG PROPERTIES INTERFACE_LINK_LIBRARIES "${FIXED_LIBS}")
+endif()
+
+if(ENABLE_LIBPLACEBO)
+    # Force static linking for libplacebo
+    set(_OLD_PKG_CONFIG_USE_STATIC_LIBS ${PKG_CONFIG_USE_STATIC_LIBS})
+    set(PKG_CONFIG_USE_STATIC_LIBS ON)
+    pkg_check_modules(LIBPLACEBO REQUIRED IMPORTED_TARGET libplacebo)
+
+    get_target_property(LIBPLACEBO_LIBS PkgConfig::LIBPLACEBO INTERFACE_LINK_LIBRARIES)
+    message(STATUS "Starting pthread and dll.a interception loop for LIBPLACEBO...")
+    set(FIXED_LIBS "")
+    foreach(LIB_PATH IN LISTS LIBPLACEBO_LIBS)
+        set(RESOLVED_LIB "")
+        replace_dll_a_with_static("${LIB_PATH}" RESOLVED_LIB)
+        if(LIB_PATH MATCHES "pthread")
+            message(NOTICE "   [INTERCEPT] Removed pthread library from ${TARGET_NAME}: ${LIB_PATH}")
+            list(APPEND FIXED_LIBS "${PTW32_STATIC_LIB}")
+            continue()
+        endif()
+        list(APPEND FIXED_LIBS "${RESOLVED_LIB}")
+    endforeach()
+    message(STATUS "Finished pthread and dll.a interception loop.")
+    set_target_properties(PkgConfig::LIBPLACEBO PROPERTIES INTERFACE_LINK_LIBRARIES "${FIXED_LIBS}")
+    set(PKG_CONFIG_USE_STATIC_LIBS ${_OLD_PKG_CONFIG_USE_STATIC_LIBS})
+
+    target_link_libraries(ffmpegkit PRIVATE PkgConfig::LIBPLACEBO)
+    target_compile_definitions(ffmpegkit PRIVATE PL_STATIC PLACEBO_STATIC)
+endif()
 
 # Fix for broken include paths in generated .pc files
 if(TARGET PkgConfig::FFMPEG)
@@ -222,18 +313,6 @@ endif()
 # ==============================================================================
 # 6. Target Definition & Flags
 # ==============================================================================
-add_library(ffmpegkit ${KIT_SOURCES} ${KIT_HEADERS})
-
-if(ENABLE_LIBPLACEBO)
-    # Force static linking for libplacebo
-    set(_OLD_PKG_CONFIG_USE_STATIC_LIBS ${PKG_CONFIG_USE_STATIC_LIBS})
-    set(PKG_CONFIG_USE_STATIC_LIBS ON)
-    pkg_check_modules(LIBPLACEBO REQUIRED IMPORTED_TARGET libplacebo)
-    set(PKG_CONFIG_USE_STATIC_LIBS ${_OLD_PKG_CONFIG_USE_STATIC_LIBS})
-
-    target_link_libraries(ffmpegkit PRIVATE PkgConfig::LIBPLACEBO)
-    target_compile_definitions(ffmpegkit PRIVATE PL_STATIC PLACEBO_STATIC)
-endif()
 
 target_include_directories(ffmpegkit PRIVATE 
     "${CMAKE_CURRENT_SOURCE_DIR}/src"
@@ -275,8 +354,7 @@ if(WIN32)
             _WIN32_WINNT=0x0600
             _FORTIFY_SOURCE=2
         )
-
-        # Standard robust stack protection
+        
         target_compile_options(ffmpegkit PRIVATE 
             -fstack-protector-strong
         )
@@ -284,16 +362,26 @@ if(WIN32)
         target_link_options(ffmpegkit PRIVATE 
             "-static-libgcc" 
             "-static-libstdc++" 
-            "-Wl,-Bstatic" 
-            "-lssp" 
-            "-lssp_nonshared"
-            "-Wl,-Bdynamic"
+            # "-nodefaultlibs"
+            # "-Wl,--entry,_DllMainCRTStartup"
+            "-Wl,--enable-runtime-pseudo-reloc"
+            "-Wl,-u,__mingw_raise_matherr"
+            "-Wl,--exclude-libs,libstdc++.a"
+            "-Wl,--exclude-libs,libgcc.a"
+            "-Wl,--exclude-libs,libgomp.a"
+            "-Wl,--exclude-libs,libssp.a"
             "-Wl,--nxcompat"        # Data Execution Prevention (DEP)
             "-Wl,--dynamicbase"     # ASLR
             "-Wl,--high-entropy-va"   # 64-bit ASLR
             "-Wl,--enable-auto-import"
             "-Wl,--allow-multiple-definition"
+            "-Wl,--stack,16777216"
         )
+        target_compile_options(ffmpegkit PRIVATE 
+            "-mstackrealign"
+            "-mpreferred-stack-boundary=4"
+        )
+        
     elseif(CMAKE_SYSTEM_NAME MATCHES "Linux")
         target_compile_definitions(ffmpegkit PRIVATE TARGET_OS_LINUX _FORTIFY_SOURCE=2)
     
@@ -379,7 +467,38 @@ if(BUILD_SHARED_LIBS)
             "${FFMPEG_BUILD_DIR}/lib/libavutil.a"
         )
 
-        if(MINGW OR CMAKE_SYSTEM_NAME MATCHES "Linux" OR ANDROID)
+        if(MINGW)
+            target_link_libraries(ffmpegkit PRIVATE
+                # 1. CRT and threading - must resolve before anything else
+                "-Wl,-Bstatic"
+                "-lstdc++"
+                "-lgcc"
+                "-lwinpthread"
+                "-Wl,-Bdynamic"
+
+                # 2. FFmpeg core - whole-archive to prevent dead-stripping of
+                #    codecs and muxers that are referenced only by string tables
+                "-Wl,--whole-archive"
+                ${FFMPEG_STATIC_LIBS}
+                "-Wl,--no-whole-archive"
+
+                # 3. External dependency libs from pkg-config (SDL2, openmpt, rist,
+                #    etc.) - grouped to resolve circular references between them.
+                #    This is the block that was previously misplaced after -Bdynamic.
+                "-Wl,--start-group"
+                PkgConfig::FFMPEG
+                "-Wl,--end-group"
+
+                # 4. Windows system DLLs - always dynamic, always last
+                "-lkernel32"
+                "-ladvapi32"
+                "-luser32"
+                "-lole32"
+                "-lshlwapi"
+                "-lbcrypt"
+                "-lws2_32"
+            )
+        elseif(CMAKE_SYSTEM_NAME MATCHES "Linux" OR ANDROID)
             target_link_libraries(ffmpegkit PRIVATE 
                 "-Wl,--whole-archive"
                 ${FFMPEG_STATIC_LIBS}
@@ -390,8 +509,18 @@ if(BUILD_SHARED_LIBS)
             target_link_libraries(ffmpegkit PRIVATE ${FFMPEG_STATIC_LIBS} PkgConfig::FFMPEG)
         endif()
     else()
-        # Shared Link Path: Let PkgConfig handle -lavcodec etc. for .so files
-        target_link_libraries(ffmpegkit PRIVATE PkgConfig::FFMPEG)
+        if(MINGW)
+            target_link_libraries(ffmpegkit PRIVATE 
+                "-Wl,--start-group"
+                "${PTW32_STATIC_LIB}"
+                PkgConfig::FFMPEG
+                "ws2_32" 
+                "bcrypt"
+                "-Wl,--end-group"
+            )
+        else()
+            target_link_libraries(ffmpegkit PRIVATE PkgConfig::FFMPEG)  
+        endif()
     endif()
 
     # Append platform-specific trailing dependencies
@@ -473,7 +602,7 @@ install(CODE "
     endif()
 ")
 
-if(WIN32)
+if(MINGW)
     target_link_libraries(ffmpegkit PRIVATE dbghelp)
 endif()
 
@@ -491,8 +620,8 @@ install(DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/src/"
     FILES_MATCHING PATTERN "*.h*"
 )
 
-configure_file("src/ffmpeg-kit.pc.in" "ffmpeg-kit.pc" @ONLY)
-install(FILES "${CMAKE_CURRENT_BINARY_DIR}/ffmpeg-kit.pc" DESTINATION lib/pkgconfig)
+configure_file("src/ffmpegkit.pc.in" "ffmpegkit.pc" @ONLY)
+install(FILES "${CMAKE_CURRENT_BINARY_DIR}/ffmpegkit.pc" DESTINATION lib/pkgconfig)
 
 # ==============================================================================
 # 9. Testing

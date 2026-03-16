@@ -2570,10 +2570,17 @@ static int task_stop(Scheduler *sch, SchTask *task)
         return task_cleanup(sch, task->node);
 
     ret = pthread_join(task->thread, &thread_ret);
+
+#ifdef _WIN32
+    if (ret == ESRCH) {
+        task->thread_running = 0;
+        return task_cleanup(sch, task->node);
+    }
+#endif
+
     av_assert0(ret == 0);
 
     task->thread_running = 0;
-
     return (intptr_t)thread_ret;
 }
 

@@ -1,0 +1,125 @@
+diff --git a/CMakeLists.txt b/CMakeLists.txt
+index 654122f..05472ef 100755
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -131,10 +131,6 @@ elseif (${CMAKE_C_COMPILER_ID} STREQUAL "GNU")
+     set(build_defines ${build_defines} HAVE_CONFIG_H)
+ endif()
+ 
+-
+-# Update filename with proper version info
+-configure_file(${CMAKE_SOURCE_DIR}/cmake/version.rc.in ${CMAKE_BINARY_DIR}/version.rc @ONLY)
+-
+ #################################
+ # Libraries                     #
+ #################################
+@@ -143,11 +139,11 @@ function(shared_lib type def)
+     set(targ pthread${type}${PTW32_VER})
+ 
+     if (${type} STREQUAL "VCE")
+-        add_library(${targ} SHARED pthread.cxx ${CMAKE_BINARY_DIR}/version.rc)
++        add_library(${targ} SHARED pthread.cxx)
+         set_target_properties(${targ} PROPERTIES LINKER_LANGUAGE CXX)
+         target_compile_options(${targ} PUBLIC "${VCEFLAGS}")
+     elseif (${CMAKE_C_COMPILER_ID} STREQUAL "GNU")
+-        add_library(${targ} SHARED pthread.cxx ${CMAKE_BINARY_DIR}/version.rc)
++        add_library(${targ} SHARED pthread.cxx)
+ 	target_compile_options(${targ} PRIVATE "-mthreads")
+ 	if (${type} STREQUAL "GCE")
+             set_target_properties(${targ} PROPERTIES LINKER_LANGUAGE CXX)
+@@ -156,7 +152,7 @@ function(shared_lib type def)
+ 	    target_link_options(${targ} PRIVATE "-shared-libgcc")
+ 	endif (${type} STREQUAL "GCE")
+     else ()
+-        add_library(${targ} SHARED pthread.c ${CMAKE_BINARY_DIR}/version.rc)
++        add_library(${targ} SHARED pthread.c)
+     endif (${type} STREQUAL "VCE")
+ 
+     target_compile_definitions(${targ} PRIVATE ${def} ${build_defines} __PTW32_BUILD_INLINED)
+@@ -175,41 +171,64 @@ function(shared_lib type def)
+       RUNTIME # DESTINATION ${TARGET_ARCH}/${CONFIG}/bin
+     )
+ 
++    message(STATUS "Shared library ${targ}")
++
+     install(
+-        FILES $<TARGET_PDB_FILE:${targ}>
+-        CONFIGURATION Debug
+-        DESTINATION lib
+-        OPTIONAL
++      TARGETS ${targ}
++      ARCHIVE DESTINATION lib
++      LIBRARY DESTINATION lib
++      RUNTIME DESTINATION bin
+     )
++
++    # Only attempt to install PDB files if using the MSVC compiler
++    if (MSVC)
++        install(
++            FILES $<TARGET_PDB_FILE:${targ}>
++            CONFIGURATION Debug
++            DESTINATION lib
++            OPTIONAL
++        )
++    endif()
+ endfunction()
+ 
+ function(static_lib type def)
+     set(targ libpthread${type}${PTW32_VER})
+ 
+-    if(${type} STREQUAL "VCE")
++    # 1. Handle C++ variants (VCE or GCE)
++    if(type STREQUAL "VCE" OR type STREQUAL "GCE")
+         add_library(${targ} STATIC pthread.cxx)
+-        target_compile_options(${targ} PRIVATE "/EHs")
+-    elseif (${CMAKE_C_COMPILER_ID} STREQUAL "GNU")
+-	if (${type} STREQUAL "GCE")
+-            add_library(${targ} STATIC pthread.cxx)
+-	    target_compile_options(${targ} PRIVATE "-xc++")
+-	    target_link_libraries(${targ} stdc++)
+-	    target_link_options(${targ} PRIVATE "-shared-libgcc")
+-	endif (${type} STREQUAL "GCE")
+-    else ()
++        if(MSVC)
++            target_compile_options(${targ} PRIVATE "/EHs")
++        else()
++            target_compile_options(${targ} PRIVATE "-xc++")
++            target_link_libraries(${targ} stdc++)
++        endif()
++
++    # 2. Handle C variants (VC, GC, or VSE)
++    else()
+         add_library(${targ} STATIC pthread.c)
+     endif()
+ 
+-    target_compile_definitions(${targ} PRIVATE "${def}" ${build_defines} __PTW32_STATIC_LIB __PTW32_BUILD_INLINED)
+-    set_target_properties(${targ} PROPERTIES DEBUG_POSTFIX "d")
++    # 3. Apply definitions to the now-existing target
++    target_compile_definitions(${targ} PRIVATE
++        "${def}"
++        ${build_defines}
++        PTW32_STATIC_LIB
++        PTW32_BUILD_INLINED
++    )
+ 
+-    message(STATUS "Static library ${targ}")
++    set_target_properties(${targ} PROPERTIES DEBUG_POSTFIX "d")
++    message(STATUS "Created Static library target: ${targ}")
+ 
+-    install(
+-      TARGETS ${targ}
+-      ARCHIVE # DESTINATION ${TARGET_ARCH}/${CONFIG}/lib
+-      LIBRARY # DESTINATION ${TARGET_ARCH}/${CONFIG}/lib
+-      RUNTIME # DESTINATION ${TARGET_ARCH}/${CONFIG}/bin
++    set_target_properties(${targ} PROPERTIES 
++        OUTPUT_NAME "pthread${type}${PTW32_VER}"
++        PREFIX "lib"
++    )
++    
++    install(TARGETS ${targ}
++        ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
++        LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
++        RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
+     )
+ endfunction()
+ 

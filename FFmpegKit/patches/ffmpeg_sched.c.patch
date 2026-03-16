@@ -1,5 +1,5 @@
 diff --git a/src/ffmpeg_sched.c b/src/ffmpeg_sched.c
-index 3180367..0a1f45c 100755
+index 3180367..e824da9 100755
 --- a/src/ffmpeg_sched.c
 +++ b/src/ffmpeg_sched.c
 @@ -2524,6 +2524,8 @@ static int task_cleanup(Scheduler *sch, SchedulerNode node)
@@ -21,3 +21,22 @@ index 3180367..0a1f45c 100755
      ret = task->func(task->func_arg);
      if (ret < 0)
          av_log(task->func_arg, AV_LOG_ERROR,
+@@ -2565,10 +2570,17 @@ static int task_stop(Scheduler *sch, SchTask *task)
+         return task_cleanup(sch, task->node);
+ 
+     ret = pthread_join(task->thread, &thread_ret);
++
++#ifdef _WIN32
++    if (ret == ESRCH) {
++        task->thread_running = 0;
++        return task_cleanup(sch, task->node);
++    }
++#endif
++
+     av_assert0(ret == 0);
+ 
+     task->thread_running = 0;
+-
+     return (intptr_t)thread_ret;
+ }
+ 

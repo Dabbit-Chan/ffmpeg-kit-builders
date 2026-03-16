@@ -1,5 +1,13 @@
 # FFmpegKit Changelog
 
+## Version 0.8.3
+
+- **MinGW Build Support**: Comprehensive improvements for Windows/MinGW builds including proper CMAKE_BUILD_TYPE handling, static linking configuration, and Windows-specific compiler/linker flags.
+- **Threading Fixes**: Replaced `std::recursive_mutex` with custom `KitMutex` for Windows compatibility and updated pthread handling for cross-platform builds.
+- **CMake Configuration**: Fixed CMAKE_BUILD_TYPE to use `set()` instead of `option()` to prevent silent conversion to boolean, and improved library linking order for MinGW.
+- **Header Organization**: Cleaned up duplicate includes and reorganized headers for better compilation compatibility across platforms.
+- **Static Linking**: Enhanced static library resolution with `replace_dll_a_with_static()` function and improved dependency management for Windows builds.
+
 ## Version 0.8.2
 
 - **MediaInformation Improvements**: Refactored `ffprobe_kit_get_media_information_async` in the C wrapper to use the specialized `FFprobeKit::getMediaInformationAsync` helper, improving implementation clarity and consistency.

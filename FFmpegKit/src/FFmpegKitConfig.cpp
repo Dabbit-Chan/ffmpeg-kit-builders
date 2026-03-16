@@ -17,6 +17,11 @@
  * along with FFmpegKit.  If not, see <http://www.gnu.org/licenses/>.
  */
 
+
+#ifdef __MINGW32__
+#include "pthread_compat.h"
+#endif
+
 #include <sys/stat.h>
 #include <sys/types.h>
 
@@ -26,6 +31,7 @@ extern "C" {
 #include "libavutil/log.h"
 #include "libavutil/mem.h"
 }
+
 #include "ffmpeg_lib.h"
 #include "ffprobe_lib.h"
 #include "ffmpeg_tls.h"
@@ -37,12 +43,13 @@ extern "C" {
 #include "Level.hpp"
 #include "LogRedirectionStrategy.hpp"
 #include "MediaInformationJsonParser.hpp"
-#include "MediaInformationSession.hpp"
-#include "MediaInformationSession.hpp"
+#include "MediaInformationSession.hpp" // Removed duplicate below
 #include "FFplaySession.hpp"
 #include "Packages.hpp"
 #include "SessionState.hpp"
 #include "ffplay_lib.h"
+#include "win32_mutex.hpp"
+
 #include <algorithm>
 #include <atomic>
 #include <condition_variable>
@@ -50,8 +57,7 @@ extern "C" {
 #include <iostream>
 #include <mutex>
 #include <signal.h>
-#include <thread>
-
+#include <thread> // 2. Standard library headers at the end
 
 extern "C" {
 void set_report_callback(void (*callback)(int, float, float, int64_t, double,
@@ -66,9 +72,9 @@ static std::atomic<long> pipeIndexGenerator(1);
 
 /* Session history variables */
 static int sessionHistorySize;
-static std::recursive_mutex &getSessionMutex() {
-  static std::recursive_mutex *instance = new std::recursive_mutex();
-  return *instance;
+static KitMutex &getSessionMutex() {
+  static KitMutex *m = new KitMutex();
+  return *m;
 }
 static std::map<long, std::shared_ptr<ffmpegkit::Session>> &
 getSessionHistoryMap() {
@@ -104,13 +110,13 @@ static ffmpegkit::LogRedirectionStrategy globalLogRedirectionStrategy;
 
 /** Redirection control variables */
 static int redirectionEnabled;
-static std::recursive_mutex &getCallbackDataMutex() {
-  static std::recursive_mutex *instance = new std::recursive_mutex();
-  return *instance;
+static KitMutex &getCallbackDataMutex() {
+  static KitMutex *m = new KitMutex();
+  return *m;
 }
-static std::recursive_mutex &getGlobalCallbacksMutex() {
-  static std::recursive_mutex *instance = new std::recursive_mutex();
-  return *instance;
+static KitMutex &getGlobalCallbacksMutex() {
+  static KitMutex *m = new KitMutex();
+  return *m;
 }
 static std::mutex &getCallbackMutex() {
   static std::mutex *instance = new std::mutex();
@@ -210,7 +216,7 @@ void deleteExpiredSessions() {
 
 void addSessionToSessionHistory(
     const std::shared_ptr<ffmpegkit::Session> session) {
-  std::unique_lock<std::recursive_mutex> lock(getSessionMutex(), std::defer_lock);
+  std::unique_lock<KitMutex> lock(getSessionMutex(), std::defer_lock);
 
   const long sessionId = session->getSessionId();
 
@@ -395,8 +401,7 @@ static void logCallbackDataAdd(int level, AVBPrint *data) {
     currentSession->debugLog("[NATIVE LOG] sessionId: %ld level: %d msg: %s", sessionId, level, (data->str ? data->str : "NULL"));
   }
 
-  std::unique_lock<std::recursive_mutex> lock(getCallbackDataMutex(),
-                                              std::defer_lock);
+  std::unique_lock<KitMutex> lock(getCallbackDataMutex(), std::defer_lock);
   CallbackData *callbackData = new CallbackData(sessionId, level, data);
 
   std::atomic_fetch_add(
@@ -422,8 +427,7 @@ static void statisticsCallbackDataAdd(int frameNumber, float fps, float quality,
 
   long sessionId = (currentSession != nullptr) ? currentSession->getSessionId() : 0;
 
-  std::unique_lock<std::recursive_mutex> lock(getCallbackDataMutex(),
-                                              std::defer_lock);
+  std::unique_lock<KitMutex> lock(getCallbackDataMutex(), std::defer_lock);
   CallbackData *callbackData = new CallbackData(
       sessionId, frameNumber, fps, quality, size, time, bitrate, speed);
 
@@ -441,8 +445,7 @@ static void statisticsCallbackDataAdd(int frameNumber, float fps, float quality,
  * Removes head of callback data list.
  */
 static CallbackData *callbackDataRemove() {
-  std::unique_lock<std::recursive_mutex> lock(getCallbackDataMutex(),
-                                              std::defer_lock);
+  std::unique_lock<KitMutex> lock(getCallbackDataMutex(), std::defer_lock);
   CallbackData *newData = nullptr;
 
   lock.lock();
@@ -647,7 +650,7 @@ static void process_log(long sessionId, int levelValueInt,
   }
 
   {
-    std::lock_guard<std::recursive_mutex> lock(getGlobalCallbacksMutex());
+    std::lock_guard<KitMutex> lock(getGlobalCallbacksMutex());
     if (logCallback != nullptr) {
       globalCallbackDefined = true;
 
@@ -726,7 +729,7 @@ void process_statistics(long sessionId, int videoFrameNumber, float videoFps,
   }
 
   {
-    std::lock_guard<std::recursive_mutex> lock(getGlobalCallbacksMutex());
+    std::lock_guard<KitMutex> lock(getGlobalCallbacksMutex());
     if (statisticsCallback != nullptr) {
       try {
         statisticsCallback(statistics);
@@ -1045,14 +1048,13 @@ void *ffmpegKitInitialize() {
               << ffmpegkit::FFmpegKitConfig::getBuildDate() << "." << std::endl;
   });
 
-  std::lock_guard<std::recursive_mutex> lock(getCallbackDataMutex());
+  std::lock_guard<KitMutex> lock(getCallbackDataMutex());
 
   return NULL;
 }
 
 void ffmpegkit::FFmpegKitConfig::enableRedirection() {
-  std::unique_lock<std::recursive_mutex> lock(getCallbackDataMutex(),
-                                              std::defer_lock);
+  std::unique_lock<KitMutex> lock(getCallbackDataMutex(), std::defer_lock);
   lock.lock();
 
   if (redirectionEnabled != 0) {
@@ -1075,8 +1077,7 @@ void ffmpegkit::FFmpegKitConfig::enableRedirection() {
 }
 
 void ffmpegkit::FFmpegKitConfig::disableRedirection() {
-  std::unique_lock<std::recursive_mutex> lock(getCallbackDataMutex(),
-                                              std::defer_lock);
+  std::unique_lock<KitMutex> lock(getCallbackDataMutex(), std::defer_lock);
 
   lock.lock();
 
@@ -1089,6 +1090,8 @@ void ffmpegkit::FFmpegKitConfig::disableRedirection() {
   lock.unlock();
 
   callbackNotify();
+
+  static pthread_t callbackThread = 0;
 
   if (callbackThread != 0) {
     pthread_join(callbackThread, NULL);
@@ -1467,48 +1470,47 @@ void ffmpegkit::FFmpegKitConfig::getMediaInformationExecute(
 
 void ffmpegkit::FFmpegKitConfig::asyncFFmpegExecute(
     const std::shared_ptr<ffmpegkit::FFmpegSession> ffmpegSession) {
-  auto thread = std::thread([ffmpegSession]() {
+  std::thread([ffmpegSession]() {
+    #ifdef __MINGW32__
+      pthread_t self = pthread_self();
+      (void)self;
+    #endif
     ffmpegkit::FFmpegKitConfig::ffmpegExecute(ffmpegSession);
 
     ffmpegkit::FFmpegSessionCompleteCallback completeCallback =
         ffmpegSession->getCompleteCallback();
     if (completeCallback != nullptr) {
       try {
-        // NOTIFY SESSION CALLBACK DEFINED
-        ffmpegSession->debugLog("[GET MEDIA INFO] sessionId: %ld NOTIFY SESSION CALLBACK DEFINED", ffmpegSession->getSessionId());
         completeCallback(ffmpegSession);
       } catch (const std::exception &exception) {
-        ffmpegSession->debugLog("[GET MEDIA INFO] sessionId: %ld exception: %s", ffmpegSession->getSessionId(), exception.what());
         std::cout << "Exception thrown inside session complete callback. "
                   << exception.what() << std::endl;
       }
     }
 
     {
-      std::lock_guard<std::recursive_mutex> lock(getGlobalCallbacksMutex());
-      ffmpegkit::FFmpegSessionCompleteCallback
-          globalFFmpegSessionCompleteCallback =
-              ffmpegkit::FFmpegKitConfig::getFFmpegSessionCompleteCallback();
-      if (globalFFmpegSessionCompleteCallback != nullptr) {
+      std::lock_guard<KitMutex> lock(getGlobalCallbacksMutex());
+      ffmpegkit::FFmpegSessionCompleteCallback globalCallback =
+          ffmpegkit::FFmpegKitConfig::getFFmpegSessionCompleteCallback();
+      if (globalCallback != nullptr) {
         try {
-          // NOTIFY SESSION CALLBACK DEFINED
-          ffmpegSession->debugLog("[GET MEDIA INFO] sessionId: %ld NOTIFY GLOBAL SESSION CALLBACK DEFINED", ffmpegSession->getSessionId());
-          globalFFmpegSessionCompleteCallback(ffmpegSession);
+          globalCallback(ffmpegSession);
         } catch (const std::exception &exception) {
-          ffmpegSession->debugLog("[GET MEDIA INFO] sessionId: %ld exception: %s", ffmpegSession->getSessionId(), exception.what());
           std::cout << "Exception thrown inside global complete callback. "
                     << exception.what() << std::endl;
         }
       }
     }
-  });
-
-  thread.detach();
+  }).detach();
 }
 
 void ffmpegkit::FFmpegKitConfig::asyncFFprobeExecute(
     const std::shared_ptr<ffmpegkit::FFprobeSession> ffprobeSession) {
-  auto thread = std::thread([ffprobeSession]() {
+  std::thread([ffprobeSession]() {
+    #ifdef __MINGW32__
+      pthread_t self = pthread_self();
+      (void)self;
+    #endif
     ffmpegkit::FFmpegKitConfig::ffprobeExecute(ffprobeSession);
 
     ffmpegkit::FFprobeSessionCompleteCallback completeCallback =
@@ -1526,7 +1528,7 @@ void ffmpegkit::FFmpegKitConfig::asyncFFprobeExecute(
     }
 
     {
-      std::lock_guard<std::recursive_mutex> lock(getGlobalCallbacksMutex());
+      std::lock_guard<KitMutex> lock(getGlobalCallbacksMutex());
       ffmpegkit::FFprobeSessionCompleteCallback
           globalFFprobeSessionCompleteCallback =
               ffmpegkit::FFmpegKitConfig::getFFprobeSessionCompleteCallback();
@@ -1542,14 +1544,16 @@ void ffmpegkit::FFmpegKitConfig::asyncFFprobeExecute(
         }
       }
     }
-  });
-
-  thread.detach();
+  }).detach();
 }
 
 void ffmpegkit::FFmpegKitConfig::asyncFFplayExecute(
     const std::shared_ptr<ffmpegkit::FFplaySession> ffplaySession, int waitTimeout = 500) {
-  auto thread = std::thread([ffplaySession, waitTimeout]() {
+  std::thread([ffplaySession, waitTimeout]() {
+    #ifdef __MINGW32__
+      pthread_t self = pthread_self();
+      (void)self;
+    #endif
     ffmpegkit::FFmpegKitConfig::ffplayExecute(ffplaySession, waitTimeout);
 
     ffmpegkit::FFplaySessionCompleteCallback completeCallback =
@@ -1567,7 +1571,7 @@ void ffmpegkit::FFmpegKitConfig::asyncFFplayExecute(
     }
 
     {
-      std::lock_guard<std::recursive_mutex> lock(getGlobalCallbacksMutex());
+      std::lock_guard<KitMutex> lock(getGlobalCallbacksMutex());
       ffmpegkit::FFplaySessionCompleteCallback
           globalFFplaySessionCompleteCallback =
               ffmpegkit::FFmpegKitConfig::getFFplaySessionCompleteCallback();
@@ -1583,16 +1587,18 @@ void ffmpegkit::FFmpegKitConfig::asyncFFplayExecute(
         }
       }
     }
-  });
-
-  thread.detach();
+  }).detach();
 }
 
 void ffmpegkit::FFmpegKitConfig::asyncGetMediaInformationExecute(
     const std::shared_ptr<ffmpegkit::MediaInformationSession>
         mediaInformationSession,
     const int waitTimeout) {
-  auto thread = std::thread([mediaInformationSession, waitTimeout]() {
+  std::thread([mediaInformationSession, waitTimeout]() {
+    #ifdef __MINGW32__
+      pthread_t self = pthread_self();
+      (void)self;
+    #endif
     ffmpegkit::FFmpegKitConfig::getMediaInformationExecute(
         mediaInformationSession, waitTimeout);
 
@@ -1611,7 +1617,7 @@ void ffmpegkit::FFmpegKitConfig::asyncGetMediaInformationExecute(
     }
 
     {
-      std::lock_guard<std::recursive_mutex> lock(getGlobalCallbacksMutex());
+      std::lock_guard<KitMutex> lock(getGlobalCallbacksMutex());
       ffmpegkit::MediaInformationSessionCompleteCallback
           globalMediaInformationSessionCompleteCallback = ffmpegkit::
               FFmpegKitConfig::getMediaInformationSessionCompleteCallback();
@@ -1627,68 +1633,66 @@ void ffmpegkit::FFmpegKitConfig::asyncGetMediaInformationExecute(
         }
       }
     }
-  });
-
-  thread.detach();
+  }).detach();
 }
 
 void ffmpegkit::FFmpegKitConfig::enableLogCallback(
     const ffmpegkit::LogCallback callback) {
-  std::lock_guard<std::recursive_mutex> lock(getGlobalCallbacksMutex());
+  std::lock_guard<KitMutex> lock(getGlobalCallbacksMutex());
   logCallback = callback;
 }
 
 void ffmpegkit::FFmpegKitConfig::enableStatisticsCallback(
     const ffmpegkit::StatisticsCallback callback) {
-  std::lock_guard<std::recursive_mutex> lock(getGlobalCallbacksMutex());
+  std::lock_guard<KitMutex> lock(getGlobalCallbacksMutex());
   statisticsCallback = callback;
 }
 
 void ffmpegkit::FFmpegKitConfig::enableFFmpegSessionCompleteCallback(
     const FFmpegSessionCompleteCallback completeCallback) {
-  std::lock_guard<std::recursive_mutex> lock(getGlobalCallbacksMutex());
+  std::lock_guard<KitMutex> lock(getGlobalCallbacksMutex());
   ffmpegSessionCompleteCallback = completeCallback;
 }
 
 ffmpegkit::FFmpegSessionCompleteCallback
 ffmpegkit::FFmpegKitConfig::getFFmpegSessionCompleteCallback() {
-  std::lock_guard<std::recursive_mutex> lock(getGlobalCallbacksMutex());
+  std::lock_guard<KitMutex> lock(getGlobalCallbacksMutex());
   return ffmpegSessionCompleteCallback;
 }
 
 void ffmpegkit::FFmpegKitConfig::enableFFprobeSessionCompleteCallback(
     const FFprobeSessionCompleteCallback completeCallback) {
-  std::lock_guard<std::recursive_mutex> lock(getGlobalCallbacksMutex());
+  std::lock_guard<KitMutex> lock(getGlobalCallbacksMutex());
   ffprobeSessionCompleteCallback = completeCallback;
 }
 
 ffmpegkit::FFprobeSessionCompleteCallback
 ffmpegkit::FFmpegKitConfig::getFFprobeSessionCompleteCallback() {
-  std::lock_guard<std::recursive_mutex> lock(getGlobalCallbacksMutex());
+  std::lock_guard<KitMutex> lock(getGlobalCallbacksMutex());
   return ffprobeSessionCompleteCallback;
 }
 
 void ffmpegkit::FFmpegKitConfig::enableFFplaySessionCompleteCallback(
     const FFplaySessionCompleteCallback completeCallback) {
-  std::lock_guard<std::recursive_mutex> lock(getGlobalCallbacksMutex());
+  std::lock_guard<KitMutex> lock(getGlobalCallbacksMutex());
   ffplaySessionCompleteCallback = completeCallback;
 }
 
 ffmpegkit::FFplaySessionCompleteCallback
 ffmpegkit::FFmpegKitConfig::getFFplaySessionCompleteCallback() {
-  std::lock_guard<std::recursive_mutex> lock(getGlobalCallbacksMutex());
+  std::lock_guard<KitMutex> lock(getGlobalCallbacksMutex());
   return ffplaySessionCompleteCallback;
 }
 
 void ffmpegkit::FFmpegKitConfig::enableMediaInformationSessionCompleteCallback(
     const MediaInformationSessionCompleteCallback completeCallback) {
-  std::lock_guard<std::recursive_mutex> lock(getGlobalCallbacksMutex());
+  std::lock_guard<KitMutex> lock(getGlobalCallbacksMutex());
   mediaInformationSessionCompleteCallback = completeCallback;
 }
 
 ffmpegkit::MediaInformationSessionCompleteCallback
 ffmpegkit::FFmpegKitConfig::getMediaInformationSessionCompleteCallback() {
-  std::lock_guard<std::recursive_mutex> lock(getGlobalCallbacksMutex());
+  std::lock_guard<KitMutex> lock(getGlobalCallbacksMutex());
   return mediaInformationSessionCompleteCallback;
 }
 
@@ -1751,7 +1755,7 @@ void ffmpegkit::FFmpegKitConfig::setSessionHistorySize(
 
 std::shared_ptr<ffmpegkit::Session>
 ffmpegkit::FFmpegKitConfig::getSession(const long sessionId) {
-  std::unique_lock<std::recursive_mutex> lock(getSessionMutex(), std::defer_lock);
+  std::unique_lock<KitMutex> lock(getSessionMutex(), std::defer_lock);
   lock.lock();
 
   auto session = getSessionHistoryMap().find(sessionId);
@@ -1764,7 +1768,7 @@ ffmpegkit::FFmpegKitConfig::getSession(const long sessionId) {
 
 std::shared_ptr<ffmpegkit::Session>
 ffmpegkit::FFmpegKitConfig::getLastSession() {
-  std::unique_lock<std::recursive_mutex> lock(getSessionMutex(), std::defer_lock);
+  std::unique_lock<KitMutex> lock(getSessionMutex(), std::defer_lock);
 
   lock.lock();
 
@@ -1777,7 +1781,7 @@ ffmpegkit::FFmpegKitConfig::getLastSession() {
 
 std::shared_ptr<ffmpegkit::FFmpegSession>
 ffmpegkit::FFmpegKitConfig::getLastFFmpegSession() {
-  std::unique_lock<std::recursive_mutex> lock(getSessionMutex(), std::defer_lock);
+  std::unique_lock<KitMutex> lock(getSessionMutex(), std::defer_lock);
 
   lock.lock();
 
@@ -1798,7 +1802,7 @@ ffmpegkit::FFmpegKitConfig::getLastFFmpegSession() {
 
 std::shared_ptr<ffmpegkit::FFprobeSession>
 ffmpegkit::FFmpegKitConfig::getLastFFprobeSession() {
-  std::unique_lock<std::recursive_mutex> lock(getSessionMutex(), std::defer_lock);
+  std::unique_lock<KitMutex> lock(getSessionMutex(), std::defer_lock);
 
   lock.lock();
 
@@ -1819,7 +1823,7 @@ ffmpegkit::FFmpegKitConfig::getLastFFprobeSession() {
 
 std::shared_ptr<ffmpegkit::FFplaySession>
 ffmpegkit::FFmpegKitConfig::getLastFFplaySession() {
-  std::unique_lock<std::recursive_mutex> lock(getSessionMutex(), std::defer_lock);
+  std::unique_lock<KitMutex> lock(getSessionMutex(), std::defer_lock);
 
   lock.lock();
 
@@ -1840,7 +1844,7 @@ ffmpegkit::FFmpegKitConfig::getLastFFplaySession() {
 
 std::shared_ptr<ffmpegkit::MediaInformationSession>
 ffmpegkit::FFmpegKitConfig::getLastMediaInformationSession() {
-  std::unique_lock<std::recursive_mutex> lock(getSessionMutex(), std::defer_lock);
+  std::unique_lock<KitMutex> lock(getSessionMutex(), std::defer_lock);
 
   lock.lock();
 
@@ -1861,7 +1865,7 @@ ffmpegkit::FFmpegKitConfig::getLastMediaInformationSession() {
 
 std::shared_ptr<ffmpegkit::Session>
 ffmpegkit::FFmpegKitConfig::getLastCompletedSession() {
-  std::unique_lock<std::recursive_mutex> lock(getSessionMutex(), std::defer_lock);
+  std::unique_lock<KitMutex> lock(getSessionMutex(), std::defer_lock);
 
   lock.lock();
 
@@ -1878,7 +1882,7 @@ ffmpegkit::FFmpegKitConfig::getLastCompletedSession() {
 
 std::shared_ptr<std::list<std::shared_ptr<ffmpegkit::Session>>>
 ffmpegkit::FFmpegKitConfig::getSessions() {
-  std::unique_lock<std::recursive_mutex> lock(getSessionMutex(), std::defer_lock);
+  std::unique_lock<KitMutex> lock(getSessionMutex(), std::defer_lock);
   lock.lock();
 
   auto sessionHistoryListCopy =
@@ -1891,7 +1895,7 @@ ffmpegkit::FFmpegKitConfig::getSessions() {
 }
 
 void ffmpegkit::FFmpegKitConfig::clearSessions() {
-  std::unique_lock<std::recursive_mutex> lock(getSessionMutex(), std::defer_lock);
+  std::unique_lock<KitMutex> lock(getSessionMutex(), std::defer_lock);
   lock.lock();
 
   getSessionHistoryList().clear();
@@ -1902,7 +1906,7 @@ void ffmpegkit::FFmpegKitConfig::clearSessions() {
 
 std::shared_ptr<std::list<std::shared_ptr<ffmpegkit::FFmpegSession>>>
 ffmpegkit::FFmpegKitConfig::getFFmpegSessions() {
-  std::unique_lock<std::recursive_mutex> lock(getSessionMutex(), std::defer_lock);
+  std::unique_lock<KitMutex> lock(getSessionMutex(), std::defer_lock);
   const auto ffmpegSessions =
       std::make_shared<std::list<std::shared_ptr<ffmpegkit::FFmpegSession>>>();
 
@@ -1924,7 +1928,7 @@ ffmpegkit::FFmpegKitConfig::getFFmpegSessions() {
 
 std::shared_ptr<std::list<std::shared_ptr<ffmpegkit::FFprobeSession>>>
 ffmpegkit::FFmpegKitConfig::getFFprobeSessions() {
-  std::unique_lock<std::recursive_mutex> lock(getSessionMutex(), std::defer_lock);
+  std::unique_lock<KitMutex> lock(getSessionMutex(), std::defer_lock);
   std::shared_ptr<std::list<std::shared_ptr<ffmpegkit::FFprobeSession>>>
       result = std::make_shared<
           std::list<std::shared_ptr<ffmpegkit::FFprobeSession>>>();
@@ -1946,7 +1950,7 @@ ffmpegkit::FFmpegKitConfig::getFFprobeSessions() {
 
 std::shared_ptr<std::list<std::shared_ptr<ffmpegkit::FFplaySession>>>
 ffmpegkit::FFmpegKitConfig::getFFplaySessions() {
-  std::unique_lock<std::recursive_mutex> lock(getSessionMutex(), std::defer_lock);
+  std::unique_lock<KitMutex> lock(getSessionMutex(), std::defer_lock);
   std::shared_ptr<std::list<std::shared_ptr<ffmpegkit::FFplaySession>>>
       result = std::make_shared<
           std::list<std::shared_ptr<ffmpegkit::FFplaySession>>>();
@@ -1977,7 +1981,7 @@ ffmpegkit::FFmpegKitConfig::getActiveFFplaySession() {
 
 std::shared_ptr<std::list<std::shared_ptr<ffmpegkit::MediaInformationSession>>>
 ffmpegkit::FFmpegKitConfig::getMediaInformationSessions() {
-  std::unique_lock<std::recursive_mutex> lock(getSessionMutex(), std::defer_lock);
+  std::unique_lock<KitMutex> lock(getSessionMutex(), std::defer_lock);
   const auto mediaInformationSessions = std::make_shared<
       std::list<std::shared_ptr<ffmpegkit::MediaInformationSession>>>();
 
@@ -2000,7 +2004,7 @@ ffmpegkit::FFmpegKitConfig::getMediaInformationSessions() {
 
 std::shared_ptr<std::list<std::shared_ptr<ffmpegkit::Session>>>
 ffmpegkit::FFmpegKitConfig::getSessionsByState(const SessionState state) {
-  std::unique_lock<std::recursive_mutex> lock(getSessionMutex(), std::defer_lock);
+  std::unique_lock<KitMutex> lock(getSessionMutex(), std::defer_lock);
   auto sessions =
       std::make_shared<std::list<std::shared_ptr<ffmpegkit::Session>>>();
 
@@ -2144,7 +2148,7 @@ ffmpegkit::FFmpegKitConfig::~FFmpegKitConfig() {
   clearSessions();
   // 2. Reset global callbacks with lock
   {
-    std::lock_guard<std::recursive_mutex> lock(getGlobalCallbacksMutex());
+    std::lock_guard<KitMutex> lock(getGlobalCallbacksMutex());
     logCallback = nullptr;
     statisticsCallback = nullptr;
     ffmpegSessionCompleteCallback = nullptr;
@@ -2153,7 +2157,7 @@ ffmpegkit::FFmpegKitConfig::~FFmpegKitConfig() {
     mediaInformationSessionCompleteCallback = nullptr;
   }
   // 3. Clear remaining callback data raw pointers
-  std::lock_guard<std::recursive_mutex> lock(getCallbackDataMutex());
+  std::lock_guard<KitMutex> lock(getCallbackDataMutex());
   while (!getCallbackDataList().empty()) {
     delete getCallbackDataList().front();
     getCallbackDataList().pop_front();

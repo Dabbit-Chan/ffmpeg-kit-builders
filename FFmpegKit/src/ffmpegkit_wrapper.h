@@ -105,6 +105,12 @@ typedef enum {
 /* FFmpegKit (FFmpeg Execution) */
 
 /**
+ * Initializes the library and FFmpeg backend.
+ * Should be called once immediately after loading the DLL.
+ */
+FFMPEG_KIT_C_EXPORT void ffmpeg_kit_initialize();
+
+/**
  * Executes the given FFmpeg command.
  *
  * @param command the FFmpeg command to execute
@@ -181,6 +187,48 @@ ffmpeg_kit_create_session_with_callbacks(const char *command,
                                          FFmpegKitLogCallback log_cb,
                                          FFmpegKitStatisticsCallback stats_cb,
                                          void *user_data);
+
+/**
+ * Creates a new FFmpeg session with the given argument array.
+ * This function prevents C++ objects from crossing the DLL boundary.
+ *
+ * @param argc the number of arguments
+ * @param argv the argument array
+ * @return the FFmpeg session handle
+ */
+FFMPEG_KIT_C_EXPORT FFmpegSessionHandle
+ffmpeg_kit_create_session_from_argv(int argc, const char** argv);
+
+/**
+ * Creates a new FFmpeg session with the given argument array and callbacks.
+ * This function prevents C++ objects from crossing the DLL boundary.
+ *
+ * @param argc the number of arguments
+ * @param argv the argument array
+ * @param complete_cb the callback to be called when the FFmpeg session is completed
+ * @param log_cb the callback to be called when a log is generated
+ * @param stats_cb the callback to be called when statistics are generated
+ * @param user_data the user data to be passed to the callbacks
+ * @return the FFmpeg session handle
+ */
+FFMPEG_KIT_C_EXPORT FFmpegSessionHandle
+ffmpeg_kit_create_session_from_argv_with_callbacks(int argc, const char** argv,
+                                         FFmpegKitCompleteCallback complete_cb,
+                                         FFmpegKitLogCallback log_cb,
+                                         FFmpegKitStatisticsCallback stats_cb,
+                                         void *user_data);
+
+/**
+ * Closes and releases a session created by ffmpeg_kit_create_session_from_argv.
+ *
+ * @param handle the session handle to close
+ */
+FFMPEG_KIT_C_EXPORT void ffmpeg_kit_close_session(FFmpegSessionHandle handle);
+
+/**
+ * Debug function to verify stack alignment.
+ */
+FFMPEG_KIT_C_EXPORT void ffmpeg_kit_debug_print_stack();
 /**
  * Sets the log callback for all FFmpeg sessions.
  *
@@ -292,6 +340,40 @@ FFMPEG_KIT_C_EXPORT FFprobeSessionHandle
 ffprobe_kit_create_session_with_callbacks(
     const char *command, FFprobeKitCompleteCallback complete_cb,
     FFmpegKitLogCallback log_cb, void *user_data);
+
+/**
+ * Creates a new FFprobe session with the given argument array.
+ * This function prevents C++ objects from crossing the DLL boundary.
+ *
+ * @param argc the number of arguments
+ * @param argv the argument array
+ * @return the FFprobe session handle
+ */
+FFMPEG_KIT_C_EXPORT FFprobeSessionHandle
+ffprobe_kit_create_session_from_argv(int argc, const char** argv);
+
+/**
+ * Creates a new FFprobe session with the given argument array and callbacks.
+ * This function prevents C++ objects from crossing the DLL boundary.
+ *
+ * @param argc the number of arguments
+ * @param argv the argument array
+ * @param complete_cb the callback to be called when the FFprobe session is completed
+ * @param log_cb the callback to be called when a log is generated
+ * @param user_data the user data to be passed to the callbacks
+ * @return the FFprobe session handle
+ */
+FFMPEG_KIT_C_EXPORT FFprobeSessionHandle
+ffprobe_kit_create_session_from_argv_with_callbacks(
+    int argc, const char** argv, FFprobeKitCompleteCallback complete_cb,
+    FFmpegKitLogCallback log_cb, void *user_data);
+
+/**
+ * Closes and releases a session created by ffprobe_kit_create_session_from_argv.
+ *
+ * @param handle the session handle to close
+ */
+FFMPEG_KIT_C_EXPORT void ffprobe_kit_close_session(FFprobeSessionHandle handle);
 
 /**
  * Sets the log callback for all FFprobe sessions.
@@ -411,6 +493,41 @@ ffplay_kit_create_session_with_callbacks(const char *command,
                                          FFplayKitCompleteCallback complete_cb,
                                          FFmpegKitLogCallback log_cb,
                                          void *user_data);
+
+/**
+ * Creates a new FFplay session with the given argument array.
+ * This function prevents C++ objects from crossing the DLL boundary.
+ *
+ * @param argc the number of arguments
+ * @param argv the argument array
+ * @return the FFplay session handle
+ */
+FFMPEG_KIT_C_EXPORT FFplaySessionHandle
+ffplay_kit_create_session_from_argv(int argc, const char** argv);
+
+/**
+ * Creates a new FFplay session with the given argument array and callbacks.
+ * This function prevents C++ objects from crossing the DLL boundary.
+ *
+ * @param argc the number of arguments
+ * @param argv the argument array
+ * @param complete_cb the callback to be called when the FFplay session is completed
+ * @param log_cb the callback to be called when a log is generated
+ * @param user_data the user data to be passed to the callbacks
+ * @return the FFplay session handle
+ */
+FFMPEG_KIT_C_EXPORT FFplaySessionHandle
+ffplay_kit_create_session_from_argv_with_callbacks(int argc, const char** argv,
+                                         FFplayKitCompleteCallback complete_cb,
+                                         FFmpegKitLogCallback log_cb,
+                                         void *user_data);
+
+/**
+ * Closes and releases a session created by ffplay_kit_create_session_from_argv.
+ *
+ * @param handle the session handle to close
+ */
+FFMPEG_KIT_C_EXPORT void ffplay_kit_close_session(FFplaySessionHandle handle);
 
 /**
  * Sets the log callback for all FFplay sessions.
@@ -767,14 +884,6 @@ FFMPEG_KIT_C_EXPORT char *ffmpeg_kit_packages_get_package_name(void);
  * @return the external libraries for the package
  */
 FFMPEG_KIT_C_EXPORT char *ffmpeg_kit_packages_get_external_libraries(void);
-
-/**
- * Gets the external libraries for the package.
- *
- * @return the external libraries for the package
- */
-FFMPEG_KIT_C_EXPORT char *ffmpeg_kit_packages_get_external_libraries(
-    void); // Returns concatenated string or JSON
 
 /* Session Management (Base) */
 
