@@ -347,6 +347,7 @@ prepare_inline_sed() {
 setup_build_environment() {
     [[ -z $host_platform ]] && pick_host_platform
     [[ -z $host_arch ]] && pick_host_arch
+    calculate_bits_target
     determine_distro
     export host_name="$host_platform-$host_arch"
     echo -e "\n************** Setting up environment for $host_name build... **************" | tee -a "$LOG_FILE"
@@ -401,8 +402,8 @@ setup_build_environment() {
 
 calculate_bits_target() {
     case "$host_arch" in
-        "armv7a"|"armeabi-v7a"|"arm"|"i686") echo "32" ;;
-        "x86_64"|"aarch64"|"arm64-v8a"|"arm64") echo "64" ;;
+        "armv7a"|"armeabi-v7a"|"arm"|"i686") export bits_target=32 ;;
+        "x86_64"|"aarch64"|"arm64-v8a"|"arm64") export bits_target=64 ;;
         *) exit_message 1 "calculate_bits_target: Unknown host arch '$host_arch'" ;;
     esac
 }
@@ -446,6 +447,9 @@ setup_windows_environment() {
     export PREFIX="$dependency_install_prefix"
     export build_cross_compile=y
     
+    export stdcpp_path="$(realpath $("$CXX" -print-file-name=libstdc++.a))"
+    export stdgcc_path="$(realpath $("$CXX" -print-file-name=libgcc.a))"
+
     export make_prefix_options="--cc=${cross_prefix}gcc \
 --ar=${cross_prefix}ar \
 --as=${cross_prefix}as \
@@ -454,16 +458,22 @@ setup_windows_environment() {
 --ld=${cross_prefix}ld \
 --strip=${cross_prefix}strip \
 --cxx=${cross_prefix}g++"
-    
-    export windows_cflags="$original_cflags -std=gnu11 -mtune=generic -O3 -pipe -Wno-pedantic "
+
+    export windows_cflags="$original_cflags -std=gnu11 -mtune=generic -O3 -pipe -Wno-pedantic -D_POSIX_THREADS -fno-use-linker-plugin -mstackrealign"
     export CFLAGS="$windows_cflags"
-    export windows_cxxflags="$original_cxxflags -I${dependency_install_prefix}/include "
+    
+    export windows_cxxflags="$original_cxxflags -I${dependency_install_prefix}/include -D_POSIX_THREADS -fno-use-linker-plugin -mstackrealign"
     export CXXFLAGS="$windows_cxxflags"
-    export windows_cppflags="$original_cppflags -U_FORTIFY_SOURCE -D_FORTIFY_SOURCE=3 -I${dependency_install_prefix}/include "
+    
+    export windows_cppflags="$original_cppflags -U_FORTIFY_SOURCE -D_FORTIFY_SOURCE=3 -I${dependency_install_prefix}/include"
     export CPPFLAGS="$windows_cppflags"
-    export windows_ldflags="-static-libgcc $original_ldflags -L${dependency_install_prefix}/lib "
+    
+    export windows_ldflags="-static -static-libgcc -static-libstdc++ $original_ldflags -L${dependency_install_prefix}/lib"
     export LDFLAGS="$windows_ldflags"
-    # disable windres by default
+
+    export GXX_STANDARD_LIBS="$stdcpp_path $stdgcc_path"
+    export GCC_STANDARD_LIBS="$stdgcc_path"
+
     cross_windres
 }
 
@@ -2038,6 +2048,9 @@ redirect_output() {
 	local term_width="${COLUMNS:-80}"
   local max_length=$((term_width > 10 ? term_width - 2 : 78))
   while IFS= read -r line; do
+    if [[ "$line" == *"<command-line>: warning:"* ]]; then
+      continue
+    fi
 		if [[ "$line" == *$'\n'* ]]; then
       IFS=$'\n' read -ra parts <<< "$line"
       for part in "${parts[@]}"; do
@@ -2352,8 +2365,10 @@ generic_configure() {
   [[ $extra_configure_options != *--bindir=* ]] && extra_configure_options+=" --bindir=\"$dependency_install_prefix/bin\" "
   [[ $extra_configure_options != *--libdir=* ]] && extra_configure_options+=" --libdir=\"$dependency_install_prefix/lib\" "
   [[ $extra_configure_options != *--with-sysroot=* ]] && extra_configure_options+=" --with-sysroot=\"$dependency_install_prefix\" "
+  if iswindows; then
+    extra_configure_options+=" --disable-windows-manifest --disable-win32-dll "
+  fi
   extra_configure_options+=" --disable-shared --enable-static "
-  iswindows && extra_configure_options+=" --disable-windows-manifest --disable-win32-dll "
   # truthy "$build_cross_compile" && extra_configure_options+=" --cross-prefix=$cross_prefix"
 	do_configure "$extra_configure_options" "$configure_name" "$touch_postfix"
 }
@@ -2570,7 +2585,7 @@ do_cmake() {
     { clean_cmake_cache "$cur_dir2" "$(validate_path "$source_dir")" || true; }
     [[ ! -d "$cur_dir2" ]] && create_dir "$cur_dir2"
 		local config_options=""
-    local command="${source_dir} -DCMAKE_MESSAGE_LOG_LEVEL=ERROR"
+    local command="${source_dir} -DCMAKE_MESSAGE_LOG_LEVEL=VERBOSE"
 		command+=" $extra_args"
 		echo -e "INFO: do_cmake() nice running:\n  DIR=$cur_dir2\n  PATH=$PATH\n  PKG_CONFIG_PATH=$PKG_CONFIG_PATH\n  CFLAGS:$CFLAGS\n  CXXFLAGS:$CXXFLAGS\n  CPPFLAGS:$CPPFLAGS\n  LDFLAGS:$LDFLAGS\n  \"${cmake_command} -G\"Unix Makefiles\" $command\"\n  $(get_compiler_flags)" >>"$LOG_FILE"
 		# shellcheck disable=SC2086
@@ -2588,9 +2603,18 @@ generic_cmake() {
   source_dir="$2"
 	touch_postfix="$3"
   if iswindows; then
-  [[ "$extra_args" != *"-DENABLE_STATIC_RUNTIME"* ]] && extra_args+=" -DENABLE_STATIC_RUNTIME=1"
-  [[ "$extra_args" != *"-DCMAKE_CROSSCOMPILING"* ]] && extra_args+=" -DCMAKE_CROSSCOMPILING=1"
-  [[ "$extra_args" != *"-DCMAKE_TOOLCHAIN_FILE"* ]] && extra_args+=" -DCMAKE_TOOLCHAIN_FILE=$(get_generic_cmake_toolchain)"
+    [[ "$extra_args" != *"-DENABLE_STATIC_RUNTIME"* ]] && extra_args+=" -DENABLE_STATIC_RUNTIME=1"
+    [[ "$extra_args" != *"-DCMAKE_CROSSCOMPILING"* ]] && extra_args+=" -DCMAKE_CROSSCOMPILING=1"
+    [[ "$extra_args" != *"-DCMAKE_TOOLCHAIN_FILE"* ]] && extra_args+=" -DCMAKE_TOOLCHAIN_FILE=$(get_generic_cmake_toolchain)"
+    [[ "$extra_args" != *"-DCMAKE_EXE_LINKER_FLAGS"* ]] && extra_args+=" -DCMAKE_EXE_LINKER_FLAGS=\"-static\""
+    [[ "$extra_args" != *"-DCMAKE_SHARED_LINKER_FLAGS"* ]] && extra_args+=" -DCMAKE_SHARED_LINKER_FLAGS=\"-static\""
+    [[ "$extra_args" != *"-DCMAKE_MODULE_LINKER_FLAGS"* ]] && extra_args+=" -DCMAKE_MODULE_LINKER_FLAGS=\"-static\""
+    [[ "$extra_args" != *"-DCMAKE_CXX_STANDARD_LIBRARIES"* ]] && extra_args+=" -DCMAKE_CXX_STANDARD_LIBRARIES=\"$GXX_STANDARD_LIBS\""
+    [[ "$extra_args" != *"-DCMAKE_C_STANDARD_LIBRARIES"* ]] && extra_args+=" -DCMAKE_C_STANDARD_LIBRARIES=\"$GCC_STANDARD_LIBS\""
+    [[ "$extra_args" != *"-DCMAKE_SYSTEM_LIBRARY_PATH"* ]] && extra_args+=" -DCMAKE_SYSTEM_LIBRARY_PATH=\"/usr/local/mingw-w64/$host_arch-w64-mingw32/lib;\
+/usr/local/mingw-w64/lib/gcc/$host_arch-w64-mingw32/15.2.0;${dependency_install_prefix}/lib\""
+    [[ "$extra_args" != *"-DCMAKE_LIBRARY_PATH"* ]] && extra_args+=" -DCMAKE_LIBRARY_PATH=\"/usr/local/mingw-w64/$host_arch-w64-mingw32/lib;\
+/usr/local/mingw-w64/lib/gcc/$host_arch-w64-mingw32/15.2.0;${dependency_install_prefix}/lib\""
   fi
   if isandroid; then
     [[ "$extra_args" != *"-DCMAKE_ANDROID_API"* ]] && extra_args+=" -DCMAKE_ANDROID_API=$ANDROID_API_LEVEL"
@@ -2598,13 +2622,13 @@ generic_cmake() {
   [[ "$extra_args" != *"-DCMAKE_SYSTEM_PROCESSOR"* ]] && extra_args+=" -DCMAKE_SYSTEM_PROCESSOR=\"$cmake_host_arch\""
   [[ "$extra_args" != *"-DCMAKE_BUILD_TYPE"* ]] && extra_args+=" -DCMAKE_BUILD_TYPE=Release"
   [[ "$extra_args" != *"-DCMAKE_SYSTEM_NAME"* ]] && extra_args+=" -DCMAKE_SYSTEM_NAME=${host_platform^}"
-	[[ "$extra_args" != *"-DCMAKE_FIND_ROOT_PATH"* ]] && extra_args+=" -DCMAKE_FIND_ROOT_PATH=$dependency_install_prefix"
-  [[ "$extra_args" != *"-DCMAKE_FIND_ROOT_PATH_MODE_PROGRAM"* ]] && extra_args+=" -DCMAKE_FIND_ROOT_PATH_MODE_PROGRAM=NEVER"
+	# [[ "$extra_args" != *"-DCMAKE_FIND_ROOT_PATH"* ]] && extra_args+=" -DCMAKE_FIND_ROOT_PATH=$dependency_install_prefix"
+  # [[ "$extra_args" != *"-DCMAKE_FIND_ROOT_PATH_MODE_PROGRAM"* ]] && extra_args+=" -DCMAKE_FIND_ROOT_PATH_MODE_PROGRAM=NEVER"
   [[ "$extra_args" != *"-DCMAKE_INSTALL_LIBDIR"* ]] && extra_args+=" -DCMAKE_INSTALL_LIBDIR=lib"
   [[ "$extra_args" != *"-DCMAKE_INSTALL_PREFIX"* ]] && extra_args+=" -DCMAKE_INSTALL_PREFIX=$dependency_install_prefix"
-  [[ "$extra_args" != *"-DCMAKE_FIND_ROOT_PATH_MODE_LIBRARY"* ]] && extra_args+=" -DCMAKE_FIND_ROOT_PATH_MODE_LIBRARY=ONLY"
-  [[ "$extra_args" != *"-DCMAKE_FIND_ROOT_PATH_MODE_INCLUDE"* ]] && extra_args+=" -DCMAKE_FIND_ROOT_PATH_MODE_INCLUDE=ONLY"
-  [[ "$extra_args" != *"-DCMAKE_FIND_ROOT_PATH_MODE_PACKAGE"* ]] && extra_args+=" -DCMAKE_FIND_ROOT_PATH_MODE_PACKAGE=ONLY"
+  # [[ "$extra_args" != *"-DCMAKE_FIND_ROOT_PATH_MODE_LIBRARY"* ]] && extra_args+=" -DCMAKE_FIND_ROOT_PATH_MODE_LIBRARY=ONLY"
+  # [[ "$extra_args" != *"-DCMAKE_FIND_ROOT_PATH_MODE_INCLUDE"* ]] && extra_args+=" -DCMAKE_FIND_ROOT_PATH_MODE_INCLUDE=ONLY"
+  # [[ "$extra_args" != *"-DCMAKE_FIND_ROOT_PATH_MODE_PACKAGE"* ]] && extra_args+=" -DCMAKE_FIND_ROOT_PATH_MODE_PACKAGE=ONLY"
   [[ "$extra_args" != *"-DBUILD_STATIC_LIBS"* ]] && extra_args+=" -DBUILD_STATIC_LIBS=ON"
   [[ "$extra_args" != *"-DBUILD_SHARED_LIBS"* ]] && extra_args+=" -DBUILD_SHARED_LIBS=OFF"
   [[ "$extra_args" != *"-DENABLE_STATIC"* ]] && extra_args+=" -DENABLE_STATIC=ON"
@@ -2814,7 +2838,7 @@ apply_patch() {
     echo "INFO: Patch already applied. Skipping." >>"$LOG_FILE"
   else
     echo "INFO: Applying $patch..." >>"$LOG_FILE"
-    git apply --ignore-space-change --ignore-whitespace --verbose "$patch" > >(redirect_output) 2>&1 || exit_message 1 "apply_patch: unable to patch $patch"
+    git apply --whitespace=fix --verbose "$patch" > >(redirect_output) 2>&1 || exit_message 1 "apply_patch: unable to patch $patch"
   fi
 }
 validate_path() {
@@ -2976,7 +3000,7 @@ install_local_dependency() {
   eval "$INSTALL_COMMAND update && sudo $INSTALL_COMMAND install -y $*" > >(redirect_output) 2>&1 || exit_message 1 "install_local_dependency: failed to install required dependencies"
 }
 
-# usage: generate_pkg_config -t="./build/libs" -o="./out/libfoo.pc" -i="/usr/local" -v="1.0" -n="LibFoo" -d="A foo library"
+# usage: generate_pkg_config -t=<scan_dir> -o=<output_pc_file> -i=<install_prefix> -n=<name> [-v=<ver>] [-d=<desc>] [-l=<libs>]
 generate_pkg_config() {
     local TARGET_SCAN_DIR=""
     local OUTPUT_FILE=""
@@ -2984,6 +3008,7 @@ generate_pkg_config() {
     local LIB_VERSION="0.0.0"
     local LIB_NAME=""
     local LIB_DESC=""
+    local EXTRA_LIBS=""
 
     # Parse arguments
     while [[ $# -gt 0 ]]; do
@@ -2994,21 +3019,22 @@ generate_pkg_config() {
             -v=*|--version=*) LIB_VERSION="${1#*=}"; shift ;;
             -n=*|--name=*)    LIB_NAME="${1#*=}"; shift ;;
             -d=*|--desc=*)    LIB_DESC="${1#*=}"; shift ;;
-            --help)           echo "Usage: generate_pkg_config -t=<dir> -o=<file> -i=<prefix> ..."; return 0 ;;
+            -l=*|--libs=*)    EXTRA_LIBS="${1#*=}"; shift ;;
+            --help)           echo "Usage: generate_pkg_config -t=<scan_dir> -o=<output_pc_file> -i=<install_prefix> -n=<name> [-v=<ver>] [-d=<desc>] [-l=<libs>]"; return 0 ;;
             *)                echo "ERROR: Unknown option '$1'"; return 1 ;;
         esac
     done
 
-    # Validate required arguments
-    if [[ -z "$TARGET_SCAN_DIR" || -z "$OUTPUT_FILE" || -z "$INSTALL_PREFIX" || -z "$LIB_NAME" ]]; then
-        echo "Error: Missing required arguments."
-        echo "Usage: generate_pkg_config -t=<scan_dir> -o=<output_pc_file> -i=<install_prefix> -n=<name> [-v=<ver>] [-d=<desc>]"
+    # Must provide either TARGET_SCAN_DIR or EXTRA_LIBS
+    if [[ -z "$TARGET_SCAN_DIR" && -z "$EXTRA_LIBS" ]]; then
+        echo "Error: Must provide either TARGET_SCAN_DIR or EXTRA_LIBS."
         return 1
     fi
 
-    # Ensure scan directory exists
-    if [[ ! -d "$TARGET_SCAN_DIR" ]]; then
-        echo "Error: Target directory '$TARGET_SCAN_DIR' does not exist."
+    # Validate required arguments
+    if [[ -z "$OUTPUT_FILE" || -z "$INSTALL_PREFIX" || -z "$LIB_NAME" ]]; then
+        echo "Error: Missing required arguments."
+        echo "Usage: generate_pkg_config -t=<scan_dir> -o=<output_pc_file> -i=<install_prefix> -n=<name> [-v=<ver>] [-d=<desc>] [-l=<libs>]"
         return 1
     fi
 
@@ -3019,24 +3045,38 @@ generate_pkg_config() {
 
     local libs_list=()
     local found_files
-    
-    # Use process substitution to avoid subshell variable scope issues
-    while IFS= read -r -d '' file_path; do
-        local filename
-        filename=$(basename "$file_path")
-        local name=$(basename "$file_path")
-        name="${name#lib}"
-        name=$(echo "$name" | sed -E 's/\.(dll\.a|so|a|dll)(\.[0-9.]+)?$//')
-        # Avoid duplicates in the list
-        # shellcheck disable=2076
-        if [[ ! " ${libs_list[*]} " =~ " ${name} " ]]; then
-            libs_list+=("-l${name}")
-        fi
-    done < <(find "$TARGET_SCAN_DIR" -maxdepth 1 -type f \( -name "*.dll*" -o -name "*.dll.a*" -o -name "*.a*" -o -name "*.so*" \) -print0)
+
+    if [[ -n "$EXTRA_LIBS" ]]; then
+      while IFS= read -r lib_name; do
+          if [[ "$lib_name" == -l* ]]; then
+              libs_list+=("${lib_name//lib/}")
+          else
+              libs_list+=("-l${lib_name//lib/}")
+          fi
+      done <<< "$EXTRA_LIBS"
+    fi
+
+    if [[ -n "$TARGET_SCAN_DIR" ]]; then
+      # Use process substitution to avoid subshell variable scope issues
+      while IFS= read -r -d '' file_path; do
+          local filename
+          filename=$(basename "$file_path")
+          local name=$(basename "$file_path")
+          name="${name#lib}"
+          name=$(echo "$name" | sed -E 's/\.(dll\.a|so|a|dll)(\.[0-9.]+)?$//')
+          # Avoid duplicates in the list
+          # shellcheck disable=2076
+          if [[ ! " ${libs_list[*]} " =~ " ${name} " ]]; then
+              libs_list+=("-l${name//lib/}")
+          fi
+      done < <(find "$TARGET_SCAN_DIR" -maxdepth 1 -type f \( -name "*.dll*" -o -name "*.dll.a*" -o -name "*.a*" -o -name "*.so*" \) -print0)
+    fi
     [[ ! -d "$(dirname "$OUTPUT_FILE")" ]] && create_dir "$(dirname "$OUTPUT_FILE")"
     # ---------------------------------------------------------
     # Generate .pc File Content
     # ---------------------------------------------------------
+    # de-duplicate libs_list
+    libs_list=($(echo "${libs_list[*]}" | tr " " "\n" | sort -u))
     cat > "$OUTPUT_FILE" <<EOF
 prefix=${INSTALL_PREFIX}
 exec_prefix=\${prefix}
@@ -3046,11 +3086,11 @@ includedir=\${prefix}/include
 Name: ${LIB_NAME}
 Description: ${LIB_DESC:-No description provided}
 Version: ${LIB_VERSION}
-Libs: -L\${libdir} -lstdc++ ${libs_list[*]}
+Libs: -L\${libdir} ${libs_list[*]}
 Cflags: -I\${includedir}
 EOF
-    [[ -f "$OUTPUT_FILE" ]] && echo "INFO: Generated pkg-config file at: $OUTPUT_FILE" >>"$LOG_FILE"
-    [[ ! -f "$OUTPUT_FILE" ]] && echo "ERROR: Failed to generated pkg-config file at: $OUTPUT_FILE" >>"$LOG_FILE"
+    [[ -f "$OUTPUT_FILE" ]] && { echo "INFO: Generated pkg-config file at: $OUTPUT_FILE" >>"$LOG_FILE"; return 0; }
+    [[ ! -f "$OUTPUT_FILE" ]] && { echo "ERROR: Failed to generated pkg-config file at: $OUTPUT_FILE" >>"$LOG_FILE"; return 1; }
 }
 
 # Usage: check_pkg_config_files <path_to_file.pc>
@@ -3356,7 +3396,7 @@ configure_ffmpeg() {
 	change_dir "$ffmpeg_source_dir" || exit_message 1 "configure_ffmpeg: could not change to $ffmpeg_source_dir"
 	# iswindows && apply_patch "$PATCHDIR"/frei0r_load-shared-libraries-dynamically.diff
   local postpend_configure_opts=""
-	local init_options=""
+	local init_options=" --disable-autodetect"
   local extra_libs=""
   function add_extra_libs() {
       # local libs="-Wl,--start-group $1 -Wl,--end-group"
@@ -3366,9 +3406,15 @@ configure_ffmpeg() {
   (iswindows || isandroid) && fix_pkgconfig_flags
   # Common compiler flags for Windows    
   if iswindows; then
+    export LDFLAGS="$LDFLAGS -Wl,-Bstatic -l:libpthreadGC3.a"
+    export CFLAGS="$CFLAGS -mstackrealign"
     export LD=${cross_prefix}gcc # ld weirdness with windows
 	  init_options+=" --target-os=mingw32"
-    init_options+=" --enable-w32threads"
+    # init_options+=" --enable-w32threads"
+    init_options+=" --disable-w32threads"
+    init_options+=" --enable-pthreads"
+    init_options+=" --extra-cflags=\" -DPTW32_STATIC_LIB \""
+    init_options+=" --extra-ldflags=\" -L${deps_install_prefix}/lib \""
   elif isandroid; then
     # unset PKG_CONFIG_PATH
     export PKG_CONFIG_SYSROOT_DIR="/"
@@ -3397,7 +3443,6 @@ configure_ffmpeg() {
     add_extra_libs "-lpthread -lrt -lm -ldl -lstdc++"
   else
     init_options+=" --target-os=$host_platform"
-    init_options+=" --enable-pthreads"
   fi
   init_options+=" --extra-ldflags=\" -Wl,--allow-multiple-definition \""
   case "$host_arch" in
@@ -3427,6 +3472,7 @@ configure_ffmpeg() {
     init_options+=" --extra-cflags=\" -DWIN32_LEAN_AND_MEAN \""
 	  init_options+=" --extra-cflags=\" -DWIN32_ANSI_API \""
 	  init_options+=" --extra-cflags=\" -DHAVE_WCHAR_FILENAME_H=0 \""
+    init_options+=" --extra-cflags=\" -mstackrealign \""
 	  init_options+=" --extra-ldflags=\" -lole32 \""
 	  init_options+=" --extra-ldflags=\" -lshlwapi \""
 	  init_options+=" --extra-ldflags=\" -static-libgcc \""
@@ -3434,8 +3480,9 @@ configure_ffmpeg() {
 	  init_options+=" --extra-cflags=\" -mtune=generic \""
 	  init_options+=" --extra-cflags=\" -O3 \""
 	  init_options+=" --extra-cflags=\" -pipe \""
+    init_options+=" --extra-ldflags=\" $stdcpp_path $stdgcc_path \""
     init_options+=" --extra-cflags=\" $extra_ffmpeg_c_flags \""
-    add_extra_libs "-static -lstdc++"
+    add_extra_libs "$stdcpp_path -l:libpthreadGC3.a"
     init_options+=" --extra-cflags=\" -Wno-pedantic -Wno-cpp -Wno-variadic-macros \""
   fi
 
@@ -3951,6 +3998,9 @@ create_ffmpeg_kit_bundle() {
 
       # COPY BINARIES
       [[ -d "${ffmpeg_kit_install}/bin" ]] && cp -rP "${ffmpeg_kit_install}/bin/"* "${ffmpeg_kit_bundle}/bin"
+
+      # COPY DEBUG PDB
+      [[  -f "$ffmpeg_kit_src_dir/build/libffmpegkit.map" ]] && cp -rP "$ffmpeg_kit_src_dir/build/libffmpegkit.map" "${ffmpeg_kit_bundle}/bin"
     } >>"$LOG_FILE"
 
     find "${ffmpeg_kit_bundle}/lib/pkgconfig" -type f -name "*.pc" -exec sed -i \
@@ -5259,7 +5309,7 @@ static_link_check() {
     # --------------------------------------------------------------------------
     _slc_is_compiler_pkg() {
       local lib="${1#-l}"
-      [[ "$lib" =~ ^(mingw32|mingwex|gcc|gcc_s|stdc\+\+)$ ]]
+      [[ "$lib" =~ ^(mingw32|mingwex|gcc|gcc_s)$ ]] # |stdc\+\+
     }
     # --------------------------------------------------------------------------
     # HELPER: Check if its System Pkg
@@ -5271,9 +5321,9 @@ static_link_check() {
       fi
       if iswindows && \
         [[ "$lib" =~ ^(ws2_32|gdi32|winmm|ole32|uuid|crypt32|advapi32|user32|kernel32|shell32|glu32)$ ]] || \
-        [[ "$lib" =~ ^(iphlpapi|secur32|setupapi|mfuuid|strmiids|bcrypt|ncrypt|psapi|version)$ ]] || \
-        [[ "$lib" =~ ^(shlwapi|wldap32|imagehlp|d3d11|dxgi|opengl32|imm32|oleaut32|mfplat|gomp|userenv)$ ]] || \
-        [[ "$lib" =~ ^(mfreadwrite|mf|dsound|ksuser|uuid|comdlg32|avrt|dnsapi|msimg32|ntdll|dwrite)$ ]] || \
+        [[ "$lib" =~ ^(iphlpapi|secur32|setupapi|mfuuid|strmiids|bcrypt|ncrypt|psapi|version|d2d1|windowscodecs)$ ]] || \
+        [[ "$lib" =~ ^(shlwapi|wldap32|imagehlp|d3d11|dxgi|opengl32|imm32|oleaut32|mfplat|gomp|userenv|mingw32)$ ]] || \
+        [[ "$lib" =~ ^(mfreadwrite|mf|dsound|ksuser|uuid|comdlg32|avrt|dnsapi|msimg32|ntdll|dwrite|mingwex)$ ]] || \
         _slc_is_compiler_pkg "$lib"; then
           return 0
       fi
@@ -5381,6 +5431,10 @@ static_link_check() {
                 res_stats[0]=$((res_stats[0] + 1))
             elif [[ "$flag" == -l* ]]; then
                 local lib="${flag#-l}"
+                if [[ "$lib" == /* ]]; then
+                    final_libs="$final_libs $lib" # Add as absolute path, strip -l
+                    continue
+                fi
                 # Check if this lib requires shared linking
                 local force_shared=false
                 if is_shared_library "$lib"; then
@@ -5451,6 +5505,7 @@ static_link_check() {
                 fi
             fi
         done
+        final_libs=$(echo "$final_libs" | xargs -n1 | awk '!x[$0]++' | xargs)
         res_libs="$final_libs"
         return 0
     }
@@ -5460,7 +5515,11 @@ static_link_check() {
     _slc_verify_binary() {
         local libs="$1" name="$2" tmp="$3" log="$4"
         local ext="so"
-        if iswindows; then ext="dll"; fi
+        local sys_libs=""
+        if iswindows; then 
+          sys_libs="-lcrypt32 -lwindowscodecs -ldwrite -ld2d1 -lshlwapi -lole32 -lshell32 -luuid -lws2_32 -ladvapi32 -luser32 -lkernel32 -lmsvcrt -lwinmm"
+          ext="dll"; 
+        fi
         local out_bin="${tmp}/${name}.${ext}"
         local gcc_bin=g++
         if truthy "$build_cross_compile"; then gcc_bin=${cross_prefix}g++; fi
@@ -5487,17 +5546,72 @@ static_link_check() {
                 cmd+=("$lib")
             fi
         done
-        cmd+=("-static-libgcc" "-static-libstdc++")
+        cmd+=("-static" "-static-libgcc" "-static-libstdc++" "$stdcpp_path" "$stdgcc_path")
+        cmd+=("-Wl,--trace")
         if [ "$use_map" = true ]; then
             cmd+=("-Wl,--version-script=$map_file" "-Wl,-Bsymbolic")
         fi
         cmd+=("-Wl,--allow-multiple-definition" "-Wl,--unresolved-symbols=ignore-all")
+        cmd+=($sys_libs)
         # Execute
         if "${cmd[@]}" > "$log" 2>&1 && [[ -f "$out_bin" ]]; then
-            du -h "$out_bin" | cut -f1
+            # Get binary size
+            local bin_size=$(du -h "$out_bin" | cut -f1)
+            
+            # Check for shared libstdc++ and libgcc dependencies
+            local shared_libs=$(_slc_check_shared_libs "$out_bin")
+            
+            if [[ -n "$shared_libs" ]]; then
+                # Shared runtime libraries detected - return failure
+                echo "fail:Shared runtime libraries detected: $shared_libs"
+                return 0
+            fi
+            
+            # Success - return size
+            echo "success:$bin_size"
+            return 0
+        else
+            # Linker failed
+            echo "fail:Linker error"
             return 0
         fi
-        return 1
+    }
+        # --------------------------------------------------------------------------
+    # HELPER: Check for shared libstdc++ and libgcc dependencies
+    # --------------------------------------------------------------------------
+    _slc_check_shared_libs() {
+        local binary="$1"
+        local shared_libs=""
+        
+        if iswindows; then
+            # Windows: Use objdump to check for DLL imports
+            if command -v "${cross_prefix}objdump" >/dev/null 2>&1; then
+                # Check for libstdc++-6.dll and libgcc_s_*.dll
+                if "${cross_prefix}objdump" -p "$binary" 2>/dev/null | grep -q "DLL Name: libstdc++-.*\.dll"; then
+                    shared_libs+="libstdc++-6.dll "
+                fi
+                if "${cross_prefix}objdump" -p "$binary" 2>/dev/null | grep -q "DLL Name: libgcc_s_.*\.dll"; then
+                    shared_libs+="libgcc_s.dll "
+                fi
+                if "${cross_prefix}objdump" -p "$binary" 2>/dev/null | grep -q "DLL Name: libgcc_.*\.dll"; then
+                    shared_libs+="libgcc.dll "
+                fi
+            fi
+        else
+            # Linux: Use ldd to check for shared library dependencies
+            if command -v ldd >/dev/null 2>&1; then
+                # Check for libstdc++.so
+                if ldd "$binary" 2>/dev/null | grep -q "libstdc++\.so"; then
+                    shared_libs+="libstdc++.so "
+                fi
+                # Check for libgcc_s.so
+                if ldd "$binary" 2>/dev/null | grep -q "libgcc_s\.so"; then
+                    shared_libs+="libgcc_s.so "
+                fi
+            fi
+        fi
+        
+        echo "$shared_libs"
     }
     # --------------------------------------------------------------------------
     # HELPER: Print Report
@@ -5570,11 +5684,15 @@ static_link_check() {
                 continue
             fi
             local bin_size
-            if bin_size=$(_slc_verify_binary "$resolved_libs" "$pkg_name" "$tmp_dir" "$log_file"); then
+            local verify_result
+            verify_result=$(_slc_verify_binary "$resolved_libs" "$pkg_name" "$tmp_dir" "$log_file")
+            if [[ "$verify_result" == success:* ]]; then
+                bin_size="${verify_result#success:}"
                 a_success+=("$(printf "  %-8s %-30s %-12d %-12d %-12d" "$bin_size" "$pkg_name" "${stats[0]}" "${stats[1]}" "${stats[2]}")")
             else
+                local reason="${verify_result#fail:}"
                 local err=$(sed -e 's|.*libraries/lib|...libraries/lib|' -e 's/^/        | /' "$log_file")
-                a_failed+=("  [FAIL] $pkg_name (Linker Error)\n        Libraries: $resolved_libs\n$err")
+                a_failed+=("  [FAIL] $pkg_name ($reason)\n        Libraries: $resolved_libs\n$err")
             fi
         done
         printf "\r\033[K" >&2

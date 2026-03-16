@@ -93,10 +93,13 @@ install_cross_compiler() {
 configure_ffmpeg_kit() {
 	echo -e "INFO: Configuring ffmpeg kit" | tee -a "$LOG_FILE"
 	local type_postfix="$build_ffmpeg_kit_type"
+	
+	iswindows && fix_pkgconfig_flags
 
 	if truthy "$build_force"; then
 		remove_path -rf "$ffmpeg_kit_src_dir"/already_configured_*
 		remove_path -rf "$ffmpeg_kit_install"
+		remove_path -rf "$ffmpeg_kit_src_dir"/build
 	fi
 
 	create_dir "$ffmpeg_kit_install"
@@ -105,15 +108,15 @@ configure_ffmpeg_kit() {
 	set_toolchain_paths
 
 	reset_allflags
-	local local_cflags="${CFLAGS} -I${ffmpeg_install_prefix}/include -L${ffmpeg_install_prefix}/lib -I${ffmpeg_source_dir} -I${ffmpeg_source_dir}/compat -DHAVE_W32PTHREADS_H=1"
-	local local_cxxfalgs="${CXXFLAGS} -I${ffmpeg_install_prefix}/include -L${ffmpeg_install_prefix}/lib -I${ffmpeg_source_dir} -I${ffmpeg_source_dir}/compat"
+	local local_cflags="${CFLAGS} -static -static-libgcc -static-libstdc++ -I${ffmpeg_install_prefix}/include -L${ffmpeg_install_prefix}/lib -I${ffmpeg_source_dir} -I${ffmpeg_source_dir}/compat"
+	local local_cxxfalgs="${CXXFLAGS} -static -static-libgcc -static-libstdc++ -I${ffmpeg_install_prefix}/include -L${ffmpeg_install_prefix}/lib -I${ffmpeg_source_dir} -I${ffmpeg_source_dir}/compat"
 	
 	change_dir "${ffmpeg_kit_src_dir}"
 	make distclean > >(redirect_output) 2>&1
 
 	export CFLAGS="${local_cflags}"
 	export CXXFLAGS="${local_cxxfalgs}"
-	export LDFLAGS="${LDFLAGS//-static /} -static-libgcc -static-libstdc++"
+	export LDFLAGS="${LDFLAGS//-static /} -static-libgcc -static-libstdc++ -Wl,-Bstatic -l:libpthreadGC3.a"
 
 	local cmake_params="-DCMAKE_SYSTEM_NAME=Windows \
 -DCMAKE_C_COMPILER=$CC \
@@ -143,47 +146,24 @@ configure_ffmpeg_kit() {
 	fi
 
 	if truthy "$do_debug_build"; then
+		export STRIP=true
 		cmake_params+=" -DCMAKE_BUILD_TYPE=Debug"
 		CFLAGS+=" -g -fno-omit-frame-pointer -ggdb"
 		CXXFLAGS+=" -g -fno-omit-frame-pointer -ggdb -D_GLIBCXX_DEBUG"
+		LDFLAGS+=" -Wl,-Map,libffmpegkit.map"
+		cmake_params+=" -DCMAKE_SHARED_LINKER_FLAGS=\"-static-libgcc -static-libstdc++ -Wl,--exclude-libs,libstdc++.a -Wl,--exclude-libs,libgcc.a -Wl,-Map,libffmpegkit.map\""
 	else
 		cmake_params+=" -DCMAKE_BUILD_TYPE=Release"
+		cmake_params+=" -DCMAKE_SHARED_LINKER_FLAGS=\"-static-libgcc -static-libstdc++ -Wl,--exclude-libs,libstdc++.a -Wl,--exclude-libs,libgcc.a\""
 	fi
 
 	change_dir "${ffmpeg_kit_src_dir}"
 	
 	change_dir "${ffmpeg_kit_src_dir}/build" 1
 	
-	do_cmake "$cmake_params" "$ffmpeg_kit_src_dir" "${type_postfix}" 1
+	do_cmake_from_build_dir "$ffmpeg_kit_src_dir" "$cmake_params" "${type_postfix}" 1
 
 	echo -e "INFO: Done configuring ffmpeg kit" | tee -a "$LOG_FILE"
-}
-
-create_ffmpegkit_package_config() {
-	local kit_version="$1"
-	local location_prefix="$2"
-	create_dir "${location_prefix}/lib/pkgconfig"
-	cat >"${location_prefix}/lib/pkgconfig/ffmpeg-kit.pc" <<EOF
-prefix=${ffmpeg_kit_install}
-libdir=\${exec_prefix}/lib
-includedir=\${prefix}/include
-
-Name: ffmpeg-kit
-Description: FFmpeg for applications on Windows
-Version: ${kit_version}
-
-# Public dependencies that have their own .pc files
-Requires: libavfilter, libswscale, libavformat, libavcodec, libswresample, libavutil
-
-# Linker flags for the ffmpeg-kit library itself (includes jsoncpp if static)
-Libs: -L\${libdir} -lffmpegkit
-
-# Private dependencies needed for linking on Windows
-Libs.private: -lstdc++ -lws2_32 -lpsapi -lole32 -lshlwapi -lgdi32 -lbcrypt -luser32 -luuid -ljsoncpp
-
-# Compiler flags for the ffmpeg-kit headers (includes jsoncpp headers if bundled)
-Cflags: -I\${includedir}
-EOF
 }
 
 get_static_macro_from_header() {
@@ -230,7 +210,28 @@ fix_pkgconfig_flags() {
 
 	echo "INFO: Scanning .pc files in $PKG_CONFIG_LIBDIR..."
 
+	find "${dependency_install_prefix}/lib" -name "*.dll.a" | while read dll_a; do
+		static_a="${dll_a%.dll.a}.a"
+		if [ -f "$static_a" ]; then
+			echo "Removing $dll_a (found static alternative: $static_a)" > >(redirect_output)
+			rm "$dll_a"
+		fi
+	done
+
 	for pc_file in "$PKG_CONFIG_LIBDIR"/*.pc; do
+			sed -i "s|-l/|/|g" "$pc_file"
+			sed -i "s|-lstdc++||g" "$pc_file"
+			sed -i "s|-lgcc_s||g" "$pc_file"
+			sed -i "s|-lgcc||g" "$pc_file"
+			sed -i 's|\b-lwinpthread\b|-lpthreadwin32|g' "$pc_file"
+			sed -i 's|\b-lpthread\b|-lpthreadwin32|g' "$pc_file"
+			sed -i "s|-latomic|"$(realpath $("$CXX" -print-file-name=libatomic.a))"|g" "$pc_file"
+			sed -i "s|/usr/local/mingw-w64/[^ ]*libstdc++[^ ]*|${stdcpp_path}|g" "$pc_file"
+			sed -i 's|/usr/local/mingw-w64/[^ ]*libstdc++\.a||g' "$pc_file"
+			sed -i "s|/usr/local/mingw-w64/[^ ]*libgcc[^ ]*|${stdgcc_path}|g" "$pc_file"
+			sed -i 's|/usr/local/mingw-w64/[^ ]*libgcc[^ ]*||g' "$pc_file"
+			sed -i 's|-static-libgcc||g' "$pc_file"
+			sed -i 's|-static-libstdc++||g' "$pc_file"
 			[[ -e "$pc_file" ]] || continue
 			pkg_name=$(basename "$pc_file" .pc)
 			# Get Libs
@@ -298,51 +299,39 @@ get_generic_cmake_toolchain() {
 			toolchain_filename="$host_name-toolchain.cmake"
 			local toolchain_path="$src_dir/$toolchain_filename"
 		fi
-		# Only generate if it doesn't exist
-		if [[ ! -e "$toolchain_path" ]]; then
-				local cpu_family="x86_64"
-				if [ "$bits_target" = 32 ]; then
-						cpu_family="x86"
-				fi
-				declare -A cmake_config
-				# System info
-				cmake_config["CMAKE_SYSTEM_NAME"]="Windows"
-				cmake_config["CMAKE_SYSTEM_PROCESSOR"]="${target_proc:-$cpu_family}"
-				# Toolchain locations
-				cmake_config["TOOLCHAIN_PREFIX"]="${host_target}"
-				cmake_config["TOOLCHAIN_ROOT"]="${toolchain_root_dir}"
-				# Compilers
-				cmake_config["CMAKE_C_COMPILER"]="${cross_prefix}gcc"
-				cmake_config["CMAKE_CXX_COMPILER"]="${cross_prefix}g++"
-				# cmake_config["CMAKE_RC_COMPILER"]="${cross_prefix}windres"
-				cmake_config["CMAKE_AR"]="${cross_prefix}ar"
-				cmake_config["CMAKE_RANLIB"]="${cross_prefix}ranlib"
-				cmake_config["CMAKE_STRIP"]="${cross_prefix}strip"
-				# Search Paths
-				cmake_config["CMAKE_FIND_ROOT_PATH"]="${dependency_install_prefix}"
-				cmake_config["CMAKE_FIND_ROOT_PATH_MODE_PROGRAM"]="NEVER"
-				cmake_config["CMAKE_FIND_ROOT_PATH_MODE_LIBRARY"]="ONLY"
-				cmake_config["CMAKE_FIND_ROOT_PATH_MODE_INCLUDE"]="ONLY"
-				# Flags (Using INIT to allow appending later)
-				cmake_config["CMAKE_C_FLAGS_INIT"]="-static -static-libgcc -static-libstdc++"
-				cmake_config["CMAKE_CXX_FLAGS_INIT"]="-static -static-libgcc -static-libstdc++"
-				cmake_config["CMAKE_EXE_LINKER_FLAGS_INIT"]="-static -static-libgcc -static-libstdc++"
-				# Loop through remaining args in format KEY="VALUE"
-				for arg in "$@"; do
-						local key="${arg%%=*}"
-						local value="${arg#*=}"
-						echo "DEBUG: adding KEY:$key and VALUE:$value to cmake toolchain file for $variant" >>"$LOG_FILE"
-						cmake_config["$key"]="$value"
-				done
-				echo "# Generated via get_generic_cmake_toolchain" > "$toolchain_path"
-				# Write CMAKE_SYSTEM_NAME first (convention)
-				echo "set(CMAKE_SYSTEM_NAME \"${cmake_config[CMAKE_SYSTEM_NAME]}\")" >> "$toolchain_path"
-				unset 'cmake_config[CMAKE_SYSTEM_NAME]'
-				# Write the rest
-				for key in "${!cmake_config[@]}"; do
-						echo "set($key \"${cmake_config[$key]}\")" >> "$toolchain_path"
-				done
+		local cpu_family="x86_64"
+		if [ "$bits_target" = 32 ]; then
+				cpu_family="x86"
 		fi
+		declare -A cmake_config
+		# System info
+		cmake_config["CMAKE_SYSTEM_NAME"]="Windows"
+		cmake_config["CMAKE_SYSTEM_PROCESSOR"]="${target_proc:-$cpu_family}"
+		# Toolchain locations
+		cmake_config["TOOLCHAIN_PREFIX"]="${host_target}"
+		cmake_config["TOOLCHAIN_ROOT"]="${toolchain_root_dir}"
+		# Compilers
+		cmake_config["CMAKE_C_COMPILER"]="${cross_prefix}gcc"
+		cmake_config["CMAKE_CXX_COMPILER"]="${cross_prefix}g++"
+		# cmake_config["CMAKE_RC_COMPILER"]="${cross_prefix}windres"
+		cmake_config["CMAKE_AR"]="${cross_prefix}ar"
+		cmake_config["CMAKE_RANLIB"]="${cross_prefix}ranlib"
+		cmake_config["CMAKE_STRIP"]="${cross_prefix}strip"
+		# Loop through remaining args in format KEY="VALUE"
+		for arg in "$@"; do
+				local key="${arg%%=*}"
+				local value="${arg#*=}"
+				echo "DEBUG: adding KEY:$key and VALUE:$value to cmake toolchain file for $variant" >>"$LOG_FILE"
+				cmake_config["$key"]="$value"
+		done
+		echo "# Generated via get_generic_cmake_toolchain" > "$toolchain_path"
+		# Write CMAKE_SYSTEM_NAME first (convention)
+		echo "set(CMAKE_SYSTEM_NAME \"${cmake_config[CMAKE_SYSTEM_NAME]}\")" >> "$toolchain_path"
+		unset 'cmake_config[CMAKE_SYSTEM_NAME]'
+		# Write the rest
+		for key in "${!cmake_config[@]}"; do
+				echo "set($key \"${cmake_config[$key]}\")" >> "$toolchain_path"
+		done
 		echo "$toolchain_path"
 }
 
@@ -356,16 +345,23 @@ get_generic_meson_cross_file() {
 	if [ "$bits_target" = 32 ]; then
 			cpu_family="x86"
 	fi
+	local meson_stdcpp="'$stdcpp_path'"
+	local meson_stdgcc="'$stdgcc_path'"
 	cat >"$base_filepath" <<EOF
 [built-in options]
 buildtype = 'release'
 wrap_mode = 'nofallback'
 default_library = 'static'
-prefer_static = 'true'
+prefer_static = true
 backend = 'ninja'
 prefix = '$dependency_install_prefix'
 libdir = '$dependency_install_prefix/lib'
-b_staticpic = 'true'
+b_lto = false
+b_staticpic = true
+c_link_args = ['-static', $meson_stdgcc]
+cpp_link_args = ['-static', $meson_stdcpp, $meson_stdgcc]
+c_args = ['-static-libgcc', '-DGLIB_STATIC_COMPILATION', '-mstackrealign']
+cpp_args = ['-static-libgcc', '-static-libstdc++', '-DGLIB_STATIC_COMPILATION', '-mstackrealign']
 
 [binaries]
 c = '${cross_prefix}gcc'
@@ -412,6 +408,7 @@ EOF
 ffmpeg_windows_patches() {
 	if iswindows; then
 		echo "INFO: Patching ffmpeg for qindows Mingw quirks..." >>"$LOG_FILE"
+		sed -i 's/#define HAVE_SCHED_GETAFFINITY 1/#define HAVE_SCHED_GETAFFINITY 0/g' "$ffmpeg_source_dir/config.h"
 		if [[ -f "$ffmpeg_source_dir/libavfilter/dnn/dnn_backend_tf.c" ]]; then
 			sed -i 's/ctx->options.async/ctx->async/g' "$ffmpeg_source_dir/libavfilter/dnn/dnn_backend_tf.c"
 		fi

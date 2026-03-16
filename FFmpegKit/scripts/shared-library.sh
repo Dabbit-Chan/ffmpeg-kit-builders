@@ -22,9 +22,6 @@ for arg in "$@"; do
 		-v|--verbose|-verbose|--v)
 			verbose=true
 			;;
-		*)
-			echo "shared-library.sh: Unsupported arg '$arg'. skipping..."
-			;;
 	esac
 done
 
@@ -139,6 +136,6 @@ if test -f bundle_manifest.txt; then
 	sort -u bundle_manifest.txt -o bundle_manifest.txt
 fi
 clean_libs=$(echo "$raw_libs_to_keep" | awk '{for (i=1;i<=NF;i++) if (!seen[$i]++) printf("%s%s", $i, OFS)}' | sed 's/ *$//')
-if test -f ffmpeg-kit.pc; then
-	sed -i "s|FFMPEG_KIT_EXT_LIBS|$clean_libs|g" ffmpeg-kit.pc
+if test -f ffmpegkit.pc; then
+	sed -i "s|FFMPEG_KIT_EXT_LIBS|$clean_libs|g" ffmpegkit.pc
 fi

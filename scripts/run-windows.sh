@@ -9,8 +9,52 @@
 #                        WINDOWS FFMPEG BUILD PRIMARY DEPENDENCIES
 #
 #===============================================================================================
-
+build_pthread_win32() {
+  local repo="https://github.com/GerHobbelt/pthread-win32"
+  local lib="pthread-win32"
+  local repo_ver="version-3.1.0-release"
+	change_dir "$src_dir" || exit_message 1 "Failed change_dir"
+	do_git_checkout "$repo" "$src_dir/$lib" "$repo_ver" || exit_message 1 "Failed git_checkout"
+  change_dir "$src_dir/$lib" || exit_message 1 "Failed change_dir"
+  cp -f "CMakeLists.txt" "CMakeLists.txt.bak" || exit_message 1 "Failed copy_path"
+  apply_patch "$PATCHDIR/pthreads-win32_cmake.patch" || exit_message 1 "Failed apply_patch"
+  sed -i '1{/^#ifdef __cplusplus/!{i\
+#ifdef __cplusplus\
+#include <exception>\
+#endif
+}}' pthread.c || exit_message 1 "Failed sed pthread.c"
+  sed -i 's/ terminate ();/std::terminate();/g' ptw32_callUserDestroyRoutines.c || exit_message 1 "Failed sed ptw32_callUserDestroyRoutines.c"
+	change_dir "$src_dir/$lib/build" 1 || exit_message 1 "Failed change_dir"
+  local cmake_args="-DTARGET_ARCH=$host_arch \
+-DCMAKE_CXX_STANDARD=11 \
+-DCMAKE_CXX_FLAGS=\"-fpermissive\" \
+-DCMAKE_C_FLAGS=\"-DPTW32_STATIC_LIB -DPTW32_BUILD_INLINED -fcommon\""
+  do_cmake_from_build_dir "$src_dir/$lib" "$cmake_args" || exit_message 1 "Failed do_cmake_from_build_dir"
+  do_make_and_make_install || exit_message 1 "Failed do_make_and_make_install"
+	change_dir "$src_dir" || exit_message 1 "Failed change_dir"
+  export PTW32_PATH="$dependency_install_prefix"
+  # Usage: generate_pkg_config -t=<scan_dir> -o=<output_pc_file> -i=<install_prefix> -n=<name> [-v=<ver>] [-d=<desc>] [-l=<libs>]
+  generate_pkg_config -o="$install_pkgconfig_dir/pthreadGC3.pc" \
+    -i="$dependency_install_prefix" \
+    -v="3.1.0" \
+    -n="PthreadGC3" \
+    -d="PthreadGC3 from PthreadWin32 library" \
+    -l="-lpthreadGC3" > >(redirect_output) 2>&1
+  generate_pkg_config -o="$install_pkgconfig_dir/pthreadGCE3.pc" \
+    -i="$dependency_install_prefix" \
+    -v="3.1.0" \
+    -n="PthreadGCE3" \
+    -d="PthreadGCE3 from PthreadWin32 library" \
+    -l="-lpthreadGCE3" > >(redirect_output) 2>&1
+  generate_pkg_config -t="$src_dir/$lib/build" \
+    -o="$install_pkgconfig_dir/pthreadwin32.pc" \
+    -i="$dependency_install_prefix" \
+    -v="3.1.0" \
+    -n="PthreadWin32" \
+    -d="PthreadWin32 library" > >(redirect_output) 2>&1
+}
 build_dlfcn() {
+  # vcpkg https://vcpkg.io/en/package/dlfcn-win32
   local repo="https://github.com/dlfcn-win32/dlfcn-win32"
   local lib="dlfcn-win32"
   local repo_ver="v1.4.2"
@@ -395,7 +439,7 @@ build_libvpl() {
 -DBUILD_EXPERIMENTAL=OFF"
   disable_nonessential "$src_dir/$lib/build"
 	do_make_and_make_install
-  add_libs_to_pkg -t="$install_pkgconfig_dir/vpl.pc" -l="-lstdc++"
+  add_libs_to_pkg -t="$install_pkgconfig_dir/vpl.pc" -l=""
 	change_dir "$src_dir"
 }
 # build_nvenc             # config_options+= --disable-nvenc              # disable Nvidia video encoding code [autodetect]
@@ -643,13 +687,18 @@ build_libharfbuzz() {
 -Dintrospection=disabled \
 -Ddocs=disabled \
 -Dgraphite=enabled \
--Dgraphite2=enabled"
+-Dgraphite2=enabled \
+-Dc_args=\" -DGRAPHITE2_STATIC -DGLIB_2.0_STATIC -DCAIRO_WIN32_STATIC_BUILD \" \
+-Dcpp_args=\" -DGRAPHITE2_STATIC -DGLIB_2.0_STATIC -DCAIRO_WIN32_STATIC_BUILD \""
   export LDFLAGS="$LDFLAGS -lbrotlidec"
   generic_meson "$meson_options"
   disable_nonessential "$src_dir/$lib"
   do_ninja_and_ninja_install
 	change_dir "$src_dir"
-  add_libs_to_pkg -t="$install_pkgconfig_dir/harfbuzz-cairo.pc" -l="-lstdc++" -p="-lole32 -lwindowscodecs -luuid"
+  while IFS= read -r -d '' file; do
+    add_libs_to_pkg -t="$file" -l="" -p="-lgraphite2"
+  done < <(find "$install_pkgconfig_dir" -type f -name "harfbuzz*.pc" -print0)
+  add_libs_to_pkg -t="$install_pkgconfig_dir/harfbuzz-cairo.pc" -p="-lcairo"
   reset_ldflags
   reset_cflags
   reset_cxxflags
@@ -667,7 +716,7 @@ build_libvmaf() {
 	generic_meson "$meson_options"
   disable_nonessential "$src_dir/$lib"
 	do_ninja_and_ninja_install
-  add_libs_to_pkg -t="$install_pkgconfig_dir/libvmaf.pc" -l="-lstdc++"
+  add_libs_to_pkg -t="$install_pkgconfig_dir/libvmaf.pc" -l=""
 	change_dir "$src_dir"
 }
 # build_libfontconfig     # config_options+= --enable-libfontconfig       # enable libfontconfig, useful for drawtext filter [no]
@@ -1061,11 +1110,18 @@ build_sdl12_compat() {
 	change_dir "$src_dir"
 	do_git_checkout "$repo" "$src_dir/$lib" "$repo_ver"
   change_dir "$src_dir/$lib"
+  # Patch 1: Remove OS restriction for static builds 
+  sed -i 's/if(STATICDEVEL AND NOT (CMAKE_SYSTEM_NAME MATCHES "Linux"))/if(FALSE)/' CMakeLists.txt
+  # Patch 2: Force the main SDL target to be STATIC 
+  sed -i 's/add_library(SDL SHARED/add_library(SDL STATIC/' CMakeLists.txt
+  # Patch 3: Remove -nostdlib causing Win32 API issues 
+  sed -i '/set_target_properties(SDL PROPERTIES LINK_FLAGS "-nostdlib")/d' CMakeLists.txt
+  # Patch 4: Skip version.rc 
   sed -i 's/set(WIN32_SRCS "src\/version.rc")/set(WIN32_SRCS "")/' CMakeLists.txt
   generic_cmake "-DCMAKE_BUILD_TYPE=Release \
 -DSDL12TESTS=OFF \
--DCMAKE_RC_COMPILER=/bin/false \
--DSDL12COMPAT_INSTALL_RES=OFF" "$src_dir/$lib"
+-DSDL12DEVEL=ON \
+-DSTATICDEVEL=OFF" "$src_dir/$lib"
   disable_nonessential "$src_dir/$lib"
   do_make_and_make_install
 	change_dir "$src_dir"
@@ -1173,6 +1229,7 @@ build_libmodplug() {
 	change_dir "$src_dir"
   do_git_checkout "$repo" "$src_dir/$lib"
   change_dir "$src_dir/$lib"
+  export LDFLAGS="$LDFLAGS -static -static-libgcc -static-libstdc++"
   sed -i.bak 's/__declspec(dllexport)//' "$src_dir/$lib/src/modplug.h" #strip DLL import/export directives
 	sed -i.bak 's/__declspec(dllimport)//' "$src_dir/$lib/src/modplug.h"
   autoreconf_library
@@ -1181,6 +1238,7 @@ build_libmodplug() {
   disable_nonessential "$src_dir/$lib"
   do_make_and_make_install
 	change_dir "$src_dir"
+  reset_ldflags
 }
 # build_libgme            # config_options+= --enable-libgme              # enable Game Music Emu via libgme [no]
 build_libgme() {
@@ -1219,7 +1277,7 @@ build_libbluray() {
 	generic_meson "$meson_options"
 	disable_nonessential "$src_dir/$lib"
   do_ninja_and_ninja_install
-  add_libs_to_pkg -t="$install_pkgconfig_dir/libbluray.pc" -p="-lstdc++ -lssp -lgdi32"
+  add_libs_to_pkg -t="$install_pkgconfig_dir/libbluray.pc" -p=" -lssp -lgdi32"
 	change_dir "$src_dir"
   unset LIBS
   reset_ldflags
@@ -1276,7 +1334,6 @@ build_libflite() {
 		sed -i.bak "s/cp -pd/cp -p/" main/Makefile # friendlier cp for OS X
 	fi
   export CFLAGS="$CFLAGS -Dc99_snprintf=snprintf"
-  export LDFLAGS="$LDFLAGS -lpthread"
 	generic_configure "--bindir=$dependency_install_prefix/bin \
 --with-audio=none \
 --disable-shared \
@@ -1398,7 +1455,7 @@ build_librubberband() {
 	# apply_patch "$PATCHDIR/rubberband_git_static-lib.diff" # create install-static target
 	# generic_configure "--disable-ladspa"
 	# do_make "install-static AR=${cross_prefix}ar" # No need for 'do_make_install', because 'install-static' already has install-instructions.
-	# sed -i.bak 's/-lrubberband.*$/-lrubberband -lfftw3 -lsamplerate -lstdc++/' "$install_pkgconfig_dir/rubberband.pc"
+	# sed -i.bak 's/-lrubberband.*$/-lrubberband -lfftw3 -lsamplerate /' "$install_pkgconfig_dir/rubberband.pc"
   # 	#	change_dir "$src_dir"
 }
 # build_frei0r            # config_options+= --enable-frei0r              # enable frei0r video filtering [no]
@@ -1412,6 +1469,7 @@ build_frei0r() {
   change_dir "$src_dir/$lib"
   sed -i.bak 's/-arch i386//' CMakeLists.txt # OS X https://github.com/dyne/frei0r/issues/64
   sed -i.bak 's/find_package (Cairo)/# find_package (Cairo)/' CMakeLists.txt # OS X https://github.com/dyne/frei0r/issues/64
+  export LDFLAGS="$LDFLAGS -static -static-libgcc -static-libstdc++"
   change_dir "$src_dir/$lib/build" 1	
   do_cmake_from_build_dir "$src_dir/$lib" "-DCMAKE_BUILD_TYPE=Release \
 -DBUILD_SHARED_LIBS=OFF \
@@ -1420,6 +1478,7 @@ build_frei0r() {
   disable_nonessential "$src_dir/$lib/build"
   do_make_and_make_install
 	change_dir "$src_dir"
+  reset_ldflags
 }
 # build_libsvtav1         # config_options+= --enable-libsvtav1           # enable AV1 encoding via SVT [no]
 build_libsvtav1() {
@@ -1542,6 +1601,7 @@ build_libass() {
 	local lib="libass"
   local repo="https://github.com/libass/libass"
   local repo_ver="0.17.4"
+  activate_meson
 	change_dir "$src_dir"
   do_git_checkout "$repo" "$src_dir/$lib" "$repo_ver"
   change_dir "$src_dir/$lib"
@@ -1590,6 +1650,8 @@ build_libsrt() {
 -DENABLE_APPS=OFF \
 -DUSE_STATIC_LIBSTDCXX=ON \
 -DCMAKE_POLICY_VERSION_MINIMUM=3.5 \
+-DCMAKE_C_FLAGS=\"$CFLAGS -include $ffmpeg_kit_src_dir/src/pthread_compat.h\" \
+-DCMAKE_CXX_FLAGS=\"$CXXFLAGS -include $ffmpeg_kit_src_dir/src/pthread_compat.h\" \
 -DENABLE_CXX11=OFF"
 	disable_nonessential "$src_dir/$lib"
   do_make_and_make_install
@@ -1601,6 +1663,7 @@ build_libaribcaption() {
 		local lib="libaribcaption"
     local repo_ver="v1.1.1"
     local repo="https://github.com/xqq/libaribcaption"
+    export LDFLAGS="$LDFLAGS -static -static-libgcc -static-libstdc++"
 	change_dir "$src_dir"
     do_git_checkout "$repo" "$src_dir/$lib" "$repo_ver"
     change_dir "$src_dir/$lib/build" 1
@@ -1613,6 +1676,7 @@ build_libaribcaption() {
 		disable_nonessential "$src_dir/$lib"
     do_make_and_make_install
 	change_dir "$src_dir"
+  reset_ldflags
 }
 # build_libaribb24        # config_options+= --enable-libaribb24          # enable ARIB text and caption decoding via libaribb24 [no]
 build_libaribb24() {
@@ -1640,7 +1704,7 @@ build_libtesseract() {
 	export CPPFLAGS="$CPPFLAGS -DJBG_STATIC "
   export CXXFLAGS="$CXXFLAGS -DJBG_STATIC "
   export LIBS="-lleptonica -lz -larchive -ltiff -lpng16 -ljpeg -lgif -lwebpmux -lwebp -lopenjp2 -ljbig -lLerc -lsharpyuv -llzma -lzstd -ldeflate -lwinmm -lcrypt32 -lws2_32" 
-  export LDFLAGS=" -static -Wl,--allow-multiple-definition $LDFLAGS -static-libgcc -static-libstdc++ "
+  export LDFLAGS=" -Wl,--allow-multiple-definition $LDFLAGS -static -static-libgcc -static-libstdc++ "
 	generic_configure "--disable-openmp \
 --with-archive \
 --disable-graphics \
@@ -1653,13 +1717,14 @@ build_libtesseract() {
 --with-extra-includes=\"$dependency_install_prefix/include\" \
 LIBLEPT_HEADERSDIR=$dependency_install_prefix/include \
 LDFLAGS=\"$LDFLAGS\" \
-CPPFLAGS=\"$CPPFLAGS\" \
-CXXFLAGS=\"$CXXFLAGS\" \
+CFLAGS=\"$CFLAGS -include $ffmpeg_kit_src_dir/src/pthread_compat.h\" \
+CPPFLAGS=\"$CPPFLAGS -static -static-libgcc -static-libstdc++ -include $ffmpeg_kit_src_dir/src/pthread_compat.h\" \
+CXXFLAGS=\"$CXXFLAGS -static -static-libgcc -static-libstdc++ -include $ffmpeg_kit_src_dir/src/pthread_compat.h\" \
 LIBS=\"$LIBS\" \
 --datadir=\"$dependency_install_prefix/bin\""
 	disable_nonessential "$src_dir/$lib"
   do_make_and_make_install
-  add_libs_to_pkg -t="$install_pkgconfig_dir/tesseract.pc" -l="-ltesseract $LIBS -lstdc++ -lws2_32 -lgdi32" -rp="lept libarchive liblzma libtiff-4"
+  add_libs_to_pkg -t="$install_pkgconfig_dir/tesseract.pc" -l="-ltesseract $LIBS  -lws2_32 -lgdi32" -rp="lept libarchive liblzma libtiff-4"
 	# TODO: add ability to download tessdata
   # https://github.com/tesseract-ocr/tessdata
   # https://github.com/tesseract-ocr/tessdata_best
@@ -1688,7 +1753,7 @@ build_liblensfun() {
 -DINSTALL_PYTHON_MODULE=OFF"
 	disable_nonessential "$src_dir/$lib"
   do_make_and_make_install
-  add_libs_to_pkg -t="$install_pkgconfig_dir/lensfun.pc" -l="-lstdc++"
+  add_libs_to_pkg -t="$install_pkgconfig_dir/lensfun.pc" -l="-lintl -liconv"
 	reset_cppflags
 	reset_cxxflags
 	change_dir "$src_dir"
@@ -1753,6 +1818,7 @@ build_libx265() {
   fi
   change_dir "$src_dir/$lib/12bit" 1
   do_cmake_from_build_dir "$src_dir/$lib/source" "-DHIGH_BIT_DEPTH=ON \
+-DSTATIC_LINK_CRT=OFF \
 -DEXPORT_C_API=OFF \
 -DENABLE_CLI=OFF \
 -DMAIN12=ON \
@@ -1768,6 +1834,7 @@ build_libx265() {
   do_make
   change_dir "$src_dir/$lib/10bit" 1
   do_cmake_from_build_dir "$src_dir/$lib/source" "-DHIGH_BIT_DEPTH=ON \
+-DSTATIC_LINK_CRT=OFF \
 -DEXPORT_C_API=OFF \
 -DENABLE_CLI=OFF \
 -DENABLE_CLI=OFF \
@@ -1785,7 +1852,7 @@ build_libx265() {
   ln -sf "$src_dir/$lib/10bit/libx265.a" libx265_main10.a
   ln -sf "$src_dir/$lib/12bit/libx265.a" libx265_main12.a
   do_cmake_from_build_dir "$src_dir/$lib/source" "-DEXTRA_LIB=\"x265_main10.a;x265_main12.a\" \
--DEXTRA_LINK_FLAGS=-L. \
+-DSTATIC_LINK_CRT=OFF \
 -DLINKED_10BIT=ON \
 -DLINKED_12BIT=ON \
 -DENABLE_CLI=OFF \
@@ -1810,6 +1877,7 @@ END
 EOF
   do_make_install
 	change_dir "$src_dir"
+  reset_allflags
 }
 # build_libopenh264       # config_options+= --enable-libopenh264         # enable H.264 encoding via OpenH264 [no]
 build_libopenh264() {
@@ -1918,6 +1986,7 @@ build_libplacebo() {
   do_git_checkout "$repo" "$src_dir/$lib" "$repo_ver"
   change_dir "$src_dir/$lib"
 	git submodule update --init --recursive --depth=1 --filter=blob:none
+  export LDFLAGS="$LDFLAGS -static -static-libgcc -static-libstdc++"
 	local config_options=""
 	local config_options+=" -Dvulkan-registry=$dependency_install_prefix/share/vulkan/registry/vk.xml"
 	local meson_options="-Ddemos=false \
@@ -1927,14 +1996,15 @@ build_libplacebo() {
 -Dvk-proc-addr=disabled \
 -Dglslang=disabled \
  -Dshaderc=disabled \
--Dc_link_args=\"-L$dependency_install_prefix/lib -lshaderc_combined -lspirv-cross-c -static\" \
--Dcpp_link_args=-static $config_options" # https://mesonbuild.com/Dependencies.html#shaderc trigger use of shaderc_combined
+-Dc_link_args=\"-L$dependency_install_prefix/lib -lshaderc_combined -lspirv-cross-c -static -static-libgcc -static-libstdc++\" \
+-Dcpp_link_args=\"-static -static-libgcc -static-libstdc++ $config_options\"" # https://mesonbuild.com/Dependencies.html#shaderc trigger use of shaderc_combined
   sed -i '/windows\.compile_resources(/,/)/ s/^/# /' "$src_dir/$lib/src/meson.build"
   sed -i '/windows\.compile_resources(/,/)/ s/^/# /' "$src_dir/$lib/demos/meson.build"
 	generic_meson "$meson_options"
 	do_ninja_and_ninja_install
-  add_libs_to_pkg -t="$install_pkgconfig_dir/libplacebo.pc" -l="-lspirv-cross-core -lspirv-cross-glsl -lspirv-cross-hlsl -lspirv-cross-msl -lshlwapi -lxxhash -lversion -lstdc++ -luserenv"
+  add_libs_to_pkg -t="$install_pkgconfig_dir/libplacebo.pc" -l="-lspirv-cross-core -lspirv-cross-glsl -lspirv-cross-hlsl -lspirv-cross-msl -lshlwapi -lxxhash -lversion  -luserenv"
 	change_dir "$src_dir"
+  reset_ldflags
 }
 # build_avisynth          # config_options+= --enable-avisynth            # enable reading of AviSynth script files [no]
 build_avisynth() {
@@ -2029,7 +2099,7 @@ build_libjxl() {
   add_libs_to_pkg -t="$install_pkgconfig_dir/libhwy-test.pc" -l="-lhwy"
   add_libs_to_pkg -t="$install_pkgconfig_dir/libhwy-contrib.pc" -l="-lhwy"
   change_dir "$src_dir/$lib/build" 1
-	export LDFLAGS="$LDFLAGS -lbrotlidec -lbrotlicommon"
+	export LDFLAGS="$LDFLAGS -lbrotlidec -lbrotlicommon -static -static-libgcc -static-libstdc++"
   local cmake_params="-DCMAKE_BUILD_TYPE=Release \
 -DCMAKE_POLICY_VERSION_MINIMUM=3.5 \
 -DJPEGXL_FORCE_SYSTEM_GTEST=ON \
@@ -2050,6 +2120,8 @@ build_libjxl() {
 -DJPEGXL_BUNDLE_LIBPNG=OFF \
 -DBUILD_TESTING=OFF \
 -DCMAKE_POSITION_INDEPENDENT_CODE=ON \
+-DCMAKE_C_FLAGS=\"$CFLAGS -include $ffmpeg_kit_src_dir/src/pthread_compat.h\" \
+-DCMAKE_CXX_FLAGS=\"$CXXFLAGS -include $ffmpeg_kit_src_dir/src/pthread_compat.h\" \
 -DJPEGXL_FORCE_SYSTEM_LCMS2=ON"
   sed -i '1s/^/set(CMAKE_POSITION_INDEPENDENT_CODE ON CACHE BOOL "Force PIC" FORCE)\n/' "$src_dir/$lib/third_party/CMakeLists.txt"
 	do_cmake_from_build_dir "$src_dir/$lib" "$cmake_params"
@@ -2104,22 +2176,10 @@ no-tests \
 no-docs \
 no-demos \
 no-legacy" || exit_message 1 "Failed to configure $lib"
-	# disable_nonessential "$src_dir/$lib"
-  # uses different build process and doesnt respect cross variables correctly
-  local touch_make=$(get_small_touchfile_name "${host_name}_already_make_make" "make")
-  local touch_install=$(get_small_touchfile_name "${host_name}_already_make_install" "make install")
-  if truthy "$build_force"; then
-    remove_path -f "$touch_make"
-    { nice make clean -j"$(get_concurrent_proc)" > >(redirect_output) 2>&1 || exit_message 1 "Failed to clean $lib"; }
-    remove_path -f "$touch_install"
-    { nice make uninstall > >(redirect_output) 2>&1 || exit_message 1 "Failed to uninstall $lib"; }
-  fi
-  [[ ! -f "$touch_make" ]] && make -j"$(get_concurrent_proc)" > >(redirect_output) 2>&1 || exit_message 1 "Failed to make $lib"
-  create_touch_file 0 "$touch_make"
-  [[ ! -f "$touch_install" ]] && make install > >(redirect_output) 2>&1 || exit_message 1 "Failed to install $lib"
-  create_touch_file 0 "$touch_install"
   reset_cross_vars
+  do_make_and_make_install
 	change_dir "$src_dir"
+  add_libs_to_pkg -t="$install_pkgconfig_dir/openssl.pc" -l="-lssl -lcrypt32"
 }
 
 # build_librav1e          # config_options+= --enable-librav1e            # enable AV1 encoding via rav1e [no]
@@ -2130,13 +2190,18 @@ build_librav1e() {
 	change_dir "$src_dir"
   do_git_checkout "$repo" "$src_dir/$lib" "$repo_ver" 
   change_dir "$src_dir/$lib"
+  mkdir -p .cargo
+cat <<EOF > .cargo/config.toml
+[target.x86_64-pc-windows-gnu]
+rustflags = ["-C", "llvm-args=-stackrealign", "-C", "llvm-args=--stackrealign=1"]
+EOF
   unset CC CXX AR STRIP PKG_CONFIG_ALLOW_CROSS
   export CROSS_ROOT=$toolchain_bin_path
   export PATH=$CROSS_ROOT:$PATH
   export PKG_CONFIG_ALLOW_CROSS=1
   export CFLAGS="-static -O3 -fPIC -I$dependency_install_prefix/include -L$dependency_install_prefix/lib"
   export CXXFLAGS="-static -O3 -fPIC -I$dependency_install_prefix/include -L$dependency_install_prefix/lib"
-  export RUSTFLAGS="-C target-feature=+crt-static -C target-cpu=x86-64"
+  export RUSTFLAGS="-C target-feature=+crt-static -C target-cpu=x86-64 -C link-arg=-mstackrealign -C llvm-args=-stackrealign -C llvm-args=--stackrealign=1"
   export CARGO_TARGET_X86_64_PC_WINDOWS_GNU_LINKER="${cross_prefix}gcc"
   export CARGO_TARGET_X86_64_PC_WINDOWS_GNU_AR="${cross_prefix}ar"
   export CC_x86_64_pc_windows_gnu="${cross_prefix}gcc"
@@ -2454,6 +2519,8 @@ build_openal() {
 -DALSOFT_BACKEND_DSOUND=ON \
 -DALSOFT_BACKEND_ALSA=OFF \
 -DALSOFT_BACKEND_PULSEAUDIO=OFF \
+-DCMAKE_C_FLAGS=\"$CFLAGS -include $ffmpeg_kit_src_dir/src/pthread_compat.h\" \
+-DCMAKE_CXX_FLAGS=\"$CXXFLAGS -include $ffmpeg_kit_src_dir/src/pthread_compat.h\" \
 -DALSOFT_BACKEND_PIPEWIRE=OFF"
 	do_cmake_from_build_dir "$src_dir/$lib" "$cmake_params"
 	disable_nonessential "$src_dir/$lib/build"
@@ -2611,6 +2678,7 @@ build_whisper() {
 	change_dir "$src_dir"
   do_git_checkout "$repo" "$src_dir/$lib" "$repo_ver"
   change_dir "$src_dir/$lib/build" 1
+  export LDFLAGS="$LDFLAGS -lgomp"
 	local cmake_params="-DCMAKE_BUILD_TYPE=Release \
 -DWHISPER_BUILD_EXAMPLES=OFF \
 -DWHISPER_BUILD_TESTS=OFF \
@@ -2621,7 +2689,8 @@ build_whisper() {
 -DGGML_AVX2=ON \
 -DGGML_FMA=ON \
 -DGGML_F16C=ON \
--DGGML_NATIVE=OFF"
+-DGGML_NATIVE=OFF \
+-DCMAKE_CXX_FLAGS=\"$CXXFLAGS -include $ffmpeg_kit_src_dir/src/pthread_compat.h\""
 	do_cmake_from_build_dir "$src_dir/$lib" "$cmake_params"
 	disable_nonessential "$src_dir/$lib/build"
   do_make_and_make_install
@@ -2632,7 +2701,7 @@ build_whisper() {
       fi
   done
   while IFS= read -r -d '' file; do
-    add_libs_to_pkg -t="$file" -l="-lwhisper -lggml -lggml-base -lggml-cpu -lgomp -lstdc++ -lpthread -lws2_32 -lwinmm"
+    add_libs_to_pkg -t="$file" -l="-lwhisper -lggml -lggml-base -lggml-cpu -lgomp -lws2_32 -lwinmm"
   done < <(find "$install_pkgconfig_dir" -name "whisper*.pc" -print0)
 	change_dir "$src_dir"
 }
@@ -2658,6 +2727,9 @@ build_librist() {
 	local lib="librist"
   local repo="https://code.videolan.org/rist/librist"
   local repo_ver="v0.2.11"
+  export LDFLAGS="$LDFLAGS -static -static-libgcc -static-libgcc -static-libstdc++"
+  export CFLAGS="$CFLAGS -static -static-libgcc -static-libstdc++"
+  export CXXFLAGS="$CXXFLAGS -static -static-libgcc -static-libstdc++"
   activate_meson
 	change_dir "$src_dir"
   do_git_checkout "$repo" "$src_dir/$lib" "$repo_ver" 
@@ -2665,12 +2737,19 @@ build_librist() {
   [[ ! -f "contrib/time-shim.c.bak" ]] && copy_path "contrib/time-shim.c" "contrib/time-shim.c.bak" "-fv" >>"$LOG_FILE" 2>&1
   apply_patch "$PATCHDIR/librist_time-shim.diff"
   local cross_file=$(get_generic_meson_cross_file)
-  local meson_options="-Ddefault_library=static -Duse_mbedtls=true -Dbuilt_tools=false -Dtest=false"
+  local meson_options="-Ddefault_library=static \
+-Duse_mbedtls=false \
+-Dbuilt_tools=false \
+-Dtest=false \
+-Dc_args=\"-static -static-libgcc -static-libstdc++\" \
+-Dc_link_args=\"-static -static-libgcc -static-libstdc++\" \
+-Dcpp_link_args=\"-static -static-libgcc -static-libstdc++\""
 	meson_options+=" --cross-file=$cross_file"
   do_meson "$meson_options"
 	do_ninja_and_ninja_install
   sed -i 's|^Libs:.*|Libs: -lrist -lws2_32 -liphlpapi|g' "$install_pkgconfig_dir/librist.pc"
 	change_dir "$src_dir"
+  reset_allflags
 }
 # build_librtmp           # config_options+= --enable-librtmp             # enable RTMP[E] support via librtmp [no]
 # shellcheck disable=2086
@@ -2817,8 +2896,8 @@ build_libzmq() {
 	change_dir "$src_dir"
   do_git_checkout "$repo" "$src_dir/$lib" "$repo_ver"
   change_dir "$src_dir/$lib"
-  export CFLAGS="-static -O3 -I$dependency_install_prefix/include -L$dependency_install_prefix/lib -Wno-incompatible-pointer-types"
-  export CXXFLAGS="-DZE_MQ_STATIC -O2 -Wno-error -Wno-unknown-pragmas -I$dependency_install_prefix/include -L$dependency_install_prefix/lib"
+  export CFLAGS="-static -static-libgcc -static-libstdc++ -O3 -I$dependency_install_prefix/include -L$dependency_install_prefix/lib -Wno-incompatible-pointer-types"
+  export CXXFLAGS="-static -static-libgcc -static-libstdc++ -DZE_MQ_STATIC -O2 -Wno-error -Wno-unknown-pragmas -I$dependency_install_prefix/include -L$dependency_install_prefix/lib"
   export LDFLAGS="-static -static-libgcc -static-libstdc++ -I$dependency_install_prefix/include -L$dependency_install_prefix/lib"
   generic_configure "--enable-static \
 --disable-shared \
@@ -2828,7 +2907,7 @@ build_libzmq() {
 --disable-perf \
 --disable-werror \
 --disable-curve-keygen \
---disable-curve"' LIBS="-lpthread -lws2_32"'
+--disable-curve"' LIBS="-lws2_32"'
   disable_nonessential "$src_dir/$lib"
   do_make_and_make_install
 	change_dir "$src_dir"
@@ -2952,6 +3031,7 @@ build_opencl() {
 -DCMAKE_BUILD_TYPE=Release \
 -DBUILD_SHARED_LIBS=OFF \
 -DBUILD_TESTING=OFF \
+-DENABLE_OPENCL_LAYERINFO=OFF \
 -DOPENCL_ICD_LOADER_BUILD_SHARED_LIBS=OFF \
 -DOPENCL_ICD_LOADER_BUILD_TESTING=OFF"
   do_cmake_from_build_dir "$src_dir/$parentlib/$lib" "$cmake_params"
@@ -3221,7 +3301,7 @@ Name: glslang
 Description: Khronos glslang validator and generator
 Version: 16.1.0
 Requires:
-Libs: -L\${libdir} -lglslang -lMachineIndependent -lGenericCodeGen -lOSDependent -lSPIRV -lSPVRemapper -lSPIRV-Tools-opt -lSPIRV-Tools -lstdc++
+Libs: -L\${libdir} -lglslang -lMachineIndependent -lGenericCodeGen -lOSDependent -lSPIRV -lSPVRemapper -lSPIRV-Tools-opt -lSPIRV-Tools 
 Cflags: -I\${includedir}
 EOF
 	change_dir "$src_dir"
@@ -3267,7 +3347,7 @@ build_liblc3() {
 	change_dir "$src_dir"
   do_git_checkout "$repo" "$src_dir/$lib" "$repo_ver"
   change_dir "$src_dir/$lib"
-	local meson_options="-Dtools=false -Dpython=false"
+	local meson_options="-Dtools=false -Dpython=false -Db_lto=false"
 	generic_meson "$meson_options"
 	do_ninja_and_ninja_install
   if [[ -f "$install_pkgconfig_dir/lc3.pc" ]]; then
@@ -3291,6 +3371,8 @@ build_liblcevc_dec() {
 -DVN_SDK_DOCS=OFF \
 -DVN_SDK_SAMPLE_SOURCE=OFF \
 -DVN_SDK_PIPELINE_VULKAN=OFF \
+-DCMAKE_C_FLAGS=\"$CFLAGS -include $ffmpeg_kit_src_dir/src/pthread_compat.h\" \
+-DCMAKE_CXX_FLAGS=\"$CXXFLAGS -include $ffmpeg_kit_src_dir/src/pthread_compat.h\" \
 -DVN_SDK_PIPELINE_LEGACY=OFF"
 	do_cmake_from_build_dir "$src_dir/$lib" "$cmake_params"
   # disable_nonessential "$src_dir/$lib"
@@ -3372,35 +3454,38 @@ build_libquirc() {
 
 # build_librsvg           # config_options+= --enable-librsvg             # enable SVG rasterization via librsvg [no]
 build_librsvg() {
-  # run_valid_function "build_pango"
   activate_meson
-# 	# https://github.com/GNOME/librsvg
-	local lib="librsvg"
+  local lib="librsvg"
   local repo="https://gitlab.gnome.org/GNOME/librsvg"
   local repo_ver="2.61.3"
-	change_dir "$src_dir"
-	do_git_checkout "$repo" "$src_dir/$lib" "$repo_ver"
-	change_dir "$src_dir/$lib"
-	local meson_options="-Ddocs=disabled \
+  change_dir "$src_dir"
+  do_git_checkout "$repo" "$src_dir/$lib" "$repo_ver"
+  change_dir "$src_dir/$lib"
+  local static_defs="-DGRAPHITE2_STATIC -DGLIB_2.0_STATIC -DCAIRO_WIN32_STATIC_BUILD -DGLIB_STATIC_COMPILATION"
+  local common_args="-mstackrealign $static_defs"
+  local meson_options="-Ddocs=disabled \
 -Dintrospection=disabled \
 -Dvala=disabled \
 -Davif=disabled \
 -Dpixbuf-loader=disabled \
 -Dtests=false \
 -Drsvg-convert=disabled \
--Dc_args=\"-DCAIRO_WIN32_STATIC_BUILD -DGLIB_STATIC_COMPILATION\" \
--Dcpp_args=\"-DCAIRO_WIN32_STATIC_BUILD -DGLIB_STATIC_COMPILATION\" \
--Dc_link_args=\"-L$dependency_install_prefix/lib -lssp -lmsvcrt -lstdc++\" \
--Dcpp_link_args=\"-L$dependency_install_prefix/lib -lssp -lmsvcrt -lstdc++\""
+-Dc_args=\"$common_args\" \
+-Dcpp_args=\"$common_args\" \
+-Dc_link_args=\"-L$dependency_install_prefix/lib -lssp -lmsvcrt\" \
+-Dcpp_link_args=\"-L$dependency_install_prefix/lib -lssp -lmsvcrt\""
   if [[ $bits_target == 64 ]]; then
     meson_options+=" -Dtriplet=x86_64-pc-windows-gnu"
+    export RUSTFLAGS="-C target-feature=-avx -C codegen-units=1 -C panic=abort"
   else
     meson_options+=" -Dtriplet=i386-pc-windows-gnu"
+    export RUSTFLAGS="-C target-feature=-sse2" # Safety for 32-bit if needed
   fi
-	generic_meson "$meson_options"
+  generic_meson "$meson_options"
   disable_nonessential "$src_dir/$lib/build"
-	do_ninja_and_ninja_install
-	change_dir "$src_dir"
+  do_ninja_and_ninja_install
+  change_dir "$src_dir"
+  unset RUSTFLAGS
 }
 
 # build_libuavs3d         # config_options+= --enable-libuavs3d           # enable AVS3 decoding via libuavs3d [no]
@@ -3445,12 +3530,13 @@ build_vapoursynth() {
 	[[ ! -f "meson.build.bak" ]] && copy_path "meson.build" "meson.build.bak" "-fv" >>"$LOG_FILE" 2>&1
   apply_patch "$PATCHDIR/vapoursynth_meson_build.patch"
 	change_dir "$src_dir/$lib"
+  export LDFLAGS="$LDFLAGS -static-libgcc -static-libstdc++"
 	local meson_options="-Db_lto=false \
 -Denable_vspipe=false \
 -Denable_python_module=false \
--Dc_args=\"$CFLAGS -I$py_inc\" \
--Dcpp_args=\"$CXXFLAGS -I$py_inc\" \
--Dcpp_link_args=\"$LDFLAGS -L$py_lib_dir -lpython312 -lpython3\""
+-Dc_args=\"$CFLAGS -I$py_inc -static-libgcc -static-libstdc++\" \
+-Dcpp_args=\"$CXXFLAGS -I$py_inc -static-libgcc -static-libstdc++\" \
+-Dcpp_link_args=\"$LDFLAGS -L$py_lib_dir -lpython312 -lpython3 -static-libgcc -static-libstdc++\""
 	generic_meson "$meson_options"
 	disable_nonessential "$src_dir/$lib"
   do_ninja_and_ninja_install
@@ -3768,7 +3854,7 @@ build_libopencv() {
     export PKG_CONFIG_PATH="$install_pkgconfig_dir"
     export LIBS="-ltiff -lwebp -lwebpmux -lsharpyuv -lzstd \
 -lLerc -ldeflate -ljpeg -lz -llzma -ljbig \
--lstdc++ -lwinmm -lversion -lbcrypt -lws2_32 \
+ -lwinmm -lversion -lbcrypt -lws2_32 \
 -ladvapi32 -luser32 -lgdi32 -lole32 -lcomdlg32 -luuid"
     export LDFLAGS="-static $LDFLAGS -Wl,--start-group $LIBS -Wl,--end-group"
     local cmake_params="-DCMAKE_BUILD_TYPE=Release \
@@ -3796,7 +3882,9 @@ build_libopencv() {
 -DOPENCV_EXTRA_EXE_LINKER_FLAGS=\"-L${dependency_install_prefix}/lib -Wl,--start-group $LIBS -Wl,--end-group\" \
 -DCMAKE_SHARED_LINKER_FLAGS=\"-L${dependency_install_prefix}/lib -Wl,--start-group $LIBS -Wl,--end-group\" \
 -DOPENCV_LINKER_LIBS=\"$LIBS\" \
--DCMAKE_CXX_STANDARD_LIBRARIES=\"-lstdc++ -lwinmm -luser32 -lgdi32\" \
+-DCMAKE_C_FLAGS=\"$CFLAGS -include $ffmpeg_kit_src_dir/src/pthread_compat.h\" \
+-DCMAKE_CXX_FLAGS=\"$CXXFLAGS -include $ffmpeg_kit_src_dir/src/pthread_compat.h\" \
+-DCMAKE_CXX_STANDARD_LIBRARIES=\" -lwinmm -luser32 -lgdi32\" \
 -DOPENCV_INCLUDE_INSTALL_PATH=${dependency_install_prefix}/include \
 -DHAVE_DSHOW=1"
     do_cmake_from_build_dir "$src_dir/$lib" "$cmake_params"
@@ -3845,12 +3933,12 @@ build_libshaderc() {
 -DENABLE_GLSLANG_BINARIES=OFF \
 -DSPIRV_SKIP_EXECUTABLES=ON \
 -DSPIRV_TOOLS_BUILD_STATIC=ON \
--DCMAKE_EXE_LINKER_FLAGS=\"-lstdc++fs\" \
--DCMAKE_CXX_STANDARD_LIBRARIES=\"-lstdc++fs\" \
 -DCMAKE_FIND_ROOT_PATH_MODE_PROGRAM=NEVER \
 -DCMAKE_FIND_ROOT_PATH_MODE_LIBRARY=ONLY \
 -DCMAKE_FIND_ROOT_PATH_MODE_INCLUDE=ONLY \
 -DCMAKE_FIND_ROOT_PATH_MODE_PACKAGE=ONLY \
+-DCMAKE_C_FLAGS=\"$CFLAGS -include $ffmpeg_kit_src_dir/src/pthread_compat.h\" \
+-DCMAKE_CXX_FLAGS=\"$CXXFLAGS -include $ffmpeg_kit_src_dir/src/pthread_compat.h\" \
 -DBUILD_SHARED_LIBS=OFF"
   do_cmake_from_build_dir "$src_dir/$lib" "$cmake_params"
   disable_nonessential "$src_dir/$lib/build"
@@ -3859,7 +3947,7 @@ build_libshaderc() {
     copy_path "$src_dir/$lib/build/libshaderc_util/libshaderc_util.a" "$dependency_install_prefix/lib/libshaderc_util.a" "-fv" >>"$LOG_FILE" 2>&1
   fi
   while IFS= read -r -d '' file; do
-    add_libs_to_pkg -t="$file" -l="-lshaderc_util -lglslang -lMachineIndependent -lGenericCodeGen -lOSDependent -lSPIRV -lSPIRV-Tools-opt -lSPIRV-Tools -lstdc++" || true;
+    add_libs_to_pkg -t="$file" -l="-lshaderc_util -lglslang -lMachineIndependent -lGenericCodeGen -lOSDependent -lSPIRV -lSPIRV-Tools-opt -lSPIRV-Tools " || true;
   done < <(find "$install_pkgconfig_dir" -name "shaderc*.pc" -print0)
   if [[ -f "$install_pkgconfig_dir/SPIRV-Tools-shared.pc" ]]; then
     remove_path -f "$install_pkgconfig_dir/SPIRV-Tools-shared.pc"
@@ -3973,8 +4061,9 @@ build_pango() {
 	change_dir "$src_dir"
 	do_git_checkout "$repo" "$src_dir/$lib" "$repo_ver"
 	change_dir "$src_dir/$lib"
-  export LIBS="-lfontconfig -lexpat -lfreetype -lbrotlidec -lbrotlicommon -lpng -lz -lbz2 -lintl -liconv -ldl -lpsapi -lstdc++"
+  export LIBS="-lfontconfig -lexpat -lfreetype -lbrotlidec -lbrotlicommon -lpng -lz -lbz2 -lintl -liconv -ldl -lpsapi $stdcpp_path"
   export LDFLAGS="$LDFLAGS $LIBS"
+  export LDFLAGS="$LDFLAGS -static -static-libgcc -static-libstdc++"
 	local meson_options="-Ddocumentation=false \
 -Dgtk_doc=false \
 -Dman-pages=false \
@@ -3985,8 +4074,8 @@ build_pango() {
 -Dbuild-examples=false \
 -Dintrospection=disabled \
 -Dxft=disabled \
--Dc_args=\"-DCAIRO_WIN32_STATIC_BUILD -DGLIB_STATIC_COMPILATION\" \
--Dcpp_args=\"-DCAIRO_WIN32_STATIC_BUILD -DGLIB_STATIC_COMPILATION\" \
+-Dc_args=\" -DCAIRO_WIN32_STATIC_BUILD -DGLIB_STATIC_COMPILATION \" \
+-Dcpp_args=\" -DCAIRO_WIN32_STATIC_BUILD -DGLIB_STATIC_COMPILATION \" \
 -Dc_link_args=\"-L${dependency_install_prefix}/lib $LIBS\" \
 -Dcpp_link_args=\"-L${dependency_install_prefix}/lib $LIBS\""
   # disable tools - not needed for ffmpeg
@@ -3999,6 +4088,9 @@ build_pango() {
         {} +
 	generic_meson "$meson_options"
 	do_ninja_and_ninja_install
+  while IFS= read -r -d '' file; do
+    add_libs_to_pkg -t="$file" -l="" -p="-lwindowscodecs -ldwrite -ld2d1"
+  done < <(find "$install_pkgconfig_dir" -type f -name "pango*.pc" -print0)
 	change_dir "$src_dir"
   reset_ldflags
   unset LIBS
@@ -4033,10 +4125,8 @@ build_cairo() {
 	change_dir "$src_dir"
 	do_git_checkout "$repo" "$src_dir/$lib" "$repo_ver"
 	change_dir "$src_dir/$lib"
-  export CFLAGS="$CFLAGS -lpthread"
-  export CXXFLAGS="$CXXFLAGS -lpthread"
-  export LDFLAGS="$LDFLAGS -lpthread"
-  export LIBS="-lpng -lpthread -lbrotlidec -lbrotlicommon -ldl -lpsapi -lstdc++"
+  export LIBS="-lpng -lbrotlidec -lbrotlicommon -ldl -lpsapi "
+  export LDFLAGS="$LDFLAGS -static -static-libgcc -static-libstdc++"
 	local meson_options="-Dtests=disabled \
 -Dgtk_doc=false \
 -Dglib=enabled \
@@ -4056,7 +4146,7 @@ build_cairo() {
 	do_ninja_and_ninja_install
 	change_dir "$src_dir"
   while IFS= read -r -d '' file; do
-    add_libs_to_pkg -t="$file" -l="-lstdc++" -p="-lole32 -lwindowscodecs -luuid"
+    add_libs_to_pkg -t="$file" -l="" -p="-lmsvcrt -ladvapi32 -lshell32 -luser32 -lkernel32 -lwindowscodecs -lole32 -luuid"
   done < <(find "$install_pkgconfig_dir" -type f -name "cairo*.pc" -print0)
   unset LIBS
   reset_allflags
@@ -4228,7 +4318,7 @@ build_libtiff() {
   change_dir "$src_dir/$lib"
   export CFLAGS="$CFLAGS -D_LIB "
   export CPPFLAGS="$CPPFLAGS -D_LIB "
-  export LIBS="-ljbig -ljpeg -llzma -lwebp -lsharpyuv -lwebp -lwebpmux -lwebpdemux -lLerc -lzstd -ldeflate -lz -lstdc++"
+  export LIBS="-ljbig -ljpeg -llzma -lwebp -lsharpyuv -lwebp -lwebpmux -lwebpdemux -lLerc -lzstd -ldeflate -lz "
   generic_configure "--enable-static \
 --disable-shared \
 --disable-docs \
@@ -4277,12 +4367,15 @@ build_glib() {
 -Dglib_debug=disabled \
 -Dtests=false \
 --includedir=\"${dependency_install_prefix}/include\" \
+-Dc_args=\"-I${dependency_install_prefix}/include\" \
+-Dcpp_args=\"-I${dependency_install_prefix}/include\" \
 -Dc_link_args=\"-L${dependency_install_prefix}/lib -lintl -liconv\" \
 -Dcpp_link_args=\"-L${dependency_install_prefix}/lib -lintl -liconv\" \
 --wrap-mode=nofallback"
 	generic_meson "$meson_options"
 	do_ninja_and_ninja_install
-  add_libs_to_pkg -t="$install_pkgconfig_dir/glib-2.0.pc" -l="-lintl -lws2_32 -lwinmm -liconv -lole32"
+  add_libs_to_pkg -t="$install_pkgconfig_dir/glib-2.0.pc" -l="-lintl -liconv -lmsvcrt -ladvapi32 -lshell32 -luser32 -lkernel32 -lole32 -luuid -lshlwapi -lwindowscodecs"
+  add_libs_to_pkg -t="$install_pkgconfig_dir/gio-2.0.pc" -l="-lintl -liconv -lmsvcrt -ladvapi32 -lshell32 -luser32 -lkernel32 -lole32 -luuid -lshlwapi -lwindowscodecs"
 	change_dir "$src_dir"
 }
 
@@ -4348,6 +4441,8 @@ build_flac() {
 -DBUILD_STATIC_LIBS=ON \
 -DBUILD_SHARED_LIBS=OFF \
 -DCMAKE_BUILD_TYPE=Release \
+-DCMAKE_C_FLAGS=\"$CFLAGS -include $ffmpeg_kit_src_dir/src/pthread_compat.h\" \
+-DCMAKE_CXX_FLAGS=\"$CXXFLAGS -include $ffmpeg_kit_src_dir/src/pthread_compat.h\" \
 -DINSTALL_MANPAGES=OFF"
   disable_nonessential "$src_dir/$lib"
 	do_make_and_make_install
@@ -4409,6 +4504,7 @@ build_libssh2() {
 build_cpuinfo() {
   local lib="cpuinfo"
   local repo="https://github.com/pytorch/cpuinfo"
+  export LDFLAGS="$LDFLAGS -static -static-libgcc -static-libstdc++ -lpthread"
   change_dir "$src_dir"
   do_git_checkout "$repo" "$src_dir/$lib" "main"
   change_dir "$src_dir/$lib/build" 1
@@ -4426,6 +4522,11 @@ build_cpuinfo() {
   do_cmake_from_build_dir "$src_dir/$lib/deps/googlebenchmark" "-DCMAKE_BUILD_TYPE=Release \
 -DCMAKE_POSITION_INDEPENDENT_CODE=ON \
 -DCMAKE_POLICY_VERSION_MINIMUM=3.5 \
+-DBENCHMARK_ENABLE_TESTING=OFF \
+-DBENCHMARK_ENABLE_GTEST_TESTS=OFF \
+-DBENCHMARK_ENABLE_ASSEMBLY_TESTS=OFF \
+-DCMAKE_CXX_FLAGS=\"${CXXFLAGS} -D_WIN32_WINNT=0x0601 -D_GNU_SOURCE -include $ffmpeg_kit_src_dir/src/pthread_compat.h\" \
+-DCMAKE_C_FLAGS=\"${CFLAGS} -D_WIN32_WINNT=0x0601 -include $ffmpeg_kit_src_dir/src/pthread_compat.h\" \
 -DGOOGLETEST_PATH=\"$src_dir/$lib/deps/googletest\" \
 -DBENCHMARK_ENABLE_WERROR=OFF \
 -DBUILD_SHARED_LIBS=OFF"
@@ -4455,6 +4556,7 @@ build_cpuinfo() {
   while IFS= read -r -d '' file; do
     add_libs_to_pkg -t="$file" -l="-lshlwapi"
   done < <(find "$install_pkgconfig_dir" -name "benchmark*.pc" -print0)
+  reset_ldflags
 }
 
 build_vulkan_loader() {
@@ -4519,7 +4621,7 @@ build_spirv_cross() {
   disable_nonessential "$src_dir/$lib"
 	do_make_and_make_install
 	[[ -f "$install_pkgconfig_dir/spirv-cross-c.pc" ]] && mv "$install_pkgconfig_dir/spirv-cross-c.pc" "$install_pkgconfig_dir/spirv-cross-c-shared.pc"
-  add_libs_to_pkg -t="$install_pkgconfig_dir/spirv-cross-c-shared.pc" -l="-lspirv-cross-c -lspirv-cross-glsl -lspirv-cross-hlsl -lspirv-cross-msl -lspirv-cross-reflect -lspirv-cross-core -lstdc++"
+  add_libs_to_pkg -t="$install_pkgconfig_dir/spirv-cross-c-shared.pc" -l="-lspirv-cross-c -lspirv-cross-glsl -lspirv-cross-hlsl -lspirv-cross-msl -lspirv-cross-reflect -lspirv-cross-core "
 	change_dir "$src_dir"
 }
 
@@ -4530,24 +4632,17 @@ build_libdovi() {
 	change_dir "$src_dir"
 	do_git_checkout "$repo" "$src_dir/$lib" "$repo_ver"
 	change_dir "$src_dir/$lib/dolby_vision"
+  mkdir -p .cargo
+cat <<EOF > .cargo/config.toml
+[target.x86_64-pc-windows-gnu]
+rustflags = ["-C", "llvm-args=-stackrealign", "-C", "llvm-args=-mstack-alignment=8"]
+EOF
+  export RUSTFLAGS="-C target-feature=+crt-static -C target-cpu=x86-64 -C link-arg=-mstackrealign -C llvm-args=-stackrealign --stackrealign"
 	cargo_build_and_install "--release" "--package dolby_vision \
 --release \
 --library-type=staticlib"
 	change_dir "$src_dir"
-	# if [[ ! -e $dependency_install_prefix/lib/libdovi.a ]]; then
-	# 	curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y && . "$HOME/.cargo/env" && rustup update && rustup target add x86_64-pc-windows-gnu # rustup self uninstall
-	# 	wget https://github.com/quietvoid/dovi_tool/releases/download/2.3.1/dovi_tool-2.3.1-x86_64-pc-windows-msvc.zip > >(redirect_output) 2>&1
-	# 	unzip -o dovi_tool-2.3.1-x86_64-pc-windows-msvc.zip -d "$dependency_install_prefix/bin"
-	# 	remove_path -f dovi_tool-2.3.1-x86_64-pc-windows-msvc.zip
-	# 	unset install_pkgconfig_dir
-	# 	change_dir "$src_dir/$lib/dolby_vision"
-	# 	cargo install cargo-c --features=vendored-openssl
-	# 	export install_pkgconfig_dir="$install_pkgconfig_dir"
-	# 	cargo cinstall --release --prefix="$dependency_install_prefix" --libdir="$dependency_install_prefix/lib" --library-type=staticlib --target x86_64-pc-windows-gnu
-	#	change_dir "$src_dir"
-	# else
-	# 	echo -e "libdovi already installed" >>"$LOG_FILE"
-	# fi
+  unset RUSTFLAGS
 }
 
 build_libjpeg_turbo() {

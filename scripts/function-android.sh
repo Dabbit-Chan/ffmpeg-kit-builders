@@ -95,33 +95,6 @@ configure_ffmpeg_kit() {
 	echo -e "INFO: Done configuring ffmpeg kit" | tee -a "$LOG_FILE"
 }
 
-create_ffmpegkit_package_config() {
-	local kit_version="$1"
-	local location_prefix="$2"
-	create_dir "${location_prefix}/lib/pkgconfig"
-	cat >"${location_prefix}/lib/pkgconfig/ffmpeg-kit.pc" <<EOF
-prefix=${ffmpeg_kit_install}
-libdir=\${exec_prefix}/lib
-includedir=\${prefix}/include
-
-Name: ffmpeg-kit
-Description: FFmpeg for applications on Android
-Version: ${kit_version}
-
-# Public dependencies that have their own .pc files
-Requires: libavfilter, libswscale, libavformat, libavcodec, libswresample, libavutil
-
-# Linker flags for the ffmpeg-kit library itself (includes jsoncpp if static)
-Libs: -L\${libdir} -lffmpegkit
-
-# Private dependencies needed for linking on Android
-Libs.private: -lstdc++ -lws2_32 -lpsapi -lole32 -lshlwapi -lgdi32 -lbcrypt -luser32 -luuid -ljsoncpp
-
-# Compiler flags for the ffmpeg-kit headers (includes jsoncpp headers if bundled)
-Cflags: -I\${includedir}
-EOF
-}
-
 # 1. variant
 # @. custom values
 # Usage: get_generic_cmake_toolchain [variant_suffix] [VAR="VALUE" ...]
