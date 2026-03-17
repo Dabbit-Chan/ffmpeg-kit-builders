@@ -82,27 +82,27 @@ ffmpegkit::AbstractSession::getCreateTime() const {
 
 std::chrono::time_point<std::chrono::system_clock>
 ffmpegkit::AbstractSession::getStartTime() const {
-  return _startTime;
+    std::lock_guard<std::mutex> lock(_stateMutex);
+    return _startTime;
 }
 
 std::chrono::time_point<std::chrono::system_clock>
 ffmpegkit::AbstractSession::getEndTime() const {
-  return _endTime;
+    std::lock_guard<std::mutex> lock(_stateMutex);
+    return _endTime;
 }
 
 long ffmpegkit::AbstractSession::getDuration() const {
-  const std::chrono::time_point<std::chrono::system_clock> startTime =
-      _startTime;
-  const std::chrono::time_point<std::chrono::system_clock> endTime = _endTime;
-
-  if (startTime.time_since_epoch() != std::chrono::microseconds(0) &&
-      endTime.time_since_epoch() != std::chrono::microseconds(0)) {
-    return std::chrono::duration_cast<std::chrono::milliseconds>(endTime -
-                                                                 startTime)
-        .count();
-  }
-
-  return 0;
+    std::lock_guard<std::mutex> lock(_stateMutex);
+    const auto startTime = _startTime;
+    const auto endTime = _endTime;
+    // now compute outside lock if you prefer, but snapshot under it
+    if (startTime.time_since_epoch() != std::chrono::microseconds(0) &&
+        endTime.time_since_epoch() != std::chrono::microseconds(0)) {
+        return std::chrono::duration_cast<std::chrono::milliseconds>(
+                   endTime - startTime).count();
+    }
+    return 0;
 }
 
 std::shared_ptr<std::list<std::string>>
@@ -197,15 +197,18 @@ ffmpegkit::SessionState ffmpegkit::AbstractSession::getState() const {
 
 std::shared_ptr<ffmpegkit::ReturnCode>
 ffmpegkit::AbstractSession::getReturnCode() const {
-  return _returnCode;
+    std::lock_guard<std::mutex> lock(_stateMutex);
+    return _returnCode;
 }
 
 std::string ffmpegkit::AbstractSession::getFailStackTrace() const {
+  std::lock_guard<std::mutex> lock(_stateMutex);
   return _failStackTrace;
 }
 
 ffmpegkit::LogRedirectionStrategy
 ffmpegkit::AbstractSession::getLogRedirectionStrategy() const {
+  std::lock_guard<std::mutex> lock(_stateMutex);
   return _logRedirectionStrategy;
 }
 
@@ -264,9 +267,14 @@ bool ffmpegkit::AbstractSession::isFFplay() const {
 }
 
 void ffmpegkit::AbstractSession::cancel() {
-  if (_state == SessionStateRunning) {
-    FFmpegKit::cancel(_sessionId);
-  }
+    SessionState currentState;
+    {
+        std::lock_guard<std::mutex> lock(_stateMutex);
+        currentState = _state;
+    }
+    if (currentState == SessionStateRunning) {
+        FFmpegKit::cancel(_sessionId);
+    }
 }
 
 void ffmpegkit::AbstractSession::wait() {
@@ -292,7 +300,7 @@ static std::string getCurrentTimeStamp() {
 }
 
 void ffmpegkit::AbstractSession::debugLog(const char *fmt, ...) {
-    if (!_debuggingEnabled) return;
+    if (!_debuggingEnabled.load(std::memory_order_relaxed)) return;
 
     // 1. Properly format the variadic arguments (evaluate %ld, %s, etc.)
     va_list args1;
@@ -336,15 +344,15 @@ std::string ffmpegkit::AbstractSession::getDebugLog() const {
 }
 
 void ffmpegkit::AbstractSession::enableDebugLog() {
-    _debuggingEnabled = true;
+    _debuggingEnabled.store(true, std::memory_order_relaxed);
 }
 
 void ffmpegkit::AbstractSession::disableDebugLog() {
-    _debuggingEnabled = false;
+    _debuggingEnabled.store(false, std::memory_order_relaxed);
 }
 
 bool ffmpegkit::AbstractSession::isDebugLogEnabled() const {
-    return _debuggingEnabled;
+    return _debuggingEnabled.load(std::memory_order_relaxed);
 }
 
 void ffmpegkit::AbstractSession::setLogCallback(const LogCallback logCallback) {

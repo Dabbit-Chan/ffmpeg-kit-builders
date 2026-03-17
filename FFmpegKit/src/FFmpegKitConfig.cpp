@@ -163,7 +163,7 @@ static std::atomic<long> globalSessionId(0);
 static thread_local std::shared_ptr<ffmpegkit::Session> tlsSession = nullptr;
 
 static std::once_flag ffmpegKitInitializerFlag;
-static pthread_t callbackThread;
+static pthread_t callbackThread = 0;
 
 void *ffmpegKitInitialize();
 
@@ -1085,7 +1085,7 @@ void ffmpegkit::FFmpegKitConfig::disableRedirection() {
 
   lock.lock();
 
-  if (redirectionEnabled.load(std::memory_order_acquire) == 0) {
+  if (redirectionEnabled.load(std::memory_order_relaxed) == 0) {
     lock.unlock();
     return;
   }
@@ -1095,8 +1095,7 @@ void ffmpegkit::FFmpegKitConfig::disableRedirection() {
 
   callbackNotify();
 
-  static pthread_t callbackThread = 0;
-
+  // BEFORE: static pthread_t callbackThread = 0;  <-- BUG: shadows the file-scope variable
   if (callbackThread != 0) {
     pthread_join(callbackThread, NULL);
     callbackThread = 0;

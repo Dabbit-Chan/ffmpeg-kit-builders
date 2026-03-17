@@ -23,6 +23,7 @@
 #include <mutex>
 #include <condition_variable>
 #include "Session.hpp"
+#include <atomic>
 
 namespace ffmpegkit {
 
@@ -373,7 +374,7 @@ private:
   const long _sessionId;
   ffmpegkit::LogCallback _logCallback;
   mutable std::mutex _debugLogMutex;
-  bool _debuggingEnabled;
+  std::atomic<bool> _debuggingEnabled{false};
   std::string _debugLog;
 
 protected:
