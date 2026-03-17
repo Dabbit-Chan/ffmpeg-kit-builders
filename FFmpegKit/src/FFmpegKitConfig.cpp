@@ -109,7 +109,7 @@ static ffmpegkit::MediaInformationSessionCompleteCallback
 static ffmpegkit::LogRedirectionStrategy globalLogRedirectionStrategy;
 
 /** Redirection control variables */
-static int redirectionEnabled;
+static std::atomic<int> redirectionEnabled{0};
 static KitMutex &getCallbackDataMutex() {
   static KitMutex *m = new KitMutex();
   return *m;
@@ -751,7 +751,7 @@ void *callbackThreadFunction(void *pointer) {
     std::cout << "Async callback block started." << std::endl;
   }
 
-  while (redirectionEnabled) {
+  while (redirectionEnabled.load(std::memory_order_acquire)) {
     try {
       CallbackData *callbackData = callbackDataRemove();
 
@@ -1043,8 +1043,6 @@ void *ffmpegKitInitialize() {
     globalLogRedirectionStrategy =
         ffmpegkit::LogRedirectionStrategyPrintLogsWhenNoCallbacksDefined;
 
-    redirectionEnabled = 0;
-
     ffmpegkit::FFmpegKitConfig::enableRedirection();
 
     std::cout << "Loaded ffmpeg-kit-" << ffmpegkit::Packages::getPackageName() << "-" 
@@ -1063,11 +1061,11 @@ void ffmpegkit::FFmpegKitConfig::enableRedirection() {
   std::unique_lock<KitMutex> lock(getCallbackDataMutex(), std::defer_lock);
   lock.lock();
 
-  if (redirectionEnabled != 0) {
+  if (redirectionEnabled.load(std::memory_order_acquire) != 0) {
     lock.unlock();
     return;
   }
-  redirectionEnabled = 1;
+  redirectionEnabled.store(1, std::memory_order_release);
 
   lock.unlock();
 
@@ -1087,11 +1085,11 @@ void ffmpegkit::FFmpegKitConfig::disableRedirection() {
 
   lock.lock();
 
-  if (redirectionEnabled == 0) {
+  if (redirectionEnabled.load(std::memory_order_acquire) == 0) {
     lock.unlock();
     return;
   }
-  redirectionEnabled = 0;
+  redirectionEnabled.store(0, std::memory_order_release);
 
   lock.unlock();
 
