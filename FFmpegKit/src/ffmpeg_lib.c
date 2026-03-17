@@ -163,6 +163,8 @@ int ffmpeg_run(FFmpegContext *ctx) {
     return AVERROR_EXIT;
   }
 
+  avformat_network_init();
+
   ffmpeg_tls_init_options();
 
   ctx->ret = ffmpeg_run_internal(ctx->argc, ctx->argv);
@@ -206,5 +208,8 @@ void ffmpeg_free(FFmpegContext *ctx) {
     }
     av_free(ctx->argv);
   }
+
+  avformat_network_deinit();
+  
   av_free(ctx);
 }

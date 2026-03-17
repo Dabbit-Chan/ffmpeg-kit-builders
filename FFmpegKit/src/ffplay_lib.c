@@ -179,8 +179,18 @@ FFplayContext* ffplay_init(const char* args_string, const FFplayCallbacks *cb) {
         ctx->callbacks = *cb;
     }
     
+    // 0 = don't overwrite if already set
+    if (!SDL_getenv("SDL_VIDEODRIVER"))
+        SDL_setenv("SDL_VIDEODRIVER", "offscreen", 0); 
+    if (!SDL_getenv("SDL_AUDIODRIVER"))
+        SDL_setenv("SDL_AUDIODRIVER", "dummy", 0); 
+    if (!SDL_getenv("DISPLAY"))
+        SDL_setenv("DISPLAY", ":0", 0); 
+        
     // Reset global state in ffplay.c
     ffplay_reset_internal_state();
+
+    avformat_network_init();
 
     ffplay_tls_init_options();
 
@@ -704,6 +714,9 @@ void ffplay_free(FFplayContext* ctx) {
         for (int i=0; i<ctx->argc; i++) av_free(ctx->argv[i]);
         av_free(ctx->argv);
     }
+
+    avformat_network_deinit();
+
     av_free(ctx);
 }
 

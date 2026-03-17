@@ -832,33 +832,37 @@ executeFFmpeg(const long sessionId,
   registerSessionId(sessionId);
   resetMessagesInTransmit(sessionId);
 
-  av_log_set_level(configuredLogLevel);
-  av_log_set_callback(ffmpegkit_log_callback_function);
-  set_report_callback(ffmpegkit_statistics_callback_function);
-  
   // 1. Construct command string for the library init
   std::string fullCommand = buildCommandString("ffmpeg", arguments);
 
   // 2. Initialize Wrapper Context
   FFmpegContext *ctx = ffmpeg_init(fullCommand.c_str());
+
   if (!ctx) {
     auto session = ffmpegkit::FFmpegKitConfig::getSession(sessionId);
     removeSession(sessionId);
     tlsSession = nullptr;
+    globalSessionId = 0;
     return -1; // ENOMEM or parse error
   }
+  
+  // 3. Set up logging and callbacks
+  av_log_set_level(configuredLogLevel);
+  av_log_set_callback(ffmpegkit_log_callback_function);
+  set_report_callback(ffmpegkit_statistics_callback_function);
 
-  // 3. RUN
+  // 4. RUN
   // This blocks until transcoding is finished
   int returnCode = ffmpeg_run(ctx);
 
   // ALWAYS REMOVE THE ID FROM THE MAP
   removeSession(sessionId);
 
-  // 4. CLEANUP
+  // 5. CLEANUP
+  tlsSession = nullptr;
+  globalSessionId = 0;
   ffmpeg_free(ctx);
 
-  tlsSession = nullptr;
   return returnCode;
 }
 
@@ -871,29 +875,31 @@ int executeFFprobe(const long sessionId,
   registerSessionId(sessionId);
   resetMessagesInTransmit(sessionId);
 
-  // SETS DEFAULT LOG LEVEL BEFORE STARTING A NEW RUN
-  av_log_set_level(configuredLogLevel);
-  av_log_set_callback(ffmpegkit_log_callback_function);
-  set_report_callback(ffmpegkit_statistics_callback_function);
-
   // 1. Construct command string
   std::string fullCommand = buildCommandString("ffprobe", arguments);
 
   // 2. Initialize Wrapper Context
   FFprobeContext *ctx = ffprobe_init(fullCommand.c_str());
+
   if (!ctx) {
     auto session = ffmpegkit::FFmpegKitConfig::getSession(sessionId);
     removeSession(sessionId);
     tlsSession = nullptr;
+    globalSessionId = 0;
     return -1;
   }
 
-  // 3. RUN
+  // 3. Set up logging and callbacks
+  av_log_set_level(configuredLogLevel);
+  av_log_set_callback(ffmpegkit_log_callback_function);
+  set_report_callback(ffmpegkit_statistics_callback_function);
+
+  // 4. RUN
   // This blocks until probe is finished.
   // Output is captured into ctx->output (AVBPrint) inside the lib.
   int returnCode = ffprobe_run(ctx);
 
-  // 4. BRIDGE OUTPUT
+  // 5. BRIDGE OUTPUT
   // MediaInformationSession expects the JSON output to appear in the logs
   // (specifically as LevelAVLogStdErr or via the log system).
   // Since ffprobe_lib.c no longer writes to stdout/stderr, we must manually
@@ -923,8 +929,9 @@ int executeFFprobe(const long sessionId,
   // ALWAYS REMOVE THE ID FROM THE MAP
   removeSession(sessionId);
 
+  // 6. CLEANUP
   tlsSession = nullptr;
-  // 5. CLEANUP
+  globalSessionId = 0;
   ffprobe_free(ctx);
 
   return returnCode;
@@ -942,11 +949,6 @@ int executeFFplay(const long sessionId,
   registerSessionId(sessionId);
   resetMessagesInTransmit(sessionId);
 
-  // SETS DEFAULT LOG LEVEL BEFORE STARTING A NEW RUN
-  av_log_set_level(configuredLogLevel);
-  av_log_set_callback(ffmpegkit_log_callback_function);
-  set_report_callback(ffmpegkit_statistics_callback_function);
-
   // 1. Construct command string
   std::string fullCommand = buildCommandString("ffplay", arguments);
 
@@ -962,16 +964,21 @@ int executeFFplay(const long sessionId,
     return -1;
   }
 
+  // 3. SETS DEFAULT LOG LEVEL BEFORE STARTING A NEW RUN
+  av_log_set_level(configuredLogLevel);
+  av_log_set_callback(ffmpegkit_log_callback_function);
+  set_report_callback(ffmpegkit_statistics_callback_function);
+
   if (tlsSession != nullptr) {
     tlsSession->debugLog("[EXECUTE FFPLAY] sessionId: %ld ffplay_init SUCCESS", sessionId);
   }
 
-  // BRIDGE: Set context on session for external control
+  // 4. BRIDGE: Set context on session for external control
   if (session && session->isFFplay()) {
     std::static_pointer_cast<ffmpegkit::FFplaySession>(session)->setContext(ctx);
   }
 
-  // 3. RUN
+  // 5. RUN
   int returnCode = ffplay_start(ctx);
   if (returnCode == 0) {
     if (tlsSession != nullptr) {
@@ -986,19 +993,18 @@ int executeFFplay(const long sessionId,
     }
   }
 
-  // BRIDGE: Clear context on session
+  // 6. BRIDGE: Clear context on session
   if (session && session->isFFplay()) {
     std::static_pointer_cast<ffmpegkit::FFplaySession>(session)->setContext(nullptr);
   }
 
-  // ALWAYS REMOVE THE ID FROM THE MAP
+  // 7. ALWAYS REMOVE THE ID FROM THE MAP
   removeSession(sessionId);
 
-  // 4. CLEANUP
-  ffplay_free(ctx);
-
+  // 8. CLEANUP
   tlsSession = nullptr;
   globalSessionId = 0;
+  ffplay_free(ctx);
 
   return returnCode;
 }
