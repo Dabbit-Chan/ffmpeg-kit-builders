@@ -103,127 +103,133 @@ bool ffmpegkit::FFplaySession::isFFprobe() const { return false; }
 bool ffmpegkit::FFplaySession::isMediaInformation() const { return false; }
 
 void ffmpegkit::FFplaySession::seek(double seconds, double rel) {
-  if (_context != nullptr) {
+    FFplayContext *ctx = _context.load(std::memory_order_acquire);
+    if (ctx == nullptr) return;
+
     if (rel != 0.0) {
-      // Direct relative seek call
-      ffplay_seek(_context, seconds, rel);
-      _position = seconds;
-      return;
+        ffplay_seek(ctx, seconds, rel);
+        _position = seconds;
+        return;
     }
 
-    double duration = getDuration();
-    double currentPos = getPosition();
+    // Use ctx directly instead of calling getDuration()/getPosition(),
+    // which would each do their own load — ctx could be nulled between calls.
+    double duration = ffplay_get_duration(ctx);
+    double currentPos = ffplay_get_position(ctx);
     double targetPos;
     double rel_hint = 0;
 
     if (seconds < 0) {
-      // Implicit relative seek backward (seconds is the offset)
-      targetPos = currentPos + seconds;
-      rel_hint = seconds;
+        targetPos = currentPos + seconds;
+        rel_hint = seconds;
     } else {
-      // Absolute seek (seconds is the target pos)
-      targetPos = seconds;
-      rel_hint = targetPos - currentPos;
+        targetPos = seconds;
+        rel_hint = targetPos - currentPos;
     }
 
-    if (targetPos < 0)
-      targetPos = 0;
-    if (duration > 0 && targetPos > duration)
-      targetPos = duration;
+    if (targetPos < 0) targetPos = 0;
+    if (duration > 0 && targetPos > duration) targetPos = duration;
 
-    ffplay_seek(_context, targetPos, rel_hint);
+    ffplay_seek(ctx, targetPos, rel_hint);
     _position = targetPos;
-  }
 }
 
 void ffmpegkit::FFplaySession::start() {
-  if (_context != nullptr) {
-    ffplay_start(_context);
-  }
+    FFplayContext *ctx = _context.load(std::memory_order_acquire);
+    if (ctx != nullptr) {
+        ffplay_start(ctx);
+    }
 }
 
 void ffmpegkit::FFplaySession::pause() {
-  if (_context != nullptr) {
-    ffplay_pause(_context);
-  }
+    FFplayContext *ctx = _context.load(std::memory_order_acquire);
+    if (ctx != nullptr) {
+        ffplay_pause(ctx);
+    }
 }
 
 void ffmpegkit::FFplaySession::resume() {
-  if (_context != nullptr) {
-    ffplay_resume(_context);
-  }
+    FFplayContext *ctx = _context.load(std::memory_order_acquire);
+    if (ctx != nullptr) {
+        ffplay_resume(ctx);
+    }
 }
 
 void ffmpegkit::FFplaySession::stop() {
-  if (_context != nullptr) {
-    ffplay_stop(_context);
-  }
+    FFplayContext *ctx = _context.load(std::memory_order_acquire);
+    if (ctx != nullptr) {
+        ffplay_stop(ctx);
+    }
 }
 
 double ffmpegkit::FFplaySession::getPosition() {
-  if (_context != nullptr) {
-    _position = ffplay_get_position(_context);
-    return _position;
-  }
-  return 0.0;
+    FFplayContext *ctx = _context.load(std::memory_order_acquire);
+    if (ctx != nullptr) {
+        _position = ffplay_get_position(ctx);
+        return _position;
+    }
+    return 0.0;
 }
 
 void ffmpegkit::FFplaySession::setPosition(double position) {
-  seek(position, 0.0);
+    seek(position, 0.0);
 }
 
 double ffmpegkit::FFplaySession::getDuration() {
-  if (_context != nullptr) {
-    _duration = ffplay_get_duration(_context);
-    return _duration;
-  }
-  return 0.0;
+    FFplayContext *ctx = _context.load(std::memory_order_acquire);
+    if (ctx != nullptr) {
+        _duration = ffplay_get_duration(ctx);
+        return _duration;
+    }
+    return 0.0;
 }
 
 bool ffmpegkit::FFplaySession::isPlaying() {
-  if (_context != nullptr) {
-    _isPlaying = ffplay_is_playing(_context) != 0;
-    return _isPlaying;
-  }
-  return false;
+    FFplayContext *ctx = _context.load(std::memory_order_acquire);
+    if (ctx != nullptr) {
+        _isPlaying = ffplay_is_playing(ctx) != 0;
+        return _isPlaying;
+    }
+    return false;
 }
 
 bool ffmpegkit::FFplaySession::isPaused() {
-  if (_context != nullptr) {
-    _isPaused = ffplay_is_paused(_context) != 0;
-    return _isPaused;
-  }
-  return false;
+    FFplayContext *ctx = _context.load(std::memory_order_acquire);
+    if (ctx != nullptr) {
+        _isPaused = ffplay_is_paused(ctx) != 0;
+        return _isPaused;
+    }
+    return false;
 }
 
 void ffmpegkit::FFplaySession::setVolume(float volume) {
-  if (_context != nullptr) {
-    ffplay_set_volume(_context, volume);
-  }
+    FFplayContext *ctx = _context.load(std::memory_order_acquire);
+    if (ctx != nullptr) {
+        ffplay_set_volume(ctx, volume);
+    }
 }
 
 float ffmpegkit::FFplaySession::getVolume() {
-  if (_context != nullptr) {
-    return ffplay_get_volume(_context);
-  }
-  return 0.0;
+    FFplayContext *ctx = _context.load(std::memory_order_acquire);
+    if (ctx != nullptr) {
+        return ffplay_get_volume(ctx);
+    }
+    return 0.0;
 }
 
-FFplayContext *ffmpegkit::FFplaySession::getContext() { return _context; }
+FFplayContext *ffmpegkit::FFplaySession::getContext() {
+    return _context.load(std::memory_order_acquire);
+}
 
 void ffmpegkit::FFplaySession::setContext(FFplayContext *context) {
-  _context = context;
+    _context.store(context, std::memory_order_release);
 }
 
 void ffmpegkit::FFplaySession::close() {
-  if (_context != nullptr) {
-    ffplay_stop(_context);
-    // Do not set _context to nullptr here immediately if we want to allow the
-    // thread to clear it, but typically close() implies we detach. However, if
-    // we set it to nullptr, executeFFplay won't be able to clear it (which is
-    // fine). But importantly, we MUST NOT free it.
-    _context = nullptr;
-  }
+    FFplayContext *ctx = _context.exchange(nullptr, std::memory_order_acq_rel);
+    if (ctx != nullptr) {
+        ffplay_stop(ctx);
+    }
 }
 
 void ffmpegkit::FFplaySession::cancel() { close(); }

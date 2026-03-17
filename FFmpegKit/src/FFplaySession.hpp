@@ -24,6 +24,8 @@
 #include "FFplaySessionCompleteCallback.hpp"
 #include "ffplay_lib.h"
 
+#include <atomic>
+
 namespace ffmpegkit {
 
 /**
@@ -191,7 +193,7 @@ public:
    * @return the volume of the media
    */
   float getVolume();
-
+  
   /**
    * Returns the ffplay context.
    *
@@ -246,7 +248,7 @@ private:
                 const LogRedirectionStrategy logRedirectionStrategy);
 
   FFplaySessionCompleteCallback _completeCallback;
-  FFplayContext *_context;
+  std::atomic<FFplayContext *> _context;
   double _position;
   double _duration;
   bool _isPlaying;
