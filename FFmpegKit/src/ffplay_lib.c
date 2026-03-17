@@ -18,6 +18,7 @@
  */
 
 #include "ffplay_lib.h"
+#include "ffmpeg_kit_assert_override.h"
 #include <SDL.h>
 #include "ffmpeg_tls.h"
 
@@ -237,10 +238,24 @@ static char *allocated_afilters = NULL;
 
 int ffplay_start(FFplayContext* ctx) {
     int ret = -1;
+
+    ffmpeg_kit_assert_triggered = 0;
+
+    // Establish recovery point for av_assert0 failures inside ffplay internals.
+    // ffplay_step calls back into FFmpeg decode/filter/render pipelines which
+    // can assert. Recovery here marks the session failed without killing Flutter.
+    if (setjmp(ffmpeg_kit_assert_jmp) != 0) {
+        av_log(NULL, AV_LOG_ERROR,
+               "[ffmpeg-kit] ffplay_start: recovered from internal assertion "
+               "failure. Session will be marked as failed.\n");
+        unlock_ffplay_api();  // ensure lock is released if assert fired mid-lock
+        return AVERROR_EXIT;
+    }
+
     lock_ffplay_api();
     if (ctx && active_ffplay_ctx == ctx && ctx->is) ret = 0;
     unlock_ffplay_api();
-    return ret; 
+    return ret;
 }
 
 int ffplay_step(FFplayContext* ctx) {

@@ -17,6 +17,7 @@
  * along with FFmpegKit.  If not, see <http://www.gnu.org/licenses/>.
  */
 
+#ifdef _WIN32
 #include <windows.h>
 #include <pthread.h>
 #include <time.h>
@@ -95,3 +96,4 @@ int __cdecl pthread_cond_timedwait64_relative_np(pthread_cond_t *cond, pthread_m
 
     return pthread_cond_timedwait(cond, mutex, &ts);
 }
+#endif

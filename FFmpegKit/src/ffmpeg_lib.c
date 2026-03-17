@@ -20,6 +20,7 @@
 #include "ffmpeg_lib.h"
 #include "ffmpeg.h"
 #include "ffmpeg_sched.h"
+#include "ffmpeg_kit_assert_override.h"
 #include "libavutil/mem.h"
 #include <string.h>
 #ifdef _WIN32
@@ -29,42 +30,6 @@
 #include <pthread.h>
 #include <unistd.h>
 #endif
-
-// Global lock to protect ffmpeg.c global variables
-// // --- MUTEX ABSTRACTION START ---
-// #ifdef _WIN32
-// static CRITICAL_SECTION ffmpeg_lock;
-// static volatile long ffmpeg_lock_initialized = 0;
-
-// static void lock_init(void) {
-//   // Thread-safe one-time initialization
-//   if (InterlockedCompareExchange(&ffmpeg_lock_initialized, 1, 0) == 0) {
-//     InitializeCriticalSection(&ffmpeg_lock);
-//     InterlockedExchange(&ffmpeg_lock_initialized, 2);
-//   } else {
-//     // Wait for initialization to complete if another thread is doing it
-//     while (InterlockedCompareExchange(&ffmpeg_lock_initialized, 2, 2) != 2) {
-//       Sleep(1);
-//     }
-//   }
-// }
-
-// static void lib_mutex_lock(void) {
-//   if (ffmpeg_lock_initialized != 2)
-//     lock_init();
-//   EnterCriticalSection(&ffmpeg_lock);
-// }
-
-// static void lib_mutex_unlock(void) { LeaveCriticalSection(&ffmpeg_lock); }
-// #else
-// // POSIX Implementation
-// static pthread_mutex_t ffmpeg_lock = PTHREAD_MUTEX_INITIALIZER;
-
-// static void lib_mutex_lock(void) { pthread_mutex_lock(&ffmpeg_lock); }
-
-// static void lib_mutex_unlock(void) { pthread_mutex_unlock(&ffmpeg_lock); }
-// #endif
-// // --- MUTEX ABSTRACTION END ---
 
 // Forward declare the auto-generated TLS initializer
 extern void ffmpeg_tls_init_options(void);
@@ -185,22 +150,23 @@ int ffmpeg_run(FFmpegContext *ctx) {
   if (!ctx)
     return AVERROR(EINVAL);
 
-  // CRITICAL: Acquire lock
-  //lib_mutex_lock();
+  ffmpeg_kit_assert_triggered = 0;
+
+  // Establish recovery point for av_assert0 failures inside ffmpeg internals.
+  // Without this, av_assert0 calls abort() which kills the Flutter host process.
+  // On assertion failure, longjmp lands here and we return AVERROR_EXIT so
+  // FFmpegKitConfig marks the session as failed rather than crashing.
+  if (setjmp(ffmpeg_kit_assert_jmp) != 0) {
+    av_log(NULL, AV_LOG_ERROR,
+           "[ffmpeg-kit] ffmpeg_run: recovered from internal assertion failure. "
+           "Session will be marked as failed.\n");
+    return AVERROR_EXIT;
+  }
 
   ffmpeg_tls_init_options();
 
-  // This handles sch_alloc, parse, transcode, and cleanup internally.
   ctx->ret = ffmpeg_run_internal(ctx->argc, ctx->argv);
-
-  // If internal run succeeded, we assume files were parsed.
-  // However, since cleanup happened inside run_internal, accessing
-  // globals like nb_output_files for progress AFTER this returns is risky
-  // unless you modified cleanup to NOT zero them out immediately.
   ctx->files_parsed = (ctx->ret >= 0);
-
-  // Release lock
-  //lib_mutex_unlock();
 
   return ctx->ret;
 }

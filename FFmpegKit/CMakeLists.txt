@@ -1,4 +1,17 @@
+# =============================================================================
+# PREAMBLE: Project Setup & Platform Validation
+# =============================================================================
+# - Enforce MinGW for Windows builds to prevent MSVC compatibility issues
+# - Prevent in-source builds to maintain clean build directory separation
+# - Initialize project with C/C++ support and enable IDE integration
+# =============================================================================
+
 cmake_minimum_required(VERSION 3.16)
+
+# Enforce MinGW when building for Windows
+if(WIN32 AND NOT MINGW)
+    message(FATAL_ERROR "Windows builds require MinGW. Use MinGW-w64 toolchain for cross-compilation. MSVC is currently not supported.")
+endif()
 
 if("${CMAKE_SOURCE_DIR}" STREQUAL "${CMAKE_BINARY_DIR}")
   message(FATAL_ERROR "In-source builds are not allowed.")
@@ -13,13 +26,20 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS_DEBUG ON)
 set(CMAKE_EXPORT_COMPILE_COMMANDS_RELEASE ON)
 option(BUILD_TESTS "Build tests" OFF)
 option(ENABLE_LIBPLACEBO "Enable libplacebo" OFF)
+option(ENABLE_LIBTENSORFLOW "Enable libtensorflow" OFF)
+option(ENABLE_OPENVINO "Enable openvino" OFF)
+option(ENABLE_LIBTORCH "Enable libtorch" OFF)
 # CMAKE_BUILD_TYPE is a CMake built-in string variable, not a boolean option.
 # Using option() on it silently converts it to OFF. Use set() instead.
 if(NOT CMAKE_BUILD_TYPE)
     set(CMAKE_BUILD_TYPE "Release" CACHE STRING "Build type (Debug, Release, RelWithDebInfo, MinSizeRel)" FORCE)
 endif()
-# ==============================================================================
-# 1. Options & Configuration
+# =============================================================================
+# 1. OPTIONS & CONFIGURATION: Build Parameters & Path Validation
+# =============================================================================
+# - Configure build type (shared/static library, optional dependencies)
+# - Validate FFmpeg source and build directory paths
+# - Set build metadata (date, bundle type, version)
 # ==============================================================================
 option(BUILD_SHARED_LIBS "Build shared library" ON)
 set(FFMPEG_KIT_BUILD_DATE "" CACHE STRING "Build date override")
@@ -42,8 +62,13 @@ if(NOT FFMPEG_BUILD_DIR OR NOT EXISTS "${FFMPEG_BUILD_DIR}/include/config_compon
     message(FATAL_ERROR "FFMPEG_BUILD_DIR is invalid. It must contain include/config_components.h")
 endif()
 
-# ==============================================================================
-# 2. File Copying & Preparation
+# =============================================================================
+# 2. FILE COPYING & PREPARATION: Source Tree Setup
+# =============================================================================
+# - Copy FFmpeg configuration headers and source files
+# - Apply platform-specific compatibility fixes (MinGW unistd.h)
+# - Integrate FFmpeg fftools with corrected include paths
+# - Copy compatibility headers for cross-platform support
 # ==============================================================================
 message(STATUS "Preparing source tree...")
 file(MAKE_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/src")
@@ -93,14 +118,14 @@ file(COPY "${FFMPEG_SRC_DIR}/compat/va_copy.h" DESTINATION "${CMAKE_CURRENT_SOUR
 if(WIN32)
     file(COPY "${FFMPEG_SRC_DIR}/compat/w32dlfcn.h" DESTINATION "${CMAKE_CURRENT_SOURCE_DIR}/src/compat/")
 endif()
-# Remove unwanted ffplay files
-# file(GLOB REMOVE_FILES "${CMAKE_CURRENT_SOURCE_DIR}/src/ffplay*")
-# if(REMOVE_FILES)
-#     file(REMOVE ${REMOVE_FILES})
-# endif()
 
-# ==============================================================================
-# 3. Patch Application
+# =============================================================================
+# 3. PATCH APPLICATION: Automated Source Transformation
+# =============================================================================
+# - Apply manual patches from patches/ directory to fix FFmpeg tools
+# - Execute TLS patch script to convert globals to thread-local storage
+# - Execute options patch script to handle static const arrays with TLS
+# - These automated transformations enable concurrent FFmpeg execution
 # ==============================================================================
 if(IS_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/patches")
     message(STATUS "Checking for patches in 'patches' directory...")
@@ -167,8 +192,13 @@ if(IS_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/patches")
     endif()
 endif()
 
-# ==============================================================================
-# 4. Source & Header Detection
+# =============================================================================
+# 4. SOURCE DETECTION & METADATA: Build Asset Discovery
+# =============================================================================
+# - Generate build metadata (date, bundle type, version)
+# - Discover all source files for compilation
+# - Filter out duplicate and backup files
+# - Log discovered sources for debugging
 # ==============================================================================
 if(NOT FFMPEG_KIT_BUILD_DATE)
     string(TIMESTAMP FFMPEG_KIT_BUILD_DATE "%Y%m%d")
@@ -177,9 +207,6 @@ endif()
 if(NOT FFMPEG_KIT_BUNDLE_TYPE)
     set(FFMPEG_KIT_BUNDLE_TYPE "custom")
 endif()
-
-# file(WRITE "${CMAKE_CURRENT_SOURCE_DIR}/src/config.c" 
-#     "const char program_name[] = \"ffmpeg-kit\";\nconst int program_birth_year = 2025;\n")
 
 # Find all sources
 file(GLOB_RECURSE KIT_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/src/*.c" "${CMAKE_CURRENT_SOURCE_DIR}/src/*.cpp")
@@ -197,11 +224,22 @@ list(FILTER KIT_HEADERS EXCLUDE REGEX ".*_(bak|orig)\\.h$")
 message(STATUS "KIT_SOURCES: ${KIT_SOURCES}")
 message(STATUS "KIT_HEADERS: ${KIT_HEADERS}")
 
-# ==============================================================================
-# 5. Dependency Detection
+# =============================================================================
+# 5. DEPENDENCY MANAGEMENT: Library Resolution & Linking
+# =============================================================================
+# - Create ffmpegkit target with forced includes for TLS/assert overrides
+# - Configure pkg-config for FFmpeg library detection
+# - Define library resolution functions for cross-platform compatibility
+# - Handle optional dependencies (libplacebo, TensorFlow, OpenVINO)
+# - Fix broken include paths in generated pkg-config files
 # ==============================================================================
 add_library(ffmpegkit ${KIT_SOURCES} ${KIT_HEADERS})
 
+target_compile_options(ffmpegkit PRIVATE
+    "-include${CMAKE_CURRENT_SOURCE_DIR}/src/ffmpeg_tls.h"
+    "-include${CMAKE_CURRENT_SOURCE_DIR}/src/ffmpeg_kit_assert_override.h"
+)
+set(BUNDLE_LIBRARIES "")
 find_package(PkgConfig REQUIRED)
 
 # Force PkgConfig to check the build dir first
@@ -214,86 +252,186 @@ pkg_check_modules(FFMPEG REQUIRED IMPORTED_TARGET
     libavdevice libavfilter libavformat libavcodec libswresample libswscale libavutil jsoncpp sdl2
 )
 
-function(replace_dll_a_with_static INPUT_LIB OUTPUT_VAR)
+function(replace_shared_with_static INPUT_LIB OUTPUT_VAR)
     if(INPUT_LIB MATCHES "\\.dll\\.a$")
         string(REPLACE ".dll.a" ".a" STATIC_PATH "${INPUT_LIB}")
         if(EXISTS "${STATIC_PATH}")
             set(${OUTPUT_VAR} "${STATIC_PATH}" PARENT_SCOPE)
+            message(STATUS "Replaced ${INPUT_LIB} with ${STATIC_PATH}")
         else()
             set(${OUTPUT_VAR} "${INPUT_LIB}" PARENT_SCOPE)
+        endif()
+    elseif(INPUT_LIB MATCHES "\\.dll$")
+        # First try to find the actual .dll file in /bin/ directory
+        string(REPLACE "/lib/" "/bin/" DLL_BIN_PATH "${INPUT_LIB}")
+        if(EXISTS "${DLL_BIN_PATH}")
+            set(${OUTPUT_VAR} "${DLL_BIN_PATH}" PARENT_SCOPE)
+            message(STATUS "Replaced ${INPUT_LIB} with ${DLL_BIN_PATH}")
+        else()
+            # Fall back to static .a file in /lib/ directory
+            string(REPLACE ".dll" ".a" STATIC_PATH "${INPUT_LIB}")
+            if(EXISTS "${STATIC_PATH}")
+                set(${OUTPUT_VAR} "${STATIC_PATH}" PARENT_SCOPE)
+                message(STATUS "Replaced ${INPUT_LIB} with ${STATIC_PATH}")
+            else()
+                set(${OUTPUT_VAR} "${INPUT_LIB}" PARENT_SCOPE)
+            endif()
+        endif()
+    elseif(INPUT_LIB MATCHES "\\.so$")
+        # Skip system libraries for Linux builds
+        if(INPUT_LIB MATCHES "^/(lib|lib64|usr/lib|usr/lib64)/")
+            set(${OUTPUT_VAR} "${INPUT_LIB}" PARENT_SCOPE)
+        else()
+            string(REPLACE ".so" ".a" STATIC_PATH "${INPUT_LIB}")
+            if(EXISTS "${STATIC_PATH}")
+                set(${OUTPUT_VAR} "${STATIC_PATH}" PARENT_SCOPE)
+                message(STATUS "Replaced ${INPUT_LIB} with ${STATIC_PATH}")
+            else()
+                set(${OUTPUT_VAR} "${INPUT_LIB}" PARENT_SCOPE)
+            endif()
         endif()
     else()
         set(${OUTPUT_VAR} "${INPUT_LIB}" PARENT_SCOPE)
     endif()
 endfunction()
 
-# if(MINGW)
-#     pkg_check_modules(PTW32 REQUIRED IMPORTED_TARGET pthreadGC3)
-#     list(GET PTW32_LIBRARY_DIRS 0 PTW32_PRIMARY_LIB_DIR)
-#     set(PTW32_STATIC_LIB "${PTW32_PRIMARY_LIB_DIR}/libpthreadGC3.a")
+function(replace_dll_a_with_dll INPUT_LIB OUTPUT_VAR)
+    if(INPUT_LIB MATCHES "\\.dll\\.a$")
+        string(REPLACE ".dll.a" ".dll" DLL_PATH "${INPUT_LIB}")
+        if(EXISTS "${DLL_PATH}")
+            set(${OUTPUT_VAR} "${DLL_PATH}" PARENT_SCOPE)
+            message(STATUS "Replaced ${INPUT_LIB} with ${DLL_PATH}")
+        else()
+            # If DLL not found in lib path, try bin path
+            string(REPLACE "/lib/" "/bin/" BIN_DLL_PATH "${DLL_PATH}")
+            if(EXISTS "${BIN_DLL_PATH}")
+                set(${OUTPUT_VAR} "${BIN_DLL_PATH}" PARENT_SCOPE)
+                message(STATUS "Replaced ${INPUT_LIB} with ${BIN_DLL_PATH}")
+            else()
+                # Try removing lib prefix for bin path (only from filename, not full path)
+                get_filename_component(LIB_DIR "${DLL_PATH}" DIRECTORY)
+                get_filename_component(LIB_NAME "${DLL_PATH}" NAME_WE)
+                # Only remove "lib" prefix if it exists at the start
+                if(LIB_NAME MATCHES "^lib")
+                    string(REPLACE "lib" "" LIB_NAME_NO_LIB "${LIB_NAME}")
+                else()
+                    set(LIB_NAME_NO_LIB "${LIB_NAME}")
+                endif()
+                # Get parent directory to remove the 'lib' subdirectory
+                get_filename_component(PARENT_DIR "${LIB_DIR}" DIRECTORY)
+                set(BIN_DLL_PATH_NO_LIB "${PARENT_DIR}/bin/${LIB_NAME_NO_LIB}.dll")
+                if(EXISTS "${BIN_DLL_PATH_NO_LIB}")
+                    set(${OUTPUT_VAR} "${BIN_DLL_PATH_NO_LIB}" PARENT_SCOPE)
+                    message(STATUS "Replaced ${INPUT_LIB} with ${BIN_DLL_PATH_NO_LIB}")
+                else()
+                    set(${OUTPUT_VAR} "${INPUT_LIB}" PARENT_SCOPE)
+                endif()
+            endif()
+        endif()
+    else()
+        set(${OUTPUT_VAR} "${INPUT_LIB}" PARENT_SCOPE)
+    endif()
+endfunction()
 
-#     add_compile_definitions(
-#         PTW32_STATIC_LIB
-#         _POSIX_THREADS
-#         __PTHREAD_INTERFACE_H__
-#         __PTW32_CLEANUP_C
-#         HAVE_STRUCT_TIMESPEC=1
-#     )
+# Fix library linking for static/dynamic libraries
+# If static linking is enabled, replace shared libraries with static ones: .so -> .a or .dll -> .a or .dll.a -> .a
+# If dynamic linking is enabled, if MINGW, replace .dll.a files with .dll files, 
+# else keep the original as dynamic linking can link to both shared and static libraries
+function(configure_library_linking LIBRARY_NAME STATIC_LINKING)
+    # Get the interface link libraries
+    get_target_property(${LIBRARY_NAME}_LIBS PkgConfig::${LIBRARY_NAME} INTERFACE_LINK_LIBRARIES)
 
-#     get_target_property(FFMPEG_LIBS PkgConfig::FFMPEG INTERFACE_LINK_LIBRARIES)
-
-#     message(STATUS "Starting pthread and dll.a interception loop for FFMPEG...")
-#     set(FIXED_LIBS "${PTW32_STATIC_LIB}")
-#     foreach(LIB_PATH IN LISTS FFMPEG_LIBS)
-#         set(RESOLVED_LIB "")
-#         replace_dll_a_with_static("${LIB_PATH}" RESOLVED_LIB)
-#         if(LIB_PATH MATCHES "pthread")
-#             message(NOTICE "   [INTERCEPT] Removed pthread library from ${TARGET_NAME}: ${LIB_PATH}")
-#             continue()
-#         endif()
-#         list(APPEND FIXED_LIBS "${RESOLVED_LIB}")
-#     endforeach()
-#     message(STATUS "Finished pthread and dll.a interception loop.")
-#     set_target_properties(PkgConfig::FFMPEG PROPERTIES INTERFACE_LINK_LIBRARIES "${FIXED_LIBS}")
-# endif()
-
-if(MINGW)
-    # Allow FFmpeg to natively use the MinGW winpthreads it was designed for
-    get_target_property(FFMPEG_LIBS PkgConfig::FFMPEG INTERFACE_LINK_LIBRARIES)
     set(FIXED_LIBS "")
-    foreach(LIB_PATH IN LISTS FFMPEG_LIBS)
-        set(RESOLVED_LIB "")
-        replace_dll_a_with_static("${LIB_PATH}" RESOLVED_LIB)
-        list(APPEND FIXED_LIBS "${RESOLVED_LIB}")
-    endforeach()
-    set_target_properties(PkgConfig::FFMPEG PROPERTIES INTERFACE_LINK_LIBRARIES "${FIXED_LIBS}")
-endif()
-
-if(ENABLE_LIBPLACEBO)
-    # Force static linking for libplacebo
-    set(_OLD_PKG_CONFIG_USE_STATIC_LIBS ${PKG_CONFIG_USE_STATIC_LIBS})
-    set(PKG_CONFIG_USE_STATIC_LIBS ON)
-    pkg_check_modules(LIBPLACEBO REQUIRED IMPORTED_TARGET libplacebo)
-
-    get_target_property(LIBPLACEBO_LIBS PkgConfig::LIBPLACEBO INTERFACE_LINK_LIBRARIES)
-    message(STATUS "Starting pthread and dll.a interception loop for LIBPLACEBO...")
-    set(FIXED_LIBS "")
-    foreach(LIB_PATH IN LISTS LIBPLACEBO_LIBS)
-        set(RESOLVED_LIB "")
-        replace_dll_a_with_static("${LIB_PATH}" RESOLVED_LIB)
-        if(LIB_PATH MATCHES "pthread")
-            message(NOTICE "   [INTERCEPT] Removed pthread library from ${TARGET_NAME}: ${LIB_PATH}")
-            list(APPEND FIXED_LIBS "${PTW32_STATIC_LIB}")
-            continue()
+    foreach(LIB_PATH IN LISTS ${LIBRARY_NAME}_LIBS)
+        if(STATIC_LINKING)
+            replace_shared_with_static("${LIB_PATH}" RESOLVED_LIB)
+        else()
+            if(MINGW)
+                replace_dll_a_with_dll("${LIB_PATH}" RESOLVED_LIB)
+            else()
+                set(RESOLVED_LIB ${LIB_PATH})
+            endif()
         endif()
         list(APPEND FIXED_LIBS "${RESOLVED_LIB}")
     endforeach()
-    message(STATUS "Finished pthread and dll.a interception loop.")
-    set_target_properties(PkgConfig::LIBPLACEBO PROPERTIES INTERFACE_LINK_LIBRARIES "${FIXED_LIBS}")
-    set(PKG_CONFIG_USE_STATIC_LIBS ${_OLD_PKG_CONFIG_USE_STATIC_LIBS})
+    set_target_properties(PkgConfig::${LIBRARY_NAME} PROPERTIES INTERFACE_LINK_LIBRARIES "${FIXED_LIBS}")
+    list(APPEND BUNDLE_LIBRARIES ${FIXED_LIBS})
+    set(BUNDLE_LIBRARIES "${BUNDLE_LIBRARIES}" PARENT_SCOPE)
+endfunction()
 
+configure_library_linking(FFMPEG ON)
+
+if(ENABLE_LIBPLACEBO)
+    set(_OLD_PKG_CONFIG_USE_STATIC_LIBS ${PKG_CONFIG_USE_STATIC_LIBS})
+    set(PKG_CONFIG_USE_STATIC_LIBS OFF)
+    pkg_check_modules(LIBPLACEBO REQUIRED IMPORTED_TARGET libplacebo)
+    configure_library_linking(LIBPLACEBO ON)
     target_link_libraries(ffmpegkit PRIVATE PkgConfig::LIBPLACEBO)
     target_compile_definitions(ffmpegkit PRIVATE PL_STATIC PLACEBO_STATIC)
+    set(PKG_CONFIG_USE_STATIC_LIBS ${_OLD_PKG_CONFIG_USE_STATIC_LIBS})
+endif()
+
+# Tensorflow cannot be linked statically on Windows
+if(ENABLE_LIBTENSORFLOW)
+    set(_OLD_PKG_CONFIG_USE_STATIC_LIBS ${PKG_CONFIG_USE_STATIC_LIBS})
+    set(PKG_CONFIG_USE_STATIC_LIBS OFF)
+    pkg_check_modules(LIBTENSORFLOW REQUIRED IMPORTED_TARGET libtensorflow)
+    configure_library_linking(LIBTENSORFLOW OFF)
+    target_link_libraries(ffmpegkit PRIVATE PkgConfig::LIBTENSORFLOW)
+    set(PKG_CONFIG_USE_STATIC_LIBS ${_OLD_PKG_CONFIG_USE_STATIC_LIBS})
+endif()
+
+if(ENABLE_OPENVINO)
+    set(_OLD_PKG_CONFIG_USE_STATIC_LIBS ${PKG_CONFIG_USE_STATIC_LIBS})
+    set(PKG_CONFIG_USE_STATIC_LIBS OFF)
+    pkg_check_modules(OPENVINO REQUIRED IMPORTED_TARGET openvino)
+    configure_library_linking(OPENVINO OFF)
+    target_link_libraries(ffmpegkit PRIVATE PkgConfig::OPENVINO)
+    # Try tbb12 first, fallback to tbb
+    pkg_check_modules(TBB12 QUIET IMPORTED_TARGET tbb12)
+    if(NOT TBB12_FOUND)
+        pkg_check_modules(TBB12 REQUIRED IMPORTED_TARGET tbb)
+    endif()
+    configure_library_linking(TBB12 OFF)
+    target_link_libraries(ffmpegkit PRIVATE PkgConfig::TBB12)
+    set(PKG_CONFIG_USE_STATIC_LIBS ${_OLD_PKG_CONFIG_USE_STATIC_LIBS})
+endif()
+
+if(ENABLE_LIBTORCH)
+    if(NOT WIN32)
+        set(_OLD_PKG_CONFIG_USE_STATIC_LIBS ${PKG_CONFIG_USE_STATIC_LIBS})
+        set(PKG_CONFIG_USE_STATIC_LIBS OFF)
+        pkg_check_modules(LIBTORCH REQUIRED IMPORTED_TARGET libtorch)
+        configure_library_linking(LIBTORCH OFF)
+        find_library(PYTHON311_LIB
+            NAMES
+                python3.11
+            PATHS
+                /usr/lib64
+                /usr/lib
+                /usr/local/lib64
+                /usr/local/lib
+            NO_DEFAULT_PATH
+        )
+        if(NOT PYTHON311_LIB)
+            if(EXISTS "/usr/lib64/libpython3.11.so.1.0")
+                set(PYTHON311_LIB "/usr/lib64/libpython3.11.so.1.0")
+            elseif(EXISTS "/usr/lib/libpython3.11.so.1.0")
+                set(PYTHON311_LIB "/usr/lib/libpython3.11.so.1.0")
+            endif()
+        endif()
+        if(NOT PYTHON311_LIB)
+            message(FATAL_ERROR "Could not find libpython3.11 in /usr/lib64 or /usr/lib")
+        else()
+            message(STATUS "Found Python 3.11 library: ${PYTHON311_LIB}")
+        endif()
+        target_link_libraries(ffmpegkit PRIVATE 
+            PkgConfig::LIBTORCH
+            ${PYTHON311_LIB}
+        )
+        target_link_options(ffmpegkit PRIVATE "-Wl,-rpath,/usr/lib64")
+        set(PKG_CONFIG_USE_STATIC_LIBS ${_OLD_PKG_CONFIG_USE_STATIC_LIBS})
+    endif()
 endif()
 
 # Fix for broken include paths in generated .pc files
@@ -310,10 +448,14 @@ if(TARGET PkgConfig::FFMPEG)
     endif()
 endif()
 
+# =============================================================================
+# 6. TARGET CONFIGURATION: Compiler Flags & Platform Hardening
+# =============================================================================
+# - Set compiler standards, include directories, and optimization flags
+# - Define preprocessor macros for FFmpeg compatibility
+# - Apply platform-specific security hardening (DEP, ASLR, stack protection)
+# - Configure Windows/MinGW, Linux, and Android-specific settings
 # ==============================================================================
-# 6. Target Definition & Flags
-# ==============================================================================
-
 target_include_directories(ffmpegkit PRIVATE 
     "${CMAKE_CURRENT_SOURCE_DIR}/src"
     "${FFMPEG_BUILD_DIR}/include"
@@ -440,12 +582,16 @@ if(WIN32)
         # The existing LINKER_SCRIPT logic will work if Java_* symbols are added
     endif()
 else()
-    target_compile_definitions(ffmpegkit PRIVATE TARGET_OS_LINUX)
     target_compile_options(ffmpegkit PRIVATE -fvisibility=default)
 endif()
 
-# ==============================================================================
-# 7. Linking & Scripts
+# =============================================================================
+# 7. LINKING & SCRIPTS: Library Integration & Build Automation
+# =============================================================================
+# - Configure static vs dynamic linking with proper dependency ordering
+# - Generate linker scripts to control symbol visibility
+# - Execute post-build scripts for library bundling and merging
+# - Handle platform-specific linking requirements (whole-archive, etc.)
 # ==============================================================================
 option(FFMPEG_STATIC "Link against static FFmpeg libraries" ON)
 
@@ -559,9 +705,14 @@ if(BUILD_SHARED_LIBS)
 };
 ")
     target_link_options(ffmpegkit PRIVATE "-Wl,--version-script=${LINKER_SCRIPT}")
+
+    # set(CMAKE_MESSAGE_LOG_LEVEL VERBOSE)
+    # message(STATUS "BUNDLE_LIBRARIES: ${BUNDLE_LIBRARIES}")
+    # set(CMAKE_MESSAGE_LOG_LEVEL DEBUG)
+    
     # Bundling Manifest (Requires shared-library.sh)
     add_custom_command(TARGET ffmpegkit POST_BUILD
-        COMMAND bash "${CMAKE_CURRENT_SOURCE_DIR}/scripts/shared-library.sh" "${FFMPEG_BUILD_DIR}"
+        COMMAND bash "${CMAKE_CURRENT_SOURCE_DIR}/scripts/shared-library.sh" "${FFMPEG_BUILD_DIR}" "\"${BUNDLE_LIBRARIES}\""
         COMMENT "Generating bundle manifest for shared dependencies..."
     )
 else()
@@ -572,6 +723,7 @@ else()
                 "${CMAKE_AR}" 
                 "${CMAKE_RANLIB}" 
                 "${FFMPEG_BUILD_DIR}"
+                "\"${BUNDLE_LIBRARIES}\""
         COMMENT "Merging static libraries into monolithic archive..."
     )
 endif()
@@ -606,8 +758,12 @@ if(MINGW)
     target_link_libraries(ffmpegkit PRIVATE dbghelp)
 endif()
 
-# ==============================================================================
-# 8. Installation
+# =============================================================================
+# 8. INSTALLATION: Package Distribution Setup
+# =============================================================================
+# - Install library files (shared/static) to standard locations
+# - Install public headers for client application development
+# - Generate and install pkg-config file for dependency resolution
 # ==============================================================================
 install(TARGETS ffmpegkit
     LIBRARY DESTINATION lib
@@ -623,10 +779,14 @@ install(DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/src/"
 configure_file("src/ffmpegkit.pc.in" "ffmpegkit.pc" @ONLY)
 install(FILES "${CMAKE_CURRENT_BINARY_DIR}/ffmpegkit.pc" DESTINATION lib/pkgconfig)
 
+# =============================================================================
+# 9. TESTING: Unit Test Framework Integration
+# =============================================================================
+# - Enable testing infrastructure with GoogleTest framework
+# - Configure cross-platform test build settings
+# - Handle Windows-specific CRT conflicts for test builds
+# - Add test directory to build system
 # ==============================================================================
-# 9. Testing
-# ==============================================================================
-
 if(BUILD_TESTS)
     enable_testing()
 

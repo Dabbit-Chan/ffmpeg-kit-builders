@@ -1468,172 +1468,171 @@ void ffmpegkit::FFmpegKitConfig::getMediaInformationExecute(
   }
 }
 
+
+struct AsyncFFmpegArgs {
+    std::shared_ptr<ffmpegkit::FFmpegSession> session;
+};
+
+struct AsyncFFprobeArgs {
+    std::shared_ptr<ffmpegkit::FFprobeSession> session;
+};
+
+struct AsyncFFplayArgs {
+    std::shared_ptr<ffmpegkit::FFplaySession> session;
+    int waitTimeout;
+};
+
+struct AsyncMediaInfoArgs {
+    std::shared_ptr<ffmpegkit::MediaInformationSession> session;
+    int waitTimeout;
+};
+
 void ffmpegkit::FFmpegKitConfig::asyncFFmpegExecute(
     const std::shared_ptr<ffmpegkit::FFmpegSession> ffmpegSession) {
-  std::thread([ffmpegSession]() {
-    #ifdef __MINGW32__
-      pthread_t self = pthread_self();
-      (void)self;
-    #endif
-    ffmpegkit::FFmpegKitConfig::ffmpegExecute(ffmpegSession);
 
-    ffmpegkit::FFmpegSessionCompleteCallback completeCallback =
-        ffmpegSession->getCompleteCallback();
+  auto* args = new AsyncFFmpegArgs{ffmpegSession};
+  pthread_t thread;
+  pthread_create(&thread, nullptr, [](void* arg) -> void* {
+    auto* a = static_cast<AsyncFFmpegArgs*>(arg);
+    auto session = std::move(a->session);
+    delete a;
+
+    ffmpegkit::FFmpegKitConfig::ffmpegExecute(session);
+
+    auto completeCallback = session->getCompleteCallback();
     if (completeCallback != nullptr) {
       try {
-        completeCallback(ffmpegSession);
-      } catch (const std::exception &exception) {
-        std::cout << "Exception thrown inside session complete callback. "
-                  << exception.what() << std::endl;
+        completeCallback(session);
+      } catch (const std::exception &e) {
+        std::cout << "Exception in session complete callback: " << e.what() << std::endl;
       }
     }
-
     {
       std::lock_guard<KitMutex> lock(getGlobalCallbacksMutex());
-      ffmpegkit::FFmpegSessionCompleteCallback globalCallback =
-          ffmpegkit::FFmpegKitConfig::getFFmpegSessionCompleteCallback();
+      auto globalCallback = ffmpegkit::FFmpegKitConfig::getFFmpegSessionCompleteCallback();
       if (globalCallback != nullptr) {
         try {
-          globalCallback(ffmpegSession);
-        } catch (const std::exception &exception) {
-          std::cout << "Exception thrown inside global complete callback. "
-                    << exception.what() << std::endl;
+          globalCallback(session);
+        } catch (const std::exception &e) {
+          std::cout << "Exception in global complete callback: " << e.what() << std::endl;
         }
       }
     }
-  }).detach();
+    return nullptr;
+  }, args);
+  pthread_detach(thread);
 }
 
 void ffmpegkit::FFmpegKitConfig::asyncFFprobeExecute(
     const std::shared_ptr<ffmpegkit::FFprobeSession> ffprobeSession) {
-  std::thread([ffprobeSession]() {
-    #ifdef __MINGW32__
-      pthread_t self = pthread_self();
-      (void)self;
-    #endif
-    ffmpegkit::FFmpegKitConfig::ffprobeExecute(ffprobeSession);
 
-    ffmpegkit::FFprobeSessionCompleteCallback completeCallback =
-        ffprobeSession->getCompleteCallback();
+  auto* args = new AsyncFFprobeArgs{ffprobeSession};
+  pthread_t thread;
+  pthread_create(&thread, nullptr, [](void* arg) -> void* {
+    auto* a = static_cast<AsyncFFprobeArgs*>(arg);
+    auto session = std::move(a->session);
+    delete a;
+
+    ffmpegkit::FFmpegKitConfig::ffprobeExecute(session);
+
+    auto completeCallback = session->getCompleteCallback();
     if (completeCallback != nullptr) {
       try {
-        // NOTIFY SESSION CALLBACK DEFINED
-        ffprobeSession->debugLog("[GET MEDIA INFO] sessionId: %ld NOTIFY SESSION CALLBACK DEFINED", ffprobeSession->getSessionId());
-        completeCallback(ffprobeSession);
-      } catch (const std::exception &exception) {
-        ffprobeSession->debugLog("[GET MEDIA INFO] sessionId: %ld exception: %s", ffprobeSession->getSessionId(), exception.what());
-        std::cout << "Exception thrown inside session complete callback. "
-                  << exception.what() << std::endl;
+        completeCallback(session);
+      } catch (const std::exception &e) {
+        std::cout << "Exception in session complete callback: " << e.what() << std::endl;
       }
     }
-
     {
       std::lock_guard<KitMutex> lock(getGlobalCallbacksMutex());
-      ffmpegkit::FFprobeSessionCompleteCallback
-          globalFFprobeSessionCompleteCallback =
-              ffmpegkit::FFmpegKitConfig::getFFprobeSessionCompleteCallback();
-      if (globalFFprobeSessionCompleteCallback != nullptr) {
+      auto globalCallback = ffmpegkit::FFmpegKitConfig::getFFprobeSessionCompleteCallback();
+      if (globalCallback != nullptr) {
         try {
-          // NOTIFY SESSION CALLBACK DEFINED
-          ffprobeSession->debugLog("[GET MEDIA INFO] sessionId: %ld NOTIFY GLOBAL SESSION CALLBACK DEFINED", ffprobeSession->getSessionId());
-          globalFFprobeSessionCompleteCallback(ffprobeSession);
-        } catch (const std::exception &exception) {
-          ffprobeSession->debugLog("[GET MEDIA INFO] sessionId: %ld exception: %s", ffprobeSession->getSessionId(), exception.what());
-          std::cout << "Exception thrown inside global complete callback. "
-                    << exception.what() << std::endl;
+          globalCallback(session);
+        } catch (const std::exception &e) {
+          std::cout << "Exception in global complete callback: " << e.what() << std::endl;
         }
       }
     }
-  }).detach();
+    return nullptr;
+  }, args);
+  pthread_detach(thread);
 }
 
 void ffmpegkit::FFmpegKitConfig::asyncFFplayExecute(
-    const std::shared_ptr<ffmpegkit::FFplaySession> ffplaySession, int waitTimeout = 500) {
-  std::thread([ffplaySession, waitTimeout]() {
-    #ifdef __MINGW32__
-      pthread_t self = pthread_self();
-      (void)self;
-    #endif
-    ffmpegkit::FFmpegKitConfig::ffplayExecute(ffplaySession, waitTimeout);
+    const std::shared_ptr<ffmpegkit::FFplaySession> ffplaySession,
+    int waitTimeout) {
 
-    ffmpegkit::FFplaySessionCompleteCallback completeCallback =
-        ffplaySession->getCompleteCallback();
+  auto* args = new AsyncFFplayArgs{ffplaySession, waitTimeout};
+  pthread_t thread;
+  pthread_create(&thread, nullptr, [](void* arg) -> void* {
+    auto* a = static_cast<AsyncFFplayArgs*>(arg);
+    auto session = std::move(a->session);
+    int timeout = a->waitTimeout;
+    delete a;
+
+    ffmpegkit::FFmpegKitConfig::ffplayExecute(session, timeout);
+
+    auto completeCallback = session->getCompleteCallback();
     if (completeCallback != nullptr) {
       try {
-        // NOTIFY SESSION CALLBACK DEFINED
-        ffplaySession->debugLog("[GET MEDIA INFO] sessionId: %ld NOTIFY SESSION CALLBACK DEFINED", ffplaySession->getSessionId());
-        completeCallback(ffplaySession);
-      } catch (const std::exception &exception) {
-        ffplaySession->debugLog("[GET MEDIA INFO] sessionId: %ld exception: %s", ffplaySession->getSessionId(), exception.what());
-        std::cout << "Exception thrown inside session complete callback. "
-                  << exception.what() << std::endl;
+        completeCallback(session);
+      } catch (const std::exception &e) {
+        std::cout << "Exception in session complete callback: " << e.what() << std::endl;
       }
     }
-
     {
       std::lock_guard<KitMutex> lock(getGlobalCallbacksMutex());
-      ffmpegkit::FFplaySessionCompleteCallback
-          globalFFplaySessionCompleteCallback =
-              ffmpegkit::FFmpegKitConfig::getFFplaySessionCompleteCallback();
-      if (globalFFplaySessionCompleteCallback != nullptr) {
+      auto globalCallback = ffmpegkit::FFmpegKitConfig::getFFplaySessionCompleteCallback();
+      if (globalCallback != nullptr) {
         try {
-          // NOTIFY SESSION CALLBACK DEFINED
-          ffplaySession->debugLog("[GET MEDIA INFO] sessionId: %ld NOTIFY GLOBAL SESSION CALLBACK DEFINED", ffplaySession->getSessionId());
-          globalFFplaySessionCompleteCallback(ffplaySession);
-        } catch (const std::exception &exception) {
-          ffplaySession->debugLog("[GET MEDIA INFO] sessionId: %ld exception: %s", ffplaySession->getSessionId(), exception.what());
-          std::cout << "Exception thrown inside global complete callback. "
-                    << exception.what() << std::endl;
+          globalCallback(session);
+        } catch (const std::exception &e) {
+          std::cout << "Exception in global complete callback: " << e.what() << std::endl;
         }
       }
     }
-  }).detach();
+    return nullptr;
+  }, args);
+  pthread_detach(thread);
 }
 
 void ffmpegkit::FFmpegKitConfig::asyncGetMediaInformationExecute(
-    const std::shared_ptr<ffmpegkit::MediaInformationSession>
-        mediaInformationSession,
+    const std::shared_ptr<ffmpegkit::MediaInformationSession> mediaInformationSession,
     const int waitTimeout) {
-  std::thread([mediaInformationSession, waitTimeout]() {
-    #ifdef __MINGW32__
-      pthread_t self = pthread_self();
-      (void)self;
-    #endif
-    ffmpegkit::FFmpegKitConfig::getMediaInformationExecute(
-        mediaInformationSession, waitTimeout);
 
-    ffmpegkit::MediaInformationSessionCompleteCallback completeCallback =
-        mediaInformationSession->getCompleteCallback();
+  auto* args = new AsyncMediaInfoArgs{mediaInformationSession, waitTimeout};
+  pthread_t thread;
+  pthread_create(&thread, nullptr, [](void* arg) -> void* {
+    auto* a = static_cast<AsyncMediaInfoArgs*>(arg);
+    auto session = std::move(a->session);
+    int timeout = a->waitTimeout;
+    delete a;
+
+    ffmpegkit::FFmpegKitConfig::getMediaInformationExecute(session, timeout);
+
+    auto completeCallback = session->getCompleteCallback();
     if (completeCallback != nullptr) {
       try {
-        // NOTIFY SESSION CALLBACK DEFINED
-        mediaInformationSession->debugLog("[GET MEDIA INFO] sessionId: %ld NOTIFY SESSION CALLBACK DEFINED", mediaInformationSession->getSessionId());
-        completeCallback(mediaInformationSession);
-      } catch (const std::exception &exception) {
-        mediaInformationSession->debugLog("[GET MEDIA INFO] sessionId: %ld exception: %s", mediaInformationSession->getSessionId(), exception.what());
-        std::cout << "Exception thrown inside session complete callback. "
-                  << exception.what() << std::endl;
+        completeCallback(session);
+      } catch (const std::exception &e) {
+        std::cout << "Exception in session complete callback: " << e.what() << std::endl;
       }
     }
-
     {
       std::lock_guard<KitMutex> lock(getGlobalCallbacksMutex());
-      ffmpegkit::MediaInformationSessionCompleteCallback
-          globalMediaInformationSessionCompleteCallback = ffmpegkit::
-              FFmpegKitConfig::getMediaInformationSessionCompleteCallback();
-      if (globalMediaInformationSessionCompleteCallback != nullptr) {
+      auto globalCallback = ffmpegkit::FFmpegKitConfig::getMediaInformationSessionCompleteCallback();
+      if (globalCallback != nullptr) {
         try {
-          // NOTIFY SESSION CALLBACK DEFINED
-          mediaInformationSession->debugLog("[GET MEDIA INFO] sessionId: %ld NOTIFY GLOBAL SESSION CALLBACK DEFINED", mediaInformationSession->getSessionId());
-          globalMediaInformationSessionCompleteCallback(mediaInformationSession);
-        } catch (const std::exception &exception) {
-          mediaInformationSession->debugLog("[GET MEDIA INFO] sessionId: %ld exception: %s", mediaInformationSession->getSessionId(), exception.what());
-          std::cout << "Exception thrown inside global complete callback. "
-                    << exception.what() << std::endl;
+          globalCallback(session);
+        } catch (const std::exception &e) {
+          std::cout << "Exception in global complete callback: " << e.what() << std::endl;
         }
       }
     }
-  }).detach();
+    return nullptr;
+  }, args);
+  pthread_detach(thread);
 }
 
 void ffmpegkit::FFmpegKitConfig::enableLogCallback(

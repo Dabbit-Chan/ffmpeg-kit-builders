@@ -2573,13 +2573,17 @@ static int task_stop(Scheduler *sch, SchTask *task)
 
 #ifdef _WIN32
     if (ret == ESRCH) {
+        av_log(NULL, AV_LOG_WARNING,
+               "[ffmpeg-kit] task_stop: pthread_join ESRCH for node "
+               "type=%d idx=%d — thread completed normally, "
+               "skipping task_cleanup.\n",
+               task->node.type, task->node.idx);
         task->thread_running = 0;
-        return task_cleanup(sch, task->node);
+        return 0;
     }
 #endif
 
     av_assert0(ret == 0);
-
     task->thread_running = 0;
     return (intptr_t)thread_ret;
 }

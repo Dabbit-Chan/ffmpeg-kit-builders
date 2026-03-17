@@ -19,6 +19,7 @@
 
 #include "ffprobe_lib.h"
 #include "ffprobe.c"
+#include "ffmpeg_kit_assert_override.h"
 #include "libavutil/mem.h"
 #include "libavutil/bprint.h"
 #include <string.h>
@@ -31,47 +32,6 @@
   #include <pthread.h>
   #include <unistd.h>
 #endif
-
-// Global lock to protect ffmpeg.c global variables
-// // --- MUTEX ABSTRACTION START ---
-// #ifdef _WIN32
-//   static CRITICAL_SECTION ffprobe_lock;
-//   static volatile long ffmpeg_lock_initialized = 0;
-
-//   static void lock_init(void) {
-//       // Thread-safe one-time initialization
-//       if (InterlockedCompareExchange(&ffmpeg_lock_initialized, 1, 0) == 0) {
-//           InitializeCriticalSection(&ffprobe_lock);
-//           InterlockedExchange(&ffmpeg_lock_initialized, 2);
-//       } else {
-//           // Wait for initialization to complete if another thread is doing it
-//           while (InterlockedCompareExchange(&ffmpeg_lock_initialized, 2, 2) != 2) {
-//               Sleep(1);
-//           }
-//       }
-//   }
-
-//   static void lib_mutex_lock(void) {
-//       if (ffmpeg_lock_initialized != 2) lock_init();
-//       EnterCriticalSection(&ffprobe_lock);
-//   }
-
-//   static void lib_mutex_unlock(void) {
-//       LeaveCriticalSection(&ffprobe_lock);
-//   }
-// #else
-//   // POSIX Implementation
-//   static pthread_mutex_t ffprobe_lock = PTHREAD_MUTEX_INITIALIZER;
-
-//   static void lib_mutex_lock(void) {
-//       pthread_mutex_lock(&ffprobe_lock);
-//   }
-
-//   static void lib_mutex_unlock(void) {
-//       pthread_mutex_unlock(&ffprobe_lock);
-//   }
-// #endif
-// // --- MUTEX ABSTRACTION END ---
 
 // Forward declare the auto-generated TLS initializer
 extern void ffprobe_tls_init_options(void);
@@ -224,14 +184,19 @@ int ffprobe_run(FFprobeContext *ctx)
   if (!ctx)
     return AVERROR(EINVAL);
 
-  //lib_mutex_lock();
+  ffmpeg_kit_assert_triggered = 0;
+
+  // Establish recovery point for av_assert0 failures inside ffprobe internals.
+  if (setjmp(ffmpeg_kit_assert_jmp) != 0) {
+    av_log(NULL, AV_LOG_ERROR,
+           "[ffmpeg-kit] ffprobe_run: recovered from internal assertion failure. "
+           "Session will be marked as failed.\n");
+    return AVERROR_EXIT;
+  }
 
   ffprobe_tls_init_options();
 
-  // Parse options and run probe
   ctx->ret = ffprobe_run_internal(ctx->argc, ctx->argv, &ctx->output);
-
-  //lib_mutex_unlock();
 
   return ctx->ret;
 }

@@ -20,6 +20,7 @@
 #ifndef PTHREAD_COMPAT_H
 #define PTHREAD_COMPAT_H
 
+#ifdef _WIN32
 #if defined(HAVE_STDINT_H)
 #undef HAVE_STDINT_H
 #endif
@@ -111,6 +112,7 @@ extern "C++" {
 #undef pthread_self
 #define pthread_self() pthread_t_compat((pthread_self)())
 
-#endif 
+#endif
 
+#endif // _WIN32
 #endif // PTHREAD_COMPAT_H
