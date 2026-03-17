@@ -165,6 +165,10 @@ configure_ffmpeg_kit() {
 
 	export PKG_CONFIG_PATH="${PKG_CONFIG_PATH}:${ffmpeg_install_prefix}/lib/pkgconfig"
 
+  export CFLAGS="$CFLAGS"
+  export CXXFLAGS="$CXXFLAGS"
+  export LDFLAGS="$LDFLAGS"
+
 	change_dir "${ffmpeg_kit_src_dir}"
 	make distclean > >(redirect_output) 2>&1
 
@@ -189,16 +193,32 @@ configure_ffmpeg_kit() {
     cmake_params+=" -DBUILD_TESTS=OFF"
 	fi
 
-	if truthy "$enable_libplacebo"; then
-    	cmake_params+=" -DENABLE_LIBPLACEBO=ON"
-	else
-    	cmake_params+=" -DENABLE_LIBPLACEBO=OFF"
-	fi
+	truthy "$enable_libplacebo" && cmake_params+=" -DENABLE_LIBPLACEBO=ON"
+  truthy "$enable_libtensorflow" && cmake_params+=" -DENABLE_LIBTENSORFLOW=ON"
+  truthy "$enable_libopenvino" && cmake_params+=" -DENABLE_OPENVINO=ON"
+  truthy "$enable_libtorch" && cmake_params+=" -DENABLE_LIBTORCH=ON"
 
 	if truthy "$do_debug_build"; then
 		cmake_params+=" -DCMAKE_BUILD_TYPE=Debug"
     CFLAGS+=" -Og -fno-omit-frame-pointer -ggdb"
     CXXFLAGS+=" -Og -fno-omit-frame-pointer -ggdb -D_GLIBCXX_DEBUG"
+    case "$test_type" in
+      tsan)
+        CFLAGS+=" -fsanitize=thread"
+        CXXFLAGS+=" -fsanitize=thread"
+        LDFLAGS+=" -fsanitize=thread"
+        ;;
+      asan)
+        CFLAGS+=" -fsanitize=address"
+        CXXFLAGS+=" -fsanitize=address"
+        LDFLAGS+=" -fsanitize=address"
+        ;;
+      undefined)
+        CFLAGS+=" -fsanitize=undefined"
+        CXXFLAGS+=" -fsanitize=undefined"
+        LDFLAGS+=" -fsanitize=undefined"
+        ;;
+    esac
 	else
 		cmake_params+=" -DCMAKE_BUILD_TYPE=Release"
 	fi

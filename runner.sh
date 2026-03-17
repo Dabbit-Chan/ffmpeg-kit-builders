@@ -133,6 +133,22 @@ Dynamic Library Control:
 "
 }
 
+append_cflags() {
+  export original_cflags+=" $1"
+}
+
+append_ldflags() {
+  export original_ldflags+=" $1"
+}
+
+append_cppflags() {
+  export original_cppflags+=" $1"
+}
+
+append_cxxflags() {
+  export original_cxxflags+=" $1"
+}
+
 parse_arguments() {
 # parse command line parameters, if any
 while [ $# -gt 0 ]; do
@@ -224,22 +240,22 @@ while [ $# -gt 0 ]; do
 		shift
 		;;
 	--cflags=*)
-		export original_cflags="${1#*=}"
+		append_cflags "${1#*=}"
 		echo -e "setting CFLAGS as $original_cflags"
 		shift
 		;;
   --cxxflags=*)
-		export original_cxxflags="${1#*=}"
+		append_cxxflags "${1#*=}"
 		echo -e "setting CXXFLAGS as $original_cxxflags"
 		shift
 		;;
   --cppflags=*)
-		export original_cppflags="${1#*=}"
+		append_cppflags "${1#*=}"
 		echo -e "setting CPPFLAGS as $original_cppflags"
 		shift
 		;;
   --ldflags=*)
-		export original_ldflags="${1#*=}"
+		append_ldflags "${1#*=}"
 		echo -e "setting LDFLAGS as $original_ldflags"
 		shift
 		;;
@@ -321,8 +337,27 @@ while [ $# -gt 0 ]; do
     export build_ffmpeg_kit=y
 		shift
 		;;
-    --build-tests|--build-test|--test|--tests)
+  --build-tests|--build-test|--test|--tests)
     export build_tests=y
+		shift
+		;;
+  --build-tests=*|--build-test=*|--test=*|--tests=*)
+    export test_type="${1#*=}"
+    export build_tests=y
+    case "$test_type" in
+      tsan|thread|t)
+      export test_type=tsan
+      ;;
+      asan|address|a)
+      export test_type=asan
+      ;;
+      undefined|ubsan|u)
+      export test_type=undefined
+      ;;
+      *)
+      export test_type=undefined
+      ;;
+    esac
 		shift
 		;;
 	--print-total-steps | --print-all-steps | --reset-and-clean=* | --reset-and-clean) shift ;; # Handled below, just consume and ignore here

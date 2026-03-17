@@ -3,7 +3,8 @@
 set -e
 
 FFMPEG_BUILD_DIR="$1"
-FFMPEG_KIT_BUILD_DIR=$(pwd) # Typically the directory containing CMakeCache.txt
+FFMPEG_KIT_LIBRARIES="$2"
+FFMPEG_KIT_SRC_DIR=$(pwd) # Typically the directory containing CMakeCache.txt
 
 truthy() {
     case "$1" in
@@ -16,118 +17,173 @@ truthy() {
     esac
 }
 
+echo_log() {
+	if truthy "$verbose"; then
+		echo "$1"
+	fi
+}
+
 verbose=false
 for arg in "$@"; do
 	case "$arg" in
 		-v|--verbose|-verbose|--v)
 			verbose=true
+			set -x
 			;;
 	esac
 done
 
 rm -f bundle_manifest.txt
 
-echo "  [SHARED-LIB] Analyzing dependencies in $FFMPEG_BUILD_DIR..."
-
 if [ ! -f "CMakeCache.txt" ]; then
-	echo "ERROR: CMakeCache.txt not found in $FFMPEG_KIT_BUILD_DIR"
+	echo "ERROR: CMakeCache.txt not found in $FFMPEG_KIT_SRC_DIR"
 	exit 1
 fi
 
-export PKG_CONFIG_PATH="$FFMPEG_BUILD_DIR/lib/pkgconfig"
-deps=$(pkg-config --static --libs libavdevice libavfilter libavformat libavcodec libswresample libswscale libavutil)
-
 raw_libs_to_keep=""
+if [ -n "$FFMPEG_KIT_LIBRARIES" ]; then
+    # Convert semicolon-delimited list to array, handling quoted strings
+    echo_log "  [SHARED-LIB] Using BUNDLE_LIBRARIES from CMake: $FFMPEG_KIT_LIBRARIES"
+    # Remove surrounding quotes and split by semicolon into array
+    clean_libs="${FFMPEG_KIT_LIBRARIES%\"}"
+    clean_libs="${clean_libs#\"}"
+    IFS=';' read -ra deps <<< "$clean_libs"
+else
+    # Fallback to original behavior if BUNDLE_LIBRARIES not provided
+    echo_log "  [SHARED-LIB] Analyzing dependencies in $FFMPEG_BUILD_DIR..."
+    export PKG_CONFIG_PATH="$FFMPEG_BUILD_DIR/lib/pkgconfig"
+    deps=$(pkg-config --static --libs libavdevice libavfilter libavformat libavcodec libswresample libswscale libavutil)
+		mapfile -t deps <<< "$deps"
+fi
 
 is_system_path() {
 	local p="$1"
 	# Skip standard Linux system library directories
-	[[ "$p" == "/usr/lib"* ]] ||
+	if [[ "$p" == "/usr/lib"* ]] ||
 		[[ "$p" == "/lib"* ]] ||
 		[[ "$p" == "/lib64"* ]] ||
 		[[ "$p" == "/usr/lib64"* ]] ||
-		[[ "$p" == *"/sysroot/usr/lib/"* ]]
+		[[ "$p" == *"/sysroot/usr/lib/"* ]]; then
+		return 0
+	fi
+	return 1
 }
 
-for flag in $deps; do
+is_system_lib() {
+	local name="$1"
+	if [[ "$name" =~ ^(m|c|pthread|dl|rt|stdc\+\+|gcc|gcc_s|atomic|z|log|android|ole32|shlwapi|gdi32|winmm|kernel32|setupapi|ws2_32|advapi32|user32|shell32|bcrypt|ncrypt|psapi|resolv|selinux|sepol|util|X11|xcb|Xext|Xau|Xdmcp|python)$ ]]; then
+		return 0
+	fi
+	return 1
+}
+
+process_library_path() {
+	local lib_path="$1"
+	local name="$2"
+	echo_log "  [DEBUG] Processing library path: $name - $lib_path"
+	if is_system_path "$lib_path"; then
+		echo_log "  [SKIPPING SYSTEM] $lib_path"
+		raw_libs_to_keep="$raw_libs_to_keep -l$name"
+		return
+	fi
+	filename=$(basename "$lib_path")
+	dirname=$(dirname "$lib_path")
+	extension="${filename##*.}"
+
+	case "$extension" in
+		so | dll | dylib)
+			echo_log "  [DEBUG] $filename is shared library"
+			if [ -h "$lib_path" ]; then
+				echo_log "  [DEBUG] $filename is symlink"
+				target=$(readlink -f "$lib_path")
+				if [[ "$target" == *.a || "$target" == *.lib ]]; then
+					echo_log "  [SKIPPING SYMLINK] $filename -> $target (Static target)"
+					return
+				fi
+			fi
+			if is_system_path "$lib_path"; then
+				raw_libs_to_keep="$raw_libs_to_keep -l$name"
+			else
+				real_path=$(readlink -f "$lib_path" 2>/dev/null || echo "$lib_path")
+				echo "  [FOUND SHARED] $filename -> $real_path"
+				echo "$real_path" >>bundle_manifest.txt
+			fi
+			;;
+		a | lib)
+			echo_log "  [DEBUG] $filename is static library"
+			if [ -h "$lib_path" ]; then
+				echo_log "  [DEBUG] $filename is symlink"
+				target=$(readlink -f "$lib_path")
+				if [[ "$target" == *.so || "$target" == *.dll || "$target" == *.dylib ]]; then
+					echo "  [FOUND SHARED VIA SYMLINK] $filename -> $(basename "$target")"
+					echo "$target" >> bundle_manifest.txt
+					raw_libs_to_keep="$raw_libs_to_keep -l$name"
+					return
+				elif [[ "$target" == *.a || "$target" == *.lib ]]; then
+					echo_log "  [SKIPPING SYMLINK] $filename -> $target (Static target)"
+					return
+				fi
+			elif [[ -f "$lib_path" ]]; then
+				echo_log "  [DEBUG] $filename is static. Bundling not needed."
+				return
+			fi
+			clean_name=$(echo "$filename" | sed -E 's/^lib//; s/\.(dll\.a|a|lib)$//; s/\.dll$//')
+
+			bin_dir="$(dirname "$dirname")/bin"
+			found_dll=""
+			for d in "$bin_dir" "$dirname"; do
+				if [ -f "$d/${clean_name}.dll" ]; then
+					found_dll="$d/${clean_name}.dll"
+					break
+				elif [ -f "$d/lib${clean_name}.dll" ]; then
+					found_dll="$d/lib${clean_name}.dll"
+					break
+				fi
+			done
+			if [ -n "$found_dll" ]; then
+				real_path=$(readlink -f "$found_dll" 2>/dev/null || echo "$found_dll")
+				echo "  [FOUND SHARED] $(basename "$found_dll") (via $filename)"
+				echo "$real_path" >>bundle_manifest.txt
+			else
+				echo_log "  [STATIC MERGED] $filename"
+			fi
+			;;
+	esac
+}
+
+for flag in "${deps[@]}"; do
+	echo_log "  [DEBUG] Processing: $flag"
 	case "$flag" in
 	-l*)
+		echo_log "  [DEBUG] $flag is -l flag"
 		name=${flag#-l}
 		name=${name#:}
 		name=${name%.a}
 
-		if [[ "$name" =~ ^(m|c|pthread|dl|rt|stdc\+\+|gcc|gcc_s|atomic|z|log|android|ole32|shlwapi|gdi32|winmm|kernel32|setupapi|ws2_32)$ ]]; then
+		if is_system_lib "$name"; then
 			raw_libs_to_keep="$raw_libs_to_keep -l$name"
 			continue
 		fi
 		lib_path=$(grep -m1 "pkgcfg_lib_FFMPEG_${name}:FILEPATH=" CMakeCache.txt | cut -d'=' -f2 || echo "")
 
 		if [[ -n "$lib_path" && "$lib_path" != *"NOTFOUND"* ]]; then
-			if is_system_path "$lib_path"; then
-				truthy "$verbose" && echo "  [SKIPPING SYSTEM] $lib_path"
-				raw_libs_to_keep="$raw_libs_to_keep -l$name"
-				continue
-			fi
-			filename=$(basename "$lib_path")
-			dirname=$(dirname "$lib_path")
-			extension="${filename##*.}"
-
-			case "$extension" in
-			so | dll | dylib)
-				if [ -h "$lib_path" ]; then
-					target=$(readlink -f "$lib_path")
-					if [[ "$target" == *.a || "$target" == *.lib ]]; then
-						truthy "$verbose" && echo "  [SKIPPING SYMLINK] $filename -> $target (Static target)"
-						continue
-					fi
-				fi
-				if is_system_path "$lib_path"; then
-					raw_libs_to_keep="$raw_libs_to_keep -l$name"
-				else
-					real_path=$(readlink -f "$lib_path" 2>/dev/null || echo "$lib_path")
-					echo "  [FOUND SHARED] $filename -> $real_path"
-					echo "$real_path" >>bundle_manifest.txt
-				fi
-				;;
-			a | lib)
-				if [ -h "$lib_path" ]; then
-					target=$(readlink -f "$lib_path")
-					if [[ "$target" == *.so || "$target" == *.dll || "$target" == *.dylib ]]; then
-						truthy "$verbose" && echo "  [FOUND SHARED VIA SYMLINK] $filename -> $(basename "$target")"
-						echo "$target" >> bundle_manifest.txt
-						raw_libs_to_keep="$raw_libs_to_keep -l$name"
-						continue
-					fi
-				fi
-				clean_name=$(echo "$filename" | sed -E 's/^lib//; s/\.(dll\.a|a|lib)$//; s/\.dll$//')
-
-				bin_dir="$(dirname "$dirname")/bin"
-				found_dll=""
-				for d in "$bin_dir" "$dirname"; do
-					if [ -f "$d/${clean_name}.dll" ]; then
-						found_dll="$d/${clean_name}.dll"
-						break
-					elif [ -f "$d/lib${clean_name}.dll" ]; then
-						found_dll="$d/lib${clean_name}.dll"
-						break
-					fi
-				done
-
-				if [ -n "$found_dll" ]; then
-					real_path=$(readlink -f "$found_dll" 2>/dev/null || echo "$found_dll")
-					echo "  [FOUND SHARED] $(basename "$found_dll") (via $filename)"
-					echo "$real_path" >>bundle_manifest.txt
-				else
-					truthy "$verbose" && echo "  [STATIC MERGED] $filename"
-				fi
-				;;
-			esac
+			process_library_path "$lib_path" "$name"
 		else
 			raw_libs_to_keep="$raw_libs_to_keep -l$name"
 		fi
 		;;
 	-Wl,* | -pthread)
+		echo_log "  [DEBUG] $flag is special flag"
 		raw_libs_to_keep="$raw_libs_to_keep $flag"
+		;;
+	*)
+		if [[ -f "$flag" ]]; then
+			echo_log "  [DEBUG] $flag is file"
+			name=$(basename "$flag")
+			name=${name%.a}
+			name=${name#lib}
+			process_library_path "$flag" "$name"
+		fi
 		;;
 	esac
 done

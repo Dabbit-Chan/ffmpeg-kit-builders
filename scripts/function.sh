@@ -493,7 +493,7 @@ setup_linux_environment() {
     export CPPFLAGS="$linux_cppflags"
     export linux_cxxflags="$original_cxxflags -I${dependency_install_prefix}/include "
     export CXXFLAGS="$linux_cxxflags"
-    export linux_ldflags="-static-libgcc $original_ldflags -L${dependency_install_prefix}/lib -Wl,-rpath,${dependency_install_prefix}/lib "
+    export linux_ldflags="$original_ldflags -L${dependency_install_prefix}/lib -Wl,-rpath,${dependency_install_prefix}/lib "
     export LDFLAGS="$linux_ldflags"
     export LD_LIBRARY_PATH="${dependency_install_prefix}/lib:$LD_LIBRARY_PATH"
 
@@ -515,6 +515,13 @@ setup_linux_environment() {
     source /opt/rh/gcc-toolset-14/enable
     
     export NASM=nasm
+    export CC=CC
+    export AR=AR
+    export AS=AS
+    export RANLIB=RANLIB
+    export LD=LD
+    export STRIP=STRIP
+    export CXX=CXX
 
     create_dir "$install_pkgconfig_dir"
     create_dir "$work_dir/pkgconfig"
@@ -3396,7 +3403,7 @@ configure_ffmpeg() {
 	change_dir "$ffmpeg_source_dir" || exit_message 1 "configure_ffmpeg: could not change to $ffmpeg_source_dir"
 	# iswindows && apply_patch "$PATCHDIR"/frei0r_load-shared-libraries-dynamically.diff
   local postpend_configure_opts=""
-	local init_options=" --disable-autodetect"
+	local init_options=""
   local extra_libs=""
   function add_extra_libs() {
       # local libs="-Wl,--start-group $1 -Wl,--end-group"
@@ -3469,6 +3476,7 @@ configure_ffmpeg() {
   fi
 
   if iswindows; then
+    init_options+=" --disable-autodetect"
     init_options+=" --extra-cflags=\" -DWIN32_LEAN_AND_MEAN \""
 	  init_options+=" --extra-cflags=\" -DWIN32_ANSI_API \""
 	  init_options+=" --extra-cflags=\" -DHAVE_WCHAR_FILENAME_H=0 \""
@@ -3532,7 +3540,7 @@ configure_ffmpeg() {
   truthy "$disable_libxcb_shm" && config_options+=" --disable-libxcb-shm"             # enable X11 grabbing shm communication [autodetect]
   truthy "$disable_libxcb_xfixes" && config_options+=" --disable-libxcb-xfixes"       # enable X11 grabbing mouse rendering [autodetect]
   truthy "$disable_libxcb" && config_options+=" --disable-libxcb"                     # enable X11 grabbing using XCB [autodetect]
-  truthy "$enable_rkmpp" && config_options+=" --enable-rkmpp"                         # enable Rockchip Media Process Platform code [no]
+  truthy "$enable_rkmpp" && config_options+=" --enable-rkmpp --enable-libdrm"         # enable Rockchip Media Process Platform code [no]
   truthy "$disable_v4l2_m2m" && config_options+=" --disable-v4l2-m2m"                 # disable V4L2 mem2mem code [autodetect]
   truthy "$disable_vaapi" && config_options+=" --disable-vaapi"                       # disable Video Acceleration API (mainly Unix/Intel) code [autodetect]
   truthy "$disable_xlib" && config_options+=" --disable-xlib"                         # disable xlib [autodetect]
@@ -4812,11 +4820,33 @@ get_pip_download_link() {
 }
 
 unversion_library() {
-TARGET_DIR="$1"
-  find "$TARGET_DIR" -maxdepth 1 -name "*.so.*" | sort -Vr | while read -r full_path; do
+  while [[ $# -gt 0 ]]; do
+      case "$1" in
+          -t=*) TARGET_DIR="${1#*=}"; shift ;;
+          # comma separated lists
+          -e=*) EXCLUDE="${1#*=}"; shift ;;
+          *) shift ;;
+      esac
+  done
+
+  IFS=',' read -ra excludes <<< "$EXCLUDE"
+
+  find "$TARGET_DIR" -maxdepth 1 \( -name "*.so.*" -o -name "*.a.*" \) | sort -Vr | while read -r full_path; do
     filename=$(basename "$full_path")
     # shellcheck disable=2001
     base_name=$(echo "$filename" | sed 's/\.so\..*/.so/')
+    # check if excluded
+    excluded=false
+    for exclude_pattern in "${excludes[@]}"; do
+        if [[ "$filename" == $exclude_pattern ]]; then
+            excluded=true
+            break
+        fi
+    done
+    if [ "$excluded" = true ]; then
+        echo "Skipping $filename -> Excluded." >>"$LOG_FILE"
+        continue
+    fi
     dest_path="$TARGET_DIR/$base_name"
     if [ -e "$dest_path" ]; then
         echo "Skipping $filename -> Target $base_name already exists." >>"$LOG_FILE"

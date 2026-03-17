@@ -2841,9 +2841,10 @@ build_libopenvino() {
     fi
 
     if [ ! -f "$src_dir/$lib/$touch_name" ]; then
+        install_missing_packages "ocl-icd"
         download_and_unpack_file "$repo" "$lib"
         change_dir "$src_dir/$lib"
-        unversion_library "$src_dir/$lib/openvino/libs"
+        unversion_library -t="$src_dir/$lib/openvino/libs"
         install_prebuilt_binary \
             -n="openvino" -v="$repo_ver" \
             -s="$src_dir/$lib" \
@@ -2851,6 +2852,10 @@ build_libopenvino() {
             -L="openvino/libs" \
             -m="$manifest" \
             -d="OpenVINO Toolkit" || exit_message 1 "could not install $lib_name"
+        cp -f "$src_dir/$lib/openvino/libs/tbb.pc" "$install_pkgconfig_dir/tbb.pc"
+        sed -i -e "s|^prefix=.*|prefix=${dependency_install_prefix}|g" \
+            -e "s|^libdir=.*|libdir=\${prefix}/lib|g" \
+            "$install_pkgconfig_dir/tbb.pc"
         create_touch_file 0 "$touch_name"
         echo "$src_dir/$lib/$touch_name" >>"$manifest"
     fi
@@ -2906,19 +2911,25 @@ build_libtorch() {
       find "$src_dir/$lib/$subdir/lib" -type f -name "libgtest*" -delete
       find "$src_dir/$lib/$subdir/lib" -type f -name "libbenchmark*" -delete
       find "$src_dir/$lib/$subdir/lib" -type f -name "libhwy*" -delete
-      unversion_library "$src_dir/$lib/$subdir/lib"
+      unversion_library -t="$src_dir/$lib/$subdir/lib" -e="libgomp*"
       install_prebuilt_binary \
           -n="$base_lib" -v="$repo_ver" \
           -s="$src_dir/$lib/$subdir" \
           -I="include" \
           -L="lib" \
           -m="$manifest" \
-          -d="PyTorch Library ($subdir)" || exit_message 1 "could not install libtensorflow"
-
+          -d="PyTorch Library ($subdir)" || exit_message 1 "could not install libtorch"
       change_dir "$src_dir/$lib/$subdir"
       create_touch_file 0 "$touch_name"
       echo "$src_dir/$lib/$subdir/$touch_name" >>"$manifest"
   fi
+  local gomp_lib=$(find "$dependency_install_prefix/lib" -type f -name "libgomp*.so.*" | head -n 1)
+  if [[ -n "$gomp_lib" ]]; then
+    local gomp_name=$(basename "${gomp_lib}")
+    gomp_name="${gomp_name%%.*}" # remove version suffix
+    ln -sf "$gomp_lib" "$dependency_install_prefix/lib/$gomp_name.so"
+  fi
+  sed -i -E 's/-lunbox_ /-lunbox_lib /g' "$install_pkgconfig_dir/$base_lib.pc" # unbox_lib becomes unbox_ for some reason
 }
 # build_libtensorflow     # config_options+= --enable-libtensorflow       # enable TensorFlow as a DNN module backend for DNN based filters like sr [no]
 build_libtensorflow() {
@@ -2968,7 +2979,7 @@ build_libtensorflow() {
 
   if [ ! -f "$src_dir/$lib/$subdir/$touch_name" ]; then
       download_and_unpack_file "$repo" "$subdir"
-      unversion_library "$src_dir/$lib/$subdir/lib"
+      unversion_library -t="$src_dir/$lib/$subdir/lib"
       install_prebuilt_binary \
           -n="$base_lib" -v="$repo_ver" \
           -s="$src_dir/$lib/$subdir" \
@@ -4375,8 +4386,8 @@ build_libnvvm() {
       if [ ! -f "$src_dir/$lib/$touch_name" ]; then
           download_and_unpack_file "$repo" "$lib"
           change_dir "$src_dir/$lib"
-          unversion_library "$src_dir/$lib/nvvm/libdevice"
-          unversion_library "$src_dir/$lib/nvvm/lib64"
+          unversion_library -t="$src_dir/$lib/nvvm/libdevice"
+          unversion_library -t="$src_dir/$lib/nvvm/lib64"
           install_prebuilt_binary -n="libdevice" -v="$repo_ver" \
               -s="$src_dir/$lib/nvvm" \
               -m="$manifest" \
@@ -4448,7 +4459,7 @@ build_cuda_cudart() {
       if [ ! -f "$src_dir/$lib/$touch_name" ]; then
           download_and_unpack_file "$repo" "$lib"
           change_dir "$src_dir/$lib"
-          unversion_library "$src_dir/$lib/lib"
+          unversion_library -t="$src_dir/$lib/lib"
           install_prebuilt_binary -n="$base_lib" -v="$repo_ver" \
               -s="$src_dir/$lib" \
               -m="$manifest" \

@@ -3131,7 +3131,7 @@ build_libopenvino() {
             -d="OpenVINO Toolkit" || exit_message 1 "could not install $lib_name"
         # 2. Install TBB Dependency
         install_prebuilt_binary \
-            -n="tbb" -v="$repo_ver" \
+            -n="tbb12" -v="$repo_ver" \
             -s="$src_dir/$lib" \
             -I="runtime/3rdparty/tbb/include" \
             -L="runtime/3rdparty/tbb/lib" \
@@ -3148,7 +3148,7 @@ build_libopenvino() {
         sed -i -E 's/^([[:space:]]*)BOOLEAN,/\1OV_BOOLEAN,/g' "$dependency_install_prefix/include/openvino/c/ov_common.h"
         fi
     fi
-    sed -i 's/^Libs:.*/Libs: -L${libdir} -lopenvino -lopenvino_c -lwinmm/g' "$install_pkgconfig_dir/openvino.pc"
+    sed -i 's/^Libs:.*/Libs: -L${libdir} -lopenvino -lopenvino_c -ltbb12 -lwinmm/g' "$install_pkgconfig_dir/openvino.pc"
 }
 # build_libtorch          # config_options+= --enable-libtorch            # enable Torch as one DNN backend [no]
 build_libtorch() {

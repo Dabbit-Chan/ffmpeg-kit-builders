@@ -139,11 +139,9 @@ configure_ffmpeg_kit() {
 		cmake_params+=" -DBUILD_TESTS=OFF"
 	fi
 
-	if truthy "$enable_libplacebo"; then
-    	cmake_params+=" -DENABLE_LIBPLACEBO=ON"
-	else
-    	cmake_params+=" -DENABLE_LIBPLACEBO=OFF"
-	fi
+	truthy "$enable_libplacebo" && cmake_params+=" -DENABLE_LIBPLACEBO=ON"
+	truthy "$enable_libtensorflow" && cmake_params+=" -DENABLE_LIBTENSORFLOW=ON"
+	truthy "$enable_libopenvino" && cmake_params+=" -DENABLE_OPENVINO=ON"
 
 	if truthy "$do_debug_build"; then
 		export STRIP=true
