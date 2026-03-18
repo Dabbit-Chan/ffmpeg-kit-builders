@@ -23,9 +23,7 @@
 #include <setjmp.h>
 #include "ffmpeg_tls.h"
 
-/* avassert.h is a C header. When force-included into C++ translation units
- * it must be wrapped in extern "C" to prevent name mangling of av_log_*
- * symbols, which would cause linker failures against the C-compiled libavutil. */
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -36,22 +34,22 @@ extern "C" {
 }
 #endif
 
-/* Override — runs after avassert.h so this is always the final definition. */
+
 #undef av_assert0
-#define av_assert0(cond) do {                               \
-    if (!(cond)) {                                          \
-        ffmpeg_kit_assert_log(#cond, __FILE__, __LINE__);   \
-        ffmpeg_kit_assert_triggered = 1;                    \
-        longjmp(ffmpeg_kit_assert_jmp, 1);                  \
-    }                                                       \
+#define av_assert0(cond) do {                                        \
+    if (!(cond)) {                                                   \
+        ffmpeg_kit_assert_log(#cond, __FILE__, __LINE__);            \
+        ffmpeg_kit_assert_triggered = 1;                             \
+        if (ffmpeg_kit_assert_jmp_ptr)                               \
+            longjmp(*ffmpeg_kit_assert_jmp_ptr, 1);                  \
+    }                                                                \
 } while (0)
 
 #ifdef __cplusplus
 extern "C" {
 #endif
-
-extern FFMPEG_THREAD_LOCAL jmp_buf ffmpeg_kit_assert_jmp;
-extern FFMPEG_THREAD_LOCAL int     ffmpeg_kit_assert_triggered;
+extern FFMPEG_THREAD_LOCAL jmp_buf *ffmpeg_kit_assert_jmp_ptr;
+extern FFMPEG_THREAD_LOCAL int      ffmpeg_kit_assert_triggered;
 void ffmpeg_kit_assert_log(const char *cond, const char *file, int line);
 
 #ifdef __cplusplus

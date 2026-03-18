@@ -46,6 +46,7 @@
 #include "libavutil/opt.h"
 #include "libavutil/tx.h"
 #include "libswresample/swresample.h"
+#include "libswscale/swscale.h"
 
 #include "libavfilter/avfilter.h"
 #include "libavfilter/buffersink.h"
@@ -63,6 +64,7 @@
 //const int program_birth_year = 2003;
 
 static void ffplay_reset_internal_state(void);
+static void ffplay_tls_init_options(void);
 
 #define MAX_QUEUE_SIZE (15 * 1024 * 1024)
 #define MIN_FRAMES 25
@@ -345,6 +347,7 @@ typedef struct VideoState {
     SDL_Window *window;
     SDL_Renderer *renderer;
     VkRenderer *vk_renderer;
+    SDL_RendererInfo renderer_info;
     char *window_title;
     atomic_int default_width;
     atomic_int default_height;
@@ -423,6 +426,7 @@ static int is_full_screen;
 static SDL_Window *window;
 static SDL_Renderer *renderer;
 static SDL_RendererInfo renderer_info = {0};
+
 
 static VkRenderer *vk_renderer;
 
@@ -989,13 +993,56 @@ static int upload_texture(SDL_Texture **tex, AVFrame *frame)
                 return -1;
             }
             break;
-        default:
-            if (frame->linesize[0] < 0) {
-                ret = SDL_UpdateTexture(*tex, NULL, frame->data[0] + frame->linesize[0] * (frame->height - 1), -frame->linesize[0]);
+        default: {
+            // SDL has no native support for this pixel format.
+            // Convert to ARGB8888 via swscale before uploading.
+            if (sdl_pix_fmt == SDL_PIXELFORMAT_UNKNOWN) {
+                static struct SwsContext *sws_ctx = NULL;
+                static AVFrame *tmp_frame = NULL;
+
+                if (!tmp_frame) {
+                    tmp_frame = av_frame_alloc();
+                    if (!tmp_frame)
+                        return -1;
+                }
+
+                // Reallocate tmp_frame if dimensions changed
+                if (tmp_frame->width  != frame->width  ||
+                    tmp_frame->height != frame->height ||
+                    tmp_frame->format != AV_PIX_FMT_BGRA) {
+                    av_frame_unref(tmp_frame);
+                    tmp_frame->width  = frame->width;
+                    tmp_frame->height = frame->height;
+                    tmp_frame->format = AV_PIX_FMT_BGRA;
+                    if (av_frame_get_buffer(tmp_frame, 0) < 0)
+                        return -1;
+                }
+
+                sws_ctx = sws_getCachedContext(sws_ctx,
+                    frame->width, frame->height, frame->format,
+                    frame->width, frame->height, AV_PIX_FMT_BGRA,
+                    SWS_BILINEAR, NULL, NULL, NULL);
+                if (!sws_ctx) {
+                    av_log(NULL, AV_LOG_ERROR, "Cannot initialize swscale context for format conversion.\n");
+                    return -1;
+                }
+
+                sws_scale(sws_ctx,
+                          (const uint8_t * const *)frame->data, frame->linesize,
+                          0, frame->height,
+                          tmp_frame->data, tmp_frame->linesize);
+
+                ret = SDL_UpdateTexture(*tex, NULL, tmp_frame->data[0], tmp_frame->linesize[0]);
             } else {
-                ret = SDL_UpdateTexture(*tex, NULL, frame->data[0], frame->linesize[0]);
+                // SDL-native packed format, upload directly
+                if (frame->linesize[0] < 0) {
+                    ret = SDL_UpdateTexture(*tex, NULL, frame->data[0] + frame->linesize[0] * (frame->height - 1), -frame->linesize[0]);
+                } else {
+                    ret = SDL_UpdateTexture(*tex, NULL, frame->data[0], frame->linesize[0]);
+                }
             }
             break;
+        }
     }
     return ret;
 }
@@ -1387,7 +1434,8 @@ static void do_exit(VideoState *is)
     if (vk_renderer)
         vk_renderer_destroy(vk_renderer);
     if (window)
-        SDL_DestroyWindow(window);
+      SDL_DestroyWindow(window);
+
     uninit_opts();
     for (int i = 0; i < nb_vfilters; i++)
         av_freep(&vfilters_list[i]);
@@ -1951,9 +1999,9 @@ static int configure_video_filters(AVFilterGraph *graph, VideoState *is, const c
     if (!par)
         return AVERROR(ENOMEM);
 
-    for (i = 0; i < renderer_info.num_texture_formats; i++) {
+    for (i = 0; i < is->renderer_info.num_texture_formats; i++) {
         for (j = 0; j < FF_ARRAY_ELEMS(sdl_texture_format_map); j++) {
-            if (renderer_info.texture_formats[i] == sdl_texture_format_map[j].texture_fmt) {
+            if (is->renderer_info.texture_formats[i] == sdl_texture_format_map[j].texture_fmt) {
                 pix_fmts[nb_pix_fmts++] = sdl_texture_format_map[j].format;
                 break;
             }
@@ -2006,7 +2054,7 @@ static int configure_video_filters(AVFilterGraph *graph, VideoState *is, const c
     if ((ret = av_opt_set_array(filt_out, "pixel_formats", AV_OPT_SEARCH_CHILDREN,
                                 0, nb_pix_fmts, AV_OPT_TYPE_PIXEL_FMT, pix_fmts)) < 0)
         goto fail;
-    if (!vk_renderer &&
+    if (!is->vk_renderer &&
         (ret = av_opt_set_array(filt_out, "colorspaces", AV_OPT_SEARCH_CHILDREN,
                                 0, FF_ARRAY_ELEMS(sdl_supported_color_spaces),
                                 AV_OPT_TYPE_INT, sdl_supported_color_spaces)) < 0)
@@ -3291,6 +3339,7 @@ static VideoState *stream_open(const char *filename,
     is->window = window;
     is->renderer = renderer;
     is->vk_renderer = vk_renderer;
+    is->renderer_info = renderer_info;
     is->window_title = av_strdup(window_title);
     is->default_width = default_width;
     is->default_height = default_height;
@@ -3806,59 +3855,63 @@ static int opt_codec(void *optctx, const char *opt, const char *arg)
 
 static int dummy;
 
-static const OptionDef options[] = {
+static OptionDef options_template[] = {
     CMDUTILS_COMMON_OPTIONS
     { "x",                  OPT_TYPE_FUNC, OPT_FUNC_ARG, { .func_arg = opt_width }, "force displayed width", "width" },
     { "y",                  OPT_TYPE_FUNC, OPT_FUNC_ARG, { .func_arg = opt_height }, "force displayed height", "height" },
-    { "fs",                 OPT_TYPE_BOOL,            0, { &is_full_screen }, "force full screen" },
-    { "an",                 OPT_TYPE_BOOL,            0, { &audio_disable }, "disable audio" },
-    { "vn",                 OPT_TYPE_BOOL,            0, { &video_disable }, "disable video" },
-    { "sn",                 OPT_TYPE_BOOL,            0, { &subtitle_disable }, "disable subtitling" },
-    { "ast",                OPT_TYPE_STRING, OPT_EXPERT, { &wanted_stream_spec[AVMEDIA_TYPE_AUDIO] }, "select desired audio stream", "stream_specifier" },
-    { "vst",                OPT_TYPE_STRING, OPT_EXPERT, { &wanted_stream_spec[AVMEDIA_TYPE_VIDEO] }, "select desired video stream", "stream_specifier" },
-    { "sst",                OPT_TYPE_STRING, OPT_EXPERT, { &wanted_stream_spec[AVMEDIA_TYPE_SUBTITLE] }, "select desired subtitle stream", "stream_specifier" },
-    { "ss",                 OPT_TYPE_TIME,            0, { &start_time }, "seek to a given position in seconds", "pos" },
-    { "t",                  OPT_TYPE_TIME,            0, { &duration }, "play  \"duration\" seconds of audio/video", "duration" },
-    { "bytes",              OPT_TYPE_INT,             0, { &seek_by_bytes }, "seek by bytes 0=off 1=on -1=auto", "val" },
-    { "seek_interval",      OPT_TYPE_FLOAT,           0, { &seek_interval }, "set seek interval for left/right keys, in seconds", "seconds" },
-    { "nodisp",             OPT_TYPE_BOOL,            0, { &display_disable }, "disable graphical display" },
-    { "noborder",           OPT_TYPE_BOOL,            0, { &borderless }, "borderless window" },
-    { "alwaysontop",        OPT_TYPE_BOOL,            0, { &alwaysontop }, "window always on top" },
-    { "volume",             OPT_TYPE_INT,             0, { &startup_volume}, "set startup volume 0=min 100=max", "volume" },
+    { "fs",                 OPT_TYPE_BOOL,            0, { NULL }, "force full screen" },
+    { "an",                 OPT_TYPE_BOOL,            0, { NULL }, "disable audio" },
+    { "vn",                 OPT_TYPE_BOOL,            0, { NULL }, "disable video" },
+    { "sn",                 OPT_TYPE_BOOL,            0, { NULL }, "disable subtitling" },
+    { "ast",                OPT_TYPE_STRING, OPT_EXPERT, { NULL }, "select desired audio stream", "stream_specifier" },
+    { "vst",                OPT_TYPE_STRING, OPT_EXPERT, { NULL }, "select desired video stream", "stream_specifier" },
+    { "sst",                OPT_TYPE_STRING, OPT_EXPERT, { NULL }, "select desired subtitle stream", "stream_specifier" },
+    { "ss",                 OPT_TYPE_TIME,            0, { NULL }, "seek to a given position in seconds", "pos" },
+    { "t",                  OPT_TYPE_TIME,            0, { NULL }, "play  \"duration\" seconds of audio/video", "duration" },
+    { "bytes",              OPT_TYPE_INT,             0, { NULL }, "seek by bytes 0=off 1=on -1=auto", "val" },
+    { "seek_interval",      OPT_TYPE_FLOAT,           0, { NULL }, "set seek interval for left/right keys, in seconds", "seconds" },
+    { "nodisp",             OPT_TYPE_BOOL,            0, { NULL }, "disable graphical display" },
+    { "noborder",           OPT_TYPE_BOOL,            0, { NULL }, "borderless window" },
+    { "alwaysontop",        OPT_TYPE_BOOL,            0, { NULL }, "window always on top" },
+    { "volume",             OPT_TYPE_INT,             0, { NULL }, "set startup volume 0=min 100=max", "volume" },
     { "f",                  OPT_TYPE_FUNC, OPT_FUNC_ARG, { .func_arg = opt_format }, "force format", "fmt" },
-    { "stats",              OPT_TYPE_BOOL,   OPT_EXPERT, { &show_status }, "show status", "" },
-    { "fast",               OPT_TYPE_BOOL,   OPT_EXPERT, { &fast }, "non spec compliant optimizations", "" },
-    { "genpts",             OPT_TYPE_BOOL,   OPT_EXPERT, { &genpts }, "generate pts", "" },
-    { "drp",                OPT_TYPE_INT,    OPT_EXPERT, { &decoder_reorder_pts }, "let decoder reorder pts 0=off 1=on -1=auto", ""},
-    { "lowres",             OPT_TYPE_INT,    OPT_EXPERT, { &lowres }, "", "" },
+    { "stats",              OPT_TYPE_BOOL,   OPT_EXPERT, { NULL }, "show status", "" },
+    { "fast",               OPT_TYPE_BOOL,   OPT_EXPERT, { NULL }, "non spec compliant optimizations", "" },
+    { "genpts",             OPT_TYPE_BOOL,   OPT_EXPERT, { NULL }, "generate pts", "" },
+    { "drp",                OPT_TYPE_INT,    OPT_EXPERT, { NULL }, "let decoder reorder pts 0=off 1=on -1=auto", ""},
+    { "lowres",             OPT_TYPE_INT,    OPT_EXPERT, { NULL }, "", "" },
     { "sync",               OPT_TYPE_FUNC, OPT_FUNC_ARG | OPT_EXPERT, { .func_arg = opt_sync }, "set audio-video sync. type (type=audio/video/ext)", "type" },
-    { "autoexit",           OPT_TYPE_BOOL,   OPT_EXPERT, { &autoexit }, "exit at the end", "" },
-    { "exitonkeydown",      OPT_TYPE_BOOL,   OPT_EXPERT, { &exit_on_keydown }, "exit on key down", "" },
-    { "exitonmousedown",    OPT_TYPE_BOOL,   OPT_EXPERT, { &exit_on_mousedown }, "exit on mouse down", "" },
-    { "loop",               OPT_TYPE_INT,    OPT_EXPERT, { &loop }, "set number of times the playback shall be looped", "loop count" },
-    { "framedrop",          OPT_TYPE_BOOL,   OPT_EXPERT, { &framedrop }, "drop frames when cpu is too slow", "" },
-    { "infbuf",             OPT_TYPE_BOOL,   OPT_EXPERT, { &infinite_buffer }, "don't limit the input buffer size (useful with realtime streams)", "" },
-    { "window_title",       OPT_TYPE_STRING,          0, { &window_title }, "set window title", "window title" },
-    { "left",               OPT_TYPE_INT,    OPT_EXPERT, { &screen_left }, "set the x position for the left of the window", "x pos" },
-    { "top",                OPT_TYPE_INT,    OPT_EXPERT, { &screen_top }, "set the y position for the top of the window", "y pos" },
+    { "autoexit",           OPT_TYPE_BOOL,   OPT_EXPERT, { NULL }, "exit at the end", "" },
+    { "exitonkeydown",      OPT_TYPE_BOOL,   OPT_EXPERT, { NULL }, "exit on key down", "" },
+    { "exitonmousedown",    OPT_TYPE_BOOL,   OPT_EXPERT, { NULL }, "exit on mouse down", "" },
+    { "loop",               OPT_TYPE_INT,    OPT_EXPERT, { NULL }, "set number of times the playback shall be looped", "loop count" },
+    { "framedrop",          OPT_TYPE_BOOL,   OPT_EXPERT, { NULL }, "drop frames when cpu is too slow", "" },
+    { "infbuf",             OPT_TYPE_BOOL,   OPT_EXPERT, { NULL }, "don't limit the input buffer size (useful with realtime streams)", "" },
+    { "window_title",       OPT_TYPE_STRING,          0, { NULL }, "set window title", "window title" },
+    { "left",               OPT_TYPE_INT,    OPT_EXPERT, { NULL }, "set the x position for the left of the window", "x pos" },
+    { "top",                OPT_TYPE_INT,    OPT_EXPERT, { NULL }, "set the y position for the top of the window", "y pos" },
     { "vf",                 OPT_TYPE_FUNC, OPT_FUNC_ARG | OPT_EXPERT, { .func_arg = opt_add_vfilter }, "set video filters", "filter_graph" },
-    { "af",                 OPT_TYPE_STRING,          0, { &afilters }, "set audio filters", "filter_graph" },
-    { "rdftspeed",          OPT_TYPE_INT, OPT_AUDIO | OPT_EXPERT, { &rdftspeed }, "rdft speed", "msecs" },
+    { "af",                 OPT_TYPE_STRING,          0, { NULL }, "set audio filters", "filter_graph" },
+    { "rdftspeed",          OPT_TYPE_INT, OPT_AUDIO | OPT_EXPERT, { NULL }, "rdft speed", "msecs" },
     { "showmode",           OPT_TYPE_FUNC, OPT_FUNC_ARG, { .func_arg = opt_show_mode}, "select show mode (0 = video, 1 = waves, 2 = RDFT)", "mode" },
-    { "i",                  OPT_TYPE_BOOL,            0, { &dummy}, "read specified file", "input_file"},
+    { "i",                  OPT_TYPE_BOOL,            0, { NULL}, "read specified file", "input_file"},
     { "codec",              OPT_TYPE_FUNC, OPT_FUNC_ARG, { .func_arg = opt_codec}, "force decoder", "decoder_name" },
-    { "acodec",             OPT_TYPE_STRING, OPT_EXPERT, {    &audio_codec_name }, "force audio decoder",    "decoder_name" },
-    { "scodec",             OPT_TYPE_STRING, OPT_EXPERT, { &subtitle_codec_name }, "force subtitle decoder", "decoder_name" },
-    { "vcodec",             OPT_TYPE_STRING, OPT_EXPERT, {    &video_codec_name }, "force video decoder",    "decoder_name" },
-    { "autorotate",         OPT_TYPE_BOOL,            0, { &autorotate }, "automatically rotate video", "" },
-    { "find_stream_info",   OPT_TYPE_BOOL, OPT_INPUT | OPT_EXPERT, { &find_stream_info },
+    { "acodec",             OPT_TYPE_STRING, OPT_EXPERT, {    NULL }, "force audio decoder",    "decoder_name" },
+    { "scodec",             OPT_TYPE_STRING, OPT_EXPERT, { NULL }, "force subtitle decoder", "decoder_name" },
+    { "vcodec",             OPT_TYPE_STRING, OPT_EXPERT, {    NULL }, "force video decoder",    "decoder_name" },
+    { "autorotate",         OPT_TYPE_BOOL,            0, { NULL }, "automatically rotate video", "" },
+    { "find_stream_info",   OPT_TYPE_BOOL, OPT_INPUT | OPT_EXPERT, { NULL },
         "read and decode the streams to fill missing information with heuristics" },
-    { "filter_threads",     OPT_TYPE_INT,    OPT_EXPERT, { &filter_nbthreads }, "number of filter threads per graph" },
-    { "enable_vulkan",      OPT_TYPE_BOOL,            0, { &enable_vulkan }, "enable vulkan renderer" },
-    { "vulkan_params",      OPT_TYPE_STRING, OPT_EXPERT, { &vulkan_params }, "vulkan configuration using a list of key=value pairs separated by ':'" },
-    { "hwaccel",            OPT_TYPE_STRING, OPT_EXPERT, { &hwaccel }, "use HW accelerated decoding" },
+    { "filter_threads",     OPT_TYPE_INT,    OPT_EXPERT, { NULL }, "number of filter threads per graph" },
+    { "enable_vulkan",      OPT_TYPE_BOOL,            0, { NULL }, "enable vulkan renderer" },
+    { "vulkan_params",      OPT_TYPE_STRING, OPT_EXPERT, { NULL }, "vulkan configuration using a list of key=value pairs separated by ':'" },
+    { "hwaccel",            OPT_TYPE_STRING, OPT_EXPERT, { NULL }, "use HW accelerated decoding" },
     { NULL, },
 };
+
+/* Per-thread working copy of options — memcpy'd from options_template at
+ * session start so concurrent sessions never share dst_ptr state. */
+static FFMPEG_THREAD_LOCAL OptionDef options[FF_ARRAY_ELEMS(options_template)];
 
 static void show_usage(void)
 {
@@ -3908,6 +3961,7 @@ VideoState *ffplay_init_internal(int argc, char **argv)
     VideoState *is;
 
     ffplay_reset_internal_state();
+    ffplay_tls_init_options();
 
     init_dynload();
 
@@ -4106,3 +4160,51 @@ void ffplay_reset_internal_state(void) {
     vk_renderer = NULL;
 }
 
+void ffplay_tls_init_options(void) {
+    memcpy(options, options_template, sizeof(options_template));
+
+    for (int i = 0; options[i].name != NULL; i++) {
+        if (strcmp(options[i].name, "hide_banner") == 0) options[i].u.dst_ptr = &hide_banner;
+        if (strcmp(options[i].name, "fs") == 0) options[i].u.dst_ptr = &is_full_screen;
+        if (strcmp(options[i].name, "an") == 0) options[i].u.dst_ptr = &audio_disable;
+        if (strcmp(options[i].name, "vn") == 0) options[i].u.dst_ptr = &video_disable;
+        if (strcmp(options[i].name, "sn") == 0) options[i].u.dst_ptr = &subtitle_disable;
+        if (strcmp(options[i].name, "ast") == 0) options[i].u.dst_ptr = &wanted_stream_spec[AVMEDIA_TYPE_AUDIO];
+        if (strcmp(options[i].name, "vst") == 0) options[i].u.dst_ptr = &wanted_stream_spec[AVMEDIA_TYPE_VIDEO];
+        if (strcmp(options[i].name, "sst") == 0) options[i].u.dst_ptr = &wanted_stream_spec[AVMEDIA_TYPE_SUBTITLE];
+        if (strcmp(options[i].name, "ss") == 0) options[i].u.dst_ptr = &start_time;
+        if (strcmp(options[i].name, "t") == 0) options[i].u.dst_ptr = &duration;
+        if (strcmp(options[i].name, "bytes") == 0) options[i].u.dst_ptr = &seek_by_bytes;
+        if (strcmp(options[i].name, "seek_interval") == 0) options[i].u.dst_ptr = &seek_interval;
+        if (strcmp(options[i].name, "nodisp") == 0) options[i].u.dst_ptr = &display_disable;
+        if (strcmp(options[i].name, "noborder") == 0) options[i].u.dst_ptr = &borderless;
+        if (strcmp(options[i].name, "alwaysontop") == 0) options[i].u.dst_ptr = &alwaysontop;
+        if (strcmp(options[i].name, "volume") == 0) options[i].u.dst_ptr = &startup_volume;
+        if (strcmp(options[i].name, "stats") == 0) options[i].u.dst_ptr = &show_status;
+        if (strcmp(options[i].name, "fast") == 0) options[i].u.dst_ptr = &fast;
+        if (strcmp(options[i].name, "genpts") == 0) options[i].u.dst_ptr = &genpts;
+        if (strcmp(options[i].name, "drp") == 0) options[i].u.dst_ptr = &decoder_reorder_pts;
+        if (strcmp(options[i].name, "lowres") == 0) options[i].u.dst_ptr = &lowres;
+        if (strcmp(options[i].name, "autoexit") == 0) options[i].u.dst_ptr = &autoexit;
+        if (strcmp(options[i].name, "exitonkeydown") == 0) options[i].u.dst_ptr = &exit_on_keydown;
+        if (strcmp(options[i].name, "exitonmousedown") == 0) options[i].u.dst_ptr = &exit_on_mousedown;
+        if (strcmp(options[i].name, "loop") == 0) options[i].u.dst_ptr = &loop;
+        if (strcmp(options[i].name, "framedrop") == 0) options[i].u.dst_ptr = &framedrop;
+        if (strcmp(options[i].name, "infbuf") == 0) options[i].u.dst_ptr = &infinite_buffer;
+        if (strcmp(options[i].name, "window_title") == 0) options[i].u.dst_ptr = &window_title;
+        if (strcmp(options[i].name, "left") == 0) options[i].u.dst_ptr = &screen_left;
+        if (strcmp(options[i].name, "top") == 0) options[i].u.dst_ptr = &screen_top;
+        if (strcmp(options[i].name, "af") == 0) options[i].u.dst_ptr = &afilters;
+        if (strcmp(options[i].name, "rdftspeed") == 0) options[i].u.dst_ptr = &rdftspeed;
+        if (strcmp(options[i].name, "i") == 0) options[i].u.dst_ptr = &dummy;
+        if (strcmp(options[i].name, "acodec") == 0) options[i].u.dst_ptr = &audio_codec_name;
+        if (strcmp(options[i].name, "scodec") == 0) options[i].u.dst_ptr = &subtitle_codec_name;
+        if (strcmp(options[i].name, "vcodec") == 0) options[i].u.dst_ptr = &video_codec_name;
+        if (strcmp(options[i].name, "autorotate") == 0) options[i].u.dst_ptr = &autorotate;
+        if (strcmp(options[i].name, "find_stream_info") == 0) options[i].u.dst_ptr = &find_stream_info;
+        if (strcmp(options[i].name, "filter_threads") == 0) options[i].u.dst_ptr = &filter_nbthreads;
+        if (strcmp(options[i].name, "enable_vulkan") == 0) options[i].u.dst_ptr = &enable_vulkan;
+        if (strcmp(options[i].name, "vulkan_params") == 0) options[i].u.dst_ptr = &vulkan_params;
+        if (strcmp(options[i].name, "hwaccel") == 0) options[i].u.dst_ptr = &hwaccel;
+    }
+}

@@ -2524,17 +2524,12 @@ static int task_cleanup(Scheduler *sch, SchedulerNode node)
     }
 }
 
-extern void ffmpeg_tls_init_options(void);
-
 static void *task_wrapper(void *arg)
 {
     SchTask  *task = arg;
     Scheduler *sch = task->parent;
     int ret;
     int err = 0;
-
-    // FFmpegKit: Initialize TLS options for the sub-thread
-    ffmpeg_tls_init_options();
 
     ret = task->func(task->func_arg);
     if (ret < 0)

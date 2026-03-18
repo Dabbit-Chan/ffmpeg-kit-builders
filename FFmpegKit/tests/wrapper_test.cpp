@@ -194,6 +194,7 @@ TEST (FFmpegKitTest, GenerateTestAudioFile) {
 }
 
 TEST(FFmpegKitTest, MediaInformation) {
+    ffmpeg_kit_config_set_log_level(FFMPEG_KIT_LOG_LEVEL_DEBUG);
     MediaInformationSessionHandle media_session = ffprobe_kit_get_media_information(TEST_VIDEO_FILE);
     printf("Media Session: %p\n", media_session);
     ASSERT_NE(media_session, nullptr);

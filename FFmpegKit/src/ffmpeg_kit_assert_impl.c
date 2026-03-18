@@ -25,15 +25,14 @@
 
 #include "ffmpeg_kit_assert_override.h"
 
-/* FFmpeg headers are safe to include here - this is not force-included */
 #include "libavutil/log.h"
 
 #include <setjmp.h>
 #include <stddef.h>
 
 /* Thread-local storage definitions - exactly one TU must define these */
-FFMPEG_THREAD_LOCAL jmp_buf ffmpeg_kit_assert_jmp;
-FFMPEG_THREAD_LOCAL int     ffmpeg_kit_assert_triggered = 0;
+FFMPEG_THREAD_LOCAL jmp_buf *ffmpeg_kit_assert_jmp_ptr = NULL;
+FFMPEG_THREAD_LOCAL int      ffmpeg_kit_assert_triggered = 0;
 
 void ffmpeg_kit_assert_log(const char *cond, const char *file, int line) {
     av_log(NULL, AV_LOG_PANIC,

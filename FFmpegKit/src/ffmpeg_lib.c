@@ -156,12 +156,16 @@ int ffmpeg_run(FFmpegContext *ctx) {
   // Without this, av_assert0 calls abort() which kills the Flutter host process.
   // On assertion failure, longjmp lands here and we return AVERROR_EXIT so
   // FFmpegKitConfig marks the session as failed rather than crashing.
-  if (setjmp(ffmpeg_kit_assert_jmp) != 0) {
+  jmp_buf assert_jmp;
+  ffmpeg_kit_assert_jmp_ptr = &assert_jmp;
+  ffmpeg_kit_assert_triggered = 0;
+  if (setjmp(assert_jmp)) {
     av_log(NULL, AV_LOG_ERROR,
            "[ffmpeg-kit] ffmpeg_run: recovered from internal assertion failure. "
            "Session will be marked as failed.\n");
     return AVERROR_EXIT;
   }
+  ffmpeg_kit_assert_jmp_ptr = NULL;
 
   avformat_network_init();
 

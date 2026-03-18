@@ -77,12 +77,10 @@ file(MAKE_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/src")
 file(COPY "${FFMPEG_BUILD_DIR}/include/config.h" DESTINATION "${CMAKE_CURRENT_SOURCE_DIR}/src/")
 file(COPY "${FFMPEG_BUILD_DIR}/include/config_components.h" DESTINATION "${CMAKE_CURRENT_SOURCE_DIR}/src/")
 
-if(MINGW)
-    message(STATUS "Patching config.h for MinGW compatibility...")
-    file(READ "${CMAKE_CURRENT_SOURCE_DIR}/src/config.h" CONFIG_H_CONTENT)
-    string(REPLACE "#define HAVE_UNISTD_H 1" "#define HAVE_UNISTD_H 0" CONFIG_H_CONTENT "${CONFIG_H_CONTENT}")
-    file(WRITE "${CMAKE_CURRENT_SOURCE_DIR}/src/config.h" "${CONFIG_H_CONTENT}")
-endif()
+message(STATUS "Patching config.h for SDL compatibility...")
+file(READ "${CMAKE_CURRENT_SOURCE_DIR}/src/config.h" CONFIG_H_CONTENT)
+string(REPLACE "#define HAVE_PTHREAD_SETNAME_NP 0" "" CONFIG_H_CONTENT "${CONFIG_H_CONTENT}")
+file(WRITE "${CMAKE_CURRENT_SOURCE_DIR}/src/config.h" "${CONFIG_H_CONTENT}")
 
 # Copy fftools (Source code)
 message(STATUS "Copying fftools from ${FFMPEG_SRC_DIR}...")
@@ -176,20 +174,6 @@ if(IS_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/patches")
     else()
         message(FATAL_ERROR "TLS patch script not found. Cannot proceed.")
     endif()
-
-    if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/scripts/options_patch.py")
-        message(STATUS "Applying Options patches...")
-        execute_process(
-            COMMAND python3 "${CMAKE_CURRENT_SOURCE_DIR}/scripts/options_patch.py" 
-            WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
-            RESULT_VARIABLE OPTIONS_PATCH_EXIT_CODE
-        )
-        if(NOT OPTIONS_PATCH_EXIT_CODE EQUAL 0)
-            message(FATAL_ERROR "Failed to apply Options patches. Check for conflicts.")
-        endif()
-    else()
-        message(FATAL_ERROR "Options patch script not found. Cannot proceed.")
-    endif()
 endif()
 
 # =============================================================================
@@ -238,6 +222,11 @@ add_library(ffmpegkit ${KIT_SOURCES} ${KIT_HEADERS})
 target_compile_options(ffmpegkit PRIVATE
     "-include${CMAKE_CURRENT_SOURCE_DIR}/src/ffmpeg_tls.h"
     "-include${CMAKE_CURRENT_SOURCE_DIR}/src/ffmpeg_kit_assert_override.h"
+)
+set_source_files_properties(
+    ${KIT_SOURCES}
+    # add any other .cpp files here
+    PROPERTIES COMPILE_OPTIONS "-Wno-attributes"
 )
 set(BUNDLE_LIBRARIES "")
 find_package(PkgConfig REQUIRED)
@@ -523,66 +512,62 @@ if(WIN32)
             "-mstackrealign"
             "-mpreferred-stack-boundary=4"
         )
-        
-    elseif(CMAKE_SYSTEM_NAME MATCHES "Linux")
-        target_compile_definitions(ffmpegkit PRIVATE TARGET_OS_LINUX _FORTIFY_SOURCE=2)
-    
-        # Compilation flags for hardening
-        target_compile_options(ffmpegkit PRIVATE 
-            -fstack-protector-strong 
-            -fvisibility=default
-            -fPIC # Required for shared libraries on Linux 
-        )
-
-        # Linker hardening (RELRO and Bind Now)
-        target_link_options(ffmpegkit PRIVATE 
-            "-Wl,-z,relro"   # Read-only relocations
-            "-Wl,-z,now"     # Immediate symbol resolution (Complete RELRO)
-            "-Wl,-z,noexecstack" # DEP equivalent for Linux
-        )
-    elseif(ANDROID)
-        # Define Android-specific macros for source code compatibility
-        target_compile_definitions(ffmpegkit PRIVATE 
-            TARGET_OS_ANDROID 
-            __ANDROID_API__=${ANDROID_NATIVE_API_LEVEL}
-            _FORTIFY_SOURCE=2
-        )
-
-        # Link essential Android system libraries
-        # 'log' is required for av_log redirection to logcat
-        # 'android' and 'jnigraphics' provide native window and bitmap support
-        target_link_libraries(ffmpegkit PRIVATE 
-            log 
-            android 
-            jnigraphics 
-            m 
-            z 
-            atomic 
-            dl
-        )
-
-        # Android-specific hardening and visibility
-        target_compile_options(ffmpegkit PRIVATE 
-            -fstack-protector-strong 
-            -fvisibility=default
-            -fPIC
-        )
-
-        # Linker flags for Android (using LLD)
-        target_link_options(ffmpegkit PRIVATE 
-            "-Wl,-z,relro"
-            "-Wl,-z,now"
-            "-Wl,-z,noexecstack"
-            "-Wl,--warn-shared-textrel" # Warn if text relocations are found
-            "-Wl,--fatal-warnings"
-            "-Wl,--allow-multiple-definition"
-        )
-
-        # Ensure JNI symbols are kept global in the version script
-        # The existing LINKER_SCRIPT logic will work if Java_* symbols are added
     endif()
-else()
-    target_compile_options(ffmpegkit PRIVATE -fvisibility=default)
+elseif(CMAKE_SYSTEM_NAME MATCHES "Linux")
+    target_compile_definitions(ffmpegkit PRIVATE TARGET_OS_LINUX _FORTIFY_SOURCE=2)
+
+    # Compilation flags for hardening
+    target_compile_options(ffmpegkit PRIVATE 
+        -fstack-protector-strong 
+        -fvisibility=default
+        -fPIC # Required for shared libraries on Linux 
+    )
+
+    # Linker hardening (RELRO and Bind Now)
+    target_link_options(ffmpegkit PRIVATE 
+        "-Wl,-z,relro"   # Read-only relocations
+        "-Wl,-z,now"     # Immediate symbol resolution (Complete RELRO)
+        "-Wl,-z,noexecstack" # DEP equivalent for Linux
+        "-Wl,--warn-common"
+        "-Wl,--no-warn-mismatch"
+    )
+elseif(ANDROID)
+    # Define Android-specific macros for source code compatibility
+    target_compile_definitions(ffmpegkit PRIVATE 
+        TARGET_OS_ANDROID 
+        __ANDROID_API__=${ANDROID_NATIVE_API_LEVEL}
+        _FORTIFY_SOURCE=2
+    )
+
+    # Link essential Android system libraries
+    # 'log' is required for av_log redirection to logcat
+    # 'android' and 'jnigraphics' provide native window and bitmap support
+    target_link_libraries(ffmpegkit PRIVATE 
+        log 
+        android 
+        jnigraphics 
+        m 
+        z 
+        atomic 
+        dl
+    )
+
+    # Android-specific hardening and visibility
+    target_compile_options(ffmpegkit PRIVATE 
+        -fstack-protector-strong 
+        -fvisibility=default
+        -fPIC
+    )
+
+    # Linker flags for Android (using LLD)
+    target_link_options(ffmpegkit PRIVATE 
+        "-Wl,-z,relro"
+        "-Wl,-z,now"
+        "-Wl,-z,noexecstack"
+        "-Wl,--warn-shared-textrel" # Warn if text relocations are found
+        "-Wl,--fatal-warnings"
+        "-Wl,--allow-multiple-definition"
+    )
 endif()
 
 # =============================================================================
@@ -660,6 +645,7 @@ if(BUILD_SHARED_LIBS)
                 "-Wl,--start-group"
                 "${PTW32_STATIC_LIB}"
                 PkgConfig::FFMPEG
+                "pthread"
                 "ws2_32" 
                 "bcrypt"
                 "-Wl,--end-group"
@@ -675,6 +661,8 @@ if(BUILD_SHARED_LIBS)
     endif()
 
     # Linker Script
+    # Ensure JNI symbols are kept global in the version script
+    # The existing LINKER_SCRIPT logic will work if Java_* symbols are added
     set(LINKER_SCRIPT "${CMAKE_CURRENT_BINARY_DIR}/ffmpeg-linker-script.map")
     file(WRITE ${LINKER_SCRIPT} "
 {

@@ -98,6 +98,7 @@ typedef struct BenchmarkTimeStamps {
 
 static BenchmarkTimeStamps get_benchmark_time_stamps(void);
 static int64_t getmaxrss(void);
+extern void ffmpeg_tls_init_options(void);
 
 atomic_uint nb_output_dumped = 0;
 
@@ -1034,9 +1035,10 @@ int ffmpeg_run_internal(int argc, char **argv)
     int ret;
     BenchmarkTimeStamps ti;
 
-    init_dynload();
-
     ffmpeg_reset_internal_state();
+    ffmpeg_tls_init_options();
+
+    init_dynload();
 
     setvbuf(stderr,NULL,_IONBF,0); /* win32 runtime needs this */
 

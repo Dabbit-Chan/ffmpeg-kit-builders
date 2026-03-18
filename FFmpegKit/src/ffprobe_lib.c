@@ -187,12 +187,16 @@ int ffprobe_run(FFprobeContext *ctx)
   ffmpeg_kit_assert_triggered = 0;
 
   // Establish recovery point for av_assert0 failures inside ffprobe internals.
-  if (setjmp(ffmpeg_kit_assert_jmp) != 0) {
+  jmp_buf assert_jmp;
+  ffmpeg_kit_assert_jmp_ptr = &assert_jmp;
+  ffmpeg_kit_assert_triggered = 0;
+  if (setjmp(assert_jmp)) {
     av_log(NULL, AV_LOG_ERROR,
            "[ffmpeg-kit] ffprobe_run: recovered from internal assertion failure. "
            "Session will be marked as failed.\n");
     return AVERROR_EXIT;
   }
+  ffmpeg_kit_assert_jmp_ptr = NULL;
 
   ffprobe_tls_init_options();
 

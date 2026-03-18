@@ -254,13 +254,17 @@ int ffplay_start(FFplayContext* ctx) {
     // Establish recovery point for av_assert0 failures inside ffplay internals.
     // ffplay_step calls back into FFmpeg decode/filter/render pipelines which
     // can assert. Recovery here marks the session failed without killing Flutter.
-    if (setjmp(ffmpeg_kit_assert_jmp) != 0) {
+    jmp_buf assert_jmp;
+    ffmpeg_kit_assert_jmp_ptr = &assert_jmp;
+    ffmpeg_kit_assert_triggered = 0;
+    if (setjmp(assert_jmp)) {
         av_log(NULL, AV_LOG_ERROR,
                "[ffmpeg-kit] ffplay_start: recovered from internal assertion "
                "failure. Session will be marked as failed.\n");
         unlock_ffplay_api();  // ensure lock is released if assert fired mid-lock
         return AVERROR_EXIT;
     }
+    ffmpeg_kit_assert_jmp_ptr = NULL;
 
     lock_ffplay_api();
     if (ctx && active_ffplay_ctx == ctx && ctx->is) ret = 0;

@@ -71,4 +71,4 @@ cd "$CURRENT_SOURCE_DIR"
 
 exec python3 $SCRIPT_DIR/tls_patch.py
 
-exec python3 $SCRIPT_DIR/options_patch.py
+# exec python3 $SCRIPT_DIR/options_patch.py

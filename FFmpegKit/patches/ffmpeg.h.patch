@@ -1,0 +1,14 @@
+diff --git a/src/ffmpeg.h b/src/ffmpeg.h
+index 53f71bc..c6a5f90 100644
+--- a/src/ffmpeg.h
++++ b/src/ffmpeg.h
+@@ -746,7 +746,8 @@ extern int auto_conversion_filters;
+ 
+ extern const AVIOInterruptCB int_cb;
+ 
+-extern const OptionDef options[];
++extern FFMPEG_THREAD_LOCAL OptionDef options[];
++
+ extern HWDevice *filter_hw_device;
+ 
+ extern atomic_uint nb_output_dumped;

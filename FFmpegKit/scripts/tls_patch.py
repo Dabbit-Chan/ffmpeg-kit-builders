@@ -90,12 +90,37 @@ def parse_logs_by_line(log_paths):
                     line_patches[current_file][line_num].add(match_sym.group(1))
     return line_patches
 
-TLS_EXCLUSION_LIST = {
+TLS_EXCLUSION_GLOBAL = {
     "received_sigterm",
     "received_nb_signals",
     "ffmpeg_exited",
     "transcode_init_done",
-    "frame_data_lock"
+    "frame_data_lock",
+    "ffmpeg_kit_assert_triggered",
+    "ffmpeg_kit_assert_jmp_ptr",
+}
+
+TLS_EXCLUSION_PER_FILE = {
+    "ffplay.c": {
+        "sdl_supported_color_spaces",
+        "options_template",
+        "wanted_stream_spec",
+        "sws_ctx",
+        "tmp_frame",
+        "renderer_info",
+    },
+    "ffmpeg_opt.c": {
+        "options_template",
+        "wanted_stream_spec",
+    },
+    "ffmpeg.h": {
+        "options_template",
+    },
+    "ffprobe.c": {
+        "real_options",
+        "real_options_template",
+        "options_template",
+    },
 }
 
 def apply_line_patches(line_patches, whitelist):
@@ -134,7 +159,9 @@ def apply_line_patches(line_patches, whitelist):
             if line_num in patches:
                 # Check for exclusions by checking if any excluded symbol is in the patches for this line
                 symbols_on_line = patches[line_num]
-                if any(sym in TLS_EXCLUSION_LIST for sym in symbols_on_line):
+                file_exclusions = TLS_EXCLUSION_PER_FILE.get(file_name, set())
+                effective_exclusions = TLS_EXCLUSION_GLOBAL | file_exclusions
+                if any(sym in effective_exclusions for sym in symbols_on_line):
                     print(f"[SKIPPED] {file_path}:{line_num}: Excluded symbols: {symbols_on_line}")
                     new_lines.append(line)
                     continue
@@ -161,8 +188,10 @@ def create_tls_header():
     header_path = os.path.join(SRC_DIR, "ffmpeg_tls.h")
     content = (
         "#ifndef FFMPEG_TLS_H\n#define FFMPEG_TLS_H\n\n"
-        "#if defined(_MSC_VER)\n"
+        "#if defined(_MSC_VER) || defined(__MINGW32__) || defined(__MINGW64__)\n"
         "    #define FFMPEG_THREAD_LOCAL __declspec(thread)\n"
+        "#elif defined(__STDC_VERSION__) && __STDC_VERSION__ >= 201112L\n"
+        "    #define FFMPEG_THREAD_LOCAL _Thread_local\n"
         "#else\n"
         "    #define FFMPEG_THREAD_LOCAL __thread\n"
         "#endif\n\n#endif\n"

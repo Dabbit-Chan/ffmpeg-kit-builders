@@ -23,11 +23,13 @@
  * simple media prober based on the FFmpeg libraries
  */
 
+#include "SDL_mutex.h"
 #include "config.h"
 #include "libavutil/ffversion.h"
 
 #include <string.h>
 #include <math.h>
+#include <pthread.h>
 
 #include "libavformat/avformat.h"
 #include "libavformat/version.h"
@@ -68,6 +70,8 @@
 #include "opt_common.h"
 
 #include "libavutil/thread.h"
+
+static void ffprobe_tls_init_options(void);
 
 // attached as opaque_ref to packets/frames
 typedef struct FrameData {
@@ -150,7 +154,9 @@ typedef struct ReadInterval {
 static ReadInterval *read_intervals;
 static int read_intervals_nb = 0;
 
-static int find_stream_info  = 1;
+static int find_stream_info = 1;
+
+
 
 /* section structure definition */
 
@@ -2990,57 +2996,61 @@ DEFINE_OPT_SHOW_SECTION(streams,          STREAMS)
 DEFINE_OPT_SHOW_SECTION(programs,         PROGRAMS)
 DEFINE_OPT_SHOW_SECTION(stream_groups,    STREAM_GROUPS)
 
-static FFMPEG_THREAD_LOCAL OptionDef real_options[] = {
+static OptionDef real_options_template[] = {
     CMDUTILS_COMMON_OPTIONS
     { "f",                     OPT_TYPE_FUNC, OPT_FUNC_ARG, {.func_arg = opt_format}, "force format", "format" },
-    { "unit",                  OPT_TYPE_BOOL,        0, {&show_value_unit}, "show unit of the displayed values" },
-    { "prefix",                OPT_TYPE_BOOL,        0, {&use_value_prefix}, "use SI prefixes for the displayed values" },
-    { "byte_binary_prefix",    OPT_TYPE_BOOL,        0, {&use_byte_value_binary_prefix},
+    { "unit",                  OPT_TYPE_BOOL,        0, {NULL}, "show unit of the displayed values" },
+    { "prefix",                OPT_TYPE_BOOL,        0, {NULL}, "use SI prefixes for the displayed values" },
+    { "byte_binary_prefix",    OPT_TYPE_BOOL,        0, {NULL},
       "use binary prefixes for byte units" },
-    { "sexagesimal",           OPT_TYPE_BOOL,        0, {&use_value_sexagesimal_format},
+    { "sexagesimal",           OPT_TYPE_BOOL,        0, {NULL},
       "use sexagesimal format HOURS:MM:SS.MICROSECONDS for time units" },
     { "pretty",                OPT_TYPE_FUNC,        0, {.func_arg = opt_pretty},
       "prettify the format of displayed values, make it more human readable" },
-    { "output_format",         OPT_TYPE_STRING,      0, { &output_format },
+    { "output_format",         OPT_TYPE_STRING,      0, { NULL },
       "set the output printing format (available formats are: default, compact, csv, flat, ini, json, xml)", "format" },
-    { "print_format",          OPT_TYPE_STRING,      0, { &output_format }, "alias for -output_format (deprecated)" },
-    { "of",                    OPT_TYPE_STRING,      0, { &output_format }, "alias for -output_format", "format" },
-    { "select_streams",        OPT_TYPE_STRING,      0, { &stream_specifier }, "select the specified streams", "stream_specifier" },
+    { "print_format",          OPT_TYPE_STRING,      0, { NULL }, "alias for -output_format (deprecated)" },
+    { "of",                    OPT_TYPE_STRING,      0, { NULL }, "alias for -output_format", "format" },
+    { "select_streams",        OPT_TYPE_STRING,      0, { NULL }, "select the specified streams", "stream_specifier" },
     { "sections",              OPT_TYPE_FUNC, OPT_EXIT, {.func_arg = opt_sections}, "print sections structure and section information, and exit" },
-    { "show_data",             OPT_TYPE_BOOL,        0, { &do_show_data }, "show packets data" },
-    { "show_data_hash",        OPT_TYPE_STRING,      0, { &show_data_hash }, "show packets data hash" },
+    { "show_data",             OPT_TYPE_BOOL,        0, { NULL }, "show packets data" },
+    { "show_data_hash",        OPT_TYPE_STRING,      0, { NULL }, "show packets data hash" },
     { "show_error",            OPT_TYPE_FUNC,        0, { .func_arg = &opt_show_error },  "show probing error" },
     { "show_format",           OPT_TYPE_FUNC,        0, { .func_arg = &opt_show_format }, "show format/container info" },
     { "show_frames",           OPT_TYPE_FUNC,        0, { .func_arg = &opt_show_frames }, "show frames info" },
     { "show_entries",          OPT_TYPE_FUNC, OPT_FUNC_ARG, {.func_arg = opt_show_entries},
       "show a set of specified entries", "entry_list" },
 #if HAVE_THREADS
-    { "show_log",              OPT_TYPE_INT,         0, { &do_show_log }, "show log" },
+    { "show_log",              OPT_TYPE_INT,         0, { NULL }, "show log" },
 #endif
     { "show_packets",          OPT_TYPE_FUNC,        0, { .func_arg = &opt_show_packets }, "show packets info" },
     { "show_programs",         OPT_TYPE_FUNC,        0, { .func_arg = &opt_show_programs }, "show programs info" },
     { "show_stream_groups",    OPT_TYPE_FUNC,        0, { .func_arg = &opt_show_stream_groups }, "show stream groups info" },
     { "show_streams",          OPT_TYPE_FUNC,        0, { .func_arg = &opt_show_streams }, "show streams info" },
     { "show_chapters",         OPT_TYPE_FUNC,        0, { .func_arg = &opt_show_chapters }, "show chapters info" },
-    { "count_frames",          OPT_TYPE_BOOL,        0, { &do_count_frames }, "count the number of frames per stream" },
-    { "count_packets",         OPT_TYPE_BOOL,        0, { &do_count_packets }, "count the number of packets per stream" },
+    { "count_frames",          OPT_TYPE_BOOL,        0, { NULL }, "count the number of frames per stream" },
+    { "count_packets",         OPT_TYPE_BOOL,        0, { NULL }, "count the number of packets per stream" },
     { "show_program_version",  OPT_TYPE_FUNC,        0, { .func_arg = &opt_show_program_version },  "show ffprobe version" },
     { "show_library_versions", OPT_TYPE_FUNC,        0, { .func_arg = &opt_show_library_versions }, "show library versions" },
     { "show_versions",         OPT_TYPE_FUNC,        0, { .func_arg = &opt_show_versions }, "show program and library versions" },
     { "show_pixel_formats",    OPT_TYPE_FUNC,        0, { .func_arg = &opt_show_pixel_formats }, "show pixel format descriptions" },
     { "show_optional_fields",  OPT_TYPE_FUNC, OPT_FUNC_ARG, { .func_arg = &opt_show_optional_fields }, "show optional fields" },
-    { "show_private_data",     OPT_TYPE_BOOL,        0, { &show_private_data }, "show private data" },
-    { "private",               OPT_TYPE_BOOL,        0, { &show_private_data }, "same as show_private_data" },
-    { "analyze_frames",        OPT_TYPE_BOOL,        0, { &do_analyze_frames }, "analyze frames to provide additional stream-level information" },
-    { "bitexact",              OPT_TYPE_BOOL,        0, {&do_bitexact}, "force bitexact output" },
+    { "show_private_data",     OPT_TYPE_BOOL,        0, { NULL }, "show private data" },
+    { "private",               OPT_TYPE_BOOL,        0, { NULL }, "same as show_private_data" },
+    { "analyze_frames",        OPT_TYPE_BOOL,        0, { NULL }, "analyze frames to provide additional stream-level information" },
+    { "bitexact",              OPT_TYPE_BOOL,        0, {NULL}, "force bitexact output" },
     { "read_intervals",        OPT_TYPE_FUNC, OPT_FUNC_ARG, {.func_arg = opt_read_intervals}, "set read intervals", "read_intervals" },
     { "i",                     OPT_TYPE_FUNC, OPT_FUNC_ARG, {.func_arg = opt_input_file_i}, "read specified file", "input_file"},
     { "o",                     OPT_TYPE_FUNC, OPT_FUNC_ARG, {.func_arg = opt_output_file_o}, "write to specified output", "output_file"},
     { "print_filename",        OPT_TYPE_FUNC, OPT_FUNC_ARG, {.func_arg = opt_print_filename}, "override the printed input filename", "print_file"},
-    { "find_stream_info",      OPT_TYPE_BOOL, OPT_INPUT | OPT_EXPERT, { &find_stream_info },
+    { "find_stream_info",      OPT_TYPE_BOOL, OPT_INPUT | OPT_EXPERT, { NULL },
         "read and decode the streams to fill missing information with heuristics" },
     { NULL, },
 };
+
+/* Per-thread working copy — memcpy'd from real_options_template at session
+ * start so concurrent ffprobe sessions never share dst_ptr state. */
+static FFMPEG_THREAD_LOCAL OptionDef real_options[FF_ARRAY_ELEMS(real_options_template)];
 
 static inline int check_section_show_entries(int section_id)
 {
@@ -3104,15 +3114,15 @@ int ffprobe_run_internal(int argc, char **argv, AVBPrint *output_buf)
     uint8_t *avio_ptr = NULL;
 
     int ret, input_ret, i;
-
-    init_dynload();
     
     // Reset state for library usage
     ffprobe_reset_internal_state();
+    ffprobe_tls_init_options();
+
+    init_dynload();
 
     av_log_set_flags(AV_LOG_SKIP_REPEATED);
 
-    options = real_options;
     parse_loglevel(argc, argv, options);
     avformat_network_init();
 #if CONFIG_AVDEVICE
@@ -3289,4 +3299,31 @@ end:
     avformat_network_deinit();
 
     return ret < 0;
+}
+
+void ffprobe_tls_init_options(void) {
+    memcpy(real_options, real_options_template, sizeof(real_options_template));
+    options = real_options;
+
+    for (int i = 0; real_options[i].name != NULL; i++) {
+        if (strcmp(real_options[i].name, "hide_banner") == 0) real_options[i].u.dst_ptr = &hide_banner;
+        if (strcmp(real_options[i].name, "unit") == 0) real_options[i].u.dst_ptr = &show_value_unit;
+        if (strcmp(real_options[i].name, "prefix") == 0) real_options[i].u.dst_ptr = &use_value_prefix;
+        if (strcmp(real_options[i].name, "byte_binary_prefix") == 0) real_options[i].u.dst_ptr = &use_byte_value_binary_prefix;
+        if (strcmp(real_options[i].name, "sexagesimal") == 0) real_options[i].u.dst_ptr = &use_value_sexagesimal_format;
+        if (strcmp(real_options[i].name, "output_format") == 0) real_options[i].u.dst_ptr = &output_format;
+        if (strcmp(real_options[i].name, "print_format") == 0) real_options[i].u.dst_ptr = &output_format;
+        if (strcmp(real_options[i].name, "of") == 0) real_options[i].u.dst_ptr = &output_format;
+        if (strcmp(real_options[i].name, "select_streams") == 0) real_options[i].u.dst_ptr = &stream_specifier;
+        if (strcmp(real_options[i].name, "show_data") == 0) real_options[i].u.dst_ptr = &do_show_data;
+        if (strcmp(real_options[i].name, "show_data_hash") == 0) real_options[i].u.dst_ptr = &show_data_hash;
+        if (strcmp(real_options[i].name, "show_log") == 0) real_options[i].u.dst_ptr = &do_show_log;
+        if (strcmp(real_options[i].name, "count_frames") == 0) real_options[i].u.dst_ptr = &do_count_frames;
+        if (strcmp(real_options[i].name, "count_packets") == 0) real_options[i].u.dst_ptr = &do_count_packets;
+        if (strcmp(real_options[i].name, "show_private_data") == 0) real_options[i].u.dst_ptr = &show_private_data;
+        if (strcmp(real_options[i].name, "private") == 0) real_options[i].u.dst_ptr = &show_private_data;
+        if (strcmp(real_options[i].name, "analyze_frames") == 0) real_options[i].u.dst_ptr = &do_analyze_frames;
+        if (strcmp(real_options[i].name, "bitexact") == 0) real_options[i].u.dst_ptr = &do_bitexact;
+        if (strcmp(real_options[i].name, "find_stream_info") == 0) real_options[i].u.dst_ptr = &find_stream_info;
+    }
 }
