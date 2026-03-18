@@ -1,5 +1,16 @@
 # FFmpegKit Changelog
 
+## Version 0.9.0
+
+- **Critical Thread Safety Fixes**: Resolved heap-buffer-overflow in ffplay texture upload by copying renderer_info into VideoState and adding swscale fallback for unsupported pixel formats.
+- **TLS Architecture Overhaul**: Replaced shared mutable options[] with read-only options_template + per-thread FFMPEG_THREAD_LOCAL options[] copies, eliminating data races between concurrent sessions.
+- **Atomic Operations**: Converted redirectionEnabled, _debuggingEnabled, and FFplaySession._context to atomic types with proper memory ordering for thread-safe access.
+- **Assert Recovery System**: Implemented thread-local jmp_buf-based crash recovery to prevent application crashes on assertion failures.
+- **Build System Refactoring**: Major CMakeLists.txt overhaul with configure_library_linking() function, optional TensorFlow/OpenVINO/libtorch support, and improved MinGW handling.
+- **Session Cleanup Improvements**: Enhanced session lifecycle management with proper network initialization/deinitialization and reordered cleanup steps.
+- **Windows TLS Compatibility**: Fixed FFMPEG_THREAD_LOCAL declaration for MinGW using __declspec(thread) instead of __thread for correct DLL TLS semantics.
+- **Enhanced Patching System**: Added per-file and global TLS exclusion lists to prevent patching of intentionally non-TLS symbols.
+
 ## Version 0.8.3
 
 - **MinGW Build Support**: Comprehensive improvements for Windows/MinGW builds including proper CMAKE_BUILD_TYPE handling, static linking configuration, and Windows-specific compiler/linker flags.
