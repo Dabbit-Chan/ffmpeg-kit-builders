@@ -128,6 +128,7 @@ Advanced Dependency Control:
 Dynamic Library Control:
 	--enable-[library name]                                       enable specific library (e.g. --enable-libx264)
 	--disable-[library name]                                      disable specific library (e.g. --disable-libxcb)
+                                                                NOTE: disables will override enables if they conflict
 	--ff-*                                                        pass additional ffmpeg parameters directly to configure.
 	                                                              Example: --ff-disable-network passed as --disable-network
 "
@@ -148,6 +149,9 @@ append_cppflags() {
 append_cxxflags() {
   export original_cxxflags+=" $1"
 }
+
+explicit_enabled=()
+explicit_disabled=()
 
 parse_arguments() {
 # parse command line parameters, if any
@@ -548,11 +552,13 @@ while [ $# -gt 0 ]; do
     shift
     ;;
 	--enable-*)
-    enable_library "${1#--enable-}"
+    lib_name="${1#--enable-}"
+    explicit_enabled+=( "$lib_name" )
     shift
     ;;
   --disable-*)
-    disable_library "${1#--disable-}"
+    lib_name="${1#--disable-}"
+    explicit_disabled+=( "$lib_name" )
     shift
     ;;
   --ff-*)
@@ -860,6 +866,17 @@ if ! truthy "$enable_base"; then
   # strict gpl libraries
   check_gpl_libraries
 fi
+
+echo -e "\n  [CONFIG] Enabling explicit libraries..." >>"$LOG_FILE"
+for lib in "${explicit_enabled[@]}"; do
+  enable_library "$lib"
+done
+
+echo -e "\n  [CONFIG] Disabling explicit libraries:" >>"$LOG_FILE"
+for lib in "${explicit_disabled[@]}"; do
+  disable_library "$lib"
+done
+
 
 main() {
   if [[ -n $run_only ]]; then

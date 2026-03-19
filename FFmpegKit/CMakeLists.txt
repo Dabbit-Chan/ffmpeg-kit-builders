@@ -414,11 +414,31 @@ if(ENABLE_LIBTORCH)
         else()
             message(STATUS "Found Python 3.11 library: ${PYTHON311_LIB}")
         endif()
-        target_link_libraries(ffmpegkit PRIVATE 
+        # Link system LLVM before libtorch so the dynamic linker loads it first.
+        # libtensorflow_framework (a libtorch dep) bundles its own LLVM and exports
+        # those symbols globally. If system libLLVM-17 loads after it, LLVM vtables
+        # get crossed and cause a segfault when Mesa later loads swrast_dri.so.
+        find_library(LLVM17_LIB
+            NAMES LLVM-17 LLVM libLLVM-17
+            PATHS /usr/lib64/llvm17/lib /usr/lib64 /usr/lib
+            NO_DEFAULT_PATH
+        )
+        if(LLVM17_LIB)
+            message(STATUS "Found system LLVM-17: ${LLVM17_LIB} (linked before libtorch to prevent symbol conflicts)")
+            target_link_libraries(ffmpegkit PRIVATE ${LLVM17_LIB})
+            get_filename_component(LLVM17_LIB_DIR "${LLVM17_LIB}" DIRECTORY)
+        else()
+            message(WARNING "System LLVM-17 not found. LLVM symbol conflicts with libtensorflow may cause crashes.")
+        endif()
+
+        target_link_libraries(ffmpegkit PRIVATE
             PkgConfig::LIBTORCH
             ${PYTHON311_LIB}
         )
-        target_link_options(ffmpegkit PRIVATE "-Wl,-rpath,/usr/lib64")
+        target_link_options(ffmpegkit PRIVATE
+            "-Wl,-rpath,/usr/lib64"
+            $<$<BOOL:${LLVM17_LIB_DIR}>:-Wl,-rpath,${LLVM17_LIB_DIR}>
+        )
         set(PKG_CONFIG_USE_STATIC_LIBS ${_OLD_PKG_CONFIG_USE_STATIC_LIBS})
     endif()
 endif()
@@ -517,19 +537,26 @@ elseif(CMAKE_SYSTEM_NAME MATCHES "Linux")
     target_compile_definitions(ffmpegkit PRIVATE TARGET_OS_LINUX _FORTIFY_SOURCE=2)
 
     # Compilation flags for hardening
-    target_compile_options(ffmpegkit PRIVATE 
-        -fstack-protector-strong 
+    target_compile_options(ffmpegkit PRIVATE
+        -fstack-protector-strong
         -fvisibility=default
-        -fPIC # Required for shared libraries on Linux 
+        -fPIC # Required for shared libraries on Linux
     )
 
     # Linker hardening (RELRO and Bind Now)
-    target_link_options(ffmpegkit PRIVATE 
+    target_link_options(ffmpegkit PRIVATE
         "-Wl,-z,relro"   # Read-only relocations
         "-Wl,-z,now"     # Immediate symbol resolution (Complete RELRO)
         "-Wl,-z,noexecstack" # DEP equivalent for Linux
         "-Wl,--warn-common"
         "-Wl,--no-warn-mismatch"
+    )
+
+    # Allow libffmpegkit.so to find sibling libs (e.g. libpulsecommon) in the
+    # same directory it is installed into (Flutter bundle's lib/ folder)
+    set_target_properties(ffmpegkit PROPERTIES
+        INSTALL_RPATH "$ORIGIN"
+        BUILD_WITH_INSTALL_RPATH TRUE
     )
 elseif(ANDROID)
     # Define Android-specific macros for source code compatibility
@@ -776,6 +803,11 @@ install(FILES "${CMAKE_CURRENT_BINARY_DIR}/ffmpegkit.pc" DESTINATION lib/pkgconf
 # - Add test directory to build system
 # ==============================================================================
 if(BUILD_TESTS)
+    set_target_properties(ffmpegkit PROPERTIES
+        INSTALL_RPATH "$ORIGIN:$ORIGIN/pulseaudio:/usr/lib/pulseaudio:/usr/lib64/pulseaudio:${CMAKE_SOURCE_DIR}/../prebuilt/linux-x86_64/libraries/lib:${CMAKE_SOURCE_DIR}/../prebuilt/linux-x86_64/libraries/lib/pulseaudio"
+        BUILD_WITH_INSTALL_RPATH TRUE
+    )
+    
     enable_testing()
 
     include(FetchContent)

@@ -1,7 +1,16 @@
 diff --git a/src/ffmpeg_sched.c b/src/ffmpeg_sched.c
-index 3180367..af5a1e2 100755
+index 3180367..9b6cac6 100755
 --- a/src/ffmpeg_sched.c
 +++ b/src/ffmpeg_sched.c
+@@ -2520,7 +2520,7 @@ static int task_cleanup(Scheduler *sch, SchedulerNode node)
+     case SCH_NODE_TYPE_DEC:         return dec_done   (sch, node.idx);
+     case SCH_NODE_TYPE_ENC:         return enc_done   (sch, node.idx);
+     case SCH_NODE_TYPE_FILTER_IN:   return filter_done(sch, node.idx);
+-    default: av_assert0(0);
++    default: av_assert0(0); return AVERROR_BUG;
+     }
+ }
+ 
 @@ -2565,10 +2565,21 @@ static int task_stop(Scheduler *sch, SchTask *task)
          return task_cleanup(sch, task->node);
  

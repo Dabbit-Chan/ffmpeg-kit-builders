@@ -515,13 +515,13 @@ setup_linux_environment() {
     source /opt/rh/gcc-toolset-14/enable
     
     export NASM=nasm
-    export CC=CC
-    export AR=AR
-    export AS=AS
-    export RANLIB=RANLIB
-    export LD=LD
-    export STRIP=STRIP
-    export CXX=CXX
+    export CC=gcc
+    export AR=ar
+    export AS=as
+    export RANLIB=ranlib
+    export LD=ld
+    export STRIP=strip
+    export CXX=g++
 
     create_dir "$install_pkgconfig_dir"
     create_dir "$work_dir/pkgconfig"
@@ -541,7 +541,7 @@ setup_android_environment() {
         if [[ -d "$ANDROID_HOME/ndk-bundle" ]]; then
             export ANDROID_NDK_ROOT="$ANDROID_HOME/ndk-bundle"
         else
-            local latest_ndk=$(ls -v "$ANDROID_HOME/ndk" 2>/dev/null | tail -n 1)
+            export latest_ndk=$(ls -v "$ANDROID_HOME/ndk" 2>/dev/null | tail -n 1)
             if [[ -n "$latest_ndk" ]]; then
                 export ANDROID_NDK_ROOT="$ANDROID_HOME/ndk/$latest_ndk"
             fi
@@ -569,6 +569,7 @@ setup_android_environment() {
             export host_target="x86_64-linux-android"
             export rust_target="x86_64-linux-android"
             export clang_arch="x86_64"
+            export aar_arch="x86_64"
             ;;
         "aarch64"|"arm64"|"arm64-v8a")
             export host_arch="aarch64"
@@ -576,6 +577,7 @@ setup_android_environment() {
             export host_target="aarch64-linux-android"
             export rust_target="aarch64-linux-android"
             export clang_arch="aarch64"
+            export aar_arch="arm64-v8a"
             ;;
         "armv7a"|"arm"|"armeabi-v7a")
             export host_arch="armv7a"
@@ -583,6 +585,7 @@ setup_android_environment() {
             export host_target="armv7a-linux-androideabi"
             export rust_target="armv7-linux-androideabi"
             export clang_arch="arm"
+            export aar_arch="armeabi-v7a"
             ;;
         *)
             exit_message 1 "setup_android_environment: Unsupported host arch '$host_arch' for Android"
@@ -862,6 +865,16 @@ get_ffmpeg_kit_directory() {
 	echo "ffmpeg-kit-$bundle_type$dir_name$is_small$is_gpl$is_nonfree"
 }
 
+get_bundle_license() {
+  if truthy "$build_gpl"; then
+    echo "gpl"
+  elif truthy "$build_nonfree"; then
+    echo "nonfree"
+  else
+    echo "lgpl"
+  fi
+}
+
 get_bundle_directory() {
   local dir_name="${host_name}-$build_ffmpeg_kit_type"
   if truthy "$do_debug_build"; then
@@ -875,15 +888,7 @@ get_bundle_directory() {
   if [[ -n $(get_bundle_type) ]]; then
     bundle_type="$(get_bundle_type)-"
   fi
-  local is_gpl="-lgpl"
-  if truthy "$build_gpl"; then
-    is_gpl="-gpl"
-  fi
-  local is_nonfree=""
-  if truthy "$build_nonfree"; then
-    is_nonfree="-nonfree"
-  fi
-	echo "bundle-$bundle_type$dir_name$is_small$is_gpl$is_nonfree"
+	echo "bundle-$bundle_type$dir_name$is_small-$(get_bundle_license)"
 }
 
 get_bundle_type() {
@@ -3985,7 +3990,9 @@ install_pkg_config_file() {
 }
 
 create_ffmpeg_kit_bundle() {
-  if [[ -d "${ffmpeg_kit_install}" ]] && truthy "$create_bundle"; then
+  if isandroid; then
+    create_android_aar
+  elif [[ -d "${ffmpeg_kit_install}" ]] && truthy "$create_bundle"; then
     echo -e "INFO: Creating bundle" | tee -a "$LOG_FILE"
     local touch_postfix="$host_name"
 
@@ -6463,4 +6470,59 @@ check_maven_package_status() {
   fi
 
   return 1
+}
+
+create_android_aar() {
+  local arch_pfx="$aar_arch"
+  local bundle_pfx="$(get_bundle_type)"
+  local license_pfx="$(get_bundle_license)"
+  local kit_dir=$(get_ffmpeg_kit_directory)
+  local small_pfx=""
+  local debug_pfx=""
+  if truthy "$do_debug_build"; then
+    debug_pfx="-debug"
+	fi
+  if truthy "$build_small"; then
+    small_pfx="-small"
+  fi
+  local lib_ext=".so"
+  if [[ "$build_ffmpeg_kit_type" == "static" ]]; then
+    lib_ext=".a"
+  fi
+  local jni_libs_dir="${work_dir}/jniLibs${bundle_pfx}${small_pfx}${debug_pfx}${license_pfx}/jniLibs"
+  mkdir -p "${jni_libs_dir}"/{include,lib/pkgconfig,arm64-v8a,armeabi-v7a,x86,x86_64}
+
+  cp -f "${work_dir}/${kit_dir}/lib/pkgconfig/ffmpegkit.pc" "${jni_libs_dir}/lib/pkgconfig/ffmpegkit.pc"
+  cp -f "${work_dir}/${kit_dir}/lib/libffmpegkit${lib_ext}" "${jni_libs_dir}/${arch_pfx}/libffmpegkit${lib_ext}"
+
+  FFMPEG_KIT_NAMESPACE="io.github.akashskypatel.ffmpegkit"
+  FFMPEG_KIT_VERSION_CODE="$(date +%Y%m%d)"
+  FFMPEG_KIT_VERSION="$(cat "${BASEDIR}/version")-SNAPSHOT"
+  FFMPEG_KIT_JNI_LIBS_DIR=$(realpath "${jni_libs_dir}")
+  FFMPEG_KIT_OUTPUT_NAME="$(get_bundle_directory)"
+  OSSRH_USERNAME="$(get_maven_username)"
+  OSSRH_PASSWORD="$(get_maven_password)"
+  if [[ "$create_release" == "local" ]]; then
+    GRADLE_COMMAND="publishToMavenLocal"
+  else
+    GRADLE_COMMAND="publishToMavenCentral"
+  fi
+  USER_HOME="/home/vscode"
+  
+  change_dir ${BASEDIR}
+
+  chmod +x "${BASEDIR}/gradlew"
+
+  exec "./gradlew" :tools:android:${GRADLE_COMMAND} \
+    --no-daemon --info --warning-mode all --gradle-user-home "${USER_HOME}/.gradle" \
+    -PFFMPEG_KIT_NAMESPACE="${FFMPEG_KIT_NAMESPACE}" \
+    -PANDROID_NDK="${ANDROID_NDK}" \
+    -PANDROID_API_LEVEL="${ANDROID_API_LEVEL}" \
+    -PFFMPEG_KIT_VERSION_CODE="${FFMPEG_KIT_VERSION_CODE}" \
+    -PFFMPEG_KIT_VERSION="${FFMPEG_KIT_VERSION}" \
+    -PFFMPEG_KIT_JNI_LIBS_DIR="${FFMPEG_KIT_JNI_LIBS_DIR}" \
+    -PFFMPEG_KIT_OUTPUT_NAME="${FFMPEG_KIT_OUTPUT_NAME}" \
+    -POSSRH_USERNAME="${OSSRH_USERNAME}" \
+    -PFFMPEG_KIT_ARCHES="$aar_arch" \
+    -POSSRH_PASSWORD="${OSSRH_PASSWORD}"  || { echo "Failed to create AAR for ${FFMPEG_KIT_OUTPUT_NAME}"; exit 1; }
 }

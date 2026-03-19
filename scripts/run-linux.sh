@@ -2250,13 +2250,14 @@ build_libpulse() {
   activate_meson
   local lib="libpulse"
   local repo="https://github.com/pulseaudio/pulseaudio"
-  local repo_ver="v17.0"
+  local ver="17.0"
+  local repo_ver="v${ver}"
   change_dir "$src_dir"
   do_git_checkout "$repo" "$src_dir/$lib" "$repo_ver"
   change_dir "$src_dir/$lib"
   remove_path -rf "$src_dir/$lib/build"
   if [[ ! -f "$src_dir/$lib/.tarball-version" ]]; then
-    echo "17.0" > "$src_dir/$lib/.tarball-version"
+    echo "$ver" > "$src_dir/$lib/.tarball-version"
   fi
   export CFLAGS="$CFLAGS -I/usr/include -I/usr/lib64/dbus-1.0/include -I${dependency_install_prefix}/include "
   export LDFLAGS="-static $LDFLAGS -L${dependency_install_prefix}/lib -L${dependency_install_prefix}/lib/${host_target} "
@@ -4163,6 +4164,8 @@ build_pocketsphinx() {
 --without-lapack \
 --without-pulseaudio \
 --without-pulse \
+--disable-pulseaudio \
+--disable-pulse \
 LIBS=\"-lasound\""
   disable_nonessential "$src_dir/$parent/$lib"
   do_make_and_make_install
