@@ -205,8 +205,8 @@ list(FILTER KIT_SOURCES EXCLUDE REGEX ".*_(bak|orig)\\.(c|cpp)$")
 list(FILTER KIT_HEADERS EXCLUDE REGEX ".*_(bak|orig)\\.h$")
 
 # print KIT_SOURCES and KIT_HEADERS
-message(STATUS "KIT_SOURCES: ${KIT_SOURCES}")
-message(STATUS "KIT_HEADERS: ${KIT_HEADERS}")
+# message(STATUS "KIT_SOURCES: ${KIT_SOURCES}")
+# message(STATUS "KIT_HEADERS: ${KIT_HEADERS}")
 
 # =============================================================================
 # 5. DEPENDENCY MANAGEMENT: Library Resolution & Linking
@@ -587,13 +587,15 @@ elseif(ANDROID)
     )
 
     # Linker flags for Android (using LLD)
-    target_link_options(ffmpegkit PRIVATE 
+    target_link_options(ffmpegkit PRIVATE
         "-Wl,-z,relro"
         "-Wl,-z,now"
         "-Wl,-z,noexecstack"
         "-Wl,--warn-shared-textrel" # Warn if text relocations are found
         "-Wl,--fatal-warnings"
         "-Wl,--allow-multiple-definition"
+        "-Wl,--as-needed"
+        "-Wl,--verbose"
     )
 endif()
 

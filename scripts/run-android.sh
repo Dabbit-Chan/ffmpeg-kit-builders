@@ -4461,6 +4461,8 @@ build_whisper() {
 -DGGML_AVX=OFF \
 -DGGML_AVX2=OFF \
 -DGGML_FMA=OFF \
+-DGGML_OPENMP_ENABLED=OFF \
+-DWHISPER_OPENMP=OFF \
 -DGGML_OPENMP=OFF \
 -DGGML_F16C=OFF"
   if [[ "$host_arch" == "aarch64" ]]; then
@@ -4473,7 +4475,7 @@ build_whisper() {
   disable_nonessential "$src_dir/$lib/build"
   do_make_and_make_install
   while IFS= read -r -d '' file; do
-    add_libs_to_pkg -t="$file" -l="-lwhisper -lggml -lggml-base -lggml-cpu -lomp -lstdc++ -lm"
+    add_libs_to_pkg -t="$file" -l="-lwhisper -lggml -lggml-base -lggml-cpu -lstdc++ -lm"
   done < <(find "$install_pkgconfig_dir" -name "*whisper*.pc" -print0)
   find "$install_pkgconfig_dir" -name "*whisper*.pc" -exec sed -i -E -e 's/(^|[[:space:]])-lgomp([[:space:]]|$)/ /g' {} +
   change_dir "$src_dir"

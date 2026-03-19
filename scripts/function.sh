@@ -3990,7 +3990,7 @@ install_pkg_config_file() {
 }
 
 create_ffmpeg_kit_bundle() {
-  if isandroid; then
+  if isandroid && truthy "$create_bundle"; then
     create_android_aar
   elif [[ -d "${ffmpeg_kit_install}" ]] && truthy "$create_bundle"; then
     echo -e "INFO: Creating bundle" | tee -a "$LOG_FILE"
@@ -5784,7 +5784,9 @@ add_libs_to_pkg() {
         for item in "${items[@]}"; do
             [[ -z "$item" ]] && continue
             local token="$item"
-            if [[ "$sanitize" == "1" && "$token" != -* ]]; then
+            if [[ $token == "/"* ]]; then
+                token="$item"
+            elif [[ "$sanitize" == "1" && "$token" != -* ]]; then
                 local name="${token#-l}"; name="${name#lib}"; name="${name%.*}"
                 token="-l$name"
             fi
@@ -6489,11 +6491,14 @@ create_android_aar() {
   if [[ "$build_ffmpeg_kit_type" == "static" ]]; then
     lib_ext=".a"
   fi
-  local jni_libs_dir="${work_dir}/jniLibs${bundle_pfx}${small_pfx}${debug_pfx}${license_pfx}/jniLibs"
+  local jni_libs_dir="${WORKDIR}/$host_platform/jniLibs-${bundle_pfx}${small_pfx}${debug_pfx}-${license_pfx}/jniLibs"
+  if [[ -d "${WORKDIR}/$host_platform/jniLibs-${bundle_pfx}${small_pfx}${debug_pfx}-${license_pfx}" ]]; then
+    rm -rf "${WORKDIR}/$host_platform/jniLibs-${bundle_pfx}${small_pfx}${debug_pfx}-${license_pfx}"
+  fi
   mkdir -p "${jni_libs_dir}"/{include,lib/pkgconfig,arm64-v8a,armeabi-v7a,x86,x86_64}
 
-  cp -f "${work_dir}/${kit_dir}/lib/pkgconfig/ffmpegkit.pc" "${jni_libs_dir}/lib/pkgconfig/ffmpegkit.pc"
-  cp -f "${work_dir}/${kit_dir}/lib/libffmpegkit${lib_ext}" "${jni_libs_dir}/${arch_pfx}/libffmpegkit${lib_ext}"
+  cp -fv "${work_dir}/${kit_dir}/lib/pkgconfig/ffmpegkit.pc" "${jni_libs_dir}/lib/pkgconfig/ffmpegkit.pc" > >(redirect_output)
+  cp -fv "${work_dir}/${kit_dir}/lib/libffmpegkit${lib_ext}" "${jni_libs_dir}/${arch_pfx}/libffmpegkit${lib_ext}" > >(redirect_output)
 
   FFMPEG_KIT_NAMESPACE="io.github.akashskypatel.ffmpegkit"
   FFMPEG_KIT_VERSION_CODE="$(date +%Y%m%d)"
@@ -6513,7 +6518,7 @@ create_android_aar() {
 
   chmod +x "${BASEDIR}/gradlew"
 
-  exec "./gradlew" :tools:android:${GRADLE_COMMAND} \
+  { exec "./gradlew" :tools:android:${GRADLE_COMMAND} \
     --no-daemon --info --warning-mode all --gradle-user-home "${USER_HOME}/.gradle" \
     -PFFMPEG_KIT_NAMESPACE="${FFMPEG_KIT_NAMESPACE}" \
     -PANDROID_NDK="${ANDROID_NDK}" \
@@ -6524,5 +6529,6 @@ create_android_aar() {
     -PFFMPEG_KIT_OUTPUT_NAME="${FFMPEG_KIT_OUTPUT_NAME}" \
     -POSSRH_USERNAME="${OSSRH_USERNAME}" \
     -PFFMPEG_KIT_ARCHES="$aar_arch" \
-    -POSSRH_PASSWORD="${OSSRH_PASSWORD}"  || { echo "Failed to create AAR for ${FFMPEG_KIT_OUTPUT_NAME}"; exit 1; }
+    -POSSRH_PASSWORD="${OSSRH_PASSWORD}" > >(redirect_output); } || { echo "Failed to create AAR for ${FFMPEG_KIT_OUTPUT_NAME}"; exit 1; }
+    echo
 }
