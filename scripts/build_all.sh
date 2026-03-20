@@ -45,6 +45,8 @@ VALID_TYPES=("full" "video_hw" "video" "audio" "base" "debug")
 VALID_PLATFORMS=("linux" "windows" "android")
 VALID_ARCHS=("x86_64" "aarch64" "armv7a")
 VALID_PLATFORM_ARCHS=("linux-x86_64" "windows-x86_64" "android-aarch64" "android-armv7a" "android-x86_64")
+ANDROID_PLATFORM_ARCHS=()
+build_aars=false
 declare -A PLATFORMS
 
 parse_platforms() {
@@ -81,14 +83,15 @@ parse_platforms() {
 }
 
 parse_bundles() {
-  bundles="${1}"
+  local b_arr="${1}"
   # Ensure bundles is populated if empty
-  if [[ -z "${bundles}" ]]; then
-    bundles=$(IFS=,; echo "${VALID_TYPES[*]}")
+  if [[ -z "${b_arr}" ]]; then
+    b_arr=$(IFS=,; echo "${VALID_TYPES[*]}")
   fi
-  echo "DEBUG: bundles: ${bundles}"
+  echo "DEBUG: bundles: ${b_arr}"
   # Use IFS local to the read command
-  IFS=',' read -ra BUNDLE_ARRAY <<< "${bundles}"
+  bundles="$b_arr"
+  IFS=',' read -ra BUNDLE_ARRAY <<< "${b_arr}"
   for b in "${BUNDLE_ARRAY[@]}"; do
     # Skip empty elements resulting from trailing/double commas
     [[ -z "$b" ]] && continue
@@ -216,10 +219,15 @@ for key in "${!PLATFORMS[@]}"; do
   for arch in "${arch_array[@]}"; do
     for bundle in "${BUNDLE_ARRAY[@]}"; do
       builds=""
-      clean=""
+      clean="--clean"
       remote=""
+      no_bundle=""
       if [[ "${platform}" == "android" ]]; then
+        ANDROID_PLATFORM_ARCHS+=("android-${arch}")
+        build_aars=true
         remote="--release=local"
+        clean=""
+        no_bundle="--no-bundle"
       else
         if [[ "${local}" == true ]]; then
           remote="--release=local"
@@ -230,26 +238,20 @@ for key in "${!PLATFORMS[@]}"; do
       if [[ "${bundle}" == "debug" ]]; then
         BUILD_STEPS+=("./runner.sh --host=${platform} --arch=${arch} -y ${deps} --base-bundle --build-debug --ffmpeg --no-bundle $remote --skip --gpl -f")
         BUILD_STEPS+=("./runner.sh --host=${platform} --arch=${arch} -y ${deps} --base-bundle --build-debug --ffmpeg --no-bundle $remote --skip -f")
-        BUILD_STEPS+=("./runner.sh --host=${platform} --arch=${arch} -y ${deps} --base-bundle --build-debug --kit --clean $remote --skip --gpl -f")
-        BUILD_STEPS+=("./runner.sh --host=${platform} --arch=${arch} -y ${deps} --base-bundle --build-debug --kit --clean $remote --skip -f")
+        BUILD_STEPS+=("./runner.sh --host=${platform} --arch=${arch} -y ${deps} --base-bundle --build-debug --kit $clean $remote $no_bundle --skip --gpl -f")
+        BUILD_STEPS+=("./runner.sh --host=${platform} --arch=${arch} -y ${deps} --base-bundle --build-debug --kit $clean $remote $no_bundle --skip -f")
       else
         BUILD_STEPS+=("./runner.sh --host=${platform} --arch=${arch} -y ${deps} --${bundle//_/-}-bundle --ffmpeg --no-bundle $remote --skip --gpl -f")
         BUILD_STEPS+=("./runner.sh --host=${platform} --arch=${arch} -y ${deps} --${bundle//_/-}-bundle --ffmpeg --no-bundle $remote --skip -f")
         BUILD_STEPS+=("./runner.sh --host=${platform} --arch=${arch} -y ${deps} --${bundle//_/-}-bundle --ffmpeg --no-bundle $remote --skip --gpl -f --small")
         BUILD_STEPS+=("./runner.sh --host=${platform} --arch=${arch} -y ${deps} --${bundle//_/-}-bundle --ffmpeg --no-bundle $remote --skip -f --small")
-        if [[ "${platform}" == "android" ]]; then
-          continue
-        fi
-        BUILD_STEPS+=("./runner.sh --host=${platform} --arch=${arch} -y ${deps} --${bundle//_/-}-bundle --kit --clean $remote --skip --gpl -f")
-        BUILD_STEPS+=("./runner.sh --host=${platform} --arch=${arch} -y ${deps} --${bundle//_/-}-bundle --kit --clean $remote --skip -f")
-        BUILD_STEPS+=("./runner.sh --host=${platform} --arch=${arch} -y ${deps} --${bundle//_/-}-bundle --kit --clean $remote --skip --gpl -f --small")
-        BUILD_STEPS+=("./runner.sh --host=${platform} --arch=${arch} -y ${deps} --${bundle//_/-}-bundle --kit --clean $remote --skip -f --small")
+        BUILD_STEPS+=("./runner.sh --host=${platform} --arch=${arch} -y ${deps} --${bundle//_/-}-bundle --kit $clean $remote $no_bundle --skip --gpl -f")
+        BUILD_STEPS+=("./runner.sh --host=${platform} --arch=${arch} -y ${deps} --${bundle//_/-}-bundle --kit $clean $remote $no_bundle --skip -f")
+        BUILD_STEPS+=("./runner.sh --host=${platform} --arch=${arch} -y ${deps} --${bundle//_/-}-bundle --kit $clean $remote $no_bundle --skip --gpl -f --small")
+        BUILD_STEPS+=("./runner.sh --host=${platform} --arch=${arch} -y ${deps} --${bundle//_/-}-bundle --kit $clean $remote $no_bundle --skip -f --small")
       fi
     done
   done
-  if [[ "$platform" == "android" ]]; then
-    execute_build "./$WORK_DIR/scripts/android/build_aar.sh --bundles=${bundles}"
-  fi
 done
 
 # Calculate progress
@@ -293,3 +295,10 @@ echo "All builds completed successfully!"
 echo "========================================"
 
 rm -f "${STATE_FILE}"
+
+android_platforms=$(IFS=,; echo "${ANDROID_PLATFORM_ARCHS[*]}")
+
+if truthy "$build_aars"; then
+  echo "Building AARs..."
+  bash -c "${WORK_DIR}/scripts/android-aar.sh --platform=${android_platforms} --bundles=${bundles}"
+fi

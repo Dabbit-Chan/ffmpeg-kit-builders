@@ -18,6 +18,9 @@ LOCK_FILE="${STATE_DIR}/build_aar.lock"
 
 source $BASEDIR/scripts/function.sh
 
+[[ -f "$LOG_FILE" ]] && rm -f "$LOG_FILE"
+[[ -f "$LOG_FILE" ]] && chmod -R a+rwx "$LOG_FILE" || true;
+
 # Initialize state directory
 mkdir -p "${STATE_DIR}"
 
@@ -357,25 +360,23 @@ for key in "${!PLATFORMS[@]}"; do
                   small_flag="--small"
               fi
               for arch in "${arch_array[@]}"; do
-                  if [[ "${bundle}" == "debug" ]]; then
-                      if [[ "${small}" != "small" ]]; then
-                          BUILD_STEPS+=("./runner.sh --host=android --arch=${arch} -y --base-bundle --build-debug --kit --no-bundle --release=local --skip -f $license_flag")
-                      fi
-                  else
-                      BUILD_STEPS+=("./runner.sh --host=android --arch=${arch} -y --${bundle//_/-}-bundle --kit --no-bundle --release=local --skip -f $license_flag $small_flag")
-                  fi
-              done
-              for step in "${BUILD_STEPS[@]}"; do
                   # execute_build "${step}"
-                  arch="${step#*--arch=}" # extract arch from step
-                  arch="${arch%% *}" # remove any additional arguments
                   ffmpeg_kit_dir="$(get_ffmpeg_kit_dir -b="${bundle}" -l="${license}" -s="${small}" -a="${arch}")"
                   ffmpeg_kit_include_dir="${ffmpeg_kit_dir}/include"
                   abi_arch="$(parse_arch "${arch}")"
                   # copy to jniLibs
-                  cp -r "${ffmpeg_kit_include_dir}" "${jni_libs_dir}"}
-                  find "${ffmpeg_kit_dir}/lib" \( -name "*.so*" -o -name "*.a*" \) -exec cp -f {} "${jni_libs_dir}/${abi_arch}" \;
-                  cp -r "${ffmpeg_kit_dir}/lib/pkgconfig" "${jni_libs_dir}/lib"
+                  if [[ -d "${ffmpeg_kit_include_dir}" ]]; then
+                    echo "Copying include directory to jniLibs" > >(redirect_output)
+                    cp -r "${ffmpeg_kit_include_dir}" "${jni_libs_dir}" > >(redirect_output)
+                  fi
+                  if [[ -d "${ffmpeg_kit_dir}/lib" ]]; then
+                    echo "Copying lib directory to jniLibs" > >(redirect_output)
+                    find "${ffmpeg_kit_dir}/lib" \( -name "*.so*" -o -name "*.a*" \) -exec cp -fv {} "${jni_libs_dir}/${abi_arch}" \; > >(redirect_output)
+                  fi
+                  if [[ -d "${ffmpeg_kit_dir}/lib/pkgconfig" ]]; then
+                    echo "Copying pkgconfig directory to jniLibs" > >(redirect_output)
+                    cp -r "${ffmpeg_kit_dir}/lib/pkgconfig" "${jni_libs_dir}/lib" > >(redirect_output)
+                  fi
                   chmod -R a+rwx "${jni_libs_dir}"
               done
               # assemble aar from prebuilt ffmpeg-kit
@@ -417,23 +418,27 @@ for key in "${!PLATFORMS[@]}"; do
               # FFMPEG_KIT_OUTPUT_NAME: bundle-${bundle}-${arch}-shared-${small}-${license}
               FFMPEG_KIT_OUTPUT_NAME="bundle-${bundle_pfx}-shared${debug_pfx}${small_pfx}${license_pfx}"
               package_name="${FFMPEG_KIT_NAMESPACE}.${FFMPEG_KIT_OUTPUT_NAME}"
-              delete_existing_package "${package_name}" "$FFMPEG_KIT_VERSION"
+              echo "${FFMPEG_KIT_JNI_LIBS_DIR}" > >(redirect_output)
               if find "${FFMPEG_KIT_JNI_LIBS_DIR}" -type f \( -name "*.so" -o -name "*.a" \) | read -r; then
-                ./gradlew :tools:android:${GRADLE_COMMAND} \
-                --no-daemon --info --warning-mode all --gradle-user-home /home/vscode/.gradle \
-                -PFFMPEG_KIT_NAMESPACE="${FFMPEG_KIT_NAMESPACE}" \
-                -PANDROID_NDK="${ANDROID_NDK}" \
-                -PANDROID_API_LEVEL="${ANDROID_API_LEVEL}" \
-                -PFFMPEG_KIT_VERSION_CODE="${FFMPEG_KIT_VERSION_CODE}" \
-                -PFFMPEG_KIT_VERSION="${FFMPEG_KIT_VERSION}" \
-                -PFFMPEG_KIT_JNI_LIBS_DIR="${FFMPEG_KIT_JNI_LIBS_DIR}" \
-                -PFFMPEG_KIT_OUTPUT_NAME="${FFMPEG_KIT_OUTPUT_NAME}" \
-                -POSSRH_USERNAME="${OSSRH_USERNAME}" \
-                -POSSRH_PASSWORD="${OSSRH_PASSWORD}"  || { echo "Failed to publish AAR for ${FFMPEG_KIT_OUTPUT_NAME}"; exit 1; }
+                if check_maven_package_status "${FFMPEG_KIT_OUTPUT_NAME}" "$FFMPEG_KIT_VERSION"; then
+                  echo "Package ${FFMPEG_KIT_NAMESPACE}-${FFMPEG_KIT_OUTPUT_NAME} version $FFMPEG_KIT_VERSION already exists, skipping..." > >(redirect_output)
+                else
+                  { ./gradlew :tools:android:${GRADLE_COMMAND} \
+                  --no-daemon --info --warning-mode all --gradle-user-home /home/vscode/.gradle \
+                  -PFFMPEG_KIT_NAMESPACE="${FFMPEG_KIT_NAMESPACE}" \
+                  -PANDROID_NDK="${ANDROID_NDK}" \
+                  -PANDROID_API_LEVEL="${ANDROID_API_LEVEL}" \
+                  -PFFMPEG_KIT_VERSION_CODE="${FFMPEG_KIT_VERSION_CODE}" \
+                  -PFFMPEG_KIT_VERSION="${FFMPEG_KIT_VERSION}" \
+                  -PFFMPEG_KIT_JNI_LIBS_DIR="${FFMPEG_KIT_JNI_LIBS_DIR}" \
+                  -PFFMPEG_KIT_OUTPUT_NAME="${FFMPEG_KIT_OUTPUT_NAME}" \
+                  -POSSRH_USERNAME="${OSSRH_USERNAME}" \
+                  -POSSRH_PASSWORD="${OSSRH_PASSWORD}" > >(redirect_output); }  || { echo "Failed to publish AAR for ${FFMPEG_KIT_OUTPUT_NAME}"; exit 1; }
+                fi
                 release_asset=$(realpath "${BASEDIR}/tools/android/build/outputs/aar/${FFMPEG_KIT_OUTPUT_NAME}-${assemble_type,,}.aar")
                 if [[ -f "${release_asset}" ]]; then
                   echo "Publishing release asset ${release_asset} ..."
-                  upload_release_asset "${release_asset}"
+                  create_github_release "${release_asset}"
                 fi
               fi
           done

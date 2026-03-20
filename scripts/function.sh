@@ -6355,6 +6355,8 @@ check_existing_package() {
   local github_token="$(get_github_token_classic)"
   local package_type="maven"
 
+  echo "Checking for existing package $package_name version $package_version..." > >(redirect_output)
+
   # Retrieve package versions metadata
   local versions_json=$(curl -s \
     -H "Authorization: Bearer $github_token" \
@@ -6368,6 +6370,7 @@ check_existing_package() {
   
   if [[ -n "$error_msg" && "$error_msg" != "null" ]]; then
     # Return nothing and exit 1 so the caller knows it doesn't exist/error
+    echo "Error: $error_msg" > >(redirect_output)
     return 1
   fi
 
@@ -6375,6 +6378,7 @@ check_existing_package() {
   local version_id=$(echo "$versions_json" | jq -r ".[]? | select(.name == \"$package_version\") | .id")
 
   if [[ -n "$version_id" && "$version_id" != "null" ]]; then
+    echo "Found existing package version: $version_id" > >(redirect_output)
     echo "$version_id"
     return 0
   fi
@@ -6388,8 +6392,6 @@ delete_existing_package() {
   local owner="$(get_github_owner)"
   local github_token="$(get_github_token_classic)"
   local package_type="maven"
-
-  echo "Checking for existing package $package_name version $package_version..." | tee -a "$LOG_FILE"
 
   # 1. Get all versions for the package
   local versions_json=$(curl -s \
@@ -6443,16 +6445,15 @@ check_maven_package_status() {
   local username="$(get_maven_username)"
   local password="$(get_maven_password)"
   local endpoint="https://central.sonatype.com/api/v1/publisher/published"
-  local namespace="io.github.akashskypatel"
+  local namespace="io.github.akashskypatel.ffmpegkit"
 
+  echo "Checking for existing package $package_name version $package_version on Maven Central..." > >(redirect_output)
+  auth_token="$(echo -n "$username:$password" | base64)"
   # Retrieve package versions metadata
-  local status_json=$(curl -s \
-    -H "Authorization: Bearer $(echo -n "$username:$password" | base64)" \
-    -H "Accept: application/json" \
-    "$endpoint" \
-    -d "namespace=$namespace" \
-    -d "name=$package_name" \
-    -d "version=$package_version")
+  local status_json=$(curl -X 'GET' \
+    "$endpoint?namespace=$namespace&name=$package_name&version=$package_version" \
+    -H 'accept: application/json' \
+    -H "Authorization: Basic $auth_token") > >(redirect_output)
 
   # 1. Safely check for error message ONLY if it's an object
   # If it's an array, error_msg will be empty
@@ -6460,6 +6461,7 @@ check_maven_package_status() {
   
   if [[ -n "$error_msg" && "$error_msg" != "null" ]]; then
     # Return nothing and exit 1 so the caller knows it doesn't exist/error
+    echo "Error checking package status: $error_msg body: $status_json" > >(redirect_output)
     return 1
   fi
 
@@ -6467,8 +6469,12 @@ check_maven_package_status() {
   local status=$(echo "$status_json" | jq -r '.published')
 
   if [[ -n "$status" && "$status" != "null" ]]; then
-    echo "$status"
-    return 0
+    echo "Package status: $status" > >(redirect_output)
+    if [[ "$status" == "true" ]]; then
+      return 0
+    else
+      return 1
+    fi
   fi
 
   return 1
