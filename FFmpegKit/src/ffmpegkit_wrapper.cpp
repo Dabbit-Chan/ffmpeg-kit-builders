@@ -2724,7 +2724,7 @@ void DLL_ALIGN ffmpeg_kit_config_enable_statistics_callback(
               // Pass ID as pointer (Hack to avoid allocation/threading issues)
               void *session_handle = (void *)(uintptr_t)s->getSessionId();
 
-              g_stats_callback(session_handle, s->getTime(), s->getSize(),
+              g_stats_callback(session_handle, (int64_t)(s->getTime() * 1000), s->getSize(),
                                s->getBitrate(), s->getSpeed(),
                                s->getVideoFrameNumber(), s->getVideoFps(),
                                s->getVideoQuality(), g_stats_user_data);

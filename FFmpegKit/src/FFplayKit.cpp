@@ -178,3 +178,16 @@ void ffmpegkit::FFplayKit::close() {
     session->close();
   }
 }
+
+#ifdef __ANDROID__
+#include <android/native_window_jni.h>
+#include "ffplay_lib.h"
+
+void ffmpegkit::FFplayKit::setAndroidSurface(JNIEnv *env, jobject surface) {
+  ANativeWindow *nw = surface ? ANativeWindow_fromSurface(env, surface) : nullptr;
+  ffplay_set_android_window(nw);
+  // The retained reference is managed by ffmpeg_kit_android.c when called from
+  // Java. When called directly via C++, the caller is responsible for keeping
+  // the Surface alive for the duration of playback.
+}
+#endif /* __ANDROID__ */

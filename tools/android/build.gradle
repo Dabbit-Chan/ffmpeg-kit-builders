@@ -64,11 +64,12 @@ android {
         main {
             def jniPathStr = getSafeProperty('FFMPEG_KIT_JNI_LIBS_DIR', "../../prebuilt/android/jniLibs-base/jniLibs")
             def jniDir = file(jniPathStr)
-            
+
             println("--> Resolved JNI Directory: ${jniDir.absolutePath}")
             println("--> Directory Exists: ${jniDir.exists()}")
-             
+
             jniLibs.srcDirs = [jniDir]
+            java.srcDirs = ['src/main/java']
         }
     }
 }

@@ -73,6 +73,44 @@ static void ffplay_kit_SDL_CloseAudioDevice(SDL_AudioDeviceID dev) {
 #define SDL_OpenAudioDevice ffplay_kit_SDL_OpenAudioDevice
 #define SDL_CloseAudioDevice ffplay_kit_SDL_CloseAudioDevice
 
+#ifdef __ANDROID__
+#include <android/native_window.h>
+
+/* ANativeWindow set by the Java caller before ffplay_init().
+   Not retained (no ANativeWindow_acquire); the caller owns the lifetime. */
+static ANativeWindow *g_android_native_window = NULL;
+
+void ffplay_set_android_window(ANativeWindow *nw) {
+    g_android_native_window = nw;
+}
+
+/* SDL_CreateWindow interceptor for Android.
+ *
+ * When an ANativeWindow has been registered via ffplay_set_android_window(),
+ * use SDL_CreateWindowFrom() to bind SDL to the Java-provided Surface instead
+ * of creating a window through SDL's Android Activity path (which doesn't exist
+ * in library mode).
+ *
+ * SDL_CreateWindowFrom() on Android accepts an ANativeWindow*. The title/x/y/
+ * w/h/flags from ffplay.c are ignored; dimensions come from the Surface itself.
+ *
+ * The #define below must appear before #include "ffplay.c" so the macro
+ * substitution applies inside ffplay.c. The call to SDL_CreateWindow() inside
+ * this function body is the real SDL symbol because the #define is not yet in
+ * scope at the point where this function is compiled.
+ */
+static SDL_Window *ffplay_kit_SDL_CreateWindow(
+        const char *title, int x, int y, int w, int h, Uint32 flags)
+{
+    if (g_android_native_window)
+        return SDL_CreateWindowFrom((void *)g_android_native_window);
+    /* Fallback: no surface set — audio-only sessions (display_disable=1)
+       still work; video sessions will fail to display. */
+    return SDL_CreateWindow(title, x, y, w, h, flags);
+}
+#define SDL_CreateWindow ffplay_kit_SDL_CreateWindow
+#endif /* __ANDROID__ */
+
 // Include the patched ffplay.c to access internal structures and static functions
 // This is a common pattern in FFmpeg tools wrapping (e.g., ffmpeg_lib.c)
 #include "ffplay.c"
@@ -179,13 +217,26 @@ FFplayContext* ffplay_init(const char* args_string, const FFplayCallbacks *cb) {
         ctx->callbacks = *cb;
     }
     
-    // 0 = don't overwrite if already set
+    // Set platform-appropriate SDL driver defaults.
+    // Use overwrite=1 on Android so these always take effect regardless of
+    // any inherited environment. Use overwrite=0 elsewhere to allow callers
+    // to override via environment variables.
+#ifdef __ANDROID__
     if (!SDL_getenv("SDL_VIDEODRIVER"))
-        SDL_setenv("SDL_VIDEODRIVER", "offscreen", 0); 
+        SDL_setenv("SDL_VIDEODRIVER", "android", 1);
+    // Use OpenSL ES: pure-native audio, no Java/JNI or JavaVM registration
+    // required. AAudio (API 26+) is preferred but falls back automatically.
     if (!SDL_getenv("SDL_AUDIODRIVER"))
-        SDL_setenv("SDL_AUDIODRIVER", "dummy", 0); 
+        SDL_setenv("SDL_AUDIODRIVER", "openslES", 1);
+    // No DISPLAY variable on Android — the android video backend does not use X11.
+#else
+    if (!SDL_getenv("SDL_VIDEODRIVER"))
+        SDL_setenv("SDL_VIDEODRIVER", "offscreen", 0);
+    if (!SDL_getenv("SDL_AUDIODRIVER"))
+        SDL_setenv("SDL_AUDIODRIVER", "dummy", 0);
     if (!SDL_getenv("DISPLAY"))
-        SDL_setenv("DISPLAY", ":0", 0); 
+        SDL_setenv("DISPLAY", ":0", 0);
+#endif
         
     // Reset global state in ffplay.c
     ffplay_reset_internal_state();

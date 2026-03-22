@@ -200,6 +200,20 @@ FFMPEG_API void ffplay_free(FFplayContext* ctx);
  */
 FFMPEG_API void ffplay_close(FFplayContext* ctx);
 
+#ifdef __ANDROID__
+#include <android/native_window.h>
+
+/**
+ * Sets the ANativeWindow* for FFplay video output on Android.
+ * Must be called before ffplay_init(). Pass NULL to clear.
+ * The window reference is not retained after ffplay_free().
+ *
+ * @param window A valid ANativeWindow* obtained via ANativeWindow_fromSurface(),
+ *               or NULL to clear the current window.
+ */
+FFMPEG_API void ffplay_set_android_window(ANativeWindow *window);
+#endif /* __ANDROID__ */
+
 #ifdef __cplusplus
 }
 #endif
