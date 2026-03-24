@@ -630,8 +630,8 @@ else
 fi
 
 if ! truthy "$accept_defaults"; then
-  [[ -z $host_platform ]] && pick_host_platform
-  [[ -z $host_arch ]] && pick_host_arch
+  pick_host_platform $host_platform
+  pick_host_arch $host_arch
 fi
 
 truthy "$enable_clean_builds" && { clean_ffmpeg_builds; exit 0; }

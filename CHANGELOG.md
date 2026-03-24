@@ -1,5 +1,20 @@
 # FFmpegKit Changelog
 
+## Version 0.9.1
+
+- **Android FFplay Video Output**: Implemented full video rendering on Android using SDL `dummy` video driver + `software` render driver. Each decoded frame is read from SDL's in-memory back-buffer via `SDL_RenderReadPixels` and blitted row-by-row to the registered `ANativeWindow` via `ANativeWindow_lock/post`. A `SDL_CreateWindow` interceptor in `ffplay_lib.c` logs dimensions and forwards to SDL without requiring `SDLActivity`. New `ffmpeg_kit_android.c` provides JNI glue that retains the `ANativeWindow` for the playback session.
+- **Android FFplay Audio Output**: Set `SDL_AUDIODRIVER=openslES` on Android to use the fully-native OpenSL ES backend (no `JavaVM`/`JNI_OnLoad` required). AAudio is also compiled in for API 26+ devices.
+- **New Android Java API**: Added `FFplayKitAndroid.java` (`com.akashskypatel.ffmpegkit`) exposing `setAndroidSurface(Surface)` for binding a `SurfaceView` or `TextureView` surface before playback. Added `getNativeWindowPtr(Surface)` → `long` and `releaseNativeWindowPtr(long)` for acquiring and releasing `ANativeWindow*` references directly from Dart FFI.
+- **New C/C++ API**: Exposed `ffplay_set_android_window(ANativeWindow*)` in `ffplay_lib.h` for native-layer surface control. Added C wrapper functions `ffplay_kit_set_android_surface_ptr(int64_t)` and `ffplay_kit_clear_android_surface()` for direct Android surface management from Dart FFI. Added `ffplay_kit_register_frame_callback()` / `ffplay_kit_unregister_frame_callback()` and `FFplayKitFrameCallback` typedef for desktop (Linux/Windows) pixel delivery. Added `ffmpeg_kit_get_build_stamp()` for DLL version verification.
+- **SDL2 Android Build Fix**: Replaced the broken autotools `configure` path (dropped in SDL2 2.x) with a CMake build using the Android NDK toolchain. Enables `SDL_OPENSL`, `SDL_AAUDIO`, `SDL_VIDEO`, and `SDL_RENDER` backends.
+- **Android AAR Orchestration**: Reworked the build pipeline to collect all per-architecture targets first, then invoke `android-aar.sh` once after all arch builds complete. Added `--no-bundle` and conditional `--clean` flags for Android build steps.
+- **Android Build Fixes**: Fixed AAR creation guard (`create_bundle` flag), corrected `jniLibs` output path to use `WORKDIR/host_platform`, fixed Maven Central namespace to `io.github.akashskypatel.ffmpegkit`, and corrected package status check return value.
+- **Symbol Conflict Resolution**: Fixed LLVM symbol collisions by explicitly linking system LLVM-17 before libtorch. Added proper RPATH configuration for shared library discovery on Linux/Android.
+- **Stats Callback Fix**: Corrected stats time unit passed to the C callback — now reported in milliseconds (was fractional seconds).
+- **Video Stream Probe API**: Added `ffplay_has_video_stream(path)` to `ffplay_lib.h` and `ffplay_kit_has_video_stream(path)` to the C ABI wrapper. Probes a file or URL for a video stream using `avformat_open_input` + `avformat_find_stream_info` without decoding. Returns 1 (video present), 0 (audio-only), or -1 (error). Thread-safe.
+- **Live Video Dimension API**: Added `FFplaySession::getVideoWidth()` and `FFplaySession::getVideoHeight()` to the C++ session API. Returns the current decoded frame dimensions from an active FFplay session, or 0 if no video stream is open.
+- **Audio-only Size Guard**: `ffplay_get_video_size()` now returns `0×0` when no video stream is present (`video_st == NULL`), preventing FFplay's audio-visualization window dimensions from being mistaken for video dimensions.
+
 ## Version 0.9.0
 
 - **Critical Thread Safety Fixes**: Resolved heap-buffer-overflow in ffplay texture upload by copying renderer_info into VideoState and adding swscale fallback for unsupported pixel formats.

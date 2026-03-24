@@ -707,6 +707,8 @@ if(BUILD_SHARED_LIBS)
         chapter*;
         Java_*;
         JNI_OnLoad;
+        ffplay_kit_session_get_video_width;
+        ffplay_kit_session_get_video_height;
         extern \"C++\" {
             ffmpegkit::*;
             typeinfo*for*ffmpegkit::*;

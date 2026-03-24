@@ -952,9 +952,13 @@ int executeFFplay(const long sessionId,
   // 1. Construct command string
   std::string fullCommand = buildCommandString("ffplay", arguments);
 
+  av_log(NULL, AV_LOG_INFO, "[executeFFplay] sessionId=%ld command='%s'\n",
+      sessionId, fullCommand.c_str());
+
   // 2. Initialize Wrapper Context
   FFplayContext *ctx = ffplay_init(fullCommand.c_str(), nullptr);
   if (!ctx) {
+    av_log(NULL, AV_LOG_ERROR, "[executeFFplay] sessionId=%ld ffplay_init FAILED\n", sessionId);
     if (tlsSession != nullptr) {
       tlsSession->debugLog("[EXECUTE FFPLAY] sessionId: %ld ffplay_init FAILED", sessionId);
     }
@@ -964,41 +968,60 @@ int executeFFplay(const long sessionId,
     return -1;
   }
 
-  // 3. SETS DEFAULT LOG LEVEL BEFORE STARTING A NEW RUN
+  // 3. Configure log level and callbacks
   av_log_set_level(configuredLogLevel);
   av_log_set_callback(ffmpegkit_log_callback_function);
   set_report_callback(ffmpegkit_statistics_callback_function);
 
+  av_log(NULL, AV_LOG_INFO, "[executeFFplay] sessionId=%ld ffplay_init SUCCESS ctx=%p\n",
+      sessionId, ctx);
   if (tlsSession != nullptr) {
     tlsSession->debugLog("[EXECUTE FFPLAY] sessionId: %ld ffplay_init SUCCESS", sessionId);
   }
 
-  // 4. BRIDGE: Set context on session for external control
+  // 4. Bind ffplay context to session
   if (session && session->isFFplay()) {
+    av_log(NULL, AV_LOG_INFO, "[executeFFplay] sessionId=%ld setContext(%p)\n", sessionId, ctx);
     std::static_pointer_cast<ffmpegkit::FFplaySession>(session)->setContext(ctx);
   }
 
   // 5. RUN
   int returnCode = ffplay_start(ctx);
+  av_log(NULL, AV_LOG_INFO, "[executeFFplay] sessionId=%ld ffplay_start returned %d\n",
+      sessionId, returnCode);
   if (returnCode == 0) {
     if (tlsSession != nullptr) {
       tlsSession->debugLog("[EXECUTE FFPLAY] sessionId: %ld ffplay_start SUCCESS", sessionId);
     }
+    int stepCount = 0;
     while (ffplay_step(ctx) == 0) {
       if (cancelRequested(sessionId)) {
+        av_log(NULL, AV_LOG_INFO, "[executeFFplay] sessionId=%ld cancelled after %d steps\n",
+            sessionId, stepCount);
         ffplay_stop(ctx);
         break;
       }
+      stepCount++;
+      if (stepCount == 1 || stepCount % 500 == 0) {
+        av_log(NULL, AV_LOG_DEBUG, "[executeFFplay] sessionId=%ld step=%d\n",
+            sessionId, stepCount);
+      }
       std::this_thread::sleep_for(std::chrono::milliseconds(10));
     }
+    av_log(NULL, AV_LOG_INFO, "[executeFFplay] sessionId=%ld step loop exited after %d steps\n",
+        sessionId, stepCount);
+  } else {
+    av_log(NULL, AV_LOG_ERROR, "[executeFFplay] sessionId=%ld ffplay_start FAILED (rc=%d), skipping step loop\n",
+        sessionId, returnCode);
   }
 
-  // 6. BRIDGE: Clear context on session
+  // 6. Unbind session context
+  av_log(NULL, AV_LOG_INFO, "[executeFFplay] sessionId=%ld clearing context\n", sessionId);
   if (session && session->isFFplay()) {
     std::static_pointer_cast<ffmpegkit::FFplaySession>(session)->setContext(nullptr);
   }
 
-  // 7. ALWAYS REMOVE THE ID FROM THE MAP
+  // 7. Remove from session map
   removeSession(sessionId);
 
   // 8. CLEANUP
@@ -1006,6 +1029,8 @@ int executeFFplay(const long sessionId,
   globalSessionId = 0;
   ffplay_free(ctx);
 
+  av_log(NULL, AV_LOG_INFO, "[executeFFplay] sessionId=%ld done returnCode=%d\n",
+      sessionId, returnCode);
   return returnCode;
 }
 

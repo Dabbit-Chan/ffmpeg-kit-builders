@@ -193,7 +193,17 @@ public:
    * @return the volume of the media
    */
   float getVolume();
-  
+
+  /**
+   * Returns the current video width in pixels, or 0 if not yet known.
+   */
+  int getVideoWidth();
+
+  /**
+   * Returns the current video height in pixels, or 0 if not yet known.
+   */
+  int getVideoHeight();
+
   /**
    * Returns the ffplay context.
    *

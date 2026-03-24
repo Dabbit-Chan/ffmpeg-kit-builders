@@ -278,6 +278,11 @@ void DLL_ALIGN ffmpeg_kit_initialize() {
     avformat_network_init();
 }
 
+const char * DLL_ALIGN ffmpeg_kit_get_build_stamp(void) {
+    static const char kStamp[] = __DATE__ " " __TIME__;
+    return kStamp;
+}
+
 void DLL_ALIGN ffmpeg_kit_handle_release(void *handle) {
   if (!handle) return;
   
@@ -1371,6 +1376,52 @@ void DLL_ALIGN ffplay_kit_session_set_position(FFplaySessionHandle session,
   }
 }
 
+int DLL_ALIGN ffplay_kit_session_get_video_width(FFplaySessionHandle session) {
+  try {
+    auto ptr = get_ptr<FFplaySession>(session);
+    if (ptr) return ptr->getVideoWidth();
+    return 0;
+  } catch (const std::exception &e) {
+    std::cerr << "[Exception] in ffplay_kit_session_get_video_width: " << e.what() << std::endl;
+    return 0;
+  }
+}
+
+int DLL_ALIGN ffplay_kit_session_get_video_height(FFplaySessionHandle session) {
+  try {
+    auto ptr = get_ptr<FFplaySession>(session);
+    if (ptr) return ptr->getVideoHeight();
+    return 0;
+  } catch (const std::exception &e) {
+    std::cerr << "[Exception] in ffplay_kit_session_get_video_height: " << e.what() << std::endl;
+    return 0;
+  }
+}
+
+int DLL_ALIGN ffplay_kit_has_video_stream(const char *path) {
+  if (!path) return -1;
+  try {
+    AVFormatContext *fmt_ctx = nullptr;
+    int ret = avformat_open_input(&fmt_ctx, path, nullptr, nullptr);
+    if (ret < 0) return -1;
+    ret = avformat_find_stream_info(fmt_ctx, nullptr);
+    int has_video = 0;
+    if (ret >= 0) {
+      for (unsigned int i = 0; i < fmt_ctx->nb_streams; i++) {
+        if (fmt_ctx->streams[i]->codecpar->codec_type == AVMEDIA_TYPE_VIDEO) {
+          has_video = 1;
+          break;
+        }
+      }
+    }
+    avformat_close_input(&fmt_ctx);
+    return (ret < 0) ? -1 : has_video;
+  } catch (const std::exception &e) {
+    std::cerr << "[Exception] in ffplay_kit_has_video_stream: " << e.what() << std::endl;
+    return -1;
+  }
+}
+
 double DLL_ALIGN ffplay_kit_session_get_duration(FFplaySessionHandle session) {
   try {
     auto ptr = get_ptr<FFplaySession>(session);
@@ -1571,6 +1622,58 @@ double DLL_ALIGN ffplay_kit_get_volume(void) {
     PRINT_STACK_TRACE();
     return -1.0;
   }
+}
+
+#ifdef __ANDROID__
+#include <android/native_window.h>
+extern "C" void ffplay_set_android_window(ANativeWindow *nw);
+
+/// Sets the Android ANativeWindow for FFplay video output.
+///
+/// [native_window_ptr] is the ANativeWindow* obtained via ANativeWindow_fromSurface()
+/// cast to int64_t.  The caller is responsible for ensuring the window remains
+/// valid for the duration of playback (i.e. the Java Surface must not be released).
+///
+/// Dart usage (via FFplayKitAndroid.setAndroidSurface):
+///   FFplayKitAndroid.setAndroidSurface(nativeWindowPtr);  // before executeAsync
+void DLL_ALIGN ffplay_kit_set_android_surface_ptr(int64_t native_window_ptr) {
+  ffplay_set_android_window(
+      reinterpret_cast<ANativeWindow *>(static_cast<uintptr_t>(native_window_ptr)));
+}
+
+/// Clears the Android ANativeWindow, stopping video output.
+/// Call when the Surface is destroyed (e.g. in surfaceDestroyed()).
+void DLL_ALIGN ffplay_kit_clear_android_surface(void) {
+  ffplay_set_android_window(nullptr);
+}
+#else
+void DLL_ALIGN ffplay_kit_set_android_surface_ptr(int64_t /*native_window_ptr*/) {}
+void DLL_ALIGN ffplay_kit_clear_android_surface(void) {}
+#endif /* __ANDROID__ */
+
+/* Desktop frame callback (Linux / Windows) */
+
+#if !defined(__ANDROID__)
+extern "C" void ffplay_set_frame_callback(
+    void (*cb)(void *, const uint8_t *, int, int, int), void *userdata);
+#endif
+
+void DLL_ALIGN ffplay_kit_register_frame_callback(
+    FFplayKitFrameCallback callback, void *userdata) {
+#if !defined(__ANDROID__)
+  ffplay_set_frame_callback(
+      reinterpret_cast<void (*)(void *, const uint8_t *, int, int, int)>(callback),
+      userdata);
+#else
+  (void)callback;
+  (void)userdata;
+#endif
+}
+
+void DLL_ALIGN ffplay_kit_unregister_frame_callback(void) {
+#if !defined(__ANDROID__)
+  ffplay_set_frame_callback(nullptr, nullptr);
+#endif
 }
 
 /* Config */

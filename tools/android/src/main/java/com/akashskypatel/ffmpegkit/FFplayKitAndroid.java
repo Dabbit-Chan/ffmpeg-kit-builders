@@ -68,4 +68,28 @@ public class FFplayKitAndroid {
      *                or {@link android.graphics.SurfaceTexture}, or {@code null} to clear
      */
     public static native void setAndroidSurface(Surface surface);
+
+    /**
+     * Returns the {@code ANativeWindow*} for a Java {@link Surface} as a {@code long}.
+     *
+     * <p>The returned pointer is suitable for passing to
+     * {@code ffplay_kit_set_android_surface_ptr()} via Dart FFI (see
+     * {@code FFplayKitAndroid.setAndroidSurface(int)} in the Dart bridge).
+     *
+     * <p><strong>The caller must call {@link #releaseNativeWindowPtr(long)} with
+     * the returned value when playback ends or the Surface is destroyed,
+     * whichever comes first.</strong> Failing to do so leaks the native window.
+     *
+     * @param surface a valid, non-null {@link Surface}
+     * @return the {@code ANativeWindow*} cast to {@code long}, or {@code 0} on failure
+     */
+    public static native long getNativeWindowPtr(Surface surface);
+
+    /**
+     * Releases the {@code ANativeWindow} reference acquired by
+     * {@link #getNativeWindowPtr(Surface)}.
+     *
+     * @param ptr the value returned by {@link #getNativeWindowPtr(Surface)}
+     */
+    public static native void releaseNativeWindowPtr(long ptr);
 }

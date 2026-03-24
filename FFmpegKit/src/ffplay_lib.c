@@ -52,7 +52,6 @@ static SDL_AudioDeviceID ffplay_kit_SDL_OpenAudioDevice(
     if (desired && !iscapture && dev > 0) {
         captured_wanted_spec = *desired;
         has_captured_spec = 1;
-        // active_audio_is will be extracted from userdata after compilation of ffplay.c struct
         active_audio_is = (struct VideoState *)desired->userdata;
         active_audio_dev_id = dev;
     }
@@ -75,50 +74,66 @@ static void ffplay_kit_SDL_CloseAudioDevice(SDL_AudioDeviceID dev) {
 
 #ifdef __ANDROID__
 #include <android/native_window.h>
+#include <android/log.h>
+
+#define FFPLAY_LOG_TAG "FFplayLib"
+#define FFPLAY_LOGI(...) __android_log_print(ANDROID_LOG_INFO,  FFPLAY_LOG_TAG, __VA_ARGS__)
+#define FFPLAY_LOGD(...) __android_log_print(ANDROID_LOG_DEBUG, FFPLAY_LOG_TAG, __VA_ARGS__)
+#define FFPLAY_LOGE(...) __android_log_print(ANDROID_LOG_ERROR, FFPLAY_LOG_TAG, __VA_ARGS__)
 
 /* ANativeWindow set by the Java caller before ffplay_init().
    Not retained (no ANativeWindow_acquire); the caller owns the lifetime. */
 static ANativeWindow *g_android_native_window = NULL;
 
 void ffplay_set_android_window(ANativeWindow *nw) {
+    FFPLAY_LOGI("ffplay_set_android_window: nw=%p (was %p)", nw, g_android_native_window);
     g_android_native_window = nw;
 }
 
-/* SDL_CreateWindow interceptor for Android.
- *
- * When an ANativeWindow has been registered via ffplay_set_android_window(),
- * use SDL_CreateWindowFrom() to bind SDL to the Java-provided Surface instead
- * of creating a window through SDL's Android Activity path (which doesn't exist
- * in library mode).
- *
- * SDL_CreateWindowFrom() on Android accepts an ANativeWindow*. The title/x/y/
- * w/h/flags from ffplay.c are ignored; dimensions come from the Surface itself.
- *
- * The #define below must appear before #include "ffplay.c" so the macro
- * substitution applies inside ffplay.c. The call to SDL_CreateWindow() inside
- * this function body is the real SDL symbol because the #define is not yet in
- * scope at the point where this function is compiled.
- */
+/* SDL_SetMainReady() is declared in SDL_main.h, but including that header
+ * redirects `main` to `SDL_main` which breaks library-mode compilation.
+ * Declare it directly instead. */
+extern void SDL_SetMainReady(void);
+
+/* SDL_CreateWindow interceptor — logs dimensions before forwarding to SDL. */
 static SDL_Window *ffplay_kit_SDL_CreateWindow(
         const char *title, int x, int y, int w, int h, Uint32 flags)
 {
-    if (g_android_native_window)
-        return SDL_CreateWindowFrom((void *)g_android_native_window);
-    /* Fallback: no surface set — audio-only sessions (display_disable=1)
-       still work; video sessions will fail to display. */
-    return SDL_CreateWindow(title, x, y, w, h, flags);
+    FFPLAY_LOGI("SDL_CreateWindow: %dx%d title=%s flags=0x%x",
+        w, h, title ? title : "(null)", (unsigned)flags);
+    SDL_Window *win = SDL_CreateWindow(title, x, y, w, h, flags);
+    FFPLAY_LOGI("SDL_CreateWindow => win=%p err='%s'", win, SDL_GetError());
+    return win;
 }
 #define SDL_CreateWindow ffplay_kit_SDL_CreateWindow
+
+#else /* !__ANDROID__ — Linux / Windows */
+
+/* Global frame callback for desktop video output.
+ * Set by ffplay_set_frame_callback() before ffplay_init().
+ * Called inside ffplay_step() with RGBA8888 pixel data after each video frame. */
+static FFplayFrameCallback g_frame_callback = NULL;
+static void *g_frame_callback_userdata = NULL;
+
+void ffplay_set_frame_callback(FFplayFrameCallback callback, void *userdata) {
+    g_frame_callback = callback;
+    g_frame_callback_userdata = userdata;
+}
+
 #endif /* __ANDROID__ */
 
-// Include the patched ffplay.c to access internal structures and static functions
-// This is a common pattern in FFmpeg tools wrapping (e.g., ffmpeg_lib.c)
+// Keep the SDL window hidden and suppress SDL_RenderPresent: pixels are read via
+// SDL_RenderReadPixels from the software back-buffer, so no X11/present needed.
+#ifndef __ANDROID__
+#define SDL_ShowWindow(w) ((void)(w))
+#define SDL_RenderPresent(r) ((void)(r))
+#endif
+
+// Include the patched ffplay.c to access internal structures and static functions.
 #include "ffplay.c"
 
-// Forward declare the auto-generated TLS initializer
+// Forward declarations of symbols defined inside the included ffplay.c.
 extern void ffplay_tls_init_options(void);
-// Forward declarations of internal functions we need that might be static
-// (If they are static in ffplay.c, including the file makes them available here)
 extern FFMPEG_THREAD_LOCAL void (*ffplay_on_show_help)(void);
 extern VideoState *ffplay_init_internal(int argc, char **argv);
 extern void ffplay_reset_internal_state(void);
@@ -153,7 +168,7 @@ static void unlock_ffplay_api(void) {
     }
 }
 
-// Helper for argument splitting (reuse from other libs if possible, specific implementation here)
+/* Splits a command-line string into argc/argv. Caller frees with av_free(). */
 static int split_args(const char *args, char ***argv_out) {
     if (!args || !argv_out) return -1;
     char *args_copy = av_strdup(args);
@@ -217,26 +232,34 @@ FFplayContext* ffplay_init(const char* args_string, const FFplayCallbacks *cb) {
         ctx->callbacks = *cb;
     }
     
-    // Set platform-appropriate SDL driver defaults.
-    // Use overwrite=1 on Android so these always take effect regardless of
-    // any inherited environment. Use overwrite=0 elsewhere to allow callers
-    // to override via environment variables.
 #ifdef __ANDROID__
-    if (!SDL_getenv("SDL_VIDEODRIVER"))
-        SDL_setenv("SDL_VIDEODRIVER", "android", 1);
-    // Use OpenSL ES: pure-native audio, no Java/JNI or JavaVM registration
-    // required. AAudio (API 26+) is preferred but falls back automatically.
+    // SDL used as a library — bypass SDLActivity requirements.
+    SDL_SetMainReady();
+
+    // 'dummy' video + 'software' render: pure CPU framebuffer, no EGL/JVM.
+    // ffplay_step() blits pixels to g_android_native_window each frame.
+    SDL_setenv("SDL_VIDEODRIVER", "dummy", 1);
+    SDL_setenv("SDL_RENDER_DRIVER", "software", 1);
+
     if (!SDL_getenv("SDL_AUDIODRIVER"))
         SDL_setenv("SDL_AUDIODRIVER", "openslES", 1);
-    // No DISPLAY variable on Android — the android video backend does not use X11.
-#else
-    if (!SDL_getenv("SDL_VIDEODRIVER"))
-        SDL_setenv("SDL_VIDEODRIVER", "offscreen", 0);
-    if (!SDL_getenv("SDL_AUDIODRIVER"))
-        SDL_setenv("SDL_AUDIODRIVER", "dummy", 0);
-    if (!SDL_getenv("DISPLAY"))
-        SDL_setenv("DISPLAY", ":0", 0);
+
+    FFPLAY_LOGI("ffplay_init: SDL_VIDEODRIVER='dummy' SDL_RENDER_DRIVER='software' "
+        "SDL_AUDIODRIVER='%s' android_window=%p args='%.200s'",
+        SDL_getenv("SDL_AUDIODRIVER") ? SDL_getenv("SDL_AUDIODRIVER") : "(null)",
+        g_android_native_window,
+        args_string ? args_string : "(null)");
+#else /* !__ANDROID__ */
+    // Use SDL_SetHintWithPriority (not SDL_setenv) so the hint lands in SDL's
+    // own table, which is reliable across CRT instances on Windows.
+#ifdef _WIN32
+    // Windows: 'dummy' driver provides an in-memory surface without a visible window.
+    SDL_SetHintWithPriority(SDL_HINT_VIDEODRIVER, "dummy", SDL_HINT_OVERRIDE);
 #endif
+    // Linux: default X11/Wayland driver required — SDL 'dummy' on Linux lacks a
+    // framebuffer, crashing SDL_CreateRenderer. Window stays hidden via macro.
+    SDL_SetHintWithPriority(SDL_HINT_RENDER_DRIVER, "software", SDL_HINT_OVERRIDE);
+#endif /* !__ANDROID__ */
         
     // Reset global state in ffplay.c
     ffplay_reset_internal_state();
@@ -251,12 +274,23 @@ FFplayContext* ffplay_init(const char* args_string, const FFplayCallbacks *cb) {
         return NULL;
     }
 
-    // Call internal init
-    // Note: ffplay_init_internal calls everything up to event_loop
     VideoState *is = ffplay_init_internal(ctx->argc, ctx->argv);
-    
+
+    // Log the SDL drivers selected after SDL_Init to confirm the expected path.
+    av_log(NULL, AV_LOG_INFO,
+        "[ffplay_lib] post-init SDL_GetCurrentVideoDriver='%s' "
+        "SDL_GetCurrentAudioDriver='%s'\n",
+        SDL_GetCurrentVideoDriver() ? SDL_GetCurrentVideoDriver() : "(null)",
+        SDL_GetCurrentAudioDriver() ? SDL_GetCurrentAudioDriver() : "(null)");
+
     if (!is) {
         // Init failed
+#ifdef __ANDROID__
+        FFPLAY_LOGE("ffplay_init_internal FAILED (argc=%d) SDL_GetError='%s'",
+            ctx->argc, SDL_GetError());
+#endif
+        av_log(NULL, AV_LOG_ERROR,
+            "[ffplay_lib] ffplay_init_internal failed (argc=%d)\n", ctx->argc);
         for (int i=0; i<ctx->argc; i++) av_free(ctx->argv[i]);
         av_free(ctx->argv);
         av_free(ctx);
@@ -264,12 +298,16 @@ FFplayContext* ffplay_init(const char* args_string, const FFplayCallbacks *cb) {
     }
 
     ctx->is = is;
-    
-    // Safely publish the context 
+
+    // Safely publish the context
     lock_ffplay_api();
     active_ffplay_ctx = ctx;
     unlock_ffplay_api();
 
+#ifdef __ANDROID__
+    FFPLAY_LOGI("ffplay_init SUCCESS: ctx=%p is=%p", ctx, is);
+#endif
+    av_log(NULL, AV_LOG_INFO, "[ffplay_lib] ffplay_init SUCCESS ctx=%p is=%p\n", ctx, is);
     return ctx;
 }
 
@@ -319,6 +357,24 @@ int ffplay_start(FFplayContext* ctx) {
 
     lock_ffplay_api();
     if (ctx && active_ffplay_ctx == ctx && ctx->is) ret = 0;
+#ifdef __ANDROID__
+    FFPLAY_LOGI("ffplay_start: ctx=%p active_ctx=%p is=%p quit=%d => ret=%d",
+        ctx, active_ffplay_ctx,
+        ctx ? ctx->is : NULL,
+        ctx ? ctx->quit : -1,
+        ret);
+    if (ret != 0) {
+        if (!ctx)                              FFPLAY_LOGE("  reason: ctx is NULL");
+        else if (active_ffplay_ctx != ctx)     FFPLAY_LOGE("  reason: active_ffplay_ctx(%p) != ctx(%p)", active_ffplay_ctx, ctx);
+        else if (!ctx->is)                     FFPLAY_LOGE("  reason: ctx->is is NULL");
+    }
+#endif
+    av_log(NULL, AV_LOG_INFO,
+        "[ffplay_lib] ffplay_start: ctx=%p active=%p is=%p quit=%d => %d\n",
+        ctx, active_ffplay_ctx,
+        ctx ? ctx->is : NULL,
+        ctx ? ctx->quit : -1,
+        ret);
     unlock_ffplay_api();
     return ret;
 }
@@ -525,7 +581,83 @@ int ffplay_step(FFplayContext* ctx) {
          video_refresh(ctx->is, &remaining_time);
     }
 
+#ifdef __ANDROID__ /* ---- Android: blit to ANativeWindow ---- */
+    /* Read the SDL software back-buffer and blit it to g_android_native_window.
+     * Skips audio-only sessions (no video_st) to avoid blitting a progress bar. */
+    if (g_android_native_window && ctx->is && ctx->is->video_st &&
+            ctx->is->window && ctx->is->renderer) {
+        int rw = 0, rh = 0;
+        SDL_GetWindowSize(ctx->is->window, &rw, &rh);
+        if (rw > 0 && rh > 0) {
+            int pitch = rw * 4;
+            void *pixels = av_malloc(rh * pitch);
+            if (pixels) {
+                /* ABGR8888 bytes [R][G][B][A] on little-endian == WINDOW_FORMAT_RGBA_8888. */
+                if (SDL_RenderReadPixels(ctx->is->renderer, NULL,
+                        SDL_PIXELFORMAT_ABGR8888, pixels, pitch) == 0) {
+                    ANativeWindow_setBuffersGeometry(
+                        g_android_native_window, rw, rh,
+                        WINDOW_FORMAT_RGBA_8888);
+                    ANativeWindow_Buffer anb;
+                    if (ANativeWindow_lock(g_android_native_window, &anb, NULL) == 0) {
+                        const uint8_t *src = (const uint8_t *)pixels;
+                        uint8_t *dst = (uint8_t *)anb.bits;
+                        int dst_stride = anb.stride * 4;
+                        for (int row = 0; row < rh; row++) {
+                            memcpy(dst, src, pitch);
+                            src += pitch;
+                            dst += dst_stride;
+                        }
+                        ANativeWindow_unlockAndPost(g_android_native_window);
+
+                        if (ctx->callbacks.on_frame_displayed)
+                            ctx->callbacks.on_frame_displayed(
+                                ctx->callbacks.userdata, NULL, rw, rh, 0);
+                    } else {
+                        FFPLAY_LOGE("ANativeWindow_lock failed");
+                    }
+                } else {
+                    FFPLAY_LOGE("SDL_RenderReadPixels failed: %s", SDL_GetError());
+                }
+                av_free(pixels);
+            }
+        }
+    }
+
+#else /* !__ANDROID__ — Linux / Windows: fire pixel callback */
+
+    /* Read SDL software back-buffer (ABGR8888 = RGBA8888 on little-endian) and
+     * deliver to g_frame_callback. Buffer is freed after the callback returns. */
+    if (ctx->is && ctx->is->video_st && ctx->is->window && ctx->is->renderer
+            && g_frame_callback) {
+        int rw = 0, rh = 0;
+        SDL_GetWindowSize(ctx->is->window, &rw, &rh);
+        if (rw > 0 && rh > 0) {
+            int pitch = rw * 4;
+            void *pixels = av_malloc(rh * pitch);
+            if (pixels) {
+                if (SDL_RenderReadPixels(ctx->is->renderer, NULL,
+                        SDL_PIXELFORMAT_ABGR8888, pixels, pitch) == 0) {
+                    g_frame_callback(g_frame_callback_userdata,
+                        (const uint8_t *)pixels, rw, rh, pitch);
+                }
+                av_free(pixels);
+            }
+        }
+    }
+
+#endif /* __ANDROID__ */
+
     return ctx->quit;
+}
+
+void ffplay_get_video_size(FFplayContext* ctx, int *width, int *height) {
+    if (width)  *width  = 0;
+    if (height) *height = 0;
+    if (!ctx || !ctx->is) return;
+    if (!ctx->is->video_st) return;  // audio-only: SDL window exists but no video stream
+    if (width)  *width  = ctx->is->width;
+    if (height) *height = ctx->is->height;
 }
 
 int ffplay_seek(FFplayContext* ctx, double seconds, double rel) {
@@ -777,4 +909,23 @@ void ffplay_free(FFplayContext* ctx) {
 
 void ffplay_close(FFplayContext* ctx) {
     ffplay_free(ctx);
+}
+
+int ffplay_has_video_stream(const char *path) {
+    if (!path) return -1;
+    AVFormatContext *fmt_ctx = NULL;
+    int ret = avformat_open_input(&fmt_ctx, path, NULL, NULL);
+    if (ret < 0) return -1;
+    ret = avformat_find_stream_info(fmt_ctx, NULL);
+    int has_video = 0;
+    if (ret >= 0) {
+        for (unsigned int i = 0; i < fmt_ctx->nb_streams; i++) {
+            if (fmt_ctx->streams[i]->codecpar->codec_type == AVMEDIA_TYPE_VIDEO) {
+                has_video = 1;
+                break;
+            }
+        }
+    }
+    avformat_close_input(&fmt_ctx);
+    return (ret < 0) ? -1 : has_video;
 }

@@ -52,21 +52,69 @@
 /* Forward declaration — defined in ffplay_lib.c */
 extern void ffplay_set_android_window(ANativeWindow *window);
 
+/* Stored by JNI_OnLoad; used by Android_JNI_SetupThread to attach worker
+ * threads (e.g. the SDL OpenSL ES audio thread) to the JVM. */
+static JavaVM *g_javaVM = NULL;
+
+/* Overrides SDL2's JNI_OnLoad, which crashes by calling FindClass for
+ * "org/libsdl/app/SDLActivity" (absent here). Stores the JavaVM for
+ * Android_JNI_SetupThread. */
+JNIEXPORT jint JNICALL JNI_OnLoad(JavaVM *vm, void *reserved)
+{
+    (void)reserved;
+    g_javaVM = vm;
+    return JNI_VERSION_1_6;
+}
+
+/* Overrides SDL2's Android_JNI_* helpers from SDL_android.c.
+ * SDL's versions dereference mJavaVM (populated only by SDL's own JNI_OnLoad,
+ * which we suppress above), causing null-deref crashes on audio threads.
+ * We use g_javaVM instead. */
+
+/* Called at audio thread start — attach the thread to the JVM. */
+void Android_JNI_SetupThread(void)
+{
+    if (g_javaVM == NULL) return;
+    JNIEnv *env;
+    (*g_javaVM)->AttachCurrentThread(g_javaVM, (void **)&env, NULL);
+}
+
+/* Called by SDL audio internals to get the JNIEnv for the current thread.
+ * Attaches the thread first if it isn't already. */
+JNIEnv *Android_JNI_GetEnv(void)
+{
+    if (g_javaVM == NULL) return NULL;
+    JNIEnv *env = NULL;
+    jint status = (*g_javaVM)->GetEnv(g_javaVM, (void **)&env, JNI_VERSION_1_6);
+    if (status == JNI_EDETACHED) {
+        if ((*g_javaVM)->AttachCurrentThread(g_javaVM, (void **)&env, NULL) != JNI_OK)
+            return NULL;
+    } else if (status != JNI_OK) {
+        return NULL;
+    }
+    return env;
+}
+
+/* Called at audio thread exit — detach the thread from the JVM. */
+void Android_JNI_DetachCurrentThread(void)
+{
+    if (g_javaVM == NULL) return;
+    (*g_javaVM)->DetachCurrentThread(g_javaVM);
+}
+
+/* No-op: SDL's version crashes (mAudioManagerClass is NULL without SDLActivity).
+ * OpenSLES manages its own thread scheduling. */
+void Android_JNI_AudioSetThreadPriority(int iscapture, int device_id)
+{
+    (void)iscapture;
+    (void)device_id;
+}
+
 /* Retained reference so the window stays valid during the entire playback
    session. Released when the caller passes NULL or a new Surface. */
 static ANativeWindow *g_retained_window = NULL;
 
-/*
- * Java signature:
- *
- *   package com.akashskypatel.ffmpegkit;
- *   public class FFplayKitAndroid {
- *       public static native void setAndroidSurface(android.view.Surface surface);
- *   }
- *
- * Registered automatically by the JVM via the Java_* naming convention;
- * no JNI_OnLoad / RegisterNatives call is required.
- */
+/* Java: public static native void setAndroidSurface(Surface surface); */
 JNIEXPORT void JNICALL
 Java_com_akashskypatel_ffmpegkit_FFplayKitAndroid_setAndroidSurface(
         JNIEnv *env, jclass clazz, jobject surface)
@@ -93,6 +141,42 @@ Java_com_akashskypatel_ffmpegkit_FFplayKitAndroid_setAndroidSurface(
     }
 
     ffplay_set_android_window(g_retained_window);
+}
+
+/* Java: public static native long getNativeWindowPtr(Surface surface);
+ * Returns ANativeWindow* as int64 for ffplay_kit_set_android_surface_ptr().
+ * Caller must pair with releaseNativeWindowPtr() to release the retained ref. */
+JNIEXPORT jlong JNICALL
+Java_com_akashskypatel_ffmpegkit_FFplayKitAndroid_getNativeWindowPtr(
+        JNIEnv *env, jclass clazz, jobject surface)
+{
+    if (!surface) {
+        ALOGE("getNativeWindowPtr: surface is null");
+        return 0;
+    }
+    ANativeWindow *nw = ANativeWindow_fromSurface(env, surface);
+    if (!nw) {
+        ALOGE("getNativeWindowPtr: ANativeWindow_fromSurface returned NULL");
+        return 0;
+    }
+    ANativeWindow_acquire(nw); /* retained; released by releaseNativeWindowPtr() */
+    ALOGI("getNativeWindowPtr: surface=%p => nw=%p (%dx%d)",
+          (void*)surface, nw,
+          ANativeWindow_getWidth(nw),
+          ANativeWindow_getHeight(nw));
+    return (jlong)(uintptr_t)nw;
+}
+
+/* Java: public static native void releaseNativeWindowPtr(long ptr);
+ * Releases the ANativeWindow ref acquired by getNativeWindowPtr(). */
+JNIEXPORT void JNICALL
+Java_com_akashskypatel_ffmpegkit_FFplayKitAndroid_releaseNativeWindowPtr(
+        JNIEnv *env, jclass clazz, jlong ptr)
+{
+    if (ptr == 0) return;
+    ANativeWindow *nw = (ANativeWindow *)(uintptr_t)ptr;
+    ALOGI("releaseNativeWindowPtr: nw=%p", nw);
+    ANativeWindow_release(nw);
 }
 
 #endif /* __ANDROID__ */

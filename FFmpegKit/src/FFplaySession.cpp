@@ -20,6 +20,7 @@
 #include "FFplaySession.hpp"
 #include "FFmpegKitConfig.hpp"
 #include "LogCallback.hpp"
+#include "libavutil/log.h"
 
 extern void
 addSessionToSessionHistory(const std::shared_ptr<ffmpegkit::Session> session);
@@ -179,8 +180,10 @@ double ffmpegkit::FFplaySession::getDuration() {
     FFplayContext *ctx = _context.load(std::memory_order_acquire);
     if (ctx != nullptr) {
         _duration = ffplay_get_duration(ctx);
+        av_log(NULL, AV_LOG_DEBUG, "[FFplaySession] getDuration: ctx=%p => %f\n", ctx, _duration);
         return _duration;
     }
+    av_log(NULL, AV_LOG_WARNING, "[FFplaySession] getDuration: ctx=NULL (session not running)\n");
     return 0.0;
 }
 
@@ -188,8 +191,10 @@ bool ffmpegkit::FFplaySession::isPlaying() {
     FFplayContext *ctx = _context.load(std::memory_order_acquire);
     if (ctx != nullptr) {
         _isPlaying = ffplay_is_playing(ctx) != 0;
+        av_log(NULL, AV_LOG_DEBUG, "[FFplaySession] isPlaying: ctx=%p => %d\n", ctx, (int)_isPlaying);
         return _isPlaying;
     }
+    av_log(NULL, AV_LOG_WARNING, "[FFplaySession] isPlaying: ctx=NULL (session not running)\n");
     return false;
 }
 
@@ -197,9 +202,27 @@ bool ffmpegkit::FFplaySession::isPaused() {
     FFplayContext *ctx = _context.load(std::memory_order_acquire);
     if (ctx != nullptr) {
         _isPaused = ffplay_is_paused(ctx) != 0;
+        av_log(NULL, AV_LOG_DEBUG, "[FFplaySession] isPaused: ctx=%p => %d\n", ctx, (int)_isPaused);
         return _isPaused;
     }
+    av_log(NULL, AV_LOG_WARNING, "[FFplaySession] isPaused: ctx=NULL (session not running)\n");
     return false;
+}
+
+int ffmpegkit::FFplaySession::getVideoWidth() {
+    FFplayContext *ctx = _context.load(std::memory_order_acquire);
+    if (ctx == nullptr) return 0;
+    int w = 0, h = 0;
+    ffplay_get_video_size(ctx, &w, &h);
+    return w;
+}
+
+int ffmpegkit::FFplaySession::getVideoHeight() {
+    FFplayContext *ctx = _context.load(std::memory_order_acquire);
+    if (ctx == nullptr) return 0;
+    int w = 0, h = 0;
+    ffplay_get_video_size(ctx, &w, &h);
+    return h;
 }
 
 void ffmpegkit::FFplaySession::setVolume(float volume) {
@@ -222,6 +245,8 @@ FFplayContext *ffmpegkit::FFplaySession::getContext() {
 }
 
 void ffmpegkit::FFplaySession::setContext(FFplayContext *context) {
+    av_log(NULL, AV_LOG_INFO, "[FFplaySession] setContext: %p -> %p\n",
+        _context.load(std::memory_order_relaxed), context);
     _context.store(context, std::memory_order_release);
 }
 
