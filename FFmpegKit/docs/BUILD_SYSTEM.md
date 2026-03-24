@@ -1,25 +1,26 @@
-# FFmpegKit Desktop Build System
+# FFmpegKit Build System
 
-The desktop build system is designed to compile FFmpeg and FFmpegKit for Linux and Windows, handling patches, dependencies, and shared library bundling.
+The FFmpegKit build system compiles FFmpeg and the FFmpegKit C/C++ wrapper for Linux, Windows, and Android, handling patches, dependencies, and shared library bundling.
 
 ## Overview
 
-The desktop build process is a sub-phase of the overall [FFmpegKit Builders build system](../../README.md). While the top-level `runner.sh` orchestrates the entire pipeline, the `desktop/` directory contains the logic for building the C++/C wrapper libraries and programs for desktop environments.
+The build process is orchestrated by the top-level [`runner.sh`](../../runner.sh). The `FFmpegKit/` directory contains the CMake-based wrapper library and supporting scripts for all target platforms.
 
 ## Core Components
 
 ### 1. CMakeLists.txt
-The [CMakeLists.txt](../CMakeLists.txt) is the heart of the desktop build. It performs the following tasks:
+The [`CMakeLists.txt`](../CMakeLists.txt) is the heart of the build. It performs the following tasks:
 - **Source Preparation**: Copies required `fftools` source files from the FFmpeg source tree.
 - **Auto-Patching**: Automatically applies all `.patch` files found in the `patches/` directory.
 - **Dependency Detection**: Uses `pkg-config` to find and link against the external libraries built by the main system.
 - **Shared Library Bundling**: Triggers post-build scripts to identify and bundle runtime dependencies (DLLs for Windows, SOs for Linux).
+- **Android (NDK)**: When cross-compiling for Android, builds SDL2 via CMake using the NDK toolchain and links the JNI glue layer (`ffmpeg_kit_android.c`).
 
 ### 2. Patch Management
-Following the [Development Workflow](../ARCHITECTURE.md#development-workflow), patches are the source of truth for all modifications to the original FFmpeg tools.
-- Patches are stored in `desktop/patches/`.
+Following the [Development Workflow](../DEVELOPMENT.md), patches are the source of truth for all modifications to the original FFmpeg tools.
+- Patches are stored in `FFmpegKit/patches/`.
 - They are applied by CMake during the configuration phase.
-- **Tip**: Always generate patches against the `_orig` baseline.
+- **Tip**: Always generate patches against the `_orig` baseline using `scripts/generate_patch.sh`.
 
 ### 3. Bundling Scripts
 - **Linux (`scripts/shared-library.sh`)**: Analyzes the generated shared library, identifies non-system dependencies, and creates a `bundle_manifest.txt`.
@@ -31,8 +32,10 @@ When you run `runner.sh --host=linux --arch=x86_64`, the system:
 1. Installs the toolchain.
 2. Builds 100+ dependency libraries.
 3. Configures and builds FFmpeg.
-4. **Invokes CMake on `desktop/`** to build `libffmpegkit` and the bundled artifacts.
+4. **Invokes CMake on `FFmpegKit/`** to build `libffmpegkit` and the bundled artifacts.
 5. Bundles everything into the `prebuilt/` directory.
+
+For Android (`--host=android`), CMake additionally builds SDL2 via the NDK toolchain and compiles the JNI surface/audio glue before packaging into an AAR.
 
 ## Customizing the Build
 
