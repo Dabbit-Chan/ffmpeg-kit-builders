@@ -14,6 +14,12 @@
 - **Video Stream Probe API**: Added `ffplay_has_video_stream(path)` to `ffplay_lib.h` and `ffplay_kit_has_video_stream(path)` to the C ABI wrapper. Probes a file or URL for a video stream using `avformat_open_input` + `avformat_find_stream_info` without decoding. Returns 1 (video present), 0 (audio-only), or -1 (error). Thread-safe.
 - **Live Video Dimension API**: Added `FFplaySession::getVideoWidth()` and `FFplaySession::getVideoHeight()` to the C++ session API. Returns the current decoded frame dimensions from an active FFplay session, or 0 if no video stream is open.
 - **Audio-only Size Guard**: `ffplay_get_video_size()` now returns `0×0` when no video stream is present (`video_st == NULL`), preventing FFplay's audio-visualization window dimensions from being mistaken for video dimensions.
+- **`ffplay_get_video_size` Thread Safety**: Added `ffplay_api_mutex` lock and `active_ffplay_ctx == ctx` validation to `ffplay_get_video_size()`, matching the pattern used by all other getters. Prevents use-after-free if `ffplay_free()` races with a concurrent `getVideoWidth()`/`getVideoHeight()` call.
+- **ANativeWindow Reference Leak Fix**: Removed redundant `ANativeWindow_acquire()` in `getNativeWindowPtr()` — `ANativeWindow_fromSurface()` already transfers ownership. `releaseNativeWindowPtr()` now correctly balances the single reference.
+- **`FFplayKit::setAndroidSurface` Reference Leak Fix**: Added a static retained `ANativeWindow*` in the C++ path so the reference from `ANativeWindow_fromSurface()` is properly released on the next call, mirroring the `g_retained_window` lifecycle in `ffmpeg_kit_android.c`.
+- **Pixel Buffer Performance**: Replaced per-frame `av_malloc`/`av_free` in `ffplay_step()` (both Android blit and desktop callback paths) with a static reusable buffer that is only reallocated when frame dimensions increase. Eliminates ~240 MB/s of allocation churn at 1080p/30fps.
+- **Android AAR Build Script Fix**: `ANDROID_PLATFORM_ARCHS` array is now populated only when `platform == android`, preventing spurious non-Android arch entries (e.g. `android-x86_64` from a Linux build pass) from being passed to `android-aar.sh` in mixed-platform builds.
+- **GitHub Templates**: Updated issue and PR templates to reflect supported platforms (Android, Linux, Windows) and correct branch names, replacing stale upstream ffmpeg-kit references.
 
 ## Version 0.9.0
 

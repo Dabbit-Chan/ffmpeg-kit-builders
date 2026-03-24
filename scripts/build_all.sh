@@ -302,7 +302,9 @@ for platform in "${!PLATFORMS[@]}"; do
   # comma separated list of architectures
   IFS=',' read -ra arch_array <<< "${PLATFORMS[$platform]}"
   for arch in "${arch_array[@]}"; do
-    ANDROID_PLATFORM_ARCHS+=("android-${arch}")
+    if [[ "${platform}" == "android" ]]; then
+      ANDROID_PLATFORM_ARCHS+=("android-${arch}")
+    fi
     for bundle in "${BUNDLE_ARRAY[@]}"; do
       if truthy "${no_clean}"; then
         clean=""

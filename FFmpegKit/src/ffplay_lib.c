@@ -33,6 +33,11 @@ struct VideoState; // Forward declaration
 static struct VideoState *active_audio_is = NULL;
 static SDL_AudioDeviceID active_audio_dev_id = 0;
 
+// Reusable pixel buffer for ffplay_step — resized only on dimension change.
+// ffplay_step is called from a single background thread, so no lock needed.
+static void   *g_pixel_buf      = NULL;
+static size_t  g_pixel_buf_size = 0;
+
 // Interception logic
 static SDL_AudioDeviceID ffplay_kit_SDL_OpenAudioDevice(
     const char *device,
@@ -590,17 +595,22 @@ int ffplay_step(FFplayContext* ctx) {
         SDL_GetWindowSize(ctx->is->window, &rw, &rh);
         if (rw > 0 && rh > 0) {
             int pitch = rw * 4;
-            void *pixels = av_malloc(rh * pitch);
-            if (pixels) {
+            size_t needed = (size_t)rh * pitch;
+            if (needed > g_pixel_buf_size) {
+                av_free(g_pixel_buf);
+                g_pixel_buf = av_malloc(needed);
+                g_pixel_buf_size = g_pixel_buf ? needed : 0;
+            }
+            if (g_pixel_buf) {
                 /* ABGR8888 bytes [R][G][B][A] on little-endian == WINDOW_FORMAT_RGBA_8888. */
                 if (SDL_RenderReadPixels(ctx->is->renderer, NULL,
-                        SDL_PIXELFORMAT_ABGR8888, pixels, pitch) == 0) {
+                        SDL_PIXELFORMAT_ABGR8888, g_pixel_buf, pitch) == 0) {
                     ANativeWindow_setBuffersGeometry(
                         g_android_native_window, rw, rh,
                         WINDOW_FORMAT_RGBA_8888);
                     ANativeWindow_Buffer anb;
                     if (ANativeWindow_lock(g_android_native_window, &anb, NULL) == 0) {
-                        const uint8_t *src = (const uint8_t *)pixels;
+                        const uint8_t *src = (const uint8_t *)g_pixel_buf;
                         uint8_t *dst = (uint8_t *)anb.bits;
                         int dst_stride = anb.stride * 4;
                         for (int row = 0; row < rh; row++) {
@@ -619,7 +629,6 @@ int ffplay_step(FFplayContext* ctx) {
                 } else {
                     FFPLAY_LOGE("SDL_RenderReadPixels failed: %s", SDL_GetError());
                 }
-                av_free(pixels);
             }
         }
     }
@@ -634,14 +643,18 @@ int ffplay_step(FFplayContext* ctx) {
         SDL_GetWindowSize(ctx->is->window, &rw, &rh);
         if (rw > 0 && rh > 0) {
             int pitch = rw * 4;
-            void *pixels = av_malloc(rh * pitch);
-            if (pixels) {
+            size_t needed = (size_t)rh * pitch;
+            if (needed > g_pixel_buf_size) {
+                av_free(g_pixel_buf);
+                g_pixel_buf = av_malloc(needed);
+                g_pixel_buf_size = g_pixel_buf ? needed : 0;
+            }
+            if (g_pixel_buf) {
                 if (SDL_RenderReadPixels(ctx->is->renderer, NULL,
-                        SDL_PIXELFORMAT_ABGR8888, pixels, pitch) == 0) {
+                        SDL_PIXELFORMAT_ABGR8888, g_pixel_buf, pitch) == 0) {
                     g_frame_callback(g_frame_callback_userdata,
-                        (const uint8_t *)pixels, rw, rh, pitch);
+                        (const uint8_t *)g_pixel_buf, rw, rh, pitch);
                 }
-                av_free(pixels);
             }
         }
     }
@@ -654,10 +667,12 @@ int ffplay_step(FFplayContext* ctx) {
 void ffplay_get_video_size(FFplayContext* ctx, int *width, int *height) {
     if (width)  *width  = 0;
     if (height) *height = 0;
-    if (!ctx || !ctx->is) return;
-    if (!ctx->is->video_st) return;  // audio-only: SDL window exists but no video stream
-    if (width)  *width  = ctx->is->width;
-    if (height) *height = ctx->is->height;
+    lock_ffplay_api();
+    if (ctx && active_ffplay_ctx == ctx && ctx->is && ctx->is->video_st) {
+        if (width)  *width  = ctx->is->width;
+        if (height) *height = ctx->is->height;
+    }
+    unlock_ffplay_api();
 }
 
 int ffplay_seek(FFplayContext* ctx, double seconds, double rel) {
@@ -895,7 +910,11 @@ void ffplay_free(FFplayContext* ctx) {
         av_free(requested_audio_device);
         requested_audio_device = NULL;
     }
-    
+
+    av_free(g_pixel_buf);
+    g_pixel_buf = NULL;
+    g_pixel_buf_size = 0;
+
     // argv freed
     if (ctx->argv) {
         for (int i=0; i<ctx->argc; i++) av_free(ctx->argv[i]);

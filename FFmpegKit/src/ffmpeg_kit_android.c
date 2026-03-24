@@ -159,7 +159,8 @@ Java_com_akashskypatel_ffmpegkit_FFplayKitAndroid_getNativeWindowPtr(
         ALOGE("getNativeWindowPtr: ANativeWindow_fromSurface returned NULL");
         return 0;
     }
-    ANativeWindow_acquire(nw); /* retained; released by releaseNativeWindowPtr() */
+    /* fromSurface already gives us ownership (refcount=1); no extra acquire needed.
+     * releaseNativeWindowPtr() releases this single reference. */
     ALOGI("getNativeWindowPtr: surface=%p => nw=%p (%dx%d)",
           (void*)surface, nw,
           ANativeWindow_getWidth(nw),
