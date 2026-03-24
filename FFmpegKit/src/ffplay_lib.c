@@ -122,11 +122,6 @@ static SDL_Window *ffplay_kit_SDL_CreateWindow(
 static FFplayFrameCallback g_frame_callback = NULL;
 static void *g_frame_callback_userdata = NULL;
 
-void ffplay_set_frame_callback(FFplayFrameCallback callback, void *userdata) {
-    g_frame_callback = callback;
-    g_frame_callback_userdata = userdata;
-}
-
 #endif /* __ANDROID__ */
 
 // Keep the SDL window hidden and suppress SDL_RenderPresent: pixels are read via
@@ -174,6 +169,18 @@ static void unlock_ffplay_api(void) {
         SDL_UnlockMutex(ffplay_api_mutex);
     }
 }
+
+#ifndef __ANDROID__
+void ffplay_set_frame_callback(FFplayFrameCallback callback, void *userdata) {
+    /* Hold the API mutex so that when this returns with callback==NULL,
+     * ffplay_step is guaranteed to have finished any in-flight call.
+     * (ffplay_step holds this same mutex for the entire callback block.) */
+    lock_ffplay_api();
+    g_frame_callback = callback;
+    g_frame_callback_userdata = userdata;
+    unlock_ffplay_api();
+}
+#endif /* __ANDROID__ */
 
 /* Splits a command-line string into argc/argv. Caller frees with av_free(). */
 static int split_args(const char *args, char ***argv_out) {
@@ -646,8 +653,11 @@ int ffplay_step(FFplayContext* ctx) {
 
 #else /* !__ANDROID__ — Linux / Windows: fire pixel callback */
 
-    /* Read SDL software back-buffer (ABGR8888 = RGBA8888 on little-endian) and
-     * deliver to g_frame_callback. Buffer is freed after the callback returns. */
+    /* Hold the API mutex for the entire check-and-call block.
+     * ffplay_set_frame_callback() holds the same mutex, so once it returns
+     * with callback==NULL, no call is in-flight and the plugin can safely
+     * free the TextureState that is passed as userdata. */
+    lock_ffplay_api();
     if (ctx->is && ctx->is->video_st && ctx->is->window && ctx->is->renderer
             && g_frame_callback) {
         int rw = 0, rh = 0;
@@ -669,6 +679,7 @@ int ffplay_step(FFplayContext* ctx) {
             }
         }
     }
+    unlock_ffplay_api();
 
 #endif /* __ANDROID__ */
 
