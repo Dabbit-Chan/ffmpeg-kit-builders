@@ -415,7 +415,7 @@ FFmpegSessionHandle DLL_ALIGN ffmpeg_kit_execute_async_full(
     };
     auto stats = [stats_cb, user_data, handle](std::shared_ptr<Statistics> s) {
       if (stats_cb && s) {
-        stats_cb(handle, s->getTime(), s->getSize(), s->getBitrate(),
+        stats_cb(handle, (int64_t)(s->getTime() * 1000), s->getSize(), s->getBitrate(),
                  s->getSpeed(), s->getVideoFrameNumber(), s->getVideoFps(),
                  s->getVideoQuality(), user_data);
       }
@@ -477,7 +477,7 @@ FFmpegSessionHandle DLL_ALIGN ffmpeg_kit_create_session_with_callbacks(
     };
     auto stats =[stats_cb, user_data, handle](std::shared_ptr<Statistics> s) {
       if (stats_cb && s) {
-        stats_cb(handle, s->getTime(), s->getSize(), s->getBitrate(),
+        stats_cb(handle, (int64_t)(s->getTime() * 1000), s->getSize(), s->getBitrate(),
                  s->getSpeed(), s->getVideoFrameNumber(), s->getVideoFps(),
                  s->getVideoQuality(), user_data);
       }
@@ -548,7 +548,7 @@ FFmpegSessionHandle DLL_ALIGN ffmpeg_kit_create_session_from_argv_with_callbacks
         };
         auto stats = [stats_cb, user_data, handle](std::shared_ptr<Statistics> s) {
             if (stats_cb && s) {
-                stats_cb(handle, s->getTime(), s->getSize(), s->getBitrate(),
+                stats_cb(handle, (int64_t)(s->getTime() * 1000), s->getSize(), s->getBitrate(),
                          s->getSpeed(), s->getVideoFrameNumber(), s->getVideoFps(),
                          s->getVideoQuality(), user_data);
             }
@@ -602,7 +602,7 @@ void DLL_ALIGN ffmpeg_kit_set_statistics_callback(FFmpegSessionHandle session,
       auto stats = [stats_cb, user_data,
                     session](std::shared_ptr<Statistics> s) {
         if (stats_cb && s) {
-          stats_cb(session, s->getTime(), s->getSize(), s->getBitrate(),
+          stats_cb(session, (int64_t)(s->getTime() * 1000), s->getSize(), s->getBitrate(),
                    s->getSpeed(), s->getVideoFrameNumber(), s->getVideoFps(),
                    s->getVideoQuality(), user_data);
         }
@@ -660,7 +660,7 @@ void DLL_ALIGN ffmpeg_kit_set_callbacks(FFmpegSessionHandle session,
       auto stats = [stats_cb, user_data,
                     session](std::shared_ptr<Statistics> s) {
         if (stats_cb && s) {
-          stats_cb(session, s->getTime(), s->getSize(), s->getBitrate(),
+          stats_cb(session, (int64_t)(s->getTime() * 1000), s->getSize(), s->getBitrate(),
                    s->getSpeed(), s->getVideoFrameNumber(), s->getVideoFps(),
                    s->getVideoQuality(), user_data);
         }
