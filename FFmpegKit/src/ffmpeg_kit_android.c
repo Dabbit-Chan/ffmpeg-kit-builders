@@ -119,8 +119,12 @@ JNIEXPORT void JNICALL
 Java_com_akashskypatel_ffmpegkit_FFplayKitAndroid_setAndroidSurface(
         JNIEnv *env, jclass clazz, jobject surface)
 {
-    /* Release the previously retained window, if any */
+    /* Clear the global pointer BEFORE releasing so ffplay_step never sees a
+       freed window. ffplay_set_android_window is mutex-protected in ffplay_lib.c
+       and ffplay_step acquires a ref under that same mutex, so once the global
+       is NULL no new blit can start on the old window. */
     if (g_retained_window != NULL) {
+        ffplay_set_android_window(NULL);
         ANativeWindow_release(g_retained_window);
         g_retained_window = NULL;
     }

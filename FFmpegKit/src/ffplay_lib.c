@@ -92,7 +92,9 @@ static ANativeWindow *g_android_native_window = NULL;
 
 void ffplay_set_android_window(ANativeWindow *nw) {
     FFPLAY_LOGI("ffplay_set_android_window: nw=%p (was %p)", nw, g_android_native_window);
+    lock_ffplay_api();
     g_android_native_window = nw;
+    unlock_ffplay_api();
 }
 
 /* SDL_SetMainReady() is declared in SDL_main.h, but including that header
@@ -587,9 +589,17 @@ int ffplay_step(FFplayContext* ctx) {
     }
 
 #ifdef __ANDROID__ /* ---- Android: blit to ANativeWindow ---- */
-    /* Read the SDL software back-buffer and blit it to g_android_native_window.
-     * Skips audio-only sessions (no video_st) to avoid blitting a progress bar. */
-    if (g_android_native_window && ctx->is && ctx->is->video_st &&
+    /* Snapshot the current ANativeWindow under the API mutex and acquire a
+     * temporary reference so the caller cannot free the window mid-blit.
+     * ffplay_set_android_window() holds the same mutex when updating the
+     * global, so once we release the mutex with a non-NULL snapshot the
+     * window is guaranteed to remain valid until we call ANativeWindow_release. */
+    lock_ffplay_api();
+    ANativeWindow *blit_window = g_android_native_window;
+    if (blit_window) ANativeWindow_acquire(blit_window);
+    unlock_ffplay_api();
+
+    if (blit_window && ctx->is && ctx->is->video_st &&
             ctx->is->window && ctx->is->renderer) {
         int rw = 0, rh = 0;
         SDL_GetWindowSize(ctx->is->window, &rw, &rh);
@@ -606,10 +616,10 @@ int ffplay_step(FFplayContext* ctx) {
                 if (SDL_RenderReadPixels(ctx->is->renderer, NULL,
                         SDL_PIXELFORMAT_ABGR8888, g_pixel_buf, pitch) == 0) {
                     ANativeWindow_setBuffersGeometry(
-                        g_android_native_window, rw, rh,
+                        blit_window, rw, rh,
                         WINDOW_FORMAT_RGBA_8888);
                     ANativeWindow_Buffer anb;
-                    if (ANativeWindow_lock(g_android_native_window, &anb, NULL) == 0) {
+                    if (ANativeWindow_lock(blit_window, &anb, NULL) == 0) {
                         const uint8_t *src = (const uint8_t *)g_pixel_buf;
                         uint8_t *dst = (uint8_t *)anb.bits;
                         int dst_stride = anb.stride * 4;
@@ -618,7 +628,7 @@ int ffplay_step(FFplayContext* ctx) {
                             src += pitch;
                             dst += dst_stride;
                         }
-                        ANativeWindow_unlockAndPost(g_android_native_window);
+                        ANativeWindow_unlockAndPost(blit_window);
 
                         if (ctx->callbacks.on_frame_displayed)
                             ctx->callbacks.on_frame_displayed(
@@ -632,6 +642,7 @@ int ffplay_step(FFplayContext* ctx) {
             }
         }
     }
+    if (blit_window) ANativeWindow_release(blit_window);
 
 #else /* !__ANDROID__ — Linux / Windows: fire pixel callback */
 

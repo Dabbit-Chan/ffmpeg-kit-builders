@@ -188,6 +188,10 @@ void ffmpegkit::FFplayKit::setAndroidSurface(JNIEnv *env, jobject surface) {
   // g_retained_window lifecycle in ffmpeg_kit_android.c.
   static ANativeWindow *s_retained = nullptr;
   if (s_retained) {
+    // Null the global BEFORE releasing: ffplay_set_android_window holds the
+    // ffplay_api_mutex, so once it returns no new blit will start on the old
+    // window (ffplay_step acquires a ref under that same mutex).
+    ffplay_set_android_window(nullptr);
     ANativeWindow_release(s_retained);
     s_retained = nullptr;
   }
