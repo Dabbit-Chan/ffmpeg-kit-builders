@@ -1873,10 +1873,11 @@ FFMPEG_KIT_C_EXPORT int64_t
 ffmpeg_kit_statistics_get_size(StatisticsHandle handle);
 
 /**
- * Gets the time.
+ * Gets the time in milliseconds.
  *
  * @param handle the statistics handle
- * @return the time
+ * @return the time in milliseconds (consistent with the time argument passed
+ *         to FFmpegKitStatisticsCallback)
  */
 FFMPEG_KIT_C_EXPORT double
 ffmpeg_kit_statistics_get_time(StatisticsHandle handle);

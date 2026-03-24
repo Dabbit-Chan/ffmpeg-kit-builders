@@ -77,6 +77,10 @@ static void ffplay_kit_SDL_CloseAudioDevice(SDL_AudioDeviceID dev) {
 #define SDL_OpenAudioDevice ffplay_kit_SDL_OpenAudioDevice
 #define SDL_CloseAudioDevice ffplay_kit_SDL_CloseAudioDevice
 
+/* Forward declarations — defined after #include "ffplay.c" below. */
+static void lock_ffplay_api(void);
+static void unlock_ffplay_api(void);
+
 #ifdef __ANDROID__
 #include <android/native_window.h>
 #include <android/log.h>
@@ -269,9 +273,13 @@ FFplayContext* ffplay_init(const char* args_string, const FFplayCallbacks *cb) {
 #ifdef _WIN32
     // Windows: 'dummy' driver provides an in-memory surface without a visible window.
     SDL_SetHintWithPriority(SDL_HINT_VIDEODRIVER, "dummy", SDL_HINT_OVERRIDE);
+#else
+    // Linux: 'offscreen' provides a CPU-backed framebuffer supporting
+    // SDL_CreateRenderer + SDL_RenderReadPixels without a display server.
+    // Works in headed and headless environments (CI, WSL, servers).
+    // ('dummy' lacks a framebuffer and crashes SDL_CreateRenderer.)
+    SDL_SetHintWithPriority(SDL_HINT_VIDEODRIVER, "offscreen", SDL_HINT_OVERRIDE);
 #endif
-    // Linux: default X11/Wayland driver required — SDL 'dummy' on Linux lacks a
-    // framebuffer, crashing SDL_CreateRenderer. Window stays hidden via macro.
     SDL_SetHintWithPriority(SDL_HINT_RENDER_DRIVER, "software", SDL_HINT_OVERRIDE);
 #endif /* !__ANDROID__ */
         

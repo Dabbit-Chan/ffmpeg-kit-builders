@@ -3264,7 +3264,7 @@ int64_t DLL_ALIGN ffmpeg_kit_statistics_get_size(StatisticsHandle handle) {
 }
 double DLL_ALIGN ffmpeg_kit_statistics_get_time(StatisticsHandle handle) {
   try {
-    return get_ptr<Statistics>(handle)->getTime();
+    return get_ptr<Statistics>(handle)->getTime() * 1000.0;
   } catch (const std::exception &e) {
     std::cerr << "[Exception] in ffmpeg_kit_statistics_get_time: " << e.what()
               << std::endl;
