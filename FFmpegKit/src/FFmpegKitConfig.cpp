@@ -1086,7 +1086,7 @@ void *ffmpegKitInitialize() {
               << "-" << ffmpegkit::FFmpegKitConfig::getVersion() << "-"
               << ffmpegkit::FFmpegKitConfig::getBuildDate() << "." << std::endl;
     static const char kStamp[] = __DATE__ " " __TIME__;
-    std::cout << kStamp << std::endl;
+    std::cout << "Build timestamp: " << kStamp << std::endl;
   });
 
   std::lock_guard<KitMutex> lock(getCallbackDataMutex());
