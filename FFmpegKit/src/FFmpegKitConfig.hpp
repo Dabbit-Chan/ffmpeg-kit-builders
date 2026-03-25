@@ -592,11 +592,30 @@ public:
 
   /**
    * Lists available audio output devices.
-   * 
+   *
    * @return a semi-colon separated string of device names
    */
   static std::string listAudioOutputDevices();
-  
+
+  /**
+   * Shuts down the async callback thread and waits for it to exit.
+   * Must be called before unloading resources that the callback thread uses.
+   */
+  static void shutdownCallbackThread();
+
+  /**
+   * Returns true if the async callback thread is currently running.
+   */
+  static bool isCallbackThreadRunning();
+
+  /**
+   * Joins the async FFplay execution thread if it is still running.
+   * Must be called from a live execution context (before static destructors)
+   * to ensure ASAN's per-thread TLS cleanup runs while the ASAN runtime is
+   * still fully initialized.
+   */
+  static void joinAsyncFFplayThread();
+
   ~FFmpegKitConfig();
 };
 

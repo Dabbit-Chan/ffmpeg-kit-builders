@@ -20,9 +20,20 @@
 #include "Packages.hpp"
 extern "C" {
 #include <libavutil/avutil.h>
+#include <libavcodec/avcodec.h>
+#include <libavcodec/codec.h>
+#include <libavformat/avformat.h>
+#include <libavfilter/avfilter.h>
+#include <libavdevice/avdevice.h>
+#include <libswscale/swscale.h>
+#include <libswresample/swresample.h>
+#include <libavcodec/bsf.h>
 }
-#include <algorithm>
 #include <memory>
+#include <mutex>
+
+// Static mutex definition
+std::mutex ffmpegkit::Packages::packages_mutex_;
 
 std::string ffmpegkit::Packages::getPackageName() {
   std::string bundleType = getBundleType();
@@ -30,191 +41,183 @@ std::string ffmpegkit::Packages::getPackageName() {
 }
 
 bool ffmpegkit::Packages::getIsGpl() {
-  std::string buildConfiguration = avutil_configuration();
-  return buildConfiguration.find("--enable-gpl") != std::string::npos;
+  std::lock_guard<std::mutex> lock(packages_mutex_);
+  std::string cfg = avutil_configuration();
+  // Match "--enable-gpl" as a complete flag (not "--enable-gpl3" etc.)
+  std::string flag = "--enable-gpl";
+  size_t pos = cfg.find(flag);
+  while (pos != std::string::npos) {
+    size_t end = pos + flag.length();
+    if (end >= cfg.length() || cfg[end] == ' ' || cfg[end] == '\t') {
+      return true;
+    }
+    pos = cfg.find(flag, end);
+  }
+  return false;
 }
 
 bool ffmpegkit::Packages::getIsNonFree() {
-  std::string buildConfiguration = avutil_configuration();
-  return buildConfiguration.find("--enable-nonfree") != std::string::npos;
+  std::lock_guard<std::mutex> lock(packages_mutex_);
+  std::string cfg = avutil_configuration();
+  // Match "--enable-nonfree" as a complete flag
+  std::string flag = "--enable-nonfree";
+  size_t pos = cfg.find(flag);
+  while (pos != std::string::npos) {
+    size_t end = pos + flag.length();
+    if (end >= cfg.length() || cfg[end] == ' ' || cfg[end] == '\t') {
+      return true;
+    }
+    pos = cfg.find(flag, end);
+  }
+  return false;
 }
 
 std::string ffmpegkit::Packages::getBundleType() {
+  std::lock_guard<std::mutex> lock(packages_mutex_);
   std::string bundleType = FFMPEG_KIT_BUNDLE_TYPE;
   return bundleType;
 }
 
 std::shared_ptr<std::set<std::string>>
 ffmpegkit::Packages::getExternalLibraries() {
-  const std::set<const char *> supportedExternalLibraries{"alsa",
-                                                          "amf",
-                                                          "aom",
-                                                          "appkit",
-                                                          "aribb24",
-                                                          "aribcaption",
-                                                          "ass",
-                                                          "audiotoolbox",
-                                                          "avfoundation",
-                                                          "avisynth",
-                                                          "bluray",
-                                                          "bs2b",
-                                                          "caca",
-                                                          "cdio",
-                                                          "celt",
-                                                          "chromaprint",
-                                                          "codec2",
-                                                          "coreimage",
-                                                          "cuda-llvm",
-                                                          "cuda-nvcc",
-                                                          "cuvid",
-                                                          "d3d11va",
-                                                          "d3d12va",
-                                                          "dav1d",
-                                                          "davs2",
-                                                          "dc1394",
-                                                          "decklink",
-                                                          "drm",
-                                                          "dvdnav",
-                                                          "dvdread",
-                                                          "dxva2",
-                                                          "fdk-aac",
-                                                          "ffnvcodec",
-                                                          "flite",
-                                                          "fontconfig",
-                                                          "frei0r",
-                                                          "freetype",
-                                                          "fribidi",
-                                                          "gcrypt",
-                                                          "glslang",
-                                                          "gme",
-                                                          "gmp",
-                                                          "gnutls",
-                                                          "gsm",
-                                                          "harfbuzz",
-                                                          "iconv",
-                                                          "iec61883",
-                                                          "ilbc",
-                                                          "jack",
-                                                          "jni",
-                                                          "jxl",
-                                                          "klvanc",
-                                                          "kvazaar",
-                                                          "ladspa",
-                                                          "lc3",
-                                                          "lcevc-dec",
-                                                          "lcms2",
-                                                          "lensfun",
-                                                          "lv2",
-                                                          "mbedtls",
-                                                          "mediacodec",
-                                                          "mediafoundation",
-                                                          "metal",
-                                                          "mfx",
-                                                          "mmal",
-                                                          "modplug",
-                                                          "mp3lame",
-                                                          "mysofa",
-                                                          "npp",
-                                                          "nvdec",
-                                                          "nvenc",
-                                                          "oapv",
-                                                          "ohcodec",
-                                                          "omx",
-                                                          "omx-rpi",
-                                                          "openal",
-                                                          "opencl",
-                                                          "opencv",
-                                                          "opencore-amrnb",
-                                                          "opencore-amrwb",
-                                                          "opengl",
-                                                          "openh264",
-                                                          "openjpeg",
-                                                          "openmpt",
-                                                          "openssl",
-                                                          "openvino",
-                                                          "opus",
-                                                          "placebo",
-                                                          "pocketsphinx",
-                                                          "pulse",
-                                                          "qrencode",
-                                                          "quirc",
-                                                          "rabbitmq",
-                                                          "rav1e",
-                                                          "rist",
-                                                          "rkmpp",
-                                                          "rsvg",
-                                                          "rtmp",
-                                                          "rubberband",
-                                                          "schannel",
-                                                          "sdl2",
-                                                          "securetransport",
-                                                          "shaderc",
-                                                          "shine",
-                                                          "smbclient",
-                                                          "snappy",
-                                                          "sndio",
-                                                          "soxr",
-                                                          "speex",
-                                                          "srt",
-                                                          "ssh",
-                                                          "svtav1",
-                                                          "tensorflow",
-                                                          "tesseract",
-                                                          "theora",
-                                                          "tls",
-                                                          "torch",
-                                                          "twolame",
-                                                          "uavs3d",
-                                                          "v4l2",
-                                                          "v4l2-m2m",
-                                                          "vaapi",
-                                                          "vapoursynth",
-                                                          "vdpau",
-                                                          "videotoolbox",
-                                                          "vidstab",
-                                                          "vmaf",
-                                                          "vo-amrwbenc",
-                                                          "vorbis",
-                                                          "vpl",
-                                                          "vpx",
-                                                          "vulkan",
-                                                          "vvenc",
-                                                          "webp",
-                                                          "whisper",
-                                                          "x264",
-                                                          "x265",
-                                                          "xavs",
-                                                          "xavs2",
-                                                          "xcb",
-                                                          "xcb-shape",
-                                                          "xcb-shm",
-                                                          "xcb-xfixes",
-                                                          "xevd",
-                                                          "xeve",
-                                                          "xlib",
-                                                          "xml2",
-                                                          "xvid",
-                                                          "zimg",
-                                                          "zmq",
-                                                          "zvbi"};
-
+  std::lock_guard<std::mutex> lock(packages_mutex_);
+  auto enabledLibrarySet = std::make_shared<std::set<std::string>>();
   std::string buildConfiguration(avutil_configuration());
-  char libraryName1[50];
-  char libraryName2[50];
-  std::shared_ptr<std::set<std::string>> enabledLibrarySet =
-      std::make_shared<std::set<std::string>>();
-
-  std::for_each(
-      supportedExternalLibraries.cbegin(), supportedExternalLibraries.cend(),
-      [&](const char *supportedExternalLibrary) {
-        sprintf(libraryName1, "enable-%s", supportedExternalLibrary);
-        sprintf(libraryName2, "enable-lib%s", supportedExternalLibrary);
-
-        if (buildConfiguration.find(libraryName1) != std::string::npos ||
-            buildConfiguration.find(libraryName2) != std::string::npos) {
-          enabledLibrarySet->insert(supportedExternalLibrary);
-        }
-      });
-
+  
+  // Parse all --enable-lib* flags dynamically instead of checking a hardcoded list
+  std::string searchToken = "--enable-lib";
+  size_t pos = 0;
+  while ((pos = buildConfiguration.find(searchToken, pos)) != std::string::npos) {
+    pos += searchToken.length();
+    size_t end = buildConfiguration.find_first_of(" \t", pos);
+    std::string libName = (end != std::string::npos) 
+        ? buildConfiguration.substr(pos, end - pos) 
+        : buildConfiguration.substr(pos);
+    if (!libName.empty()) {
+      enabledLibrarySet->insert(libName);
+    }
+  }
+  
+  // Also parse non-lib --enable-* flags that are known external libraries
+  // (e.g., --enable-openssl, --enable-opencl, --enable-vulkan, etc.)
+  const std::set<std::string> nonLibPrefixed = {
+    "alsa", "amf", "appkit", "audiotoolbox", "avfoundation", "avisynth",
+    "coreimage", "cuda-llvm", "cuda-nvcc", "cuvid", "d3d11va", "d3d12va",
+    "drm", "dxva2", "ffnvcodec", "iconv", "jni", "ladspa", "lv2",
+    "mediacodec", "mediafoundation", "metal", "nvdec", "nvenc",
+    "opencl", "opengl", "openssl", "rkmpp", "schannel", "securetransport",
+    "v4l2", "v4l2-m2m", "vaapi", "vdpau", "videotoolbox", "vulkan",
+    "xlib", "mbedtls", "gnutls"
+  };
+  for (const auto& lib : nonLibPrefixed) {
+    std::string flag = "--enable-" + lib;
+    if (buildConfiguration.find(flag) != std::string::npos) {
+      enabledLibrarySet->insert(lib);
+    }
+  }
+  
   return enabledLibrarySet;
+}
+
+std::shared_ptr<std::set<std::string>> ffmpegkit::Packages::getRegisteredCodecs() {
+  std::lock_guard<std::mutex> lock(packages_mutex_);
+  auto codecs = std::make_shared<std::set<std::string>>();
+  const AVCodec *codec = nullptr;
+  void *iter = nullptr;
+  while ((codec = av_codec_iterate(&iter))) {
+    codecs->insert(codec->name);
+  }
+  return codecs;
+}
+
+std::shared_ptr<std::set<std::string>> ffmpegkit::Packages::getRegisteredEncoders() {
+  std::lock_guard<std::mutex> lock(packages_mutex_);
+  auto encoders = std::make_shared<std::set<std::string>>();
+  const AVCodec *codec = nullptr;
+  void *iter = nullptr;
+  while ((codec = av_codec_iterate(&iter))) {
+    if (av_codec_is_encoder(codec)) {
+      encoders->insert(codec->name);
+    }
+  }
+  return encoders;
+}
+
+std::shared_ptr<std::set<std::string>> ffmpegkit::Packages::getRegisteredDecoders() {
+  std::lock_guard<std::mutex> lock(packages_mutex_);
+  auto decoders = std::make_shared<std::set<std::string>>();
+  const AVCodec *codec = nullptr;
+  void *iter = nullptr;
+  while ((codec = av_codec_iterate(&iter))) {
+    if (av_codec_is_decoder(codec)) {
+      decoders->insert(codec->name);
+    }
+  }
+  return decoders;
+}
+
+std::shared_ptr<std::set<std::string>> ffmpegkit::Packages::getRegisteredMuxers() {
+  std::lock_guard<std::mutex> lock(packages_mutex_);
+  auto muxers = std::make_shared<std::set<std::string>>();
+  const AVOutputFormat *ofmt = nullptr;
+  void *iter = nullptr;
+  while ((ofmt = av_muxer_iterate(&iter))) {
+    muxers->insert(ofmt->name);
+  }
+  return muxers;
+}
+
+std::shared_ptr<std::set<std::string>> ffmpegkit::Packages::getRegisteredDemuxers() {
+  std::lock_guard<std::mutex> lock(packages_mutex_);
+  auto demuxers = std::make_shared<std::set<std::string>>();
+  const AVInputFormat *ifmt = nullptr;
+  void *iter = nullptr;
+  while ((ifmt = av_demuxer_iterate(&iter))) {
+    demuxers->insert(ifmt->name);
+  }
+  return demuxers;
+}
+
+std::shared_ptr<std::set<std::string>> ffmpegkit::Packages::getRegisteredFilters() {
+  std::lock_guard<std::mutex> lock(packages_mutex_);
+  auto filters = std::make_shared<std::set<std::string>>();
+  const AVFilter *filter = nullptr;
+  void *iter = nullptr;
+  while ((filter = av_filter_iterate(&iter))) {
+    filters->insert(filter->name);
+  }
+  return filters;
+}
+
+std::shared_ptr<std::set<std::string>> ffmpegkit::Packages::getRegisteredProtocols() {
+  std::lock_guard<std::mutex> lock(packages_mutex_);
+  auto protocols = std::make_shared<std::set<std::string>>();
+  void *opaque = nullptr;
+  const char *name;
+  // Input protocols
+  while ((name = avio_enum_protocols(&opaque, 0))) {
+    protocols->insert(name);
+  }
+  // Output protocols
+  opaque = nullptr;
+  while ((name = avio_enum_protocols(&opaque, 1))) {
+    protocols->insert(name);
+  }
+  return protocols;
+}
+
+std::shared_ptr<std::set<std::string>> ffmpegkit::Packages::getRegisteredBitStreamFilters() {
+  std::lock_guard<std::mutex> lock(packages_mutex_);
+  auto bsfs = std::make_shared<std::set<std::string>>();
+  const AVBitStreamFilter *bsf = nullptr;
+  void *iter = nullptr;
+  while ((bsf = av_bsf_iterate(&iter))) {
+    bsfs->insert(bsf->name);
+  }
+  return bsfs;
+}
+
+std::string ffmpegkit::Packages::getBuildConfiguration() {
+  std::lock_guard<std::mutex> lock(packages_mutex_);
+  return std::string(avutil_configuration());
 }

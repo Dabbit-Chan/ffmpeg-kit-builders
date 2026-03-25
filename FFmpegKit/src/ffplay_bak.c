@@ -88,8 +88,6 @@ static void ffplay_tls_init_options(void);
 /* no AV correction is done if too big error */
 #define AV_NOSYNC_THRESHOLD 10.0
 
-extern void (*ffplay_on_show_help)(void);
-
 /* maximum audio speed change to get correct sync */
 #define SAMPLE_CORRECTION_PERCENT_MAX 10
 
@@ -3926,7 +3924,6 @@ void ffplay_show_help_default(const char *opt, const char *arg)
     show_usage();
     show_help_options(options, "Main options:", 0, OPT_EXPERT);
     show_help_options(options, "Advanced options:", OPT_EXPERT, 0);
-    if (ffplay_on_show_help) ffplay_on_show_help();
     printf("\n");
     show_help_children(avcodec_get_class(), AV_OPT_FLAG_DECODING_PARAM);
     show_help_children(avformat_get_class(), AV_OPT_FLAG_DECODING_PARAM);
@@ -3951,8 +3948,6 @@ void ffplay_show_help_default(const char *opt, const char *arg)
            "left double-click   toggle full screen\n"
            );
 }
-
-void (*ffplay_on_show_help)(void) = NULL;
 
 /* Called from the main */
 VideoState *ffplay_init_internal(int argc, char **argv)

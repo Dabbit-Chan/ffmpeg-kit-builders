@@ -286,6 +286,9 @@ FFplayContext* ffplay_init(const char* args_string, const FFplayCallbacks *cb) {
     SDL_SetHintWithPriority(SDL_HINT_VIDEODRIVER, "offscreen", SDL_HINT_OVERRIDE);
 #endif
     SDL_SetHintWithPriority(SDL_HINT_RENDER_DRIVER, "software", SDL_HINT_OVERRIDE);
+    // Force dummy audio driver unless the caller has overridden SDL_AUDIODRIVER.
+    if (!SDL_getenv("SDL_AUDIODRIVER"))
+        SDL_setenv("SDL_AUDIODRIVER", "dummy", 0);
 #endif /* !__ANDROID__ */
         
     // Reset global state in ffplay.c

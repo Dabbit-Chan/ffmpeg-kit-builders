@@ -997,6 +997,90 @@ FFMPEG_KIT_C_EXPORT char *ffmpeg_kit_packages_get_package_name(void);
  */
 FFMPEG_KIT_C_EXPORT char *ffmpeg_kit_packages_get_external_libraries(void);
 
+/**
+ * Gets the FFmpegKit bundle type.
+ *
+ * @return the bundle type
+ */
+FFMPEG_KIT_C_EXPORT char *ffmpeg_kit_packages_get_bundle_type(void);
+
+/**
+ * Gets whether GPL is enabled.
+ *
+ * @return 1 if GPL is enabled, 0 otherwise
+ */
+FFMPEG_KIT_C_EXPORT bool ffmpeg_kit_packages_get_is_gpl(void);
+
+/**
+ * Gets whether non-free is enabled.
+ *
+ * @return 1 if non-free is enabled, 0 otherwise
+ */
+FFMPEG_KIT_C_EXPORT bool ffmpeg_kit_packages_get_is_nonfree(void);
+
+/**
+ * Gets all registered codecs.
+ *
+ * @return comma-separated list of codec names
+ */
+FFMPEG_KIT_C_EXPORT char *ffmpeg_kit_packages_get_registered_codecs(void);
+
+/**
+ * Gets all registered encoders.
+ *
+ * @return comma-separated list of encoder names
+ */
+FFMPEG_KIT_C_EXPORT char *ffmpeg_kit_packages_get_registered_encoders(void);
+
+/**
+ * Gets all registered decoders.
+ *
+ * @return comma-separated list of decoder names
+ */
+FFMPEG_KIT_C_EXPORT char *ffmpeg_kit_packages_get_registered_decoders(void);
+
+/**
+ * Gets all registered muxers.
+ *
+ * @return comma-separated list of muxer names
+ */
+FFMPEG_KIT_C_EXPORT char *ffmpeg_kit_packages_get_registered_muxers(void);
+
+/**
+ * Gets all registered demuxers.
+ *
+ * @return comma-separated list of demuxer names
+ */
+FFMPEG_KIT_C_EXPORT char *ffmpeg_kit_packages_get_registered_demuxers(void);
+
+/**
+ * Gets all registered filters.
+ *
+ * @return comma-separated list of filter names
+ */
+FFMPEG_KIT_C_EXPORT char *ffmpeg_kit_packages_get_registered_filters(void);
+
+/**
+ * Gets all registered protocols.
+ *
+ * @return comma-separated list of protocol names
+ */
+FFMPEG_KIT_C_EXPORT char *ffmpeg_kit_packages_get_registered_protocols(void);
+
+/**
+ * Gets all registered bitstream filters.
+ *
+ * @return comma-separated list of bitstream filter names
+ */
+FFMPEG_KIT_C_EXPORT char *ffmpeg_kit_packages_get_registered_bitstream_filters(void);
+
+/**
+ * Gets the FFmpeg build configuration.
+ *
+ * @return the build configuration string
+ */
+FFMPEG_KIT_C_EXPORT char *ffmpeg_kit_packages_get_build_configuration(void);
+
 /* Session Management (Base) */
 
 /**

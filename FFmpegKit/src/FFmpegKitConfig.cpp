@@ -164,6 +164,7 @@ static thread_local std::shared_ptr<ffmpegkit::Session> tlsSession = nullptr;
 
 static std::once_flag ffmpegKitInitializerFlag;
 static pthread_t callbackThread = 0;
+static pthread_t asyncFFplayThread = 0;
 
 void *ffmpegKitInitialize();
 
@@ -1034,6 +1035,13 @@ int executeFFplay(const long sessionId,
   return returnCode;
 }
 
+void ffmpegkit::FFmpegKitConfig::joinAsyncFFplayThread() {
+  if (asyncFFplayThread != 0) {
+    pthread_join(asyncFFplayThread, nullptr);
+    asyncFFplayThread = 0;
+  }
+}
+
 void *ffmpegKitInitialize() {
   std::call_once(ffmpegKitInitializerFlag, []() {
     std::cout << "Loading ffmpeg-kit." << std::endl;
@@ -1069,12 +1077,16 @@ void *ffmpegKitInitialize() {
         ffmpegkit::LogRedirectionStrategyPrintLogsWhenNoCallbacksDefined;
 
     ffmpegkit::FFmpegKitConfig::enableRedirection();
-
-    std::cout << "Loaded ffmpeg-kit-" << ffmpegkit::Packages::getPackageName() << "-" 
-              << ffmpegkit::ArchDetect::getArch() << "-"
-              << (ffmpegkit::Packages::getIsGpl() ? "gpl" : ffmpegkit::Packages::getIsNonFree() ? "nonfree" : "lgpl") << "-"
-              << ffmpegkit::FFmpegKitConfig::getVersion() << "-"
+    
+    std::cout << "Loaded ffmpeg-kit-" << ffmpegkit::Packages::getPackageName()
+              << "-" << ffmpegkit::ArchDetect::getArch() << "-"
+              << (ffmpegkit::Packages::getIsGpl()       ? "gpl"
+                  : ffmpegkit::Packages::getIsNonFree() ? "nonfree"
+                                                        : "lgpl")
+              << "-" << ffmpegkit::FFmpegKitConfig::getVersion() << "-"
               << ffmpegkit::FFmpegKitConfig::getBuildDate() << "." << std::endl;
+    static const char kStamp[] = __DATE__ " " __TIME__;
+    std::cout << kStamp << std::endl;
   });
 
   std::lock_guard<KitMutex> lock(getCallbackDataMutex());
@@ -1591,9 +1603,14 @@ void ffmpegkit::FFmpegKitConfig::asyncFFplayExecute(
     const std::shared_ptr<ffmpegkit::FFplaySession> ffplaySession,
     int waitTimeout) {
 
+  // Join any previously completed async ffplay thread before launching a new one
+  if (asyncFFplayThread != 0) {
+    pthread_join(asyncFFplayThread, nullptr);
+    asyncFFplayThread = 0;
+  }
+
   auto* args = new AsyncFFplayArgs{ffplaySession, waitTimeout};
-  pthread_t thread;
-  pthread_create(&thread, nullptr, [](void* arg) -> void* {
+  pthread_create(&asyncFFplayThread, nullptr, [](void* arg) -> void* {
     auto* a = static_cast<AsyncFFplayArgs*>(arg);
     auto session = std::move(a->session);
     int timeout = a->waitTimeout;
@@ -1622,7 +1639,8 @@ void ffmpegkit::FFmpegKitConfig::asyncFFplayExecute(
     }
     return nullptr;
   }, args);
-  pthread_detach(thread);
+  // Do NOT detach: keep asyncFFplayThread joinable so we can wait for it at
+  // program exit (in ~FFmpegKitConfig) and avoid ASAN/TLS teardown crashes.
 }
 
 void ffmpegkit::FFmpegKitConfig::asyncGetMediaInformationExecute(
@@ -2168,6 +2186,13 @@ std::string ffmpegkit::FFmpegKitConfig::listAudioOutputDevices() {
 }
 
 ffmpegkit::FFmpegKitConfig::~FFmpegKitConfig() {
+  // 0. Join async ffplay thread so its TLS destructors run before ASAN/LLVM
+  //    tears down during program exit (prevents __nptl_deallocate_tsd crash).
+  if (asyncFFplayThread != 0) {
+    pthread_join(asyncFFplayThread, nullptr);
+    asyncFFplayThread = 0;
+  }
+
   // 1. Stop background redirection thread first to prevent races on sessions
   disableRedirection();
 

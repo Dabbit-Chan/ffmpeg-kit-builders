@@ -300,8 +300,8 @@ void DLL_ALIGN ffmpeg_kit_handle_release(void *handle) {
   if (session) {
     session->cancel();
     /**
-     * Block destruction until the native background thread has gracefully exited. 
-     * We bound this with a 10-second timeout to prevent deadlocking the calling 
+     * Block destruction until the native background thread has gracefully exited.
+     * We bound this with a 10-second timeout to prevent deadlocking the calling
      * thread (e.g., the Flutter UI isolate) if a session hangs indefinitely.
      */
     auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(10);
@@ -311,6 +311,12 @@ void DLL_ALIGN ffmpeg_kit_handle_release(void *handle) {
         break;
       }
       std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    }
+
+    // For FFplay sessions, join the async execution thread so its TLS
+    // destructors complete while the runtime is still fully initialized.
+    if (session->isFFplay()) {
+      ffmpegkit::FFmpegKitConfig::joinAsyncFFplayThread();
     }
   }
 }
@@ -1884,6 +1890,194 @@ char * DLL_ALIGN ffmpeg_kit_packages_get_external_libraries(void) {
     return strdup_cpp(result);
   } catch (const std::exception &e) {
     std::cerr << "[Exception] in ffmpeg_kit_packages_get_external_libraries: "
+              << e.what() << std::endl;
+    PRINT_STACK_TRACE();
+    return nullptr;
+  }
+}
+
+char * DLL_ALIGN ffmpeg_kit_packages_get_bundle_type(void) {
+  try {
+    return strdup_cpp(Packages::getBundleType());
+  } catch (const std::exception &e) {
+    std::cerr << "[Exception] in ffmpeg_kit_packages_get_bundle_type: "
+              << e.what() << std::endl;
+    PRINT_STACK_TRACE();
+    return nullptr;
+  }
+}
+
+bool DLL_ALIGN ffmpeg_kit_packages_get_is_gpl(void) {
+  try {
+    return Packages::getIsGpl();
+  } catch (const std::exception &e) {
+    std::cerr << "[Exception] in ffmpeg_kit_packages_get_is_gpl: "
+              << e.what() << std::endl;
+    PRINT_STACK_TRACE();
+    return false;
+  }
+}
+
+bool DLL_ALIGN ffmpeg_kit_packages_get_is_nonfree(void) {
+  try {
+    return Packages::getIsNonFree();
+  } catch (const std::exception &e) {
+    std::cerr << "[Exception] in ffmpeg_kit_packages_get_is_nonfree: "
+              << e.what() << std::endl;
+    PRINT_STACK_TRACE();
+    return false;
+  }
+}
+
+char * DLL_ALIGN ffmpeg_kit_packages_get_registered_codecs(void) {
+  try {
+    auto codecs = Packages::getRegisteredCodecs();
+    std::string result = "";
+    for (const auto &codec : *codecs) {
+      if (!result.empty())
+        result += ", ";
+      result += codec;
+    }
+    return strdup_cpp(result);
+  } catch (const std::exception &e) {
+    std::cerr << "[Exception] in ffmpeg_kit_packages_get_registered_codecs: "
+              << e.what() << std::endl;
+    PRINT_STACK_TRACE();
+    return nullptr;
+  }
+}
+
+char * DLL_ALIGN ffmpeg_kit_packages_get_registered_encoders(void) {
+  try {
+    auto encoders = Packages::getRegisteredEncoders();
+    std::string result = "";
+    for (const auto &encoder : *encoders) {
+      if (!result.empty())
+        result += ", ";
+      result += encoder;
+    }
+    return strdup_cpp(result);
+  } catch (const std::exception &e) {
+    std::cerr << "[Exception] in ffmpeg_kit_packages_get_registered_encoders: "
+              << e.what() << std::endl;
+    PRINT_STACK_TRACE();
+    return nullptr;
+  }
+}
+
+char * DLL_ALIGN ffmpeg_kit_packages_get_registered_decoders(void) {
+  try {
+    auto decoders = Packages::getRegisteredDecoders();
+    std::string result = "";
+    for (const auto &decoder : *decoders) {
+      if (!result.empty())
+        result += ", ";
+      result += decoder;
+    }
+    return strdup_cpp(result);
+  } catch (const std::exception &e) {
+    std::cerr << "[Exception] in ffmpeg_kit_packages_get_registered_decoders: "
+              << e.what() << std::endl;
+    PRINT_STACK_TRACE();
+    return nullptr;
+  }
+}
+
+char * DLL_ALIGN ffmpeg_kit_packages_get_registered_muxers(void) {
+  try {
+    auto muxers = Packages::getRegisteredMuxers();
+    std::string result = "";
+    for (const auto &muxer : *muxers) {
+      if (!result.empty())
+        result += ", ";
+      result += muxer;
+    }
+    return strdup_cpp(result);
+  } catch (const std::exception &e) {
+    std::cerr << "[Exception] in ffmpeg_kit_packages_get_registered_muxers: "
+              << e.what() << std::endl;
+    PRINT_STACK_TRACE();
+    return nullptr;
+  }
+}
+
+char * DLL_ALIGN ffmpeg_kit_packages_get_registered_demuxers(void) {
+  try {
+    auto demuxers = Packages::getRegisteredDemuxers();
+    std::string result = "";
+    for (const auto &demuxer : *demuxers) {
+      if (!result.empty())
+        result += ", ";
+      result += demuxer;
+    }
+    return strdup_cpp(result);
+  } catch (const std::exception &e) {
+    std::cerr << "[Exception] in ffmpeg_kit_packages_get_registered_demuxers: "
+              << e.what() << std::endl;
+    PRINT_STACK_TRACE();
+    return nullptr;
+  }
+}
+
+char * DLL_ALIGN ffmpeg_kit_packages_get_registered_filters(void) {
+  try {
+    auto filters = Packages::getRegisteredFilters();
+    std::string result = "";
+    for (const auto &filter : *filters) {
+      if (!result.empty())
+        result += ", ";
+      result += filter;
+    }
+    return strdup_cpp(result);
+  } catch (const std::exception &e) {
+    std::cerr << "[Exception] in ffmpeg_kit_packages_get_registered_filters: "
+              << e.what() << std::endl;
+    PRINT_STACK_TRACE();
+    return nullptr;
+  }
+}
+
+char * DLL_ALIGN ffmpeg_kit_packages_get_registered_protocols(void) {
+  try {
+    auto protocols = Packages::getRegisteredProtocols();
+    std::string result = "";
+    for (const auto &protocol : *protocols) {
+      if (!result.empty())
+        result += ", ";
+      result += protocol;
+    }
+    return strdup_cpp(result);
+  } catch (const std::exception &e) {
+    std::cerr << "[Exception] in ffmpeg_kit_packages_get_registered_protocols: "
+              << e.what() << std::endl;
+    PRINT_STACK_TRACE();
+    return nullptr;
+  }
+}
+
+char * DLL_ALIGN ffmpeg_kit_packages_get_registered_bitstream_filters(void) {
+  try {
+    auto bsfs = Packages::getRegisteredBitStreamFilters();
+    std::string result = "";
+    for (const auto &bsf : *bsfs) {
+      if (!result.empty())
+        result += ", ";
+      result += bsf;
+    }
+    return strdup_cpp(result);
+  } catch (const std::exception &e) {
+    std::cerr << "[Exception] in ffmpeg_kit_packages_get_registered_bitstream_filters: "
+              << e.what() << std::endl;
+    PRINT_STACK_TRACE();
+    return nullptr;
+  }
+}
+
+char * DLL_ALIGN ffmpeg_kit_packages_get_build_configuration(void) {
+  try {
+    return strdup_cpp(Packages::getBuildConfiguration());
+  } catch (const std::exception &e) {
+    std::cerr << "[Exception] in ffmpeg_kit_packages_get_build_configuration: "
               << e.what() << std::endl;
     PRINT_STACK_TRACE();
     return nullptr;
