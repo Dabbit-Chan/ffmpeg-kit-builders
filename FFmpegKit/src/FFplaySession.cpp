@@ -237,7 +237,9 @@ float ffmpegkit::FFplaySession::getVolume() {
     if (ctx != nullptr) {
         return ffplay_get_volume(ctx);
     }
-    return 0.0;
+    // Return -1.0 as a sentinel to signal "context not ready" so callers can
+    // distinguish a legitimate mute (0.0) from an uninitialised context.
+    return -1.0f;
 }
 
 FFplayContext *ffmpegkit::FFplaySession::getContext() {
