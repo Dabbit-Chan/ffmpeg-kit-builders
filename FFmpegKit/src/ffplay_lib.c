@@ -150,6 +150,11 @@ struct FFplayContext {
     char **argv;
     FFplayCallbacks callbacks;
     int quit;
+    /* High-water mark for the position returned by ffplay_get_position.
+       Prevents the near-EOF clock jitter (audio buffer drain oscillation)
+       from reaching callers.  Reset to 0 on every seek so backwards
+       movement after a seek is still reported correctly. */
+    double max_seen_pos;
 };
 
 // Global API Synchronization to satisfy TSAN strictly on FFI context pointer reads
@@ -718,6 +723,10 @@ int ffplay_seek(FFplayContext* ctx, double seconds, double rel) {
             event.type = FF_PLAY_SEEK_EVENT;
             event.user.data1 = data;
             SDL_PushEvent(&event);
+            /* Reset the position high-water mark so the post-seek position
+               (which may be lower than the pre-seek value) is reported
+               correctly instead of being suppressed. */
+            ctx->max_seen_pos = 0.0;
             ret = 0;
         }
     }
@@ -770,12 +779,23 @@ double ffplay_get_position(FFplayContext* ctx) {
     lock_ffplay_api();
     if (ctx && active_ffplay_ctx == ctx && ctx->is) {
         pos = get_master_clock(ctx->is);
-        /* Clamp to duration so position never exceeds the media length.
-           Both values are read under the same lock, so they're consistent. */
-        if (ctx->is->ic && ctx->is->ic->duration != AV_NOPTS_VALUE) {
-            double dur = (double)ctx->is->ic->duration / AV_TIME_BASE;
-            if (dur > 0.0 && pos > dur)
-                pos = dur;
+        /* During seek the master clock is NaN — propagate as-is so the
+           Dart layer can detect and skip the transient. */
+        if (!isnan(pos)) {
+            /* Clamp to duration so position never exceeds the media length.
+               Both values are read under the same lock, so they're consistent. */
+            if (ctx->is->ic && ctx->is->ic->duration != AV_NOPTS_VALUE) {
+                double dur = (double)ctx->is->ic->duration / AV_TIME_BASE;
+                if (dur > 0.0 && pos > dur)
+                    pos = dur;
+            }
+            /* High-water mark: suppress the backwards oscillation that
+               occurs as the audio buffer drains near EOF.  Only move
+               forward; seek resets max_seen_pos to 0. */
+            if (pos > ctx->max_seen_pos)
+                ctx->max_seen_pos = pos;
+            else
+                pos = ctx->max_seen_pos;
         }
     }
     unlock_ffplay_api();
