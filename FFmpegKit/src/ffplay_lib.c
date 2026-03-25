@@ -770,6 +770,13 @@ double ffplay_get_position(FFplayContext* ctx) {
     lock_ffplay_api();
     if (ctx && active_ffplay_ctx == ctx && ctx->is) {
         pos = get_master_clock(ctx->is);
+        /* Clamp to duration so position never exceeds the media length.
+           Both values are read under the same lock, so they're consistent. */
+        if (ctx->is->ic && ctx->is->ic->duration != AV_NOPTS_VALUE) {
+            double dur = (double)ctx->is->ic->duration / AV_TIME_BASE;
+            if (dur > 0.0 && pos > dur)
+                pos = dur;
+        }
     }
     unlock_ffplay_api();
     return pos;
