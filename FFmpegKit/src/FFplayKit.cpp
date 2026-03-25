@@ -169,7 +169,7 @@ float ffmpegkit::FFplayKit::getVolume() {
   if (session) {
     return session->getVolume();
   }
-  return 0.0;
+  return -1.0;
 }
 
 void ffmpegkit::FFplayKit::close() {
