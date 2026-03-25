@@ -1484,9 +1484,9 @@ double DLL_ALIGN ffplay_kit_session_get_volume(FFplaySessionHandle session) {
   try {
     auto ptr = get_ptr<FFplaySession>(session);
     if (ptr) {
-      return ptr->getVolume();
+      return ptr->getVolume();  // -1.0 when context not ready; see header docs
     }
-    return 0.0;
+    return -1.0;  // invalid handle — same sentinel as context-not-ready
   } catch (const std::exception &e) {
     std::cerr << "[Exception] in ffplay_kit_session_get_volume: " << e.what()
               << std::endl;
@@ -1628,23 +1628,40 @@ double DLL_ALIGN ffplay_kit_get_volume(void) {
 #include <android/native_window.h>
 extern "C" void ffplay_set_android_window(ANativeWindow *nw);
 
+// Window retained by ffplay_kit_set_android_surface_ptr so the native layer
+// owns a reference independently of the Dart caller.
+static ANativeWindow *s_ffi_retained_window = nullptr;
+
 /// Sets the Android ANativeWindow for FFplay video output.
 ///
-/// [native_window_ptr] is the ANativeWindow* obtained via ANativeWindow_fromSurface()
-/// cast to int64_t.  The caller is responsible for ensuring the window remains
-/// valid for the duration of playback (i.e. the Java Surface must not be released).
-///
-/// Dart usage (via FFplayKitAndroid.setAndroidSurface):
-///   FFplayKitAndroid.setAndroidSurface(nativeWindowPtr);  // before executeAsync
+/// Acquires a reference to [native_window_ptr] so the native layer owns its
+/// own reference independently of the Dart caller.  The Dart caller may
+/// release its own reference (via releaseNativeWindowPtr) immediately after
+/// this call returns.  Pass 0 to clear the window and release the retained
+/// reference (equivalent to calling ffplay_kit_clear_android_surface).
 void DLL_ALIGN ffplay_kit_set_android_surface_ptr(int64_t native_window_ptr) {
-  ffplay_set_android_window(
-      reinterpret_cast<ANativeWindow *>(static_cast<uintptr_t>(native_window_ptr)));
+  ANativeWindow *nw = reinterpret_cast<ANativeWindow *>(
+      static_cast<uintptr_t>(native_window_ptr));
+
+  // Release the previously retained window.  Null the global first so
+  // ffplay_step cannot start a new blit on the old window after this point.
+  if (s_ffi_retained_window) {
+    ffplay_set_android_window(nullptr);
+    ANativeWindow_release(s_ffi_retained_window);
+    s_ffi_retained_window = nullptr;
+  }
+
+  if (nw) {
+    ANativeWindow_acquire(nw);
+    s_ffi_retained_window = nw;
+  }
+  ffplay_set_android_window(nw);
 }
 
-/// Clears the Android ANativeWindow, stopping video output.
-/// Call when the Surface is destroyed (e.g. in surfaceDestroyed()).
+/// Clears the Android ANativeWindow, releasing the retained reference and
+/// stopping video output.  Call when the Surface is destroyed.
 void DLL_ALIGN ffplay_kit_clear_android_surface(void) {
-  ffplay_set_android_window(nullptr);
+  ffplay_kit_set_android_surface_ptr(0);
 }
 #else
 void DLL_ALIGN ffplay_kit_set_android_surface_ptr(int64_t /*native_window_ptr*/) {}

@@ -712,7 +712,11 @@ ffplay_kit_session_set_volume(FFplaySessionHandle session, double volume);
  * Gets the volume of the FFplay session.
  *
  * @param session the FFplay session to get the volume of
- * @return the volume of the FFplay session
+ * @return volume in [0.0, 1.0], or -1.0 if the session handle is invalid or
+ *         the native playback context is not yet ready (called before the
+ *         session has started executing, or after it has completed).
+ *         Callers should treat any negative value as "not available" and
+ *         fall back to a cached or default value.
  */
 FFMPEG_KIT_C_EXPORT double
 ffplay_kit_session_get_volume(FFplaySessionHandle session);
@@ -796,7 +800,8 @@ FFMPEG_KIT_C_EXPORT void ffplay_kit_set_volume(double volume);
 /**
  * Gets the volume of the current FFplay session.
  *
- * @return the volume of the current FFplay session
+ * @return volume in [0.0, 1.0], or -1.0 if there is no active session or
+ *         the native context is not yet ready. See ffplay_kit_session_get_volume.
  */
 FFMPEG_KIT_C_EXPORT double ffplay_kit_get_volume(void);
 
