@@ -3408,7 +3408,7 @@ configure_ffmpeg() {
 	change_dir "$ffmpeg_source_dir" || exit_message 1 "configure_ffmpeg: could not change to $ffmpeg_source_dir"
 	# iswindows && apply_patch "$PATCHDIR"/frei0r_load-shared-libraries-dynamically.diff
   local postpend_configure_opts=""
-	local init_options=" --disable-programs"
+	local init_options=""
   local extra_libs=""
   function add_extra_libs() {
       # local libs="-Wl,--start-group $1 -Wl,--end-group"
@@ -3775,7 +3775,7 @@ configure_ffmpeg() {
 	else
 		postpend_configure_opts+=" --disable-debug --enable-stripping --enable-optimizations"
 	fi
-  postpend_configure_opts+=" --extra-cflags=\"-std=gnu17\" --extra-libs=\"-Wl,--start-group $extra_libs -Wl,--end-group\""
+  postpend_configure_opts+=" --extra-cflags=\"-std=gnu17\" --extra-libs=\"-Wl,--start-group $extra_libs -Wl,--end-group\" $ff_flags_values"
   
   if iswindows; then
     cross_windres y

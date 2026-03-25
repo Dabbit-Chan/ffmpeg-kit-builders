@@ -27,3 +27,4 @@ gradle/*
 build/*
 local.properties
 tools/android/build/*
+.reviews/*

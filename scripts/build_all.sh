@@ -329,8 +329,8 @@ for platform in "${!PLATFORMS[@]}"; do
         no_bundle="--no-bundle"
       fi
       if [[ "${bundle}" == "debug" ]]; then
-        truthy "$build_ffmpeg" && BUILD_STEPS+=("./runner.sh --host=${platform} --arch=${arch} -y ${deps} --base-bundle --build-debug --ffmpeg --no-bundle $remote --skip --gpl -f")
-        truthy "$build_ffmpeg" && BUILD_STEPS+=("./runner.sh --host=${platform} --arch=${arch} -y ${deps} --base-bundle --build-debug --ffmpeg --no-bundle $remote --skip -f")
+        truthy "$build_ffmpeg" && BUILD_STEPS+=("./runner.sh --host=${platform} --arch=${arch} -y ${deps} --base-bundle --build-debug --ffmpeg --no-bundle $remote --skip --gpl -f --ff-disable-programs")
+        truthy "$build_ffmpeg" && BUILD_STEPS+=("./runner.sh --host=${platform} --arch=${arch} -y ${deps} --base-bundle --build-debug --ffmpeg --no-bundle $remote --skip -f --ff-disable-programs")
         truthy "$build_kit" && BUILD_STEPS+=("./runner.sh --host=${platform} --arch=${arch} -y ${deps} --base-bundle --build-debug --kit $clean $remote $no_bundle --skip --gpl -f")
         truthy "$build_kit" && BUILD_STEPS+=("./runner.sh --host=${platform} --arch=${arch} -y ${deps} --base-bundle --build-debug --kit $clean $remote $no_bundle --skip -f")
         if falsey "$build_kit" && truthy "$build_bundle"; then
@@ -338,10 +338,10 @@ for platform in "${!PLATFORMS[@]}"; do
           BUILD_STEPS+=("./runner.sh --host=${platform} --arch=${arch} -y ${deps} --base-bundle --build-debug --kit $clean $remote --skip -f")
         fi
       else
-        truthy "$build_ffmpeg" && BUILD_STEPS+=("./runner.sh --host=${platform} --arch=${arch} -y ${deps} --${bundle//_/-}-bundle --ffmpeg --no-bundle $remote --skip --gpl -f")
-        truthy "$build_ffmpeg" && BUILD_STEPS+=("./runner.sh --host=${platform} --arch=${arch} -y ${deps} --${bundle//_/-}-bundle --ffmpeg --no-bundle $remote --skip -f")
-        truthy "$build_ffmpeg" && BUILD_STEPS+=("./runner.sh --host=${platform} --arch=${arch} -y ${deps} --${bundle//_/-}-bundle --ffmpeg --no-bundle $remote --skip --gpl -f --small")
-        truthy "$build_ffmpeg" && BUILD_STEPS+=("./runner.sh --host=${platform} --arch=${arch} -y ${deps} --${bundle//_/-}-bundle --ffmpeg --no-bundle $remote --skip -f --small")
+        truthy "$build_ffmpeg" && BUILD_STEPS+=("./runner.sh --host=${platform} --arch=${arch} -y ${deps} --${bundle//_/-}-bundle --ffmpeg --no-bundle $remote --skip --gpl -f --ff-disable-programs")
+        truthy "$build_ffmpeg" && BUILD_STEPS+=("./runner.sh --host=${platform} --arch=${arch} -y ${deps} --${bundle//_/-}-bundle --ffmpeg --no-bundle $remote --skip -f --ff-disable-programs")
+        truthy "$build_ffmpeg" && BUILD_STEPS+=("./runner.sh --host=${platform} --arch=${arch} -y ${deps} --${bundle//_/-}-bundle --ffmpeg --no-bundle $remote --skip --gpl -f --small --ff-disable-programs")
+        truthy "$build_ffmpeg" && BUILD_STEPS+=("./runner.sh --host=${platform} --arch=${arch} -y ${deps} --${bundle//_/-}-bundle --ffmpeg --no-bundle $remote --skip -f --small --ff-disable-programs")
         truthy "$build_kit" && BUILD_STEPS+=("./runner.sh --host=${platform} --arch=${arch} -y ${deps} --${bundle//_/-}-bundle --kit $clean $remote $no_bundle --skip --gpl -f")
         truthy "$build_kit" && BUILD_STEPS+=("./runner.sh --host=${platform} --arch=${arch} -y ${deps} --${bundle//_/-}-bundle --kit $clean $remote $no_bundle --skip -f")
         truthy "$build_kit" && BUILD_STEPS+=("./runner.sh --host=${platform} --arch=${arch} -y ${deps} --${bundle//_/-}-bundle --kit $clean $remote $no_bundle --skip --gpl -f --small")
