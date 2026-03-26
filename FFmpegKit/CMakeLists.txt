@@ -723,7 +723,7 @@ elseif(CMAKE_SYSTEM_NAME MATCHES "Linux")
     else()
         message(FATAL_ERROR "ALSA not found. Please install libasound-dev")
     endif()
-    
+
     # Allow libffmpegkit.so to find sibling libs (e.g. libpulsecommon) in the
     # same directory it is installed into (Flutter bundle's lib/ folder)
     set_target_properties(ffmpegkit PROPERTIES
