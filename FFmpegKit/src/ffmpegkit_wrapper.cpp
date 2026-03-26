@@ -304,19 +304,30 @@ void DLL_ALIGN ffmpeg_kit_handle_release(void *handle) {
      * We bound this with a 10-second timeout to prevent deadlocking the calling
      * thread (e.g., the Flutter UI isolate) if a session hangs indefinitely.
      */
+    bool timed_out = false;
     auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(10);
     while (session->getState() == SessionStateRunning) {
       if (std::chrono::steady_clock::now() > deadline) {
         std::cerr << "[Warning] ffmpeg_kit_handle_release: timed out waiting for session to stop\n";
+        timed_out = true;
         break;
       }
       std::this_thread::sleep_for(std::chrono::milliseconds(10));
     }
 
-    // For FFplay sessions, join the async execution thread so its TLS
-    // destructors complete while the runtime is still fully initialized.
+    // For FFplay sessions, synchronise with the async execution thread so its
+    // TLS destructors complete while the runtime is still fully initialized.
+    // If the session timed out (thread still running), detach instead of
+    // joining to avoid blocking the caller (e.g., Flutter UI isolate)
+    // indefinitely.  The detached thread will run its TLS destructors when it
+    // eventually exits on its own.
     if (session->isFFplay()) {
-      ffmpegkit::FFmpegKitConfig::joinAsyncFFplayThread();
+      if (timed_out) {
+        std::cerr << "[Warning] ffmpeg_kit_handle_release: detaching stuck FFplay thread\n";
+        ffmpegkit::FFmpegKitConfig::detachAsyncFFplayThread();
+      } else {
+        ffmpegkit::FFmpegKitConfig::joinAsyncFFplayThread();
+      }
     }
   }
 }
@@ -1634,33 +1645,15 @@ double DLL_ALIGN ffplay_kit_get_volume(void) {
 #include <android/native_window.h>
 extern "C" void ffplay_set_android_window(ANativeWindow *nw);
 
-// Window retained by ffplay_kit_set_android_surface_ptr so the native layer
-// owns a reference independently of the Dart caller.
-static ANativeWindow *s_ffi_retained_window = nullptr;
-
 /// Sets the Android ANativeWindow for FFplay video output.
 ///
-/// Acquires a reference to [native_window_ptr] so the native layer owns its
-/// own reference independently of the Dart caller.  The Dart caller may
-/// release its own reference (via releaseNativeWindowPtr) immediately after
-/// this call returns.  Pass 0 to clear the window and release the retained
-/// reference (equivalent to calling ffplay_kit_clear_android_surface).
+/// ffplay_set_android_window() owns the single retained ANativeWindow
+/// reference (acquire/release inside), so the Dart caller may release its own
+/// reference (via releaseNativeWindowPtr) immediately after this call returns.
+/// Pass 0 to clear the window (equivalent to ffplay_kit_clear_android_surface).
 void DLL_ALIGN ffplay_kit_set_android_surface_ptr(int64_t native_window_ptr) {
   ANativeWindow *nw = reinterpret_cast<ANativeWindow *>(
       static_cast<uintptr_t>(native_window_ptr));
-
-  // Release the previously retained window.  Null the global first so
-  // ffplay_step cannot start a new blit on the old window after this point.
-  if (s_ffi_retained_window) {
-    ffplay_set_android_window(nullptr);
-    ANativeWindow_release(s_ffi_retained_window);
-    s_ffi_retained_window = nullptr;
-  }
-
-  if (nw) {
-    ANativeWindow_acquire(nw);
-    s_ffi_retained_window = nw;
-  }
   ffplay_set_android_window(nw);
 }
 

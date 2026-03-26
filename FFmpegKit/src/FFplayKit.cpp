@@ -184,19 +184,10 @@ void ffmpegkit::FFplayKit::close() {
 #include "ffplay_lib.h"
 
 void ffmpegkit::FFplayKit::setAndroidSurface(JNIEnv *env, jobject surface) {
-  // Retain the new window and release the previous one, mirroring the
-  // g_retained_window lifecycle in ffmpeg_kit_android.c.
-  static ANativeWindow *s_retained = nullptr;
-  if (s_retained) {
-    // Null the global BEFORE releasing: ffplay_set_android_window holds the
-    // ffplay_api_mutex, so once it returns no new blit will start on the old
-    // window (ffplay_step acquires a ref under that same mutex).
-    ffplay_set_android_window(nullptr);
-    ANativeWindow_release(s_retained);
-    s_retained = nullptr;
-  }
+  // ffplay_set_android_window owns the single retained ANativeWindow reference.
+  // Hand off the pointer and immediately release the transient fromSurface ref.
   ANativeWindow *nw = surface ? ANativeWindow_fromSurface(env, surface) : nullptr;
-  s_retained = nw;
   ffplay_set_android_window(nw);
+  if (nw) ANativeWindow_release(nw);
 }
 #endif /* __ANDROID__ */

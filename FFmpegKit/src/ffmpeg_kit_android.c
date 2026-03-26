@@ -110,41 +110,29 @@ void Android_JNI_AudioSetThreadPriority(int iscapture, int device_id)
     (void)device_id;
 }
 
-/* Retained reference so the window stays valid during the entire playback
-   session. Released when the caller passes NULL or a new Surface. */
-static ANativeWindow *g_retained_window = NULL;
-
 /* Java: public static native void setAndroidSurface(Surface surface); */
 JNIEXPORT void JNICALL
 Java_com_akashskypatel_ffmpegkit_FFplayKitAndroid_setAndroidSurface(
         JNIEnv *env, jclass clazz, jobject surface)
 {
-    /* Clear the global pointer BEFORE releasing so ffplay_step never sees a
-       freed window. ffplay_set_android_window is mutex-protected in ffplay_lib.c
-       and ffplay_step acquires a ref under that same mutex, so once the global
-       is NULL no new blit can start on the old window. */
-    if (g_retained_window != NULL) {
-        ffplay_set_android_window(NULL);
-        ANativeWindow_release(g_retained_window);
-        g_retained_window = NULL;
-    }
-
+    /* ffplay_set_android_window owns the single retained ANativeWindow reference
+       (acquire/release inside), so this path just hands the pointer over and
+       immediately releases the transient ref from ANativeWindow_fromSurface. */
+    ANativeWindow *nw = NULL;
     if (surface != NULL) {
-        g_retained_window = ANativeWindow_fromSurface(env, surface);
-        if (g_retained_window == NULL) {
+        nw = ANativeWindow_fromSurface(env, surface);
+        if (nw == NULL) {
             ALOGE("setAndroidSurface: ANativeWindow_fromSurface returned NULL");
             ffplay_set_android_window(NULL);
             return;
         }
         ALOGI("setAndroidSurface: acquired ANativeWindow %p (%dx%d)",
-              g_retained_window,
-              ANativeWindow_getWidth(g_retained_window),
-              ANativeWindow_getHeight(g_retained_window));
+              nw, ANativeWindow_getWidth(nw), ANativeWindow_getHeight(nw));
     } else {
         ALOGI("setAndroidSurface: surface cleared");
     }
-
-    ffplay_set_android_window(g_retained_window);
+    ffplay_set_android_window(nw);
+    if (nw) ANativeWindow_release(nw);
 }
 
 /* Java: public static native long getNativeWindowPtr(Surface surface);

@@ -840,6 +840,12 @@ FFMPEG_KIT_C_EXPORT void ffplay_kit_clear_android_surface(void);
  * The pixel buffer is valid only for the duration of the call — copy it
  * (e.g. into a pre-allocated FlutterDesktopPixelBuffer) before returning.
  *
+ * WARNING: The callback is invoked while the internal ffplay API mutex is
+ * held. Do NOT call any ffplay API function (ffplay_pause, ffplay_seek,
+ * ffplay_get_position, etc.) from within the callback — doing so will
+ * deadlock. Perform only lightweight, non-blocking work (e.g. memcpy into a
+ * pre-allocated buffer and signal a separate rendering thread).
+ *
  * Not used on Android; Android video output goes to the ANativeWindow set via
  * ffplay_kit_set_android_surface_ptr().
  *

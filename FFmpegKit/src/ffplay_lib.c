@@ -20,7 +20,6 @@
 #include "ffplay_lib.h"
 #include "ffmpeg_kit_assert_override.h"
 #include <SDL.h>
-#include "ffmpeg_tls.h"
 
 const char program_name[] = "ffplay";
 const int program_birth_year = 2003;
@@ -91,14 +90,25 @@ static void unlock_ffplay_api(void);
 #define FFPLAY_LOGE(...) __android_log_print(ANDROID_LOG_ERROR, FFPLAY_LOG_TAG, __VA_ARGS__)
 
 /* ANativeWindow set by the Java caller before ffplay_init().
-   Not retained (no ANativeWindow_acquire); the caller owns the lifetime. */
+   Owned reference: ffplay_set_android_window() calls ANativeWindow_acquire/release
+   so all three caller paths (JNI, C++, FFI) share the same single retained ref. */
 static ANativeWindow *g_android_native_window = NULL;
+static ANativeWindow *g_owned_window = NULL;
 
 void ffplay_set_android_window(ANativeWindow *nw) {
     FFPLAY_LOGI("ffplay_set_android_window: nw=%p (was %p)", nw, g_android_native_window);
+    /* Acquire the new reference before taking the lock so it is valid the
+     * instant another thread can observe it via g_android_native_window. */
+    if (nw) ANativeWindow_acquire(nw);
     lock_ffplay_api();
+    ANativeWindow *old = g_owned_window;
+    g_owned_window = nw;
     g_android_native_window = nw;
     unlock_ffplay_api();
+    /* Release after the lock so ffplay_step's transient blit reference (also
+     * acquired under the same mutex) keeps the window alive if a blit is
+     * already in flight. */
+    if (old) ANativeWindow_release(old);
 }
 
 /* SDL_SetMainReady() is declared in SDL_main.h, but including that header
@@ -140,7 +150,6 @@ static void *g_frame_callback_userdata = NULL;
 
 // Forward declarations of symbols defined inside the included ffplay.c.
 extern void ffplay_tls_init_options(void);
-extern FFMPEG_THREAD_LOCAL void (*ffplay_on_show_help)(void);
 extern VideoState *ffplay_init_internal(int argc, char **argv);
 extern void ffplay_reset_internal_state(void);
 
@@ -337,7 +346,6 @@ FFplayContext* ffplay_init(const char* args_string, const FFplayCallbacks *cb) {
 #ifdef __ANDROID__
     FFPLAY_LOGI("ffplay_init SUCCESS: ctx=%p is=%p", ctx, is);
 #endif
-    av_log(NULL, AV_LOG_INFO, "[ffplay_lib] ffplay_init SUCCESS ctx=%p is=%p\n", ctx, is);
     return ctx;
 }
 
@@ -371,8 +379,9 @@ int ffplay_start(FFplayContext* ctx) {
     ffmpeg_kit_assert_triggered = 0;
 
     // Establish recovery point for av_assert0 failures inside ffplay internals.
-    // ffplay_step calls back into FFmpeg decode/filter/render pipelines which
-    // can assert. Recovery here marks the session failed without killing Flutter.
+    // Keep ffmpeg_kit_assert_jmp_ptr live for the entire body of this function
+    // so the lock/check block below is also protected.  Clear it before every
+    // return path so a dangling pointer to this stack frame is never left behind.
     jmp_buf assert_jmp;
     ffmpeg_kit_assert_jmp_ptr = &assert_jmp;
     ffmpeg_kit_assert_triggered = 0;
@@ -381,9 +390,9 @@ int ffplay_start(FFplayContext* ctx) {
                "[ffmpeg-kit] ffplay_start: recovered from internal assertion "
                "failure. Session will be marked as failed.\n");
         unlock_ffplay_api();  // ensure lock is released if assert fired mid-lock
+        ffmpeg_kit_assert_jmp_ptr = NULL;
         return AVERROR_EXIT;
     }
-    ffmpeg_kit_assert_jmp_ptr = NULL;
 
     lock_ffplay_api();
     if (ctx && active_ffplay_ctx == ctx && ctx->is) ret = 0;
@@ -406,12 +415,28 @@ int ffplay_start(FFplayContext* ctx) {
         ctx ? ctx->quit : -1,
         ret);
     unlock_ffplay_api();
+    ffmpeg_kit_assert_jmp_ptr = NULL;
     return ret;
 }
 
 int ffplay_step(FFplayContext* ctx) {
     if (!ctx) return 1;
     if (ctx->quit || !ctx->is) return 1;
+
+    // Establish recovery point for av_assert0 failures inside the decode,
+    // filter, and render pipelines invoked during this step.  The ptr is kept
+    // live for the entire function body and cleared on every exit path.
+    int step_ret = 1;
+    jmp_buf assert_jmp;
+    ffmpeg_kit_assert_jmp_ptr = &assert_jmp;
+    ffmpeg_kit_assert_triggered = 0;
+    if (setjmp(assert_jmp)) {
+        av_log(NULL, AV_LOG_ERROR,
+               "[ffmpeg-kit] ffplay_step: recovered from internal assertion "
+               "failure. Stopping playback.\n");
+        unlock_ffplay_api();  // release if assert fired while the lock was held
+        goto step_done;
+    }
 
     SDL_Event event;
     double remaining_time = 0.0; // Instant return if possible
@@ -430,7 +455,7 @@ int ffplay_step(FFplayContext* ctx) {
                 }
                 ctx->quit = 1;
                 unlock_ffplay_api();
-                return 1;
+                goto step_done;
             }
             if (!ctx->is->width) continue;
             switch (event.key.keysym.sym) {
@@ -498,7 +523,7 @@ int ffplay_step(FFplayContext* ctx) {
             }
             ctx->quit = 1;
             unlock_ffplay_api();
-            return 1;
+            goto step_done;
         
         // Custom Events Handling
         case FF_PLAY_SEEK_EVENT: {
@@ -699,7 +724,11 @@ int ffplay_step(FFplayContext* ctx) {
 
 #endif /* __ANDROID__ */
 
-    return ctx->quit;
+    step_ret = ctx->quit;
+
+step_done:
+    ffmpeg_kit_assert_jmp_ptr = NULL;
+    return step_ret;
 }
 
 void ffplay_get_video_size(FFplayContext* ctx, int *width, int *height) {

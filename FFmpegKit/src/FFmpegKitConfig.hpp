@@ -616,6 +616,14 @@ public:
    */
   static void joinAsyncFFplayThread();
 
+  /**
+   * Detaches the async FFplay execution thread without waiting for it to
+   * finish.  Used when the session has already timed out and blocking the
+   * caller is unacceptable.  TLS destructors will still run when the thread
+   * eventually exits on its own.
+   */
+  static void detachAsyncFFplayThread();
+
   ~FFmpegKitConfig();
 };
 

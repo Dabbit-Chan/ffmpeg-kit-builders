@@ -259,10 +259,10 @@ private:
 
   FFplaySessionCompleteCallback _completeCallback;
   std::atomic<FFplayContext *> _context;
-  double _position;
-  double _duration;
-  bool _isPlaying;
-  bool _isPaused;
+  std::atomic<double> _position;
+  std::atomic<double> _duration;
+  std::atomic<bool> _isPlaying;
+  std::atomic<bool> _isPaused;
 };
 
 } // namespace ffmpegkit

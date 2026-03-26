@@ -20,7 +20,6 @@
 #include "FFplaySession.hpp"
 #include "FFmpegKitConfig.hpp"
 #include "LogCallback.hpp"
-#include "libavutil/log.h"
 
 extern void
 addSessionToSessionHistory(const std::shared_ptr<ffmpegkit::Session> session);
@@ -87,7 +86,8 @@ ffmpegkit::FFplaySession::FFplaySession(
     const LogRedirectionStrategy logRedirectionStrategy)
     : ffmpegkit::AbstractSession(arguments, logCallback,
                                  logRedirectionStrategy),
-      _completeCallback{completeCallback}, _context{nullptr} {}
+      _completeCallback{completeCallback}, _context{nullptr},
+      _position{0.0}, _duration{0.0}, _isPlaying{false}, _isPaused{false} {}
 
 ffmpegkit::FFplaySessionCompleteCallback
 ffmpegkit::FFplaySession::getCompleteCallback() {
@@ -180,10 +180,8 @@ double ffmpegkit::FFplaySession::getDuration() {
     FFplayContext *ctx = _context.load(std::memory_order_acquire);
     if (ctx != nullptr) {
         _duration = ffplay_get_duration(ctx);
-        av_log(NULL, AV_LOG_DEBUG, "[FFplaySession] getDuration: ctx=%p => %f\n", ctx, _duration);
         return _duration;
     }
-    av_log(NULL, AV_LOG_WARNING, "[FFplaySession] getDuration: ctx=NULL (session not running)\n");
     return 0.0;
 }
 
@@ -191,10 +189,8 @@ bool ffmpegkit::FFplaySession::isPlaying() {
     FFplayContext *ctx = _context.load(std::memory_order_acquire);
     if (ctx != nullptr) {
         _isPlaying = ffplay_is_playing(ctx) != 0;
-        av_log(NULL, AV_LOG_DEBUG, "[FFplaySession] isPlaying: ctx=%p => %d\n", ctx, (int)_isPlaying);
         return _isPlaying;
     }
-    av_log(NULL, AV_LOG_WARNING, "[FFplaySession] isPlaying: ctx=NULL (session not running)\n");
     return false;
 }
 
@@ -202,10 +198,8 @@ bool ffmpegkit::FFplaySession::isPaused() {
     FFplayContext *ctx = _context.load(std::memory_order_acquire);
     if (ctx != nullptr) {
         _isPaused = ffplay_is_paused(ctx) != 0;
-        av_log(NULL, AV_LOG_DEBUG, "[FFplaySession] isPaused: ctx=%p => %d\n", ctx, (int)_isPaused);
         return _isPaused;
     }
-    av_log(NULL, AV_LOG_WARNING, "[FFplaySession] isPaused: ctx=NULL (session not running)\n");
     return false;
 }
 
@@ -247,8 +241,6 @@ FFplayContext *ffmpegkit::FFplaySession::getContext() {
 }
 
 void ffmpegkit::FFplaySession::setContext(FFplayContext *context) {
-    av_log(NULL, AV_LOG_INFO, "[FFplaySession] setContext: %p -> %p\n",
-        _context.load(std::memory_order_relaxed), context);
     _context.store(context, std::memory_order_release);
 }
 
