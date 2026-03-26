@@ -171,6 +171,11 @@ static SDL_mutex *ffplay_api_mutex = NULL;
 static SDL_SpinLock ffplay_init_lock = 0;
 static FFplayContext *active_ffplay_ctx = NULL;
 
+/* Thread-local flag: non-zero when the calling thread holds ffplay_api_mutex.
+ * Used by setjmp recovery paths to conditionally unlock without calling
+ * unlock_ffplay_api() when the mutex was never acquired. */
+static _Thread_local int ffplay_api_held = 0;
+
 static void lock_ffplay_api(void) {
     if (!ffplay_api_mutex) {
         SDL_AtomicLock(&ffplay_init_lock);
@@ -180,10 +185,12 @@ static void lock_ffplay_api(void) {
         SDL_AtomicUnlock(&ffplay_init_lock);
     }
     SDL_LockMutex(ffplay_api_mutex);
+    ffplay_api_held = 1;
 }
 
 static void unlock_ffplay_api(void) {
     if (ffplay_api_mutex) {
+        ffplay_api_held = 0;
         SDL_UnlockMutex(ffplay_api_mutex);
     }
 }
@@ -389,7 +396,7 @@ int ffplay_start(FFplayContext* ctx) {
         av_log(NULL, AV_LOG_ERROR,
                "[ffmpeg-kit] ffplay_start: recovered from internal assertion "
                "failure. Session will be marked as failed.\n");
-        unlock_ffplay_api();  // ensure lock is released if assert fired mid-lock
+        if (ffplay_api_held) unlock_ffplay_api();
         ffmpeg_kit_assert_jmp_ptr = NULL;
         return AVERROR_EXIT;
     }
@@ -434,7 +441,7 @@ int ffplay_step(FFplayContext* ctx) {
         av_log(NULL, AV_LOG_ERROR,
                "[ffmpeg-kit] ffplay_step: recovered from internal assertion "
                "failure. Stopping playback.\n");
-        unlock_ffplay_api();  // release if assert fired while the lock was held
+        if (ffplay_api_held) unlock_ffplay_api();
         goto step_done;
     }
 

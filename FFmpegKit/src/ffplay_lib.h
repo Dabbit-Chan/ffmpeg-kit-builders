@@ -205,8 +205,10 @@ FFMPEG_API int ffplay_has_video_stream(const char *path);
 #include <android/native_window.h>
 
 /**
- * Sets the ANativeWindow for video output. Must be called before ffplay_init().
- * Not retained — the caller owns the window lifetime.
+ * Sets the ANativeWindow for video output.
+ * The function acquires its own ANativeWindow reference (ANativeWindow_acquire),
+ * so callers MUST release their own reference after this call returns.
+ * Passing NULL clears the window and releases the internally held reference.
  *
  * @param window ANativeWindow from ANativeWindow_fromSurface(), or NULL to clear.
  */
