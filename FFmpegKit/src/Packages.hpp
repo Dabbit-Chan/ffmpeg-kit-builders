@@ -23,6 +23,7 @@
 #include <memory>
 #include <set>
 #include <string>
+#include <mutex>
 
 namespace ffmpegkit {
 
@@ -30,6 +31,9 @@ namespace ffmpegkit {
  * <p>Helper class to extract binary package information.
  */
 class Packages {
+private:
+  static std::mutex packages_mutex_;
+
 public:
   /**
    * Returns the FFmpegKit binary package name.
@@ -65,6 +69,51 @@ public:
    * @return FFmpegKit bundle type
    */
   static std::string getBundleType();
+
+  /**
+   * Returns all codecs registered in the linked FFmpeg (both encoders and decoders).
+   */
+  static std::shared_ptr<std::set<std::string>> getRegisteredCodecs();
+
+  /**
+   * Returns all registered encoders.
+   */
+  static std::shared_ptr<std::set<std::string>> getRegisteredEncoders();
+
+  /**
+   * Returns all registered decoders.
+   */
+  static std::shared_ptr<std::set<std::string>> getRegisteredDecoders();
+
+  /**
+   * Returns all registered muxers (output formats).
+   */
+  static std::shared_ptr<std::set<std::string>> getRegisteredMuxers();
+
+  /**
+   * Returns all registered demuxers (input formats).
+   */
+  static std::shared_ptr<std::set<std::string>> getRegisteredDemuxers();
+
+  /**
+   * Returns all registered filters.
+   */
+  static std::shared_ptr<std::set<std::string>> getRegisteredFilters();
+
+  /**
+   * Returns all registered protocols (input and output).
+   */
+  static std::shared_ptr<std::set<std::string>> getRegisteredProtocols();
+
+  /**
+   * Returns all registered bitstream filters.
+   */
+  static std::shared_ptr<std::set<std::string>> getRegisteredBitStreamFilters();
+
+  /**
+   * Returns the FFmpeg build configuration string.
+   */
+  static std::string getBuildConfiguration();
 };
 
 } // namespace ffmpegkit

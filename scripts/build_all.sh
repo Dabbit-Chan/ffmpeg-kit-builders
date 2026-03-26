@@ -33,10 +33,9 @@ fi
 touch "${LOCK_FILE}"
 
 # Keep the timestamp alive in the background for long-running builds
-while true; do sudo -n v; sleep 60; kill -0 "$$" || exit; done 2>/dev/null &
+while true; do sudo -n true; sleep 60; kill -0 "$$" || exit; done 2>/dev/null &
 
 # Parse arguments
-p=""
 p_args=""
 deps=""
 bundles=""
@@ -45,9 +44,43 @@ VALID_TYPES=("full" "video_hw" "video" "audio" "base" "debug")
 VALID_PLATFORMS=("linux" "windows" "android")
 VALID_ARCHS=("x86_64" "aarch64" "armv7a")
 VALID_PLATFORM_ARCHS=("linux-x86_64" "windows-x86_64" "android-aarch64" "android-armv7a" "android-x86_64")
+VALID_BUILDS=("ffmpeg" "kit" "bundle")
 ANDROID_PLATFORM_ARCHS=()
 build_aars=false
 declare -A PLATFORMS
+build_ffmpeg=false
+build_kit=false
+build_bundle=false
+
+# Check if value is truthy
+# Returns 0 (success) for truthy values, 1 (failure) for falsey values
+truthy() {
+  local value="$1"
+  case "${value,,}" in
+    true|1|T|t|True|TRUE|y|Y|yes|Yes|YES|on|On|ON) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+# Check if value is falsey  
+# Returns 0 (success) for falsey values, 1 (failure) for truthy values
+falsey() {
+  local value="$1"
+  case "${value,,}" in
+    false|0|F|f|False|FALSE|n|N|no|No|NO|off|Off|OFF) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+# Add a single platform-arch entry to PLATFORMS, skipping duplicates
+_add_platform_arch() {
+  local key="${1}" value="${2}"
+  if [[ -z "${PLATFORMS["$key"]}" ]]; then
+    PLATFORMS["$key"]="${value}"
+  elif [[ ",${PLATFORMS["$key"]}," != *",${value},"* ]]; then
+    PLATFORMS["$key"]="${PLATFORMS["$key"]},${value}"
+  fi
+}
 
 parse_platforms() {
   p_args="${1}"
@@ -55,30 +88,37 @@ parse_platforms() {
   if [[ -z "${p_args}" ]]; then
     p_args=$(IFS=,; echo "${VALID_PLATFORM_ARCHS[*]}")
   fi
-  echo "DEBUG: p_args: ${p_args}"
-  # Use IFS local to the read command
   IFS=',' read -ra P_ARRAY <<< "$p_args"
   for p in "${P_ARRAY[@]}"; do
     # Skip empty elements resulting from trailing/double commas
     [[ -z "$p" ]] && continue
-    # Validate against whitelist
+
+    # Check if it's a plain platform name — expand to all valid archs for that platform
+    local is_platform=false
+    for valid_plat in "${VALID_PLATFORMS[@]}"; do
+      if [[ "$p" == "$valid_plat" ]]; then
+        is_platform=true
+        for valid_pa in "${VALID_PLATFORM_ARCHS[@]}"; do
+          if [[ "${valid_pa}" == "${p}-"* ]]; then
+            _add_platform_arch "${valid_pa%-*}" "${valid_pa#*-}"
+          fi
+        done
+        break
+      fi
+    done
+    [[ "$is_platform" == true ]] && continue
+
+    # Validate as a platform-arch combination
     local valid=false
     for valid_p in "${VALID_PLATFORM_ARCHS[@]}"; do
       [[ "$p" == "$valid_p" ]] && valid=true && break
     done
     if [[ "$valid" == false ]]; then
-      echo "Error: Invalid platform and arch: ${p}"
+      echo "Error: Invalid platform or platform-arch: ${p}"
       echo "Use --help for usage information"
       exit 1
     fi
-    local key="${p%-*}"
-    local value="${p#*-}"
-    # Always quote the key within the brackets
-    if [[ -z "${PLATFORMS["$key"]}" ]]; then
-      PLATFORMS["$key"]="${value}"
-    else
-      PLATFORMS["$key"]="${PLATFORMS["$key"]},${value}"
-    fi
+    _add_platform_arch "${p%-*}" "${p#*-}"
   done
 }
 
@@ -88,7 +128,6 @@ parse_bundles() {
   if [[ -z "${b_arr}" ]]; then
     b_arr=$(IFS=,; echo "${VALID_TYPES[*]}")
   fi
-  echo "DEBUG: bundles: ${b_arr}"
   # Use IFS local to the read command
   bundles="$b_arr"
   IFS=',' read -ra BUNDLE_ARRAY <<< "${b_arr}"
@@ -108,44 +147,86 @@ parse_bundles() {
   done
 }
 
+parse_builds() {
+  local b_arr="${1}"
+  # Ensure builds is populated if empty
+  if [[ -z "${b_arr}" ]]; then
+    b_arr=$(IFS=,; echo "${VALID_BUILDS[*]}")
+  fi
+  # Use IFS local to the read command
+  builds="$b_arr"
+  IFS=',' read -ra BUILD_ARRAY <<< "${b_arr}"
+  for b in "${BUILD_ARRAY[@]}"; do
+    # Skip empty elements resulting from trailing/double commas
+    [[ -z "$b" ]] && continue
+    # Validate against whitelist
+    local valid=false
+    for valid_b in "${VALID_BUILDS[@]}"; do
+      if [[ "$b" == "$valid_b" ]]; then
+        valid=true
+        case "$b" in
+          ffmpeg)
+            build_ffmpeg=true
+            ;;
+          kit)
+            build_kit=true
+            ;;
+          bundle)
+            build_bundle=true
+            ;;
+        esac
+        break
+      fi
+    done
+    if [[ "$valid" == false ]]; then
+      echo "Error: Invalid build type: ${b}"
+      echo "Use --help for usage information"
+      exit 1
+    fi
+  done
+}
+
 for arg; do
   case "${arg}" in
     --platform=*)
      # input format: platform-arch ex: linux-x86_64 or android-aarch64. Comma separated (without spaces) list of platforms.
      # output format: platform ex: linux or android
      p_args="${arg#*=}"
-     parse_platforms "${p_args}"
-     shift;;
-    --deps) 
-      deps="--deps"
-      build_deps=true
-      shift;;
+     parse_platforms "${p_args}";;
+    --deps)
+      deps="--deps";;
     --reset)
-      reset_state=true
-      shift;;
+      reset_state=true;;
     --help)
-      echo "Usage: $0 [--platform=linux-x86_64|windows-x86_64|android-aarch64|android-armv7a|android-x86_64] [--deps] [--reset] [--bundles=*) ] [--help]"
+      echo "Usage: $0 [--platform=<platform>|<platform-arch>,...] [--deps] [--reset] [--bundles=*] [--help]"
       echo ""
       echo "Options:"
-      echo "  --platform=*  Comma separated (without spaces) list of platforms and architectures (e.g. --platform=linux-x86_64,windows-x86_64,android-aarch64,android-armv7a,android-x86_64)"
-      echo "                Valid platforms: ${VALID_PLATFORMS[*]}"
-      echo "                Valid architectures: ${VALID_ARCHS[*]}"
-      echo "                Valid platform and arch combinations: ${VALID_PLATFORM_ARCHS[*]}"
+      echo "  --platform=*  Comma separated (without spaces) list of platforms or platform-arch pairs."
+      echo "                A plain platform name expands to all valid archs for that platform."
+      echo "                  e.g. --platform=android              → android-aarch64,android-armv7a,android-x86_64"
+      echo "                  e.g. --platform=android,linux-x86_64 → android (all archs) + linux-x86_64"
+      echo "                Valid platforms (expands to all archs): ${VALID_PLATFORMS[*]}"
+      echo "                Valid platform-arch combinations:       ${VALID_PLATFORM_ARCHS[*]}"
       echo "  --deps        Build dependencies first"
       echo "  --reset       Reset build state and start from beginning"
       echo "  --bundles=*   Comma separated (without spaces) list of bundles to build (e.g. --bundles=debug,full,base,audio,video,video_hw)"
       echo "                Valid bundles: ${VALID_TYPES[*]}"
+      echo "  --build=*     Comma separated (without spaces) list of builds to build (e.g. --build=ffmpeg,kit,bundle)"
+      echo "                Valid builds: ${VALID_BUILDS[*]}"
       echo "  --help        Show this help message"
       echo ""
       echo "State file location: ${STATE_FILE}"
       exit 0;;
-    --bundles=*) 
+    --bundles=*)
       #comma separated list of bundles to build
-      parse_bundles "${arg#*=}"
-      shift;;
+      parse_bundles "${arg#*=}";;
+    --build=*)
+      #comma separated list of builds to build
+      parse_builds "${arg#*=}";;
+    --no-clean)
+      no_clean=true;;
     --local)
-      local=true
-      shift;;
+      release_local=true;;
     *)  
       echo "Invalid argument: ${arg}"
       echo "Use --help for usage information"
@@ -160,6 +241,10 @@ fi
 
 if [[ ${#BUNDLE_ARRAY[@]} -eq 0 ]]; then
   parse_bundles ""
+fi
+
+if [[ ${#BUILD_ARRAY[@]} -eq 0 ]]; then
+  parse_builds ""
 fi
 
 # Reset state if requested
@@ -187,20 +272,21 @@ mark_completed() {
 # Execute a build step with state tracking
 execute_build() {
   local cmd_string="$1"
+  local step_label="${2:-}"
   if is_completed "${cmd_string}"; then
     echo "[SKIP] Already completed: ${cmd_string}"
     return 0
   fi
-  
+
   echo "[BUILD] Starting: ${cmd_string}"
-  
+
   if sudo -E bash -c "${cmd_string}"; then
     mark_completed "${cmd_string}"
     echo "[DONE] Completed: ${cmd_string}"
     return 0
   else
     local exit_code=$?
-    echo "[FAIL] Failed: ${cmd_string} (exit code: ${exit_code})"
+    echo "[FAIL] Step ${step_label} failed: ${cmd_string} (exit code: ${exit_code})"
     echo ""
     echo "Build failed. You can:"
     echo "  1. Fix the issue and re-run this script to resume from this step"
@@ -212,62 +298,79 @@ execute_build() {
 # Define all build steps
 declare -a BUILD_STEPS
 
-for key in "${!PLATFORMS[@]}"; do
-  platform=${key}
+for platform in "${!PLATFORMS[@]}"; do
   # comma separated list of architectures
-  IFS=',' read -ra arch_array <<< "${PLATFORMS[$key]}"
+  IFS=',' read -ra arch_array <<< "${PLATFORMS[$platform]}"
   for arch in "${arch_array[@]}"; do
+    if [[ "${platform}" == "android" ]]; then
+      ANDROID_PLATFORM_ARCHS+=("android-${arch}")
+    fi
     for bundle in "${BUNDLE_ARRAY[@]}"; do
-      builds=""
-      clean="--clean"
+      if truthy "${no_clean}"; then
+        clean=""
+      else
+        clean="--clean"
+      fi
       remote=""
       no_bundle=""
       if [[ "${platform}" == "android" ]]; then
-        ANDROID_PLATFORM_ARCHS+=("android-${arch}")
         build_aars=true
         remote="--release=local"
         clean=""
         no_bundle="--no-bundle"
       else
-        if [[ "${local}" == true ]]; then
+        if [[ "${release_local}" == true ]]; then
           remote="--release=local"
         else
           remote="--release=remote"
         fi
       fi
+      if falsey "${build_bundle}"; then
+        no_bundle="--no-bundle"
+      fi
       if [[ "${bundle}" == "debug" ]]; then
-        BUILD_STEPS+=("./runner.sh --host=${platform} --arch=${arch} -y ${deps} --base-bundle --build-debug --ffmpeg --no-bundle $remote --skip --gpl -f")
-        BUILD_STEPS+=("./runner.sh --host=${platform} --arch=${arch} -y ${deps} --base-bundle --build-debug --ffmpeg --no-bundle $remote --skip -f")
-        BUILD_STEPS+=("./runner.sh --host=${platform} --arch=${arch} -y ${deps} --base-bundle --build-debug --kit $clean $remote $no_bundle --skip --gpl -f")
-        BUILD_STEPS+=("./runner.sh --host=${platform} --arch=${arch} -y ${deps} --base-bundle --build-debug --kit $clean $remote $no_bundle --skip -f")
+        truthy "$build_ffmpeg" && BUILD_STEPS+=("./runner.sh --host=${platform} --arch=${arch} -y ${deps} --base-bundle --build-debug --ffmpeg --no-bundle $remote --skip --gpl -f --ff-disable-programs")
+        truthy "$build_ffmpeg" && BUILD_STEPS+=("./runner.sh --host=${platform} --arch=${arch} -y ${deps} --base-bundle --build-debug --ffmpeg --no-bundle $remote --skip -f --ff-disable-programs")
+        truthy "$build_kit" && BUILD_STEPS+=("./runner.sh --host=${platform} --arch=${arch} -y ${deps} --base-bundle --build-debug --kit $clean $remote $no_bundle --skip --gpl -f")
+        truthy "$build_kit" && BUILD_STEPS+=("./runner.sh --host=${platform} --arch=${arch} -y ${deps} --base-bundle --build-debug --kit $clean $remote $no_bundle --skip -f")
+        if falsey "$build_kit" && truthy "$build_bundle"; then
+          BUILD_STEPS+=("./runner.sh --host=${platform} --arch=${arch} -y ${deps} --base-bundle --build-debug --kit $clean $remote --skip --gpl -f")
+          BUILD_STEPS+=("./runner.sh --host=${platform} --arch=${arch} -y ${deps} --base-bundle --build-debug --kit $clean $remote --skip -f")
+        fi
       else
-        BUILD_STEPS+=("./runner.sh --host=${platform} --arch=${arch} -y ${deps} --${bundle//_/-}-bundle --ffmpeg --no-bundle $remote --skip --gpl -f")
-        BUILD_STEPS+=("./runner.sh --host=${platform} --arch=${arch} -y ${deps} --${bundle//_/-}-bundle --ffmpeg --no-bundle $remote --skip -f")
-        BUILD_STEPS+=("./runner.sh --host=${platform} --arch=${arch} -y ${deps} --${bundle//_/-}-bundle --ffmpeg --no-bundle $remote --skip --gpl -f --small")
-        BUILD_STEPS+=("./runner.sh --host=${platform} --arch=${arch} -y ${deps} --${bundle//_/-}-bundle --ffmpeg --no-bundle $remote --skip -f --small")
-        BUILD_STEPS+=("./runner.sh --host=${platform} --arch=${arch} -y ${deps} --${bundle//_/-}-bundle --kit $clean $remote $no_bundle --skip --gpl -f")
-        BUILD_STEPS+=("./runner.sh --host=${platform} --arch=${arch} -y ${deps} --${bundle//_/-}-bundle --kit $clean $remote $no_bundle --skip -f")
-        BUILD_STEPS+=("./runner.sh --host=${platform} --arch=${arch} -y ${deps} --${bundle//_/-}-bundle --kit $clean $remote $no_bundle --skip --gpl -f --small")
-        BUILD_STEPS+=("./runner.sh --host=${platform} --arch=${arch} -y ${deps} --${bundle//_/-}-bundle --kit $clean $remote $no_bundle --skip -f --small")
+        truthy "$build_ffmpeg" && BUILD_STEPS+=("./runner.sh --host=${platform} --arch=${arch} -y ${deps} --${bundle//_/-}-bundle --ffmpeg --no-bundle $remote --skip --gpl -f --ff-disable-programs")
+        truthy "$build_ffmpeg" && BUILD_STEPS+=("./runner.sh --host=${platform} --arch=${arch} -y ${deps} --${bundle//_/-}-bundle --ffmpeg --no-bundle $remote --skip -f --ff-disable-programs")
+        truthy "$build_ffmpeg" && BUILD_STEPS+=("./runner.sh --host=${platform} --arch=${arch} -y ${deps} --${bundle//_/-}-bundle --ffmpeg --no-bundle $remote --skip --gpl -f --small --ff-disable-programs")
+        truthy "$build_ffmpeg" && BUILD_STEPS+=("./runner.sh --host=${platform} --arch=${arch} -y ${deps} --${bundle//_/-}-bundle --ffmpeg --no-bundle $remote --skip -f --small --ff-disable-programs")
+        truthy "$build_kit" && BUILD_STEPS+=("./runner.sh --host=${platform} --arch=${arch} -y ${deps} --${bundle//_/-}-bundle --kit $clean $remote $no_bundle --skip --gpl -f")
+        truthy "$build_kit" && BUILD_STEPS+=("./runner.sh --host=${platform} --arch=${arch} -y ${deps} --${bundle//_/-}-bundle --kit $clean $remote $no_bundle --skip -f")
+        truthy "$build_kit" && BUILD_STEPS+=("./runner.sh --host=${platform} --arch=${arch} -y ${deps} --${bundle//_/-}-bundle --kit $clean $remote $no_bundle --skip --gpl -f --small")
+        truthy "$build_kit" && BUILD_STEPS+=("./runner.sh --host=${platform} --arch=${arch} -y ${deps} --${bundle//_/-}-bundle --kit $clean $remote $no_bundle --skip -f --small")
+        if falsey "$build_kit" && truthy "$build_bundle"; then
+          BUILD_STEPS+=("./runner.sh --host=${platform} --arch=${arch} -y ${deps} --${bundle//_/-}-bundle --kit $clean $remote --skip --gpl -f")
+          BUILD_STEPS+=("./runner.sh --host=${platform} --arch=${arch} -y ${deps} --${bundle//_/-}-bundle --kit $clean $remote --skip -f")
+          BUILD_STEPS+=("./runner.sh --host=${platform} --arch=${arch} -y ${deps} --${bundle//_/-}-bundle --kit $clean $remote --skip --gpl -f --small")
+          BUILD_STEPS+=("./runner.sh --host=${platform} --arch=${arch} -y ${deps} --${bundle//_/-}-bundle --kit $clean $remote --skip -f --small")
+        fi
       fi
     done
   done
 done
 
-# Calculate progress
+# Calculate progress — count only steps in the current BUILD_STEPS list
+# that are already recorded in the state file (accurate for resumed runs)
 total_steps=${#BUILD_STEPS[@]}
-completed_steps=$(wc -l < "${STATE_FILE}" | tr -d ' ')
-# Subtract header lines
-completed_steps=$((completed_steps - 2))
-if [[ ${completed_steps} -lt 0 ]]; then
-  completed_steps=0
-fi
+completed_steps=0
+for _step in "${BUILD_STEPS[@]}"; do
+  is_completed "${_step}" && (( completed_steps++ )) || true
+done
 
 echo "========================================"
 echo "FFmpeg Kit Build All - State Management"
 echo "========================================"
 echo "Platform: ${p_args}"
 echo "Bundles: ${bundles}"
+echo "Builds: ${builds}"
 echo "Dependencies: ${deps:-no}"
 echo "Total steps: ${total_steps}"
 echo "Completed steps: ${completed_steps}"
@@ -284,9 +387,9 @@ for step in "${BUILD_STEPS[@]}"; do
   echo "========================================"
   echo "Step ${current_step}/${total_steps}"
   echo "========================================"
-  echo "Executing ${step}"
   [[ -z "${step}" ]] && continue
-  execute_build "${step}"
+  echo "Executing ${step}"
+  execute_build "${step}" "${current_step}/${total_steps}"
 done
 
 echo ""
@@ -298,7 +401,7 @@ rm -f "${STATE_FILE}"
 
 android_platforms=$(IFS=,; echo "${ANDROID_PLATFORM_ARCHS[*]}")
 
-if truthy "$build_aars"; then
+if truthy "$build_aars" && truthy "$build_bundle"; then
   echo "Building AARs..."
-  bash -c "${WORK_DIR}/scripts/android-aar.sh --platform=${android_platforms} --bundles=${bundles}"
+  sudo -E bash -c "${WORK_DIR}/scripts/android-aar.sh --platform=${android_platforms} --bundles=${bundles}"
 fi

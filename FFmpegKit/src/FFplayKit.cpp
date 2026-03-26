@@ -169,7 +169,7 @@ float ffmpegkit::FFplayKit::getVolume() {
   if (session) {
     return session->getVolume();
   }
-  return 0.0;
+  return -1.0;
 }
 
 void ffmpegkit::FFplayKit::close() {
@@ -178,3 +178,16 @@ void ffmpegkit::FFplayKit::close() {
     session->close();
   }
 }
+
+#ifdef __ANDROID__
+#include <android/native_window_jni.h>
+#include "ffplay_lib.h"
+
+void ffmpegkit::FFplayKit::setAndroidSurface(JNIEnv *env, jobject surface) {
+  // ffplay_set_android_window owns the single retained ANativeWindow reference.
+  // Hand off the pointer and immediately release the transient fromSurface ref.
+  ANativeWindow *nw = surface ? ANativeWindow_fromSurface(env, surface) : nullptr;
+  ffplay_set_android_window(nw);
+  if (nw) ANativeWindow_release(nw);
+}
+#endif /* __ANDROID__ */

@@ -600,9 +600,18 @@ build_sdl2() {
   local repo_ver="release-2.32.8"
   change_dir "$src_dir"
   do_git_checkout "$repo" "$src_dir/$lib" "$repo_ver"
-  change_dir "$src_dir/$lib"
-  generic_configure "--enable-static --disable-shared"
-  disable_nonessential "$src_dir/$lib"
+  change_dir "$src_dir/$lib/build" 1
+  local cmake_options="-DCMAKE_BUILD_TYPE=Release \
+-DSDL_SHARED=OFF \
+-DSDL_STATIC=ON \
+-DSDL_STATIC_PIC=ON \
+-DSDL_TEST=OFF \
+-DSDL_TESTS=OFF \
+-DSDL_HIDAPI=OFF \
+-DSDL_AUDIO=ON \
+-DSDL_VIDEO=ON \
+-DSDL_RENDER=ON"
+  do_cmake_from_build_dir "$src_dir/$lib" "$cmake_options"
   do_make_and_make_install
   change_dir "$src_dir"
 }

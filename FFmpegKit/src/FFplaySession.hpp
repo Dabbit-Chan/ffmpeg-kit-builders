@@ -193,7 +193,17 @@ public:
    * @return the volume of the media
    */
   float getVolume();
-  
+
+  /**
+   * Returns the current video width in pixels, or 0 if not yet known.
+   */
+  int getVideoWidth();
+
+  /**
+   * Returns the current video height in pixels, or 0 if not yet known.
+   */
+  int getVideoHeight();
+
   /**
    * Returns the ffplay context.
    *
@@ -249,10 +259,10 @@ private:
 
   FFplaySessionCompleteCallback _completeCallback;
   std::atomic<FFplayContext *> _context;
-  double _position;
-  double _duration;
-  bool _isPlaying;
-  bool _isPaused;
+  std::atomic<double> _position;
+  std::atomic<double> _duration;
+  std::atomic<bool> _isPlaying;
+  std::atomic<bool> _isPaused;
 };
 
 } // namespace ffmpegkit

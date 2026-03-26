@@ -86,7 +86,8 @@ ffmpegkit::FFplaySession::FFplaySession(
     const LogRedirectionStrategy logRedirectionStrategy)
     : ffmpegkit::AbstractSession(arguments, logCallback,
                                  logRedirectionStrategy),
-      _completeCallback{completeCallback}, _context{nullptr} {}
+      _completeCallback{completeCallback}, _context{nullptr},
+      _position{0.0}, _duration{0.0}, _isPlaying{false}, _isPaused{false} {}
 
 ffmpegkit::FFplaySessionCompleteCallback
 ffmpegkit::FFplaySession::getCompleteCallback() {
@@ -202,6 +203,22 @@ bool ffmpegkit::FFplaySession::isPaused() {
     return false;
 }
 
+int ffmpegkit::FFplaySession::getVideoWidth() {
+    FFplayContext *ctx = _context.load(std::memory_order_acquire);
+    if (ctx == nullptr) return 0;
+    int w = 0, h = 0;
+    ffplay_get_video_size(ctx, &w, &h);
+    return w;
+}
+
+int ffmpegkit::FFplaySession::getVideoHeight() {
+    FFplayContext *ctx = _context.load(std::memory_order_acquire);
+    if (ctx == nullptr) return 0;
+    int w = 0, h = 0;
+    ffplay_get_video_size(ctx, &w, &h);
+    return h;
+}
+
 void ffmpegkit::FFplaySession::setVolume(float volume) {
     FFplayContext *ctx = _context.load(std::memory_order_acquire);
     if (ctx != nullptr) {
@@ -214,7 +231,9 @@ float ffmpegkit::FFplaySession::getVolume() {
     if (ctx != nullptr) {
         return ffplay_get_volume(ctx);
     }
-    return 0.0;
+    // Return -1.0 as a sentinel to signal "context not ready" so callers can
+    // distinguish a legitimate mute (0.0) from an uninitialised context.
+    return -1.0f;
 }
 
 FFplayContext *ffmpegkit::FFplaySession::getContext() {

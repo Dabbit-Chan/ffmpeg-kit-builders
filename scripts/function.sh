@@ -325,8 +325,8 @@ truthy() {
 falsey() {
   local value="$1"
   case "${value,,}" in
-    false|0|F|f|False|FALSE|n|N|no|No|NO|off|Off|OFF) return 1 ;;
-    *) return 0 ;;
+    false|0|F|f|False|FALSE|n|N|no|No|NO|off|Off|OFF) return 0 ;;
+    *) return 1 ;;
   esac
 }
 
@@ -345,8 +345,8 @@ prepare_inline_sed() {
 }
 
 setup_build_environment() {
-    [[ -z $host_platform ]] && pick_host_platform
-    [[ -z $host_arch ]] && pick_host_arch
+    pick_host_platform $host_platform
+    pick_host_arch $host_arch
     calculate_bits_target
     determine_distro
     export host_name="$host_platform-$host_arch"
@@ -1194,8 +1194,8 @@ autoreconf_library() {
 }
 
 clean_ffmpeg_builds() {
-	[[ -z $host_platform ]] && pick_host_platform
-  [[ -z $host_arch ]] && pick_host_arch
+	pick_host_platform $host_platform
+	pick_host_arch $host_arch
 	pick_clean_type
   if [[ -z $host_name ]]; then
 		exit_message 1 "clean_ffmpeg_builds: no build flavor provided"
@@ -3775,7 +3775,7 @@ configure_ffmpeg() {
 	else
 		postpend_configure_opts+=" --disable-debug --enable-stripping --enable-optimizations"
 	fi
-  postpend_configure_opts+=" --extra-cflags=\"-std=gnu17\" --extra-libs=\"-Wl,--start-group $extra_libs -Wl,--end-group\""
+  postpend_configure_opts+=" --extra-cflags=\"-std=gnu17\" --extra-libs=\"-Wl,--start-group $extra_libs -Wl,--end-group\" $ff_flags_values"
   
   if iswindows; then
     cross_windres y
@@ -4034,21 +4034,27 @@ create_ffmpeg_kit_bundle() {
 
     create_touch_file 0 "$touch_name"
     echo -e "INFO: Done creating bundle at $ffmpeg_kit_bundle" | tee -a "$LOG_FILE"
+
+    create_ffmpeg_kit_release
     
-    if [[ -n "$create_release" ]]; then
-      echo -e "INFO: Creating release bundle" | tee -a "$LOG_FILE"
-      create_dir "$work_dir/releases"
-      local out_dir=$(basename "$ffmpeg_kit_bundle")
-      zip_dir "$ffmpeg_kit_bundle" "$work_dir/releases/$out_dir"
-      echo -e "INFO: Done creating release bundle at $work_dir/releases/$out_dir.zip" | tee -a "$LOG_FILE"
-      truthy "$create_release_clean" && clean_builds "all"
-      if [[ "$create_release" == "remote" ]]; then
-        create_github_release "$work_dir/releases/$out_dir.zip"
-      fi
-    fi
     chmod -R a+rwx "$work_dir"
   fi
 }
+
+create_ffmpeg_kit_release() {
+  if [[ -n "$create_release" ]]; then
+    echo -e "INFO: Creating release bundle" | tee -a "$LOG_FILE"
+    create_dir "$work_dir/releases"
+    local out_dir=$(basename "$ffmpeg_kit_bundle")
+    zip_dir "$ffmpeg_kit_bundle" "$work_dir/releases/$out_dir"
+    echo -e "INFO: Done creating release bundle at $work_dir/releases/$out_dir.zip" | tee -a "$LOG_FILE"
+    truthy "$create_release_clean" && clean_builds "all"
+    if [[ "$create_release" == "remote" ]]; then
+      create_github_release "$work_dir/releases/$out_dir.zip"
+    fi
+  fi
+}
+
 uninstall_manifest() {
   local manifest="$1"
   if [[ -f "$manifest" ]]; then
@@ -4378,7 +4384,7 @@ EOF
 }
 
 pick_host_platform() {
-	if truthy "$accept_defaults"; then
+	if truthy "$accept_defaults" && [[ -z "$1" ]]; then
     export host_platform="linux"
     echo "$host_platform"
     return 0
@@ -4455,13 +4461,13 @@ pick_host_arch() {
     export cmake_host_arch="armv7-a"
     export bits_target=32
   }
-	if truthy "$accept_defaults"; then
+	if truthy "$accept_defaults" && [[ -z "$1" ]]; then
     set_x86_64
     echo "$host_arch"
     return 0
   fi
   export host_arch=${1:-host_arch}
-	while [[ ! "${host_arch,,}" =~ ^([1-5]|i686|x86_64|x86|x64|x32|aarch64|arm64|armv7a|arm)$ ]]; do
+	while [[ ! "${host_arch,,}" =~ ^([1-5]|"x86_64"|"x64"|"i386"|"i686"|"x86"|"x32"|"aarch64"|"arm64"|"arm64-v8a"|"armv7a"|"arm"|"armeabi-v7a")$ ]]; do
 		# shellcheck disable=SC2199
 		if [[ -n "${unknown_opts[@]}" ]]; then
 			echo -e -n 'Unknown option(s)'

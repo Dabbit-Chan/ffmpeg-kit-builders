@@ -23,6 +23,10 @@
 #include "FFplaySession.hpp"
 #include <stdlib.h>
 
+#ifdef __ANDROID__
+#include <jni.h>
+#endif
+
 namespace ffmpegkit {
 
 /**
@@ -221,6 +225,23 @@ public:
    * <p>Close the ffplay session.
    */
   static void close();
+
+#ifdef __ANDROID__
+  /**
+   * <p>Sets the Android Surface for FFplay video output.
+   *
+   * <p>Must be called before executing an FFplay session. The Surface is
+   * typically obtained from a SurfaceView or TextureView in your Activity or
+   * Fragment. Call with <code>nullptr</code> when the Surface is destroyed
+   * (e.g., in <code>surfaceDestroyed()</code>) to avoid use-after-free.
+   *
+   * <p>Audio output uses OpenSL ES and requires no Surface.
+   *
+   * @param env     JNIEnv pointer from the calling JNI context
+   * @param surface jobject of type android.view.Surface, or nullptr to clear
+   */
+  static void setAndroidSurface(JNIEnv *env, jobject surface);
+#endif /* __ANDROID__ */
 };
 
 } // namespace ffmpegkit

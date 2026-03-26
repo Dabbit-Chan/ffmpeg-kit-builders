@@ -81,22 +81,6 @@ build_libusb() {
 build_sdl12_compat() {
   echo "INFO: Only available on Linux Desktop build" >>"$LOG_FILE"
   disable_library "sdl12-compat"
-  return 0
-  # run_valid_function "build_sdl2" 1
-  local repo="https://github.com/libsdl-org/sdl12-compat"
-  local lib="sdl12-compat"
-  local repo_ver="release-1.2.72"
-  change_dir "$src_dir"
-  do_git_checkout "$repo" "$src_dir/$lib" "$repo_ver"
-  change_dir "$src_dir/$lib"
-  generic_cmake "-DCMAKE_BUILD_TYPE=Release \
--DBUILD_SHARED_LIBS=OFF \
--DSTATICDEVEL=ON \
--DCMAKE_EXE_LINKER_FLAGS=\"-lm\" \
--DSDL12TESTS=OFF" "$src_dir/$lib"
-  disable_nonessential "$src_dir/$lib"
-  do_make_and_make_install
-  change_dir "$src_dir"
 }
 # build_libdc1394         # config_options+= --enable-libdc1394           # enable IIDC-1394 grabbing using libdc1394 and libraw1394 [no]
 build_libdc1394() {
@@ -544,9 +528,26 @@ build_sdl2() {
   local repo_ver="release-2.32.8"
   change_dir "$src_dir"
   do_git_checkout "$repo" "$src_dir/$lib" "$repo_ver"
-  change_dir "$src_dir/$lib"
-  generic_configure "--enable-static --disable-shared --disable-hidapi"
-  disable_nonessential "$src_dir/$lib"
+  # SDL2 2.x requires CMake; autotools support was removed.
+  # Build in a separate directory and pass the NDK toolchain file so SDL2's
+  # Android-specific audio/video backends (OpenSL ES, AAudio, ANativeWindow)
+  # are compiled in.
+  local toolchain
+  toolchain="$(get_generic_cmake_toolchain)"
+  change_dir "$src_dir/$lib/build" 1
+  do_cmake_from_build_dir "$src_dir/$lib" \
+    "-DCMAKE_TOOLCHAIN_FILE=$toolchain \
+-DSDL_SHARED=OFF \
+-DSDL_STATIC=ON \
+-DSDL_STATIC_PIC=ON \
+-DSDL_TEST=OFF \
+-DSDL_TESTS=OFF \
+-DSDL_HIDAPI=OFF \
+-DSDL_OPENSL=ON \
+-DSDL_AAUDIO=ON \
+-DSDL_AUDIO=ON \
+-DSDL_VIDEO=ON \
+-DSDL_RENDER=ON"
   do_make_and_make_install
   change_dir "$src_dir"
 }

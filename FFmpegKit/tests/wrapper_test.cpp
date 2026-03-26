@@ -470,7 +470,8 @@ TEST_F(FFplayKitInteractiveTest, PlayPauseResume) {
     const char* video_file = TEST_VIDEO_FILE;
     char command[256];
     snprintf(command, sizeof(command), "-loglevel fatal -i %s", video_file);
-
+    const char *ext_libraries = ffmpeg_kit_packages_get_external_libraries();
+    printf("Linked External Libraries: %s\n", ext_libraries);
     FFplaySessionHandle session = ffplay_kit_execute_async(command, nullptr, nullptr, 1000);
     printf("FFplay Session: %p\n", session);
     ASSERT_NE(session, nullptr);
@@ -491,7 +492,21 @@ TEST_F(FFplayKitInteractiveTest, PlayPauseResume) {
     printf("Is Playing: %d\n", ffplay_kit_session_is_playing(session));
     EXPECT_EQ(ffplay_kit_session_is_playing(session), 1);
 
+    // Stop session before cleanup to ensure all pending events are processed
+    printf("Stopping session...\n");
+    ffplay_kit_session_stop(session);
+    WaitForSeconds(1);
+    
+    // Validate session completed
+    FFmpegKitSessionState state = ffmpeg_kit_session_get_state(session);
+    printf("State: %d\n", state);
+
+    while (state == FFMPEG_KIT_SESSION_STATE_RUNNING) {
+      state = ffmpeg_kit_session_get_state(session);
+    }
+    EXPECT_EQ(state, FFMPEG_KIT_SESSION_STATE_COMPLETED);
     ffmpeg_kit_handle_release(session);
+    printf("Session released successfully\n");
 }
 
 TEST_F(FFplayKitInteractiveTest, Seek) {
@@ -504,21 +519,51 @@ TEST_F(FFplayKitInteractiveTest, Seek) {
     ASSERT_NE(session, nullptr);
     WaitForSeconds(2);
 
-    // Seek Absolute
+    // Validate session is in valid state before seeking
+    FFmpegKitSessionState state = ffmpeg_kit_session_get_state(session);
+    ASSERT_EQ(state, FFMPEG_KIT_SESSION_STATE_RUNNING);
+    
+    // Verify session is actually playing before seeking
+    int is_playing = ffplay_kit_session_is_playing(session);
+    ASSERT_TRUE(is_playing) << "Session must be playing before seek";
+
+    // Seek Absolute - with validation
+    printf("Seeking to position 10.0...\n");
     ffplay_kit_session_seek(session, 10.0);
-    WaitForSeconds(1);
+    WaitForSeconds(2); // Increased wait time for seek to complete
+    
+    // Validate session is still valid after seek
+    state = ffmpeg_kit_session_get_state(session);
+    ASSERT_EQ(state, FFMPEG_KIT_SESSION_STATE_RUNNING);
+    
     double pos = ffplay_kit_session_get_position(session);
-    printf("Position: %f\n", pos);
+    printf("Position after seek: %f\n", pos);
     EXPECT_GE(pos, 5.0); 
 
-    // Seek Relative Backward
+    // Seek Relative Backward - with validation
+    printf("Seeking backward by 5.0...\n");
     ffplay_kit_session_seek(session, -5.0);
-    WaitForSeconds(1);
+    WaitForSeconds(2); // Increased wait time for seek to complete
+    
+    // Validate session is still valid
+    state = ffmpeg_kit_session_get_state(session);
+    ASSERT_EQ(state, FFMPEG_KIT_SESSION_STATE_RUNNING);
+    
     double new_pos = ffplay_kit_session_get_position(session);
     printf("New Position: %f\n", new_pos);
     EXPECT_LT(new_pos, pos);
     
+    // Stop session before cleanup
+    printf("Stopping session...\n");
+    ffplay_kit_session_stop(session);
+    WaitForSeconds(1); // Wait for stop to complete
+    
+    // Validate session completed
+    state = ffmpeg_kit_session_get_state(session);
+    EXPECT_EQ(state, FFMPEG_KIT_SESSION_STATE_COMPLETED);
+    
     ffmpeg_kit_handle_release(session);
+    printf("Session released successfully\n");
 }
 
 TEST_F(FFplayKitInteractiveTest, ConcurrentSessions) {
@@ -586,24 +631,43 @@ TEST_F(FFplayKitInteractiveTest, GlobalSeek) {
     ASSERT_NE(session, nullptr);
     WaitForSeconds(2);
 
-    // Global Set Position
+    // Validate session is in valid state before using global controls
+    FFmpegKitSessionState state = ffmpeg_kit_session_get_state(session);
+    ASSERT_EQ(state, FFMPEG_KIT_SESSION_STATE_RUNNING);
+
+    // Global Set Position - with validation
+    printf("Setting global position to 10.0...\n");
     ffplay_kit_set_position(10.0);
-    WaitForSeconds(1);
+    WaitForSeconds(2); // Increased wait time
     
     double pos = ffplay_kit_get_position();
     printf("Position: %f\n", pos);
     EXPECT_GE(pos, 9.0); // Allow some tolerance
 
-    // Global Seek
+    // Global Seek - with validation
+    printf("Global seeking backward by 5.0...\n");
     ffplay_kit_seek(-5.0);
-    WaitForSeconds(1);
+    WaitForSeconds(2); // Increased wait time
+    
+    // Validate session is still valid
+    state = ffmpeg_kit_session_get_state(session);
+    ASSERT_EQ(state, FFMPEG_KIT_SESSION_STATE_RUNNING);
+    
     double new_pos = ffplay_kit_get_position();
     printf("New Position: %f\n", new_pos);
     EXPECT_LT(new_pos, pos);
 
+    // Stop session before cleanup
+    printf("Stopping session...\n");
     ffplay_kit_stop();
-    WaitForSeconds(1);
+    WaitForSeconds(1); // Wait for stop to complete
+    
+    // Validate session completed
+    state = ffmpeg_kit_session_get_state(session);
+    EXPECT_EQ(state, FFMPEG_KIT_SESSION_STATE_COMPLETED);
+    
     ffmpeg_kit_handle_release(session);
+    printf("Session released successfully\n");
 }
 
 TEST_F(FFplayKitInteractiveTest, SessionAPIs) {

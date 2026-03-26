@@ -47,38 +47,30 @@ typedef struct FFplayCallbacks {
     void *userdata;
 } FFplayCallbacks;
 
-// Initialize ffplay with command-line arguments as a string
-// Returns NULL on error
 /**
  * Initializes ffplay with command-line arguments as a string.
  *
  * @param args_string the command-line arguments as a string
  * @param cb the callback
- * @return the ffplay context
+ * @return the ffplay context, or NULL on error
  */
 FFMPEG_API FFplayContext* ffplay_init(const char* args_string, const FFplayCallbacks *cb);
 
-// Start playback (non-blocking if possible, but ffplay architecture is thread-heavy)
-// Returns 0 on success
 /**
- * Starts playback (non-blocking if possible, but ffplay architecture is thread-heavy).
+ * Starts playback.
  *
  * @param ctx the ffplay context
  * @return 0 on success
  */
 FFMPEG_API int ffplay_start(FFplayContext* ctx);
 
-// Process events (call regularly from your event loop)
-// Returns 0 if running, 1 if quit/finished
 /**
- * Processes events (call regularly from your event loop).
+ * Processes one event-loop iteration. Call regularly from the host event loop.
  *
  * @param ctx the ffplay context
  * @return 0 if running, 1 if quit/finished
  */
 FFMPEG_API int ffplay_step(FFplayContext* ctx);
-
-// Control playback
 /**
  * Seeks to a specific position in the media.
  *
@@ -146,9 +138,8 @@ FFMPEG_API int ffplay_is_playing(FFplayContext* ctx);
  */
 FFMPEG_API int ffplay_is_paused(FFplayContext* ctx);
 
-// Set volume (0.0 to 1.0)
 /**
- * Sets the volume.
+ * Sets the volume (0.0 to 1.0).
  *
  * @param ctx the ffplay context
  * @param volume the volume
@@ -172,22 +163,23 @@ FFMPEG_API float ffplay_get_volume(FFplayContext* ctx);
 FFMPEG_API void ffplay_set_audio_output_device(const char* device_name);
 
 /**
- * Get all available audio devices.
- * format: null-terminated array of strings.
- * caller must free results with free() (and also free strings?)
- * No, let's keep it simple: Callback pattern?
- * Or: Returns a single string with names separated by \0, double null at end.
- * Actually, let's provide a callback based approach to avoid complex memory management across boundaries.
+ * Returns a ';'-delimited string of available audio output device names.
+ * Returns NULL on error. Caller must free.
  */
-
-// Better approach for wrapper: 
-// Returns a single string with all device names delimited by ';'. (Assumes device names don't contain ';')
-// Returns NULL if error. Caller must free.
 FFMPEG_API char* ffplay_list_audio_devices(void);
 
-// Clean up resources
 /**
- * Cleans up resources.
+ * Returns the current video stream dimensions.
+ * Both values are 0 if no video stream has been opened yet.
+ *
+ * @param ctx    the ffplay context
+ * @param width  out: video width in pixels
+ * @param height out: video height in pixels
+ */
+FFMPEG_API void ffplay_get_video_size(FFplayContext* ctx, int *width, int *height);
+
+/**
+ * Frees all resources and stops playback.
  *
  * @param ctx the ffplay context
  */
@@ -199,6 +191,55 @@ FFMPEG_API void ffplay_free(FFplayContext* ctx);
  * @param ctx the ffplay context
  */
 FFMPEG_API void ffplay_close(FFplayContext* ctx);
+
+/**
+ * Probes [path] for at least one video stream without decoding.
+ * Uses avformat_open_input + avformat_find_stream_info. Thread-safe.
+ *
+ * @param path  UTF-8 file path or URL
+ * @return  1 video present, 0 audio-only, -1 on error
+ */
+FFMPEG_API int ffplay_has_video_stream(const char *path);
+
+#ifdef __ANDROID__
+#include <android/native_window.h>
+
+/**
+ * Sets the ANativeWindow for video output.
+ * The function acquires its own ANativeWindow reference (ANativeWindow_acquire),
+ * so callers MUST release their own reference after this call returns.
+ * Passing NULL clears the window and releases the internally held reference.
+ *
+ * @param window ANativeWindow from ANativeWindow_fromSurface(), or NULL to clear.
+ */
+FFMPEG_API void ffplay_set_android_window(ANativeWindow *window);
+
+#else /* !__ANDROID__ — Linux / Windows / macOS */
+
+/**
+ * Frame-ready callback for desktop video output. Fired inside ffplay_step().
+ * Pixel format: RGBA8888 ([R][G][B][A] on little-endian), linesize == width * 4.
+ * The pixel buffer is freed after the callback returns — copy if you need to retain it.
+ *
+ * @param userdata  opaque pointer from ffplay_set_frame_callback()
+ * @param pixels    RGBA8888 rows, tightly packed
+ * @param width     frame width in pixels
+ * @param height    frame height in pixels
+ * @param linesize  bytes per row
+ */
+typedef void (*FFplayFrameCallback)(void *userdata, const uint8_t *pixels,
+                                    int width, int height, int linesize);
+
+/**
+ * Registers a frame-ready callback for desktop video output. Call before ffplay_init().
+ *
+ * @param callback  frame callback, or NULL to clear
+ * @param userdata  forwarded to every callback invocation
+ */
+FFMPEG_API void ffplay_set_frame_callback(FFplayFrameCallback callback,
+                                           void *userdata);
+
+#endif /* __ANDROID__ */
 
 #ifdef __cplusplus
 }

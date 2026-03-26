@@ -111,6 +111,15 @@ typedef enum {
 FFMPEG_KIT_C_EXPORT void ffmpeg_kit_initialize();
 
 /**
+ * Returns a NUL-terminated build-stamp string of the form
+ * "YYYY-MM-DD HH:MM:SS" (compile-time __DATE__ and __TIME__).
+ *
+ * Call this immediately after loading the DLL to confirm you are running the
+ * expected build.  If this symbol itself is missing the DLL is too old.
+ */
+FFMPEG_KIT_C_EXPORT const char *ffmpeg_kit_get_build_stamp(void);
+
+/**
  * Executes the given FFmpeg command.
  *
  * @param command the FFmpeg command to execute
@@ -653,6 +662,26 @@ FFMPEG_KIT_C_EXPORT double
 ffplay_kit_session_get_duration(FFplaySessionHandle session);
 
 /**
+ * Returns the video width of the FFplay session in pixels.
+ * Returns 0 if no video stream is active yet.
+ *
+ * @param session the FFplay session
+ * @return video width in pixels, or 0
+ */
+FFMPEG_KIT_C_EXPORT int
+ffplay_kit_session_get_video_width(FFplaySessionHandle session);
+
+/**
+ * Returns the video height of the FFplay session in pixels.
+ * Returns 0 if no video stream is active yet.
+ *
+ * @param session the FFplay session
+ * @return video height in pixels, or 0
+ */
+FFMPEG_KIT_C_EXPORT int
+ffplay_kit_session_get_video_height(FFplaySessionHandle session);
+
+/**
  * Checks if the FFplay session is playing.
  *
  * @param session the FFplay session to check
@@ -683,7 +712,11 @@ ffplay_kit_session_set_volume(FFplaySessionHandle session, double volume);
  * Gets the volume of the FFplay session.
  *
  * @param session the FFplay session to get the volume of
- * @return the volume of the FFplay session
+ * @return volume in [0.0, 1.0], or -1.0 if the session handle is invalid or
+ *         the native playback context is not yet ready (called before the
+ *         session has started executing, or after it has completed).
+ *         Callers should treat any negative value as "not available" and
+ *         fall back to a cached or default value.
  */
 FFMPEG_KIT_C_EXPORT double
 ffplay_kit_session_get_volume(FFplaySessionHandle session);
@@ -767,9 +800,94 @@ FFMPEG_KIT_C_EXPORT void ffplay_kit_set_volume(double volume);
 /**
  * Gets the volume of the current FFplay session.
  *
- * @return the volume of the current FFplay session
+ * @return volume in [0.0, 1.0], or -1.0 if there is no active session or
+ *         the native context is not yet ready. See ffplay_kit_session_get_volume.
  */
 FFMPEG_KIT_C_EXPORT double ffplay_kit_get_volume(void);
+
+/**
+ * Sets the Android ANativeWindow for FFplay video output.
+ *
+ * Pass the ANativeWindow* obtained via ANativeWindow_fromSurface() cast to
+ * int64_t. On Android this must be called before executing an FFplay session;
+ * on all other platforms this function is a no-op.
+ *
+ * The caller is responsible for ensuring the window remains valid for the
+ * duration of playback. Call ffplay_kit_clear_android_surface() when the
+ * Surface is destroyed to avoid use-after-free.
+ *
+ * Dart bridge: use FFplayKitAndroid.setAndroidSurface(nativeWindowPtr).
+ *
+ * @param native_window_ptr ANativeWindow* cast to int64_t, or 0 to clear
+ */
+FFMPEG_KIT_C_EXPORT void ffplay_kit_set_android_surface_ptr(int64_t native_window_ptr);
+
+/**
+ * Clears the Android ANativeWindow, stopping video output.
+ *
+ * Call when the Surface is destroyed (e.g. in surfaceDestroyed()).
+ * Equivalent to ffplay_kit_set_android_surface_ptr(0).
+ * On non-Android platforms this is a no-op.
+ */
+FFMPEG_KIT_C_EXPORT void ffplay_kit_clear_android_surface(void);
+
+/**
+ * Frame-ready callback type for desktop (Linux/Windows) video output.
+ *
+ * Fired inside ffplay_step() on every rendered video frame.
+ * Pixel format: RGBA8888 — bytes [R][G][B][A] on little-endian, compatible
+ * with Flutter's FlutterDesktopPixelBuffer.
+ * The pixel buffer is valid only for the duration of the call — copy it
+ * (e.g. into a pre-allocated FlutterDesktopPixelBuffer) before returning.
+ *
+ * WARNING: The callback is invoked while the internal ffplay API mutex is
+ * held. Do NOT call any ffplay API function (ffplay_pause, ffplay_seek,
+ * ffplay_get_position, etc.) from within the callback — doing so will
+ * deadlock. Perform only lightweight, non-blocking work (e.g. memcpy into a
+ * pre-allocated buffer and signal a separate rendering thread).
+ *
+ * Not used on Android; Android video output goes to the ANativeWindow set via
+ * ffplay_kit_set_android_surface_ptr().
+ *
+ * @param userdata  opaque pointer registered with ffplay_kit_register_frame_callback()
+ * @param pixels    RGBA8888 pixels, width*4 bytes per row (linesize == width*4)
+ * @param width     frame width in pixels
+ * @param height    frame height in pixels
+ * @param linesize  bytes per row
+ */
+typedef void (*FFplayKitFrameCallback)(void *userdata, const uint8_t *pixels,
+                                       int width, int height, int linesize);
+
+/**
+ * Registers a global frame-ready callback for desktop video output (Linux/Windows).
+ *
+ * Must be called before ffplay_kit_session_execute() / ffplay_kit_execute().
+ * On Android this is a no-op; video output is delivered to the ANativeWindow.
+ *
+ * Dart FFI usage:
+ *   ffplay_kit_register_frame_callback(Pointer.fromFunction(myCallback), nullptr);
+ *
+ * @param callback  frame callback function; NULL clears any previous registration
+ * @param userdata  opaque pointer forwarded to every callback invocation
+ */
+FFMPEG_KIT_C_EXPORT void ffplay_kit_register_frame_callback(
+    FFplayKitFrameCallback callback, void *userdata);
+
+/**
+ * Clears the global frame callback, stopping desktop pixel delivery.
+ * Equivalent to ffplay_kit_register_frame_callback(NULL, NULL).
+ * On Android this is a no-op.
+ */
+FFMPEG_KIT_C_EXPORT void ffplay_kit_unregister_frame_callback(void);
+
+/**
+ * Probes [path] for at least one video stream without decoding.
+ * Uses avformat_open_input + avformat_find_stream_info. Thread-safe.
+ *
+ * @param path  UTF-8 file path or URL
+ * @return  1 video present, 0 audio-only, -1 on error
+ */
+FFMPEG_KIT_C_EXPORT int ffplay_kit_has_video_stream(const char *path);
 
 /* Config & Global Functions */
 
@@ -884,6 +1002,90 @@ FFMPEG_KIT_C_EXPORT char *ffmpeg_kit_packages_get_package_name(void);
  * @return the external libraries for the package
  */
 FFMPEG_KIT_C_EXPORT char *ffmpeg_kit_packages_get_external_libraries(void);
+
+/**
+ * Gets the FFmpegKit bundle type.
+ *
+ * @return the bundle type
+ */
+FFMPEG_KIT_C_EXPORT char *ffmpeg_kit_packages_get_bundle_type(void);
+
+/**
+ * Gets whether GPL is enabled.
+ *
+ * @return 1 if GPL is enabled, 0 otherwise
+ */
+FFMPEG_KIT_C_EXPORT bool ffmpeg_kit_packages_get_is_gpl(void);
+
+/**
+ * Gets whether non-free is enabled.
+ *
+ * @return 1 if non-free is enabled, 0 otherwise
+ */
+FFMPEG_KIT_C_EXPORT bool ffmpeg_kit_packages_get_is_nonfree(void);
+
+/**
+ * Gets all registered codecs.
+ *
+ * @return comma-separated list of codec names
+ */
+FFMPEG_KIT_C_EXPORT char *ffmpeg_kit_packages_get_registered_codecs(void);
+
+/**
+ * Gets all registered encoders.
+ *
+ * @return comma-separated list of encoder names
+ */
+FFMPEG_KIT_C_EXPORT char *ffmpeg_kit_packages_get_registered_encoders(void);
+
+/**
+ * Gets all registered decoders.
+ *
+ * @return comma-separated list of decoder names
+ */
+FFMPEG_KIT_C_EXPORT char *ffmpeg_kit_packages_get_registered_decoders(void);
+
+/**
+ * Gets all registered muxers.
+ *
+ * @return comma-separated list of muxer names
+ */
+FFMPEG_KIT_C_EXPORT char *ffmpeg_kit_packages_get_registered_muxers(void);
+
+/**
+ * Gets all registered demuxers.
+ *
+ * @return comma-separated list of demuxer names
+ */
+FFMPEG_KIT_C_EXPORT char *ffmpeg_kit_packages_get_registered_demuxers(void);
+
+/**
+ * Gets all registered filters.
+ *
+ * @return comma-separated list of filter names
+ */
+FFMPEG_KIT_C_EXPORT char *ffmpeg_kit_packages_get_registered_filters(void);
+
+/**
+ * Gets all registered protocols.
+ *
+ * @return comma-separated list of protocol names
+ */
+FFMPEG_KIT_C_EXPORT char *ffmpeg_kit_packages_get_registered_protocols(void);
+
+/**
+ * Gets all registered bitstream filters.
+ *
+ * @return comma-separated list of bitstream filter names
+ */
+FFMPEG_KIT_C_EXPORT char *ffmpeg_kit_packages_get_registered_bitstream_filters(void);
+
+/**
+ * Gets the FFmpeg build configuration.
+ *
+ * @return the build configuration string
+ */
+FFMPEG_KIT_C_EXPORT char *ffmpeg_kit_packages_get_build_configuration(void);
 
 /* Session Management (Base) */
 
@@ -1766,10 +1968,11 @@ FFMPEG_KIT_C_EXPORT int64_t
 ffmpeg_kit_statistics_get_size(StatisticsHandle handle);
 
 /**
- * Gets the time.
+ * Gets the time in milliseconds.
  *
  * @param handle the statistics handle
- * @return the time
+ * @return the time in milliseconds (consistent with the time argument passed
+ *         to FFmpegKitStatisticsCallback)
  */
 FFMPEG_KIT_C_EXPORT double
 ffmpeg_kit_statistics_get_time(StatisticsHandle handle);

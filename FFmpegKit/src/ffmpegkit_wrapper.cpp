@@ -278,6 +278,11 @@ void DLL_ALIGN ffmpeg_kit_initialize() {
     avformat_network_init();
 }
 
+const char * DLL_ALIGN ffmpeg_kit_get_build_stamp(void) {
+    static const char kStamp[] = __DATE__ " " __TIME__;
+    return kStamp;
+}
+
 void DLL_ALIGN ffmpeg_kit_handle_release(void *handle) {
   if (!handle) return;
   
@@ -295,17 +300,34 @@ void DLL_ALIGN ffmpeg_kit_handle_release(void *handle) {
   if (session) {
     session->cancel();
     /**
-     * Block destruction until the native background thread has gracefully exited. 
-     * We bound this with a 10-second timeout to prevent deadlocking the calling 
+     * Block destruction until the native background thread has gracefully exited.
+     * We bound this with a 10-second timeout to prevent deadlocking the calling
      * thread (e.g., the Flutter UI isolate) if a session hangs indefinitely.
      */
+    bool timed_out = false;
     auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(10);
     while (session->getState() == SessionStateRunning) {
       if (std::chrono::steady_clock::now() > deadline) {
         std::cerr << "[Warning] ffmpeg_kit_handle_release: timed out waiting for session to stop\n";
+        timed_out = true;
         break;
       }
       std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    }
+
+    // For FFplay sessions, synchronise with the async execution thread so its
+    // TLS destructors complete while the runtime is still fully initialized.
+    // If the session timed out (thread still running), detach instead of
+    // joining to avoid blocking the caller (e.g., Flutter UI isolate)
+    // indefinitely.  The detached thread will run its TLS destructors when it
+    // eventually exits on its own.
+    if (session->isFFplay()) {
+      if (timed_out) {
+        std::cerr << "[Warning] ffmpeg_kit_handle_release: detaching stuck FFplay thread\n";
+        ffmpegkit::FFmpegKitConfig::detachAsyncFFplayThread();
+      } else {
+        ffmpegkit::FFmpegKitConfig::joinAsyncFFplayThread();
+      }
     }
   }
 }
@@ -410,7 +432,7 @@ FFmpegSessionHandle DLL_ALIGN ffmpeg_kit_execute_async_full(
     };
     auto stats = [stats_cb, user_data, handle](std::shared_ptr<Statistics> s) {
       if (stats_cb && s) {
-        stats_cb(handle, s->getTime(), s->getSize(), s->getBitrate(),
+        stats_cb(handle, (int64_t)(s->getTime() * 1000), s->getSize(), s->getBitrate(),
                  s->getSpeed(), s->getVideoFrameNumber(), s->getVideoFps(),
                  s->getVideoQuality(), user_data);
       }
@@ -472,7 +494,7 @@ FFmpegSessionHandle DLL_ALIGN ffmpeg_kit_create_session_with_callbacks(
     };
     auto stats =[stats_cb, user_data, handle](std::shared_ptr<Statistics> s) {
       if (stats_cb && s) {
-        stats_cb(handle, s->getTime(), s->getSize(), s->getBitrate(),
+        stats_cb(handle, (int64_t)(s->getTime() * 1000), s->getSize(), s->getBitrate(),
                  s->getSpeed(), s->getVideoFrameNumber(), s->getVideoFps(),
                  s->getVideoQuality(), user_data);
       }
@@ -543,7 +565,7 @@ FFmpegSessionHandle DLL_ALIGN ffmpeg_kit_create_session_from_argv_with_callbacks
         };
         auto stats = [stats_cb, user_data, handle](std::shared_ptr<Statistics> s) {
             if (stats_cb && s) {
-                stats_cb(handle, s->getTime(), s->getSize(), s->getBitrate(),
+                stats_cb(handle, (int64_t)(s->getTime() * 1000), s->getSize(), s->getBitrate(),
                          s->getSpeed(), s->getVideoFrameNumber(), s->getVideoFps(),
                          s->getVideoQuality(), user_data);
             }
@@ -597,7 +619,7 @@ void DLL_ALIGN ffmpeg_kit_set_statistics_callback(FFmpegSessionHandle session,
       auto stats = [stats_cb, user_data,
                     session](std::shared_ptr<Statistics> s) {
         if (stats_cb && s) {
-          stats_cb(session, s->getTime(), s->getSize(), s->getBitrate(),
+          stats_cb(session, (int64_t)(s->getTime() * 1000), s->getSize(), s->getBitrate(),
                    s->getSpeed(), s->getVideoFrameNumber(), s->getVideoFps(),
                    s->getVideoQuality(), user_data);
         }
@@ -655,7 +677,7 @@ void DLL_ALIGN ffmpeg_kit_set_callbacks(FFmpegSessionHandle session,
       auto stats = [stats_cb, user_data,
                     session](std::shared_ptr<Statistics> s) {
         if (stats_cb && s) {
-          stats_cb(session, s->getTime(), s->getSize(), s->getBitrate(),
+          stats_cb(session, (int64_t)(s->getTime() * 1000), s->getSize(), s->getBitrate(),
                    s->getSpeed(), s->getVideoFrameNumber(), s->getVideoFps(),
                    s->getVideoQuality(), user_data);
         }
@@ -1371,6 +1393,52 @@ void DLL_ALIGN ffplay_kit_session_set_position(FFplaySessionHandle session,
   }
 }
 
+int DLL_ALIGN ffplay_kit_session_get_video_width(FFplaySessionHandle session) {
+  try {
+    auto ptr = get_ptr<FFplaySession>(session);
+    if (ptr) return ptr->getVideoWidth();
+    return 0;
+  } catch (const std::exception &e) {
+    std::cerr << "[Exception] in ffplay_kit_session_get_video_width: " << e.what() << std::endl;
+    return 0;
+  }
+}
+
+int DLL_ALIGN ffplay_kit_session_get_video_height(FFplaySessionHandle session) {
+  try {
+    auto ptr = get_ptr<FFplaySession>(session);
+    if (ptr) return ptr->getVideoHeight();
+    return 0;
+  } catch (const std::exception &e) {
+    std::cerr << "[Exception] in ffplay_kit_session_get_video_height: " << e.what() << std::endl;
+    return 0;
+  }
+}
+
+int DLL_ALIGN ffplay_kit_has_video_stream(const char *path) {
+  if (!path) return -1;
+  try {
+    AVFormatContext *fmt_ctx = nullptr;
+    int ret = avformat_open_input(&fmt_ctx, path, nullptr, nullptr);
+    if (ret < 0) return -1;
+    ret = avformat_find_stream_info(fmt_ctx, nullptr);
+    int has_video = 0;
+    if (ret >= 0) {
+      for (unsigned int i = 0; i < fmt_ctx->nb_streams; i++) {
+        if (fmt_ctx->streams[i]->codecpar->codec_type == AVMEDIA_TYPE_VIDEO) {
+          has_video = 1;
+          break;
+        }
+      }
+    }
+    avformat_close_input(&fmt_ctx);
+    return (ret < 0) ? -1 : has_video;
+  } catch (const std::exception &e) {
+    std::cerr << "[Exception] in ffplay_kit_has_video_stream: " << e.what() << std::endl;
+    return -1;
+  }
+}
+
 double DLL_ALIGN ffplay_kit_session_get_duration(FFplaySessionHandle session) {
   try {
     auto ptr = get_ptr<FFplaySession>(session);
@@ -1433,9 +1501,9 @@ double DLL_ALIGN ffplay_kit_session_get_volume(FFplaySessionHandle session) {
   try {
     auto ptr = get_ptr<FFplaySession>(session);
     if (ptr) {
-      return ptr->getVolume();
+      return ptr->getVolume();  // -1.0 when context not ready; see header docs
     }
-    return 0.0;
+    return -1.0;  // invalid handle — same sentinel as context-not-ready
   } catch (const std::exception &e) {
     std::cerr << "[Exception] in ffplay_kit_session_get_volume: " << e.what()
               << std::endl;
@@ -1571,6 +1639,57 @@ double DLL_ALIGN ffplay_kit_get_volume(void) {
     PRINT_STACK_TRACE();
     return -1.0;
   }
+}
+
+#ifdef __ANDROID__
+#include <android/native_window.h>
+extern "C" void ffplay_set_android_window(ANativeWindow *nw);
+
+/// Sets the Android ANativeWindow for FFplay video output.
+///
+/// ffplay_set_android_window() owns the single retained ANativeWindow
+/// reference (acquire/release inside), so the Dart caller may release its own
+/// reference (via releaseNativeWindowPtr) immediately after this call returns.
+/// Pass 0 to clear the window (equivalent to ffplay_kit_clear_android_surface).
+void DLL_ALIGN ffplay_kit_set_android_surface_ptr(int64_t native_window_ptr) {
+  ANativeWindow *nw = reinterpret_cast<ANativeWindow *>(
+      static_cast<uintptr_t>(native_window_ptr));
+  ffplay_set_android_window(nw);
+}
+
+/// Clears the Android ANativeWindow, releasing the retained reference and
+/// stopping video output.  Call when the Surface is destroyed.
+void DLL_ALIGN ffplay_kit_clear_android_surface(void) {
+  ffplay_kit_set_android_surface_ptr(0);
+}
+#else
+void DLL_ALIGN ffplay_kit_set_android_surface_ptr(int64_t /*native_window_ptr*/) {}
+void DLL_ALIGN ffplay_kit_clear_android_surface(void) {}
+#endif /* __ANDROID__ */
+
+/* Desktop frame callback (Linux / Windows) */
+
+#if !defined(__ANDROID__)
+extern "C" void ffplay_set_frame_callback(
+    void (*cb)(void *, const uint8_t *, int, int, int), void *userdata);
+#endif
+
+void DLL_ALIGN ffplay_kit_register_frame_callback(
+    FFplayKitFrameCallback callback, void *userdata) {
+#if !defined(__ANDROID__)
+  ffplay_set_frame_callback(
+      reinterpret_cast<void (*)(void *, const uint8_t *, int, int, int)>(callback),
+      userdata);
+#else
+  (void)callback;
+  (void)userdata;
+#endif
+}
+
+void DLL_ALIGN ffplay_kit_unregister_frame_callback(void) {
+#if !defined(__ANDROID__)
+  ffplay_set_frame_callback(nullptr, nullptr);
+#endif
 }
 
 /* Config */
@@ -1764,6 +1883,194 @@ char * DLL_ALIGN ffmpeg_kit_packages_get_external_libraries(void) {
     return strdup_cpp(result);
   } catch (const std::exception &e) {
     std::cerr << "[Exception] in ffmpeg_kit_packages_get_external_libraries: "
+              << e.what() << std::endl;
+    PRINT_STACK_TRACE();
+    return nullptr;
+  }
+}
+
+char * DLL_ALIGN ffmpeg_kit_packages_get_bundle_type(void) {
+  try {
+    return strdup_cpp(Packages::getBundleType());
+  } catch (const std::exception &e) {
+    std::cerr << "[Exception] in ffmpeg_kit_packages_get_bundle_type: "
+              << e.what() << std::endl;
+    PRINT_STACK_TRACE();
+    return nullptr;
+  }
+}
+
+bool DLL_ALIGN ffmpeg_kit_packages_get_is_gpl(void) {
+  try {
+    return Packages::getIsGpl();
+  } catch (const std::exception &e) {
+    std::cerr << "[Exception] in ffmpeg_kit_packages_get_is_gpl: "
+              << e.what() << std::endl;
+    PRINT_STACK_TRACE();
+    return false;
+  }
+}
+
+bool DLL_ALIGN ffmpeg_kit_packages_get_is_nonfree(void) {
+  try {
+    return Packages::getIsNonFree();
+  } catch (const std::exception &e) {
+    std::cerr << "[Exception] in ffmpeg_kit_packages_get_is_nonfree: "
+              << e.what() << std::endl;
+    PRINT_STACK_TRACE();
+    return false;
+  }
+}
+
+char * DLL_ALIGN ffmpeg_kit_packages_get_registered_codecs(void) {
+  try {
+    auto codecs = Packages::getRegisteredCodecs();
+    std::string result = "";
+    for (const auto &codec : *codecs) {
+      if (!result.empty())
+        result += ", ";
+      result += codec;
+    }
+    return strdup_cpp(result);
+  } catch (const std::exception &e) {
+    std::cerr << "[Exception] in ffmpeg_kit_packages_get_registered_codecs: "
+              << e.what() << std::endl;
+    PRINT_STACK_TRACE();
+    return nullptr;
+  }
+}
+
+char * DLL_ALIGN ffmpeg_kit_packages_get_registered_encoders(void) {
+  try {
+    auto encoders = Packages::getRegisteredEncoders();
+    std::string result = "";
+    for (const auto &encoder : *encoders) {
+      if (!result.empty())
+        result += ", ";
+      result += encoder;
+    }
+    return strdup_cpp(result);
+  } catch (const std::exception &e) {
+    std::cerr << "[Exception] in ffmpeg_kit_packages_get_registered_encoders: "
+              << e.what() << std::endl;
+    PRINT_STACK_TRACE();
+    return nullptr;
+  }
+}
+
+char * DLL_ALIGN ffmpeg_kit_packages_get_registered_decoders(void) {
+  try {
+    auto decoders = Packages::getRegisteredDecoders();
+    std::string result = "";
+    for (const auto &decoder : *decoders) {
+      if (!result.empty())
+        result += ", ";
+      result += decoder;
+    }
+    return strdup_cpp(result);
+  } catch (const std::exception &e) {
+    std::cerr << "[Exception] in ffmpeg_kit_packages_get_registered_decoders: "
+              << e.what() << std::endl;
+    PRINT_STACK_TRACE();
+    return nullptr;
+  }
+}
+
+char * DLL_ALIGN ffmpeg_kit_packages_get_registered_muxers(void) {
+  try {
+    auto muxers = Packages::getRegisteredMuxers();
+    std::string result = "";
+    for (const auto &muxer : *muxers) {
+      if (!result.empty())
+        result += ", ";
+      result += muxer;
+    }
+    return strdup_cpp(result);
+  } catch (const std::exception &e) {
+    std::cerr << "[Exception] in ffmpeg_kit_packages_get_registered_muxers: "
+              << e.what() << std::endl;
+    PRINT_STACK_TRACE();
+    return nullptr;
+  }
+}
+
+char * DLL_ALIGN ffmpeg_kit_packages_get_registered_demuxers(void) {
+  try {
+    auto demuxers = Packages::getRegisteredDemuxers();
+    std::string result = "";
+    for (const auto &demuxer : *demuxers) {
+      if (!result.empty())
+        result += ", ";
+      result += demuxer;
+    }
+    return strdup_cpp(result);
+  } catch (const std::exception &e) {
+    std::cerr << "[Exception] in ffmpeg_kit_packages_get_registered_demuxers: "
+              << e.what() << std::endl;
+    PRINT_STACK_TRACE();
+    return nullptr;
+  }
+}
+
+char * DLL_ALIGN ffmpeg_kit_packages_get_registered_filters(void) {
+  try {
+    auto filters = Packages::getRegisteredFilters();
+    std::string result = "";
+    for (const auto &filter : *filters) {
+      if (!result.empty())
+        result += ", ";
+      result += filter;
+    }
+    return strdup_cpp(result);
+  } catch (const std::exception &e) {
+    std::cerr << "[Exception] in ffmpeg_kit_packages_get_registered_filters: "
+              << e.what() << std::endl;
+    PRINT_STACK_TRACE();
+    return nullptr;
+  }
+}
+
+char * DLL_ALIGN ffmpeg_kit_packages_get_registered_protocols(void) {
+  try {
+    auto protocols = Packages::getRegisteredProtocols();
+    std::string result = "";
+    for (const auto &protocol : *protocols) {
+      if (!result.empty())
+        result += ", ";
+      result += protocol;
+    }
+    return strdup_cpp(result);
+  } catch (const std::exception &e) {
+    std::cerr << "[Exception] in ffmpeg_kit_packages_get_registered_protocols: "
+              << e.what() << std::endl;
+    PRINT_STACK_TRACE();
+    return nullptr;
+  }
+}
+
+char * DLL_ALIGN ffmpeg_kit_packages_get_registered_bitstream_filters(void) {
+  try {
+    auto bsfs = Packages::getRegisteredBitStreamFilters();
+    std::string result = "";
+    for (const auto &bsf : *bsfs) {
+      if (!result.empty())
+        result += ", ";
+      result += bsf;
+    }
+    return strdup_cpp(result);
+  } catch (const std::exception &e) {
+    std::cerr << "[Exception] in ffmpeg_kit_packages_get_registered_bitstream_filters: "
+              << e.what() << std::endl;
+    PRINT_STACK_TRACE();
+    return nullptr;
+  }
+}
+
+char * DLL_ALIGN ffmpeg_kit_packages_get_build_configuration(void) {
+  try {
+    return strdup_cpp(Packages::getBuildConfiguration());
+  } catch (const std::exception &e) {
+    std::cerr << "[Exception] in ffmpeg_kit_packages_get_build_configuration: "
               << e.what() << std::endl;
     PRINT_STACK_TRACE();
     return nullptr;
@@ -2724,7 +3031,7 @@ void DLL_ALIGN ffmpeg_kit_config_enable_statistics_callback(
               // Pass ID as pointer (Hack to avoid allocation/threading issues)
               void *session_handle = (void *)(uintptr_t)s->getSessionId();
 
-              g_stats_callback(session_handle, s->getTime(), s->getSize(),
+              g_stats_callback(session_handle, (int64_t)(s->getTime() * 1000), s->getSize(),
                                s->getBitrate(), s->getSpeed(),
                                s->getVideoFrameNumber(), s->getVideoFps(),
                                s->getVideoQuality(), g_stats_user_data);
@@ -3161,7 +3468,7 @@ int64_t DLL_ALIGN ffmpeg_kit_statistics_get_size(StatisticsHandle handle) {
 }
 double DLL_ALIGN ffmpeg_kit_statistics_get_time(StatisticsHandle handle) {
   try {
-    return get_ptr<Statistics>(handle)->getTime();
+    return get_ptr<Statistics>(handle)->getTime() * 1000.0;
   } catch (const std::exception &e) {
     std::cerr << "[Exception] in ffmpeg_kit_statistics_get_time: " << e.what()
               << std::endl;
