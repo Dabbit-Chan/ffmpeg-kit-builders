@@ -1013,9 +1013,6 @@ int executeFFplay(const long sessionId,
   globalSessionId = 0;
   ffplay_free(ctx);
 
-  if (tlsSession != nullptr) {
-    tlsSession->debugLog("[EXECUTE FFPLAY] sessionId: %ld done returnCode=%d", sessionId, returnCode);
-  }
   return returnCode;
 }
 
