@@ -51,6 +51,8 @@ declare -A PLATFORMS
 build_ffmpeg=false
 build_kit=false
 build_bundle=false
+no_clean=true
+release_local=false
 
 # Check if value is truthy
 # Returns 0 (success) for truthy values, 1 (failure) for falsey values
@@ -213,6 +215,9 @@ for arg; do
       echo "                Valid bundles: ${VALID_TYPES[*]}"
       echo "  --build=*     Comma separated (without spaces) list of builds to build (e.g. --build=ffmpeg,kit,bundle)"
       echo "                Valid builds: ${VALID_BUILDS[*]}"
+      echo "  --clean=*     Comma separated (without spaces) list of components to clean (e.g. --clean=ffmpeg,kit,bundle)"
+      echo "                Valid components: all OR ${VALID_BUILDS[*]}"
+      echo "  --local       Build locally instead of using remote releases"
       echo "  --help        Show this help message"
       echo ""
       echo "State file location: ${STATE_FILE}"
@@ -223,8 +228,10 @@ for arg; do
     --build=*)
       #comma separated list of builds to build
       parse_builds "${arg#*=}";;
-    --no-clean)
-      no_clean=true;;
+    --clean=*)
+      #comma separated list of components to clean
+      clean_type="${arg#*=}"
+      no_clean=false;;
     --local)
       release_local=true;;
     *)  
@@ -309,7 +316,7 @@ for platform in "${!PLATFORMS[@]}"; do
       if truthy "${no_clean}"; then
         clean=""
       else
-        clean="--clean"
+        clean="--clean=${clean_type}"
       fi
       remote=""
       no_bundle=""
@@ -403,5 +410,5 @@ android_platforms=$(IFS=,; echo "${ANDROID_PLATFORM_ARCHS[*]}")
 
 if truthy "$build_aars" && truthy "$build_bundle"; then
   echo "Building AARs..."
-  sudo -E bash -c "${WORK_DIR}/scripts/android-aar.sh --platform=${android_platforms} --bundles=${bundles}"
+  sudo -E bash -c "${WORK_DIR}/scripts/build_aar.sh --platform=${android_platforms} --bundles=${bundles}"
 fi

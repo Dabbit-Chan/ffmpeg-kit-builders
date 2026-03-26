@@ -412,7 +412,6 @@ for key in "${!PLATFORMS[@]}"; do
               debug_pfx=""
               if [[ "${bundle}" == "debug" ]]; then
                   bundle_pfx="base"
-                  assemble_type="Debug"
                   debug_pfx="-debug"
               fi
               # FFMPEG_KIT_OUTPUT_NAME: bundle-${bundle}-${arch}-shared-${small}-${license}

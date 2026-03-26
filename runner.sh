@@ -100,8 +100,8 @@ Build Options:
   --release-and-clean                                           create release zip of ffmpeg-kit bundled binaries to be distributed 
                                                                 and clean ffmpeg and ffmpeg-kit build artifacts (dependencies are not deleted)
 	--clean-builds=[shared]|static                                clean ffmpeg and ffmpeg-kit builds of type [shared] or static and exit
-  --clean                                                        reset and clean all source directories of touch files and build artifacts
-                                                                ARG=library src dir name
+  --clean=[all]|ffmpeg|kit|bundle                               clean build artifacts of specified components. Pass as Comma-separated list
+                                                                to specify multiple components. Blank value cleans all components.
   --resume                                                      resume previously inturrupted run (based on ~run.state file)
 
 Advanced Dependency Control:
@@ -219,8 +219,13 @@ while [ $# -gt 0 ]; do
     export create_release=local
     shift
     ;;
+  --clean=*)
+    export create_release_clean_type="${1#*=}"
+    shift
+    ;;
   --clean)
     export create_release_clean=y
+    export create_release_clean_type="all"
     shift
     ;;
   --host-platform=*|--host=*)
