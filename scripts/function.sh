@@ -1398,18 +1398,21 @@ clean_ffmpeg_builds() {
 
 clean_builds() {
 	export clean_type=${1:-clean_type} # comma-separated list of components to clean
+	export clean_type=${1:-clean_type} # comma-separated list of components to clean
   local build_flavor=${2:-host_name}
   local clean_types=()
   IFS=',' read -ra clean_types <<< "$clean_type"
-  echo -e "WARNING: Executing clean for ${clean_types[*]} and $host_name"
+  echo -e "WARNING: Executing clean for ${clean_types[@]} and $host_name"
 	if [[ " ${clean_types[*]} " =~ " all " ]] || [[ " ${clean_types[*]} " =~ " ffmpeg " ]]; then
 		echo -e "INFO: Deleting ${ffmpeg_install_prefix}..."
 		remove_path -rf "${ffmpeg_install_prefix}"
 	fi
 	if [[ " ${clean_types[*]} " =~ " all " ]] || [[ " ${clean_types[*]} " =~ " kit " ]]; then
+	if [[ " ${clean_types[*]} " =~ " all " ]] || [[ " ${clean_types[*]} " =~ " kit " ]]; then
 		echo -e "INFO: Deleting ${ffmpeg_kit_install}..."
 		remove_path -rf "${ffmpeg_kit_install}"
 	fi
+	if [[ " ${clean_types[*]} " =~ " all " ]] || [[ " ${clean_types[*]} " =~ " bundle " ]]; then
 	if [[ " ${clean_types[*]} " =~ " all " ]] || [[ " ${clean_types[*]} " =~ " bundle " ]]; then
 		echo -e "INFO: Deleting ${ffmpeg_kit_bundle}..."
 		remove_path -rf "${ffmpeg_kit_bundle}"
@@ -4412,6 +4415,7 @@ create_ffmpeg_kit_release() {
     local out_dir=$(basename "$ffmpeg_kit_bundle")
     zip_dir "$ffmpeg_kit_bundle" "$work_dir/releases/$out_dir"
     echo -e "INFO: Done creating release bundle at $work_dir/releases/$out_dir.zip" | tee -a "$LOG_FILE"
+    truthy "$create_release_clean" && clean_builds "$create_release_clean_type"
     truthy "$create_release_clean" && clean_builds "$create_release_clean_type"
     if [[ "$create_release" == "remote" ]]; then
       create_github_release "$work_dir/releases/$out_dir.zip"

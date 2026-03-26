@@ -66,8 +66,7 @@ build_ffmpeg=false
 build_kit=false
 build_bundle=false
 no_clean=true
-REMOTE_RELEASE=false
-build_commands=""
+release_local=false
 
 # Check if value is truthy
 # Returns 0 (success) for truthy values, 1 (failure) for falsey values
@@ -262,13 +261,7 @@ for arg; do
       echo "                Valid builds: ${VALID_BUILDS[*]}"
       echo "  --clean=*     Comma separated (without spaces) list of components to clean (e.g. --clean=ffmpeg,kit,bundle)"
       echo "                Valid components: all OR ${VALID_BUILDS[*]}"
-      echo "  --license=*   Comma separated (without spaces) list of licenses to build"
-      echo "                Valid licenses: ${VALID_LICENSES[*]}"
-      echo "  --remote      Publish release asset to remote repository"
       echo "  --local       Build locally instead of using remote releases"
-      echo "  --small       Build with small flags (reduces binary size)."
-      echo "  --not-small   Build without small flag."
-      echo "  --both        Build both small and full versions (default)"
       echo "  --help        Show this help message"
       echo ""
       echo "State file location: ${STATE_FILE}"
@@ -283,18 +276,6 @@ for arg; do
       #comma separated list of components to clean
       clean_type="${arg#*=}"
       no_clean=false;;
-    --small)
-      SMALL_FLAGS=("small")
-      shift;;
-    --not-small)
-      SMALL_FLAGS=("")
-      shift;;
-    --both)
-      SMALL_FLAGS=("small" "")
-      shift;;
-    --remote)
-      REMOTE_RELEASE=true
-      shift;;
     --local)
       REMOTE_RELEASE=false
       shift;;
@@ -381,45 +362,53 @@ for platform in "${!PLATFORMS[@]}"; do
       ANDROID_PLATFORM_ARCHS+=("android-${arch}")
     fi
     for bundle in "${BUNDLE_ARRAY[@]}"; do
-      for license in "${LICENSE_ARRAY[@]}"; do
-        for small in "${SMALL_FLAGS[@]}"; do
-          if [[ $small == "small" ]]; then
-            build_commands="--small"
-          else
-            build_commands=""
-          fi
-          if [[ $license == "gpl" ]]; then
-            build_commands="${build_commands} --gpl"
-          fi
-          if truthy "${no_clean}"; then
-            clean=""
-          else
-            clean="--clean=${clean_type}"
-          fi
-          remote=""
-          no_bundle=""
-          if [[ "${platform}" == "android" || "${platform}" == "ios" || "${platform}" == "macos" || "${platform}" == "iphonesimulator" ]]; then
-            build_aars=true
-            remote="--release=local"
-            clean=""
-            no_bundle="--no-bundle"
-          else
-            if [[ "${REMOTE_RELEASE}" == true ]]; then
-              remote="--release=local"
-            else
-              remote="--release=remote"
-            fi
-          fi
-          if falsey "${build_bundle}"; then
-            no_bundle="--no-bundle"
-          fi
-          if [[ "${bundle}" == "debug" ]]; then
-            BUILD_STEPS+=("./runner.sh --host=${platform} --arch=${arch} -y ${deps} --base-bundle --build-debug $build_commands $no_bundle $clean $remote --skip -f --ff-disable-programs")
-          else
-            BUILD_STEPS+=("./runner.sh --host=${platform} --arch=${arch} -y ${deps} --${bundle//_/-}-bundle $build_commands $no_bundle $clean $remote --skip -f --ff-disable-programs")
-          fi
-        done
-      done
+      if truthy "${no_clean}"; then
+        clean=""
+      else
+        clean="--clean=${clean_type}"
+      fi
+      remote=""
+      no_bundle=""
+      if [[ "${platform}" == "android" ]]; then
+        build_aars=true
+        remote="--release=local"
+        clean=""
+        no_bundle="--no-bundle"
+      else
+        if [[ "${release_local}" == true ]]; then
+          remote="--release=local"
+        else
+          remote="--release=remote"
+        fi
+      fi
+      if falsey "${build_bundle}"; then
+        no_bundle="--no-bundle"
+      fi
+      if [[ "${bundle}" == "debug" ]]; then
+        truthy "$build_ffmpeg" && BUILD_STEPS+=("./runner.sh --host=${platform} --arch=${arch} -y ${deps} --base-bundle --build-debug --ffmpeg --no-bundle $remote --skip --gpl -f --ff-disable-programs")
+        truthy "$build_ffmpeg" && BUILD_STEPS+=("./runner.sh --host=${platform} --arch=${arch} -y ${deps} --base-bundle --build-debug --ffmpeg --no-bundle $remote --skip -f --ff-disable-programs")
+        truthy "$build_kit" && BUILD_STEPS+=("./runner.sh --host=${platform} --arch=${arch} -y ${deps} --base-bundle --build-debug --kit $clean $remote $no_bundle --skip --gpl -f")
+        truthy "$build_kit" && BUILD_STEPS+=("./runner.sh --host=${platform} --arch=${arch} -y ${deps} --base-bundle --build-debug --kit $clean $remote $no_bundle --skip -f")
+        if falsey "$build_kit" && truthy "$build_bundle"; then
+          BUILD_STEPS+=("./runner.sh --host=${platform} --arch=${arch} -y ${deps} --base-bundle --build-debug --kit $clean $remote --skip --gpl -f")
+          BUILD_STEPS+=("./runner.sh --host=${platform} --arch=${arch} -y ${deps} --base-bundle --build-debug --kit $clean $remote --skip -f")
+        fi
+      else
+        truthy "$build_ffmpeg" && BUILD_STEPS+=("./runner.sh --host=${platform} --arch=${arch} -y ${deps} --${bundle//_/-}-bundle --ffmpeg --no-bundle $remote --skip --gpl -f --ff-disable-programs")
+        truthy "$build_ffmpeg" && BUILD_STEPS+=("./runner.sh --host=${platform} --arch=${arch} -y ${deps} --${bundle//_/-}-bundle --ffmpeg --no-bundle $remote --skip -f --ff-disable-programs")
+        truthy "$build_ffmpeg" && BUILD_STEPS+=("./runner.sh --host=${platform} --arch=${arch} -y ${deps} --${bundle//_/-}-bundle --ffmpeg --no-bundle $remote --skip --gpl -f --small --ff-disable-programs")
+        truthy "$build_ffmpeg" && BUILD_STEPS+=("./runner.sh --host=${platform} --arch=${arch} -y ${deps} --${bundle//_/-}-bundle --ffmpeg --no-bundle $remote --skip -f --small --ff-disable-programs")
+        truthy "$build_kit" && BUILD_STEPS+=("./runner.sh --host=${platform} --arch=${arch} -y ${deps} --${bundle//_/-}-bundle --kit $clean $remote $no_bundle --skip --gpl -f")
+        truthy "$build_kit" && BUILD_STEPS+=("./runner.sh --host=${platform} --arch=${arch} -y ${deps} --${bundle//_/-}-bundle --kit $clean $remote $no_bundle --skip -f")
+        truthy "$build_kit" && BUILD_STEPS+=("./runner.sh --host=${platform} --arch=${arch} -y ${deps} --${bundle//_/-}-bundle --kit $clean $remote $no_bundle --skip --gpl -f --small")
+        truthy "$build_kit" && BUILD_STEPS+=("./runner.sh --host=${platform} --arch=${arch} -y ${deps} --${bundle//_/-}-bundle --kit $clean $remote $no_bundle --skip -f --small")
+        if falsey "$build_kit" && truthy "$build_bundle"; then
+          BUILD_STEPS+=("./runner.sh --host=${platform} --arch=${arch} -y ${deps} --${bundle//_/-}-bundle --kit $clean $remote --skip --gpl -f")
+          BUILD_STEPS+=("./runner.sh --host=${platform} --arch=${arch} -y ${deps} --${bundle//_/-}-bundle --kit $clean $remote --skip -f")
+          BUILD_STEPS+=("./runner.sh --host=${platform} --arch=${arch} -y ${deps} --${bundle//_/-}-bundle --kit $clean $remote --skip --gpl -f --small")
+          BUILD_STEPS+=("./runner.sh --host=${platform} --arch=${arch} -y ${deps} --${bundle//_/-}-bundle --kit $clean $remote --skip -f --small")
+        fi
+      fi
     done
   done
 done
@@ -459,72 +448,16 @@ for step in "${BUILD_STEPS[@]}"; do
   execute_build "${step}" "${current_step}/${total_steps}"
 done
 
-# save end time
-END_TIME=$(date +%s)
-ELAPSED_TIME=$((END_TIME - START_TIME))
-# elapsed time in h:m:s
-ELAPSED_H=$((ELAPSED_TIME / 3600))
-ELAPSED_M=$(((ELAPSED_TIME % 3600) / 60))
-ELAPSED_S=$((ELAPSED_TIME % 60))
-ELAPSED_TIME_HMS="${ELAPSED_H}h:${ELAPSED_M}m:${ELAPSED_S}s"
+echo ""
+echo "========================================"
+echo "All builds completed successfully!"
+echo "========================================"
 
-echo "" | tee -a "${LOG_FILE}"
-echo "========================================" | tee -a "${LOG_FILE}"
-echo "All builds completed successfully!" | tee -a "${LOG_FILE}"
-echo "Elapsed time: ${ELAPSED_TIME_HMS}" | tee -a "${LOG_FILE}"
-echo "========================================" | tee -a "${LOG_FILE}"
+rm -f "${STATE_FILE}"
 
-rm -rf "${STATE_DIR}"
+android_platforms=$(IFS=,; echo "${ANDROID_PLATFORM_ARCHS[*]}")
 
-# Build XCFrameworks for Apple platforms
-declare -a android_platforms
-android_platforms=()
-android_platforms_str=""
-for platform in "${!PLATFORMS[@]}"; do
-  case "${platform}" in
-    "android")
-      android_platforms+=("${platform}")
-      ;;
-    *)
-      ;;
-  esac
-done
-
-if [[ ${#android_platforms[@]} -gt 0 ]]; then
-  android_platforms_str=$(IFS=,; echo "${android_platforms[*]}")
+if truthy "$build_aars" && truthy "$build_bundle"; then
+  echo "Building AARs..."
+  sudo -E bash -c "${WORK_DIR}/scripts/build_aar.sh --platform=${android_platforms} --bundles=${bundles}"
 fi
-
-if [[ ${#android_platforms[@]} -gt 0 ]] && truthy "$build_bundle"; then
-  echo "Building AARs..." | tee -a "${LOG_FILE}"
-  sudo -E bash -c "${WORK_DIR}/scripts/android/build_aar.sh --platform=${android_platforms_str} --bundle=${bundles} --reset"
-fi
-
-# Build XCFrameworks for Apple platforms
-declare -a apple_platforms
-apple_platforms=()
-apple_platforms_str=""
-for platform in "${!PLATFORMS[@]}"; do
-  case "${platform}" in
-    "ios"|"macos")
-      apple_platforms+=("${platform}")
-      ;;
-    *)
-      ;;
-  esac
-done
-
-if [[ ${#apple_platforms[@]} -gt 0 ]]; then
-  apple_platforms_str=$(IFS=,; echo "${apple_platforms[*]}")
-fi
-
-if [[ -n "${apple_platforms_str}" ]] && truthy "$build_bundle"; then
-  echo "========================================" | tee -a "${LOG_FILE}"
-  echo "Building XCFrameworks for Apple platforms" | tee -a "${LOG_FILE}"
-  echo "========================================" | tee -a "${LOG_FILE}"
-  echo "Platforms: ${apple_platforms_str}" | tee -a "${LOG_FILE}"
-  echo "Bundles: ${bundles}" | tee -a "${LOG_FILE}"
-  echo "========================================" | tee -a "${LOG_FILE}"
-  
-  sudo -E bash -c "${WORK_DIR}/scripts/apple/build_xcframework.sh --platform=${apple_platforms_str} --bundle=${bundles} --reset"
-fi
-
