@@ -28,3 +28,5 @@ build/*
 local.properties
 tools/android/build/*
 .reviews/*
+.qwen/*
+.claude/*

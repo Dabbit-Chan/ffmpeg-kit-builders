@@ -7,7 +7,13 @@
 - Builds shared and static native libraries (.so, .dll, .a)
 - Supports native Linux builds and cross-compilation for Windows
 - Includes advanced `FFplay` playback controls (Seek, Pause, Resume, Speed, Volume)
-- Prebuilt binaries are not published
+- Prebuilt binaries published to [GitHub Releases](https://github.com/akashskypatel/ffmpeg-kit-builders/releases)
+- Deploy custom builds for specialized requirements
+
+### 1.1 Limitations
+
+- **Single FFplay Session**: Only one FFplay session can be active at a time. Starting a new FFplay session automatically stops any previous session.
+- **MSVC Not Supported**: Windows builds require MinGW-w64 toolchain. Native MSVC compilation is not supported.
 
 ---
 
@@ -46,7 +52,9 @@ All libraries and headers created by the build process can be found under the `p
 
 ### 3. Usage
 
-FFmpegKit doesn't publish prebuilt desktop libraries. You need to build them manually and import them into your project.
+Prebuilt desktop libraries are published to [GitHub Releases](https://github.com/akashskypatel/ffmpeg-kit-builders/releases). Alternatively, you can build them manually following the [Building](#2-building) section.
+
+**Note:** FFmpeg, FFprobe, and FFplay binaries are built as part of the dependency chain and statically merged into the final FFmpegKit library. The resulting library is a self-contained bundle that includes all selected codecs and libraries.
 
 #### 3.1 C API Wrapper (Recommended for FFI)
 
