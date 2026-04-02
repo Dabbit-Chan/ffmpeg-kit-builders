@@ -116,7 +116,10 @@ file(COPY "${FFMPEG_SRC_DIR}/compat/va_copy.h" DESTINATION "${CMAKE_CURRENT_SOUR
 if(WIN32)
     file(COPY "${FFMPEG_SRC_DIR}/compat/w32dlfcn.h" DESTINATION "${CMAKE_CURRENT_SOURCE_DIR}/src/compat/")
 endif()
-
+# copy android compat files to src
+if(ANDROID)
+    file(COPY "${FFMPEG_SRC_DIR}/compat/android" DESTINATION "${CMAKE_CURRENT_SOURCE_DIR}/src/compat")
+endif()
 # =============================================================================
 # 3. PATCH APPLICATION: Automated Source Transformation
 # =============================================================================
@@ -551,8 +554,8 @@ elseif(CMAKE_SYSTEM_NAME MATCHES "Linux")
         "-Wl,--warn-common"
         "-Wl,--no-warn-mismatch"
     )
-
-    target_link_libraries(ffmpegkit PRIVATE alsa)
+    pkg_check_modules(ALSA REQUIRED alsa)
+    target_include_directories(ffmpegkit PRIVATE ${ALSA_INCLUDE_DIRS})
 
     # Allow libffmpegkit.so to find sibling libs (e.g. libpulsecommon) in the
     # same directory it is installed into (Flutter bundle's lib/ folder)
@@ -660,7 +663,15 @@ if(BUILD_SHARED_LIBS)
                 "-lbcrypt"
                 "-lws2_32"
             )
-        elseif(CMAKE_SYSTEM_NAME MATCHES "Linux" OR ANDROID)
+        elseif(CMAKE_SYSTEM_NAME MATCHES "Linux")
+            target_link_libraries(ffmpegkit PRIVATE 
+                "-Wl,--whole-archive"
+                ${FFMPEG_STATIC_LIBS}
+                ${ALSA_LIBRARIES}
+                "-Wl,--no-whole-archive"
+                PkgConfig::FFMPEG
+            )
+        elseif(ANDROID)
             target_link_libraries(ffmpegkit PRIVATE 
                 "-Wl,--whole-archive"
                 ${FFMPEG_STATIC_LIBS}

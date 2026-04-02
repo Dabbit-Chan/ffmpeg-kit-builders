@@ -1,5 +1,5 @@
 diff --git a/src/cmdutils.c b/src/cmdutils.c
-index dc093b0..40645c1 100755
+index 2f9bae9..75e62f4 100755
 --- a/src/cmdutils.c
 +++ b/src/cmdutils.c
 @@ -183,6 +183,10 @@ static int win32_argc = 0;
