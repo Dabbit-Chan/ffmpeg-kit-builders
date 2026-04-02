@@ -7,3 +7,7 @@ leak:libGL
 leak:libglapi
 leak:libGLX_mesa
 leak:<unknown module>
+# TLS thread cleanup crashes
+interceptor_via_lib:libpthread.so*
+interceptor_via_func:__nptl_deallocate_tsd*
+interceptor_via_func:start_thread*

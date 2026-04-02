@@ -39,9 +39,9 @@ configure_ffmpeg_kit() {
 	export CFLAGS="${local_cflags}"
 	export CXXFLAGS="${local_cxxfalgs}"
 	UNWIND_STATIC=$($CXX -print-file-name=libunwind.a)
-    BUILTINS_STATIC=$($CXX -print-file-name=libclang_rt.builtins-$clang_arch-android.a)
+    BUILTINS_STATIC=$($CXX -print-file-name=libclang_rt.builtins-"${clang_arch}"-android.a)
     export LDFLAGS="${LDFLAGS} -Wl,--allow-multiple-definition -Wl,--exclude-libs,libunwind.a $UNWIND_STATIC $BUILTINS_STATIC"
-    export LDFLAGS=$(echo $LDFLAGS | sed 's/-Wl,--fatal-warnings//g')
+    export LDFLAGS=$(echo "${LDFLAGS}" | sed 's/-Wl,--fatal-warnings//g')
 	export LDFLAGS="${LDFLAGS//-static /} -static-libstdc++ -L${ffmpeg_install_prefix}/lib -L${dependency_install_prefix}/lib"
 
 	local cmake_params="-DCMAKE_SYSTEM_NAME=Android \
@@ -205,7 +205,8 @@ fix_pkgconfig_flags() {
 	find "$install_pkgconfig_dir" -name "*.pc" -exec sed -i -E \
 	-e 's/(^|[[:space:]])-lrt([[:space:]]|$)/ /g' \
 	-e 's/(^|[[:space:]])-lpthread([[:space:]]|$)/ -pthread /g' \
-	-e 's/(^|[[:space:]])-l([[:space:]]|$)/ /g' \{} +
+	-e 's/(^|[[:space:]])-l([[:space:]]|$)/ /g' "{}" + \
+	2>>"$LOG_FILE"
 	find "$dependency_install_prefix/lib" -name "*.la*" -delete
 }
 

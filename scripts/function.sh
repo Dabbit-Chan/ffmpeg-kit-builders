@@ -345,8 +345,8 @@ prepare_inline_sed() {
 }
 
 setup_build_environment() {
-    pick_host_platform $host_platform
-    pick_host_arch $host_arch
+    pick_host_platform "$host_platform"
+    pick_host_arch "$host_arch"
     calculate_bits_target
     determine_distro
     export host_name="$host_platform-$host_arch"
@@ -447,8 +447,8 @@ setup_windows_environment() {
     export PREFIX="$dependency_install_prefix"
     export build_cross_compile=y
     
-    export stdcpp_path="$(realpath $("$CXX" -print-file-name=libstdc++.a))"
-    export stdgcc_path="$(realpath $("$CXX" -print-file-name=libgcc.a))"
+    export stdcpp_path="$(realpath "$("$CXX" -print-file-name=libstdc++.a)")"
+    export stdgcc_path="$(realpath "$("$CXX" -print-file-name=libgcc.a)")"
 
     export make_prefix_options="--cc=${cross_prefix}gcc \
 --ar=${cross_prefix}ar \
@@ -541,7 +541,8 @@ setup_android_environment() {
         if [[ -d "$ANDROID_HOME/ndk-bundle" ]]; then
             export ANDROID_NDK_ROOT="$ANDROID_HOME/ndk-bundle"
         else
-            export latest_ndk=$(ls -v "$ANDROID_HOME/ndk" 2>/dev/null | tail -n 1)
+            # shellcheck disable=2012
+            export latest_ndk="$(ls -v "$ANDROID_HOME/ndk" 2>/dev/null | tail -n 1)"
             if [[ -n "$latest_ndk" ]]; then
                 export ANDROID_NDK_ROOT="$ANDROID_HOME/ndk/$latest_ndk"
             fi
@@ -1194,8 +1195,8 @@ autoreconf_library() {
 }
 
 clean_ffmpeg_builds() {
-	pick_host_platform $host_platform
-	pick_host_arch $host_arch
+	pick_host_platform "$host_platform"
+	pick_host_arch "$host_arch"
 	pick_clean_type
   if [[ -z $host_name ]]; then
 		exit_message 1 "clean_ffmpeg_builds: no build flavor provided"
@@ -1210,7 +1211,7 @@ clean_builds() {
   local build_flavor=${2:-host_name}
   local clean_types=()
   IFS=',' read -ra clean_types <<< "$clean_type"
-  echo -e "WARNING: Executing clean for ${clean_types[@]} and $host_name"
+  echo -e "WARNING: Executing clean for ${clean_types[*]} and $host_name"
 	if [[ " ${clean_types[*]} " =~ " all " ]] || [[ " ${clean_types[*]} " =~ " ffmpeg " ]]; then
 		echo -e "INFO: Deleting ${ffmpeg_install_prefix}..."
 		remove_path -rf "${ffmpeg_install_prefix}"
@@ -3090,7 +3091,7 @@ generate_pkg_config() {
     # Generate .pc File Content
     # ---------------------------------------------------------
     # de-duplicate libs_list
-    libs_list=($(echo "${libs_list[*]}" | tr " " "\n" | sort -u))
+    libs_list=("$(echo "${libs_list[*]}" | tr " " "\n" | sort -u)")
     cat > "$OUTPUT_FILE" <<EOF
 prefix=${INSTALL_PREFIX}
 exec_prefix=\${prefix}
@@ -3251,10 +3252,8 @@ download_ffmpeg() {
 	if [[ -z $desired_version ]]; then
 		desired_version="master"
 	fi
-  if ! is_valid_git_dir "$ffmpeg_source_dir"; then
-	  do_git_checkout "$ffmpeg_git_checkout" "$output_dir" "$desired_version" || exit_message 1 "download_ffmpeg: could not git $ffmpeg_git_checkout $output_dir $desired_version"
-    ffmpeg_source_dir=$output_dir
-	fi
+  do_git_checkout "$ffmpeg_git_checkout" "$output_dir" "$desired_version" || exit_message 1 "download_ffmpeg: could not git $ffmpeg_git_checkout $output_dir $desired_version"
+  ffmpeg_source_dir=$output_dir
   touch "$ffmpeg_source_dir/no.autoreconf"
 }
 
@@ -3434,7 +3433,7 @@ configure_ffmpeg() {
     export PKG_CONFIG_SYSROOT_DIR="/"
     export PKG_CONFIG_LIBDIR="$install_pkgconfig_dir:$ffmpeg_install_prefix/lib/pkgconfig"
     UNWIND_STATIC=$($CXX -print-file-name=libunwind.a)
-    BUILTINS_STATIC=$($CXX -print-file-name=libclang_rt.builtins-$clang_arch-android.a)
+    BUILTINS_STATIC=$($CXX -print-file-name=libclang_rt.builtins-"${clang_arch}"-android.a)
     export AS="$CC"
     export LD="$CXX"
     export LDFLAGS="$LDFLAGS -L$toolchain_bin_path/lib -Wl,--allow-multiple-definition -static-libstdc++ -Wl,--start-group $UNWIND_STATIC $BUILTINS_STATIC -latomic -landroid -lm -Wl,--end-group"
@@ -3447,6 +3446,7 @@ configure_ffmpeg() {
     init_options+=" --enable-pthreads"
     init_options+=" --extra-ldflags='$LDFLAGS'"
     init_options+=" --extra-ldexeflags='$LDFLAGS'"
+    init_options+=" --disable-programs"
     if [[ "$host_arch" == "armv7a" ]]; then
       # these do not support 32bit architecture
       disable_library "libsvtav1"
@@ -3523,8 +3523,8 @@ configure_ffmpeg() {
   # ----------------------------- android features ------------------------------     
   #------------------------------------------------------------------------------      
   if isandroid; then
-  truthy "$disable_jni" && config_options+=" --disable-jni"                           # enable JNI support [no]
-  truthy "$disable_mediacodec" && config_options+=" --disable-mediacodec"             # enable Android MediaCodec support [no]
+  truthy "$enable_jni" && config_options+=" --enable-jni"                           # enable JNI support [no]
+  truthy "$enable_mediacodec" && config_options+=" --enable-mediacodec"             # enable Android MediaCodec support [no]
   fi
   #------------------------------------------------------------------------------    
   # --------------------------- OpenHarmony features ----------------------------     
@@ -3536,29 +3536,29 @@ configure_ffmpeg() {
   # --------------------------- linux/unix features -----------------------------     
   #------------------------------------------------------------------------------    
   if islinux; then
-  truthy "$disable_alsa" && config_options+=" --disable-alsa"                         # disable ALSA support [autodetect]
+  truthy "$enable_alsa" && config_options+=" --enable-alsa"                         # enable ALSA support [autodetect]
   truthy "$enable_libdc1394" && { config_options+=" --enable-libdc1394" \
   && add_extra_libs "-lusb-1.0"; }                                                       # enable IIDC-1394 grabbing using libdc1394 and libraw1394 [no]
-  truthy "$disable_libdrm" && config_options+=" --disable-libdrm"                     # disable DRM code (Linux) [autodetect]
+  truthy "$enable_libdrm" && config_options+=" --enable-libdrm"                     # enable DRM code (Linux) [autodetect]
   truthy "$enable_libiec61883" && { config_options+=" --enable-libiec61883" \
   && add_extra_libs "-liec61883 -lavc1394 -lrom1394 -lraw1394"; }                        # enable iec61883 via libiec61883 [no]
-  truthy "$disable_libv4l2" && config_options+=" --disable-libv4l2"                   # enable libv4l2/v4l-utils [no]
-  truthy "$disable_libxcb_shape" && config_options+=" --disable-libxcb-shape"         # enable X11 grabbing shape rendering [autodetect]
-  truthy "$disable_libxcb_shm" && config_options+=" --disable-libxcb-shm"             # enable X11 grabbing shm communication [autodetect]
-  truthy "$disable_libxcb_xfixes" && config_options+=" --disable-libxcb-xfixes"       # enable X11 grabbing mouse rendering [autodetect]
-  truthy "$disable_libxcb" && config_options+=" --disable-libxcb"                     # enable X11 grabbing using XCB [autodetect]
+  truthy "$enable_libv4l2" && config_options+=" --enable-libv4l2"                   # enable libv4l2/v4l-utils [no]
+  truthy "$enable_libxcb_shape" && config_options+=" --enable-libxcb-shape"         # enable X11 grabbing shape rendering [autodetect]
+  truthy "$enable_libxcb_shm" && config_options+=" --enable-libxcb-shm"             # enable X11 grabbing shm communication [autodetect]
+  truthy "$enable_libxcb_xfixes" && config_options+=" --enable-libxcb-xfixes"       # enable X11 grabbing mouse rendering [autodetect]
+  truthy "$enable_libxcb" && config_options+=" --enable-libxcb"                     # enable X11 grabbing using XCB [autodetect]
   truthy "$enable_rkmpp" && config_options+=" --enable-rkmpp --enable-libdrm"         # enable Rockchip Media Process Platform code [no]
-  truthy "$disable_v4l2_m2m" && config_options+=" --disable-v4l2-m2m"                 # disable V4L2 mem2mem code [autodetect]
-  truthy "$disable_vaapi" && config_options+=" --disable-vaapi"                       # disable Video Acceleration API (mainly Unix/Intel) code [autodetect]
-  truthy "$disable_xlib" && config_options+=" --disable-xlib"                         # disable xlib [autodetect]
+  truthy "$enable_v4l2_m2m" && config_options+=" --enable-v4l2-m2m"                 # enable V4L2 mem2mem code [autodetect]
+  truthy "$enable_vaapi" && config_options+=" --enable-vaapi"                       # enable Video Acceleration API (mainly Unix/Intel) code [autodetect]
+  truthy "$enable_xlib" && config_options+=" --enable-xlib"                         # enable xlib [autodetect]
                                                                                       # XXX --disable-sndio MinGW/Windows not supported 
-  truthy "$disable_sndio" && config_options+=" --disable-sndio"                       # disable sndio support [autodetect]
+  truthy "$enable_sndio" && config_options+=" --enable-sndio"                       # enable sndio support [autodetect]
                                                                                       # XXX --enable-libtorch ABI mismatch on windows
   truthy "$enable_libtorch" && config_options+=" --enable-libtorch \
   --extra-cflags=\"-I${dependency_install_prefix}/include/torch/csrc/api/include\" \
   --extra-cxxflags=\"-I${dependency_install_prefix}/include/torch/csrc/api/include\""
                                                                                       # enable Torch as one DNN backend [no]
-  truthy "$disable_ladspa" && config_options+=" --disable-ladspa"                     # enable LADSPA audio filtering [no]
+  truthy "$enable_ladspa" && config_options+=" --enable-ladspa"                     # enable LADSPA audio filtering [no]
   truthy "$enable_libxvid" && config_options+=" --enable-libxvid"                     # enable Xvid encoding via xvidcore, native MPEG-4/Xvid encoder exists [no]
   truthy "$enable_libpulse" && { config_options+=" --enable-libpulse" \
   && add_extra_libs "-lxcb -lXau -lX11 -liconv -lXdmcp"; }                            # enable Pulseaudio input via libpulse [no]
@@ -3569,8 +3569,8 @@ configure_ffmpeg() {
   #------------------------------------------------------------------------------
   # ----------------------------- hardware features ----------------------------- 
   #------------------------------------------------------------------------------
-  truthy "$disable_amf" && config_options+=" --disable-amf"                           # disable AMF video encoding code [autodetect]
-  truthy "$disable_vulkan" && config_options+=" --disable-vulkan"                     # disable Vulkan code [autodetect]
+  truthy "$enable_amf" && config_options+=" --enable-amf"                             # enable AMF video encoding code [autodetect]
+  truthy "$enable_vulkan" && config_options+=" --enable-vulkan"                       # enable Vulkan code [autodetect]
   truthy "$enable_libmfx" && config_options+=" --enable-libmfx"                       # enable Intel MediaSDK (AKA Quick Sync Video) code via libmfx [no]
   truthy "$enable_libvpl" && config_options+=" --enable-libvpl"                       # enable Intel oneVPL code via libvpl if libmfx is not used [no]
   truthy "$enable_vulkan_static" && config_options+=" --enable-vulkan-static"         # enable statically link to libvulkan [no]
@@ -3606,11 +3606,11 @@ configure_ffmpeg() {
   --extra-ldflags=\" -L/usr/lib64 -lsmbclient \""                                       # enable Samba protocol via libsmbclient [no]
   truthy "$enable_libsmbclient" && add_extra_libs "-lsmbclient"
   fi
-  truthy "$disable_bzlib" && config_options+=" --disable-bzlib"                       # disable bzlib [autodetect]
-  truthy "$disable_iconv" && config_options+=" --disable-iconv"                       # disable iconv [autodetect]
-  truthy "$disable_lzma" && config_options+=" --disable-lzma"                         # disable lzma [autodetect]
-  truthy "$disable_sdl2" && config_options+=" --disable-sdl2"                         # disable sdl2 [autodetect]
-  truthy "$disable_zlib" && config_options+=" --disable-zlib"                         # disable zlib [autodetect]
+  truthy "$enable_bzlib" && config_options+=" --enable-bzlib"                       # enable bzlib [autodetect]
+  truthy "$enable_iconv" && config_options+=" --enable-iconv"                       # enable iconv [autodetect]
+  truthy "$enable_lzma" && config_options+=" --enable-lzma"                         # enable lzma [autodetect]
+  truthy "$enable_sdl2" && config_options+=" --enable-sdl2"                         # enable sdl2 [autodetect]
+  truthy "$enable_zlib" && config_options+=" --enable-zlib"                         # enable zlib [autodetect]
   truthy "$enable_libvo_amrwbenc" && config_options+=" --enable-libvo-amrwbenc"       # enable AMR-WB encoding via libvo-amrwbenc [no]
   truthy "$enable_libopencore_amrnb" && config_options+=" --enable-libopencore-amrnb" # enable AMR-NB de/encoding via libopencore-amrnb [no]
   truthy "$enable_libopencore_amrwb" && config_options+=" --enable-libopencore-amrwb" # enable AMR-WB decoding via libopencore-amrwb [no]
@@ -3949,7 +3949,7 @@ install_ffmpeg_kit() {
   elif isandroid; then
     CLANG_RT_DIR=$($CC -print-libgcc-file-name | xargs dirname)
     export LDFLAGS="${LDFLAGS} -Wl,--allow-multiple-definition -L$CLANG_RT_DIR -lclang_rt.builtins-$host_arch-android -Wl,--exclude-libs,libunwind.a"
-    export LDFLAGS=$(echo $LDFLAGS | sed 's/-Wl,--fatal-warnings//g')
+    export LDFLAGS=$(echo "${LDFLAGS}" | sed 's/-Wl,--fatal-warnings//g')
   fi
 	
   change_dir "${ffmpeg_kit_src_dir}/build"
@@ -4853,7 +4853,7 @@ unversion_library() {
     # check if excluded
     excluded=false
     for exclude_pattern in "${excludes[@]}"; do
-        if [[ "$filename" == $exclude_pattern ]]; then
+        if [[ "$filename" == "$exclude_pattern" ]]; then
             excluded=true
             break
         fi
@@ -6047,7 +6047,7 @@ get_version() {
 increment_version_patch() {
   local version_file="$BASEDIR/version"
   local version=$(cat "$version_file")
-  local version_array=(${version//./ })
+  local version_array=("${version//./ }")
   local version_major=${version_array[0]}
   local version_minor=${version_array[1]}
   local version_patch=${version_array[2]}
@@ -6058,7 +6058,7 @@ increment_version_patch() {
 increment_version_minor() {
   local version_file="$BASEDIR/version"
   local version=$(cat "$version_file")
-  local version_array=(${version//./ })
+  local version_array=("${version//./ }")
   local version_major=${version_array[0]}
   local version_minor=${version_array[1]}
   local version_patch=${version_array[2]}
@@ -6070,7 +6070,7 @@ increment_version_minor() {
 increment_version_major() {
   local version_file="$BASEDIR/version"
   local version=$(cat "$version_file")
-  local version_array=(${version//./ })
+  local version_array=("${version//./ }")
   local version_major=${version_array[0]}
   local version_minor=${version_array[1]}
   local version_patch=${version_array[2]}
@@ -6528,7 +6528,7 @@ create_android_aar() {
   fi
   USER_HOME="/home/vscode"
   
-  change_dir ${BASEDIR}
+  change_dir "${BASEDIR}"
 
   chmod +x "${BASEDIR}/gradlew"
 

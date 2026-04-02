@@ -1964,11 +1964,16 @@ $extra_args" "$src_dir/$lib"
 build_vulkan_static() {
   local lib="Vulkan-Shim-Loader"
   local repo="https://github.com/BtbN/Vulkan-Shim-Loader"
-	change_dir "$src_dir"
-	do_git_checkout "$repo" "$src_dir/$lib"
-	change_dir "$src_dir/$lib"
-	# run_valid_function "build_vulkan" "-DCMAKE_BUILD_TYPE=Release -DVULKAN_SHIM_IMPERSONATE=ON"
-	change_dir "$src_dir"
+  change_dir "$src_dir"
+  do_git_checkout "$repo" "$src_dir/$lib"
+  change_dir "$src_dir/$lib/build" 1
+  do_cmake_from_build_dir "$src_dir/$lib" "-DCMAKE_BUILD_TYPE=Release -DVULKAN_SHIM_IMPERSONATE=ON"
+  disable_nonessential "$src_dir/$lib"
+  do_make_and_make_install
+  # libvulkan-1.a is the Windows Vulkan name; FFmpeg configure also checks -lvulkan
+  [[ -f "${dependency_install_prefix}/lib/libvulkan-1.a" ]] && \
+    ln -sf "${dependency_install_prefix}/lib/libvulkan-1.a" "${dependency_install_prefix}/lib/libvulkan.a"
+  change_dir "$src_dir"
 }
 # build_libplacebo        # config_options+= --enable-libplacebo          # enable libplacebo library [no]
 build_libplacebo() {

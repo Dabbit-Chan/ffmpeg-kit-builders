@@ -208,7 +208,7 @@ fix_pkgconfig_flags() {
 
 	echo "INFO: Scanning .pc files in $PKG_CONFIG_LIBDIR..."
 
-	find "${dependency_install_prefix}/lib" -name "*.dll.a" | while read dll_a; do
+	find "${dependency_install_prefix}/lib" -name "*.dll.a" | while read -r dll_a; do
 		static_a="${dll_a%.dll.a}.a"
 		if [ -f "$static_a" ]; then
 			echo "Removing $dll_a (found static alternative: $static_a)" > >(redirect_output)
@@ -223,7 +223,7 @@ fix_pkgconfig_flags() {
 			sed -i "s|-lgcc||g" "$pc_file"
 			sed -i 's|\b-lwinpthread\b|-lpthreadwin32|g' "$pc_file"
 			sed -i 's|\b-lpthread\b|-lpthreadwin32|g' "$pc_file"
-			sed -i "s|-latomic|"$(realpath $("$CXX" -print-file-name=libatomic.a))"|g" "$pc_file"
+			sed -i "s|-latomic|$(realpath "$("$CXX" -print-file-name=libatomic.a)")|g" "$pc_file"
 			sed -i "s|/usr/local/mingw-w64/[^ ]*libstdc++[^ ]*|${stdcpp_path}|g" "$pc_file"
 			sed -i 's|/usr/local/mingw-w64/[^ ]*libstdc++\.a||g' "$pc_file"
 			sed -i "s|/usr/local/mingw-w64/[^ ]*libgcc[^ ]*|${stdgcc_path}|g" "$pc_file"

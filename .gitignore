@@ -30,3 +30,6 @@ tools/android/build/*
 .reviews/*
 .qwen/*
 .claude/*
+node_modules/*
+package.json
+package-lock.json

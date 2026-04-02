@@ -42,7 +42,6 @@ bundles=""
 reset_state=false
 VALID_TYPES=("full" "video_hw" "video" "audio" "base" "debug")
 VALID_PLATFORMS=("linux" "windows" "android")
-VALID_ARCHS=("x86_64" "aarch64" "armv7a")
 VALID_PLATFORM_ARCHS=("linux-x86_64" "windows-x86_64" "android-aarch64" "android-armv7a" "android-x86_64")
 VALID_BUILDS=("ffmpeg" "kit" "bundle")
 ANDROID_PLATFORM_ARCHS=()
