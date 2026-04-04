@@ -21,8 +21,10 @@
 #include "ffmpeg_kit_assert_override.h"
 #include <SDL.h>
 
-const char program_name[] = "ffplay";
-const int program_birth_year = 2003;
+FFMPEG_THREAD_LOCAL const char program_name[] = "ffplay";
+FFMPEG_THREAD_LOCAL const int program_birth_year = 2003;
+extern void (*show_help_default_func)(const char *opt, const char *arg);
+extern void ffplay_show_help_default(const char *opt, const char *arg);
 
 // Global state for audio device management
 static char *requested_audio_device = NULL;
@@ -313,6 +315,7 @@ FFplayContext* ffplay_init(const char* args_string, const FFplayCallbacks *cb) {
     avformat_network_init();
 
     ffplay_tls_init_options();
+    show_help_default_func = ffplay_show_help_default;
 
     ctx->argc = split_args(args_string, &ctx->argv);
     if (ctx->argc < 0) {

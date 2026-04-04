@@ -1,5 +1,5 @@
 diff --git a/src/ffplay.c b/src/ffplay.c
-index 8d51919..6ff02b1 100755
+index 8d51919..a7a3600 100755
 --- a/src/ffplay.c
 +++ b/src/ffplay.c
 @@ -47,11 +47,13 @@
@@ -576,8 +576,12 @@ index 8d51919..6ff02b1 100755
      av_free(is->filename);
      if (is->vis_texture)
          SDL_DestroyTexture(is->vis_texture);
-@@ -1367,42 +1491,43 @@ static void do_exit(VideoState *is)
-         printf("\n");
+@@ -1364,45 +1488,46 @@ static void do_exit(VideoState *is)
+     av_freep(&input_filename);
+     avformat_network_deinit();
+     if (show_status)
+-        printf("\n");
++        av_log(NULL, AV_LOG_INFO, "\n");
      SDL_Quit();
      av_log(NULL, AV_LOG_QUIET, "%s", "");
 -    exit(0);
@@ -1350,16 +1354,28 @@ index 8d51919..6ff02b1 100755
  static void show_usage(void)
  {
      av_log(NULL, AV_LOG_INFO, "Simple media player\n");
-@@ -3803,7 +3997,7 @@ static void show_usage(void)
+@@ -3803,17 +3997,16 @@ static void show_usage(void)
      av_log(NULL, AV_LOG_INFO, "\n");
  }
  
 -void show_help_default(const char *opt, const char *arg)
 +void ffplay_show_help_default(const char *opt, const char *arg)
  {
-     av_log_set_callback(log_callback_help);
+-    av_log_set_callback(log_callback_help);
      show_usage();
-@@ -3835,11 +4029,14 @@ void show_help_default(const char *opt, const char *arg)
+     show_help_options(options, "Main options:", 0, OPT_EXPERT);
+     show_help_options(options, "Advanced options:", OPT_EXPERT, 0);
+-    printf("\n");
++    av_log(NULL, AV_LOG_INFO, "\n");
+     show_help_children(avcodec_get_class(), AV_OPT_FLAG_DECODING_PARAM);
+     show_help_children(avformat_get_class(), AV_OPT_FLAG_DECODING_PARAM);
+     show_help_children(avfilter_get_class(), AV_OPT_FLAG_FILTERING_PARAM);
+-    printf("\nWhile playing:\n"
++    av_log(NULL, AV_LOG_INFO, "\nWhile playing:\n"
+            "q, ESC              quit\n"
+            "f                   toggle full screen\n"
+            "p, SPC              pause\n"
+@@ -3835,11 +4028,14 @@ void show_help_default(const char *opt, const char *arg)
  }
  
  /* Called from the main */
@@ -1375,7 +1391,7 @@ index 8d51919..6ff02b1 100755
      init_dynload();
  
      av_log_set_flags(AV_LOG_SKIP_REPEATED);
-@@ -3858,14 +4055,14 @@ int main(int argc, char **argv)
+@@ -3858,14 +4054,14 @@ int main(int argc, char **argv)
  
      ret = parse_options(NULL, argc, argv, options, opt_input_file);
      if (ret < 0)
@@ -1392,7 +1408,7 @@ index 8d51919..6ff02b1 100755
      }
  
      if (display_disable) {
-@@ -3885,7 +4082,7 @@ int main(int argc, char **argv)
+@@ -3885,7 +4081,7 @@ int main(int argc, char **argv)
      if (SDL_Init (flags)) {
          av_log(NULL, AV_LOG_FATAL, "Could not initialize SDL - %s\n", SDL_GetError());
          av_log(NULL, AV_LOG_FATAL, "(Did you set the DISPLAY variable?)\n");
@@ -1401,7 +1417,7 @@ index 8d51919..6ff02b1 100755
      }
  
      SDL_EventState(SDL_SYSWMEVENT, SDL_IGNORE);
-@@ -3927,6 +4124,7 @@ int main(int argc, char **argv)
+@@ -3927,6 +4123,7 @@ int main(int argc, char **argv)
          if (!window) {
              av_log(NULL, AV_LOG_FATAL, "Failed to create window: %s", SDL_GetError());
              do_exit(NULL);
@@ -1409,7 +1425,7 @@ index 8d51919..6ff02b1 100755
          }
  
          if (vk_renderer) {
-@@ -3937,6 +4135,7 @@ int main(int argc, char **argv)
+@@ -3937,6 +4134,7 @@ int main(int argc, char **argv)
                  if (ret < 0) {
                      av_log(NULL, AV_LOG_FATAL, "Failed to parse, %s\n", vulkan_params);
                      do_exit(NULL);
@@ -1417,7 +1433,7 @@ index 8d51919..6ff02b1 100755
                  }
              }
              ret = vk_renderer_create(vk_renderer, window, dict);
-@@ -3944,6 +4143,7 @@ int main(int argc, char **argv)
+@@ -3944,6 +4142,7 @@ int main(int argc, char **argv)
              if (ret < 0) {
                  av_log(NULL, AV_LOG_FATAL, "Failed to create vulkan renderer, %s\n", av_err2str(ret));
                  do_exit(NULL);
@@ -1425,7 +1441,7 @@ index 8d51919..6ff02b1 100755
              }
          } else {
              renderer = SDL_CreateRenderer(window, -1, SDL_RENDERER_ACCELERATED | SDL_RENDERER_PRESENTVSYNC);
-@@ -3958,6 +4158,7 @@ int main(int argc, char **argv)
+@@ -3958,6 +4157,7 @@ int main(int argc, char **argv)
              if (!renderer || !renderer_info.num_texture_formats) {
                  av_log(NULL, AV_LOG_FATAL, "Failed to create window or renderer: %s", SDL_GetError());
                  do_exit(NULL);
@@ -1433,7 +1449,7 @@ index 8d51919..6ff02b1 100755
              }
          }
      }
-@@ -3966,11 +4167,119 @@ int main(int argc, char **argv)
+@@ -3966,11 +4166,119 @@ int main(int argc, char **argv)
      if (!is) {
          av_log(NULL, AV_LOG_FATAL, "Failed to initialize VideoState!\n");
          do_exit(NULL);

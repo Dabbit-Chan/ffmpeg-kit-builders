@@ -953,10 +953,37 @@ int executeFFplay(const long sessionId,
   // 1. Construct command string
   std::string fullCommand = buildCommandString("ffplay", arguments);
 
-  // 2. Initialize Wrapper Context
+  // 2. Configure log level and callbacks
+  av_log_set_level(configuredLogLevel);
+  av_log_set_callback(ffmpegkit_log_callback_function);
+  set_report_callback(ffmpegkit_statistics_callback_function);
+
+  bool helpRequested = false;
+  for (const auto& arg : *arguments) {
+    if (arg == "-h" || arg == "--help" || arg == "-help" || arg == "?") {
+      helpRequested = true;
+      tlsSession->debugLog("[EXECUTE FFPLAY] sessionId: %ld ffplay help requested", sessionId);
+      break;
+    }
+  }
+
+  // 3. Initialize Wrapper Context
   FFplayContext *ctx = ffplay_init(fullCommand.c_str(), nullptr);
   if (!ctx) {
-    if (tlsSession != nullptr) {
+    if (helpRequested) {
+      // Help was displayed successfully - wait for logs and return success
+      if (tlsSession != nullptr) {
+        static_cast<ffmpegkit::FFplaySession *>(tlsSession.get())
+            ->waitForAsynchronousMessagesInTransmit(
+                ffmpegkit::AbstractSession::
+                    DefaultTimeoutForAsynchronousMessagesInTransmit);
+      }
+      removeSession(sessionId);
+      tlsSession = nullptr;
+      globalSessionId = 0;
+      tlsSession->debugLog("[EXECUTE FFPLAY] sessionId: %ld ffplay help displayed, returning success", sessionId);
+      return 0; // Success - help was displayed
+    } else if (tlsSession != nullptr) {
       tlsSession->debugLog("[EXECUTE FFPLAY] sessionId: %ld ffplay_init FAILED", sessionId);
     }
     removeSession(sessionId);
@@ -964,11 +991,6 @@ int executeFFplay(const long sessionId,
     globalSessionId = 0;
     return -1;
   }
-
-  // 3. Configure log level and callbacks
-  av_log_set_level(configuredLogLevel);
-  av_log_set_callback(ffmpegkit_log_callback_function);
-  set_report_callback(ffmpegkit_statistics_callback_function);
 
   if (tlsSession != nullptr) {
     tlsSession->debugLog("[EXECUTE FFPLAY] sessionId: %ld ffplay_init SUCCESS", sessionId);

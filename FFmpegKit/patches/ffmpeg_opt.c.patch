@@ -1,5 +1,5 @@
 diff --git a/src/ffmpeg_opt.c b/src/ffmpeg_opt.c
-index a0664e2..2bc757f 100755
+index a0664e2..863c6e9 100755
 --- a/src/ffmpeg_opt.c
 +++ b/src/ffmpeg_opt.c
 @@ -21,6 +21,7 @@
@@ -19,6 +19,50 @@ index a0664e2..2bc757f 100755
  HWDevice *filter_hw_device;
  
  char *vstats_filename;
+@@ -157,10 +160,10 @@ static int show_hwaccels(void *optctx, const char *opt, const char *arg)
+ {
+     enum AVHWDeviceType type = AV_HWDEVICE_TYPE_NONE;
+ 
+-    printf("Hardware acceleration methods:\n");
++    av_log(NULL, AV_LOG_INFO, "Hardware acceleration methods:");
+     while ((type = av_hwdevice_iterate_types(type)) !=
+            AV_HWDEVICE_TYPE_NONE)
+-        printf("%s\n", av_hwdevice_get_type_name(type));
++        av_log(NULL, AV_LOG_INFO, "%s", av_hwdevice_get_type_name(type));
+     printf("\n");
+     return 0;
+ }
+@@ -753,10 +756,10 @@ static int opt_init_hw_device(void *optctx, const char *opt, const char *arg)
+ {
+     if (!strcmp(arg, "list")) {
+         enum AVHWDeviceType type = AV_HWDEVICE_TYPE_NONE;
+-        printf("Supported hardware device types:\n");
++        av_log(NULL, AV_LOG_INFO, "Supported hardware device types:");
+         while ((type = av_hwdevice_iterate_types(type)) !=
+                AV_HWDEVICE_TYPE_NONE)
+-            printf("%s\n", av_hwdevice_get_type_name(type));
++            av_log(NULL, AV_LOG_INFO, "%s", av_hwdevice_get_type_name(type));
+         printf("\n");
+         return AVERROR_EXIT;
+     } else {
+@@ -1304,7 +1307,7 @@ static int opt_filter_complex_script(void *optctx, const char *opt, const char *
+ }
+ #endif
+ 
+-void show_help_default(const char *opt, const char *arg)
++void ffmpeg_show_help_default(const char *opt, const char *arg)
+ {
+     int show_advanced = 0, show_avoptions = 0;
+ 
+@@ -1319,7 +1322,7 @@ void show_help_default(const char *opt, const char *arg)
+ 
+     show_usage();
+ 
+-    printf("Getting help:\n"
++    av_log(NULL, AV_LOG_INFO, "Getting help:\n"
+            "    -h      -- print basic options\n"
+            "    -h long -- print more options\n"
+            "    -h full -- print all options (including all format and codec specific options, very long)\n"
 @@ -1619,26 +1622,26 @@ static const char *const alt_qscale[]         = { "q", NULL};
  static const char *const alt_tag[]            = { "atag", "vtag", "stag", NULL };
  

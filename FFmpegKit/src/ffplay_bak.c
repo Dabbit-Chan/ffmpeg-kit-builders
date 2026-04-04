@@ -1488,7 +1488,7 @@ static void do_exit(VideoState *is)
     av_freep(&input_filename);
     avformat_network_deinit();
     if (show_status)
-        printf("\n");
+        av_log(NULL, AV_LOG_INFO, "\n");
     SDL_Quit();
     av_log(NULL, AV_LOG_QUIET, "%s", "");
     //exit(0);
@@ -3999,15 +3999,14 @@ static void show_usage(void)
 
 void ffplay_show_help_default(const char *opt, const char *arg)
 {
-    av_log_set_callback(log_callback_help);
     show_usage();
     show_help_options(options, "Main options:", 0, OPT_EXPERT);
     show_help_options(options, "Advanced options:", OPT_EXPERT, 0);
-    printf("\n");
+    av_log(NULL, AV_LOG_INFO, "\n");
     show_help_children(avcodec_get_class(), AV_OPT_FLAG_DECODING_PARAM);
     show_help_children(avformat_get_class(), AV_OPT_FLAG_DECODING_PARAM);
     show_help_children(avfilter_get_class(), AV_OPT_FLAG_FILTERING_PARAM);
-    printf("\nWhile playing:\n"
+    av_log(NULL, AV_LOG_INFO, "\nWhile playing:\n"
            "q, ESC              quit\n"
            "f                   toggle full screen\n"
            "p, SPC              pause\n"

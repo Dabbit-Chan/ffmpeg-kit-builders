@@ -160,11 +160,11 @@ static int show_hwaccels(void *optctx, const char *opt, const char *arg)
 {
     enum AVHWDeviceType type = AV_HWDEVICE_TYPE_NONE;
 
-    printf("Hardware acceleration methods:\n");
+    av_log(NULL, AV_LOG_INFO, "Hardware acceleration methods:");
     while ((type = av_hwdevice_iterate_types(type)) !=
            AV_HWDEVICE_TYPE_NONE)
-        printf("%s\n", av_hwdevice_get_type_name(type));
-    printf("\n");
+        av_log(NULL, AV_LOG_INFO, "%s", av_hwdevice_get_type_name(type));
+    av_log(NULL, AV_LOG_INFO, "\n");
     return 0;
 }
 
@@ -756,11 +756,11 @@ static int opt_init_hw_device(void *optctx, const char *opt, const char *arg)
 {
     if (!strcmp(arg, "list")) {
         enum AVHWDeviceType type = AV_HWDEVICE_TYPE_NONE;
-        printf("Supported hardware device types:\n");
+        av_log(NULL, AV_LOG_INFO, "Supported hardware device types:");
         while ((type = av_hwdevice_iterate_types(type)) !=
                AV_HWDEVICE_TYPE_NONE)
-            printf("%s\n", av_hwdevice_get_type_name(type));
-        printf("\n");
+            av_log(NULL, AV_LOG_INFO, "%s", av_hwdevice_get_type_name(type));
+        av_log(NULL, AV_LOG_INFO, "\n");
         return AVERROR_EXIT;
     } else {
         return hw_device_init_from_string(arg, NULL);
@@ -1307,7 +1307,7 @@ static int opt_filter_complex_script(void *optctx, const char *opt, const char *
 }
 #endif
 
-void show_help_default(const char *opt, const char *arg)
+void ffmpeg_show_help_default(const char *opt, const char *arg)
 {
     int show_advanced = 0, show_avoptions = 0;
 
@@ -1322,7 +1322,7 @@ void show_help_default(const char *opt, const char *arg)
 
     show_usage();
 
-    printf("Getting help:\n"
+    av_log(NULL, AV_LOG_INFO, "Getting help:\n"
            "    -h      -- print basic options\n"
            "    -h long -- print more options\n"
            "    -h full -- print all options (including all format and codec specific options, very long)\n"
@@ -1407,7 +1407,7 @@ void show_help_default(const char *opt, const char *arg)
     if (show_advanced)
         show_help_options(options, "Data stream options:",
                           OPT_DATA, OPT_VIDEO | OPT_AUDIO | OPT_SUBTITLE);
-    printf("\n");
+    av_log(NULL, AV_LOG_INFO, "\n");
 
     if (show_avoptions) {
         int flags = AV_OPT_FLAG_DECODING_PARAM | AV_OPT_FLAG_ENCODING_PARAM;

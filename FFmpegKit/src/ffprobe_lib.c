@@ -33,6 +33,11 @@
   #include <unistd.h>
 #endif
 
+FFMPEG_THREAD_LOCAL const char program_name[] = "ffprobe";
+FFMPEG_THREAD_LOCAL const int program_birth_year = 2007;
+extern void (*show_help_default_func)(const char *opt, const char *arg);
+extern void ffprobe_show_help_default(const char *opt, const char *arg);
+
 // Forward declare the auto-generated TLS initializer
 extern void ffprobe_tls_init_options(void);
 
@@ -199,6 +204,7 @@ int ffprobe_run(FFprobeContext *ctx)
   ffmpeg_kit_assert_jmp_ptr = NULL;
 
   ffprobe_tls_init_options();
+  show_help_default_func = ffprobe_show_help_default;
 
   ctx->ret = ffprobe_run_internal(ctx->argc, ctx->argv, &ctx->output);
 
