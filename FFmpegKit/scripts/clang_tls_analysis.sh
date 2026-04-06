@@ -64,7 +64,7 @@ for file_rel in "${FILE_LIST[@]}"; do
             --extra-arg="-I$TARGET_DIR" \
             2>/dev/null | \
             grep -E "^/.*:[0-9]+:[0-9]+" | \
-            sed -E 's/^(.+:[0-9]+):[0-9]+.*/\1/' | \
+            sed -i'' -E 's/^(.+:[0-9]+):[0-9]+.*/\1/' | \
             while read -r loc; do
                 
                 [[ -z "$loc" ]] && continue
@@ -74,7 +74,7 @@ for file_rel in "${FILE_LIST[@]}"; do
                 
                 # Check if file exists and line number is valid
                 if [[ -f "$f_path" && "$l_num" =~ ^[0-9]+$ ]]; then
-                    line_content=$(sed "${l_num}q;d" "$f_path" | xargs)
+                    line_content=$(sed -i'' "${l_num}q;d" "$f_path" | xargs)
                     
                     # Output match if it's not the declaration line
                     if [[ ! "$line_content" == *"FFMPEG_THREAD_LOCAL"* ]]; then

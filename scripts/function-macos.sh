@@ -236,23 +236,27 @@ detect_clang_version() {
 }
 
 set_toolchain_paths() {
-  export CC=gcc
-  export CXX=g++
-  export AS=as
-  export AR=ar
-  export LD=ld
-  export RANLIB=ranlib
-  export STRIP=strip
-  export NM=nm
-  export CFLAGS="$CFLAGS -Wl,--allow-multiple-definition,--warn-once -I${ffmpeg_source_dir} -I${ffmpeg_source_dir}/compat"
+  export CC="$(xcrun --sdk macosx --find clang)"
+  export CXX="$(xcrun --sdk macosx --find clang++)"
+  export AR="$(xcrun --sdk macosx --find ar)"
+  export AS="$(xcrun --sdk macosx --find as)"
+  export RANLIB="$(xcrun --sdk macosx --find ranlib)"
+  export LD="$(xcrun --sdk macosx --find ld)"
+  export STRIP="$(xcrun --sdk macosx --find strip)"
+  export NM="$(xcrun --sdk macosx --find nm)"
+  export CFLAGS="$CFLAGS -I${ffmpeg_source_dir} -I${ffmpeg_source_dir}/compat"
   export CXXFLAGS="$CXXFLAGS -I${ffmpeg_source_dir} -I${ffmpeg_source_dir}/compat"
-  export LDFLAGS="$LDFLAGS -Wl,--allow-multiple-definition,--warn-once -ljsoncpp -L${ffmpeg_install_prefix}/lib"
+  export LDFLAGS="$LDFLAGS -ljsoncpp -L${ffmpeg_install_prefix}/lib"
 }
 
 ffmpeg_patches() {
-	if islinux; then
-		echo "INFO: Patching ffmpeg for linux quirks..." >>"$LOG_FILE"
-		
-		echo "INFO: Done patching ffmpeg for linux quirks." >>"$LOG_FILE"
+	if ismacos; then
+		echo "INFO: Patching ffmpeg for macOS quirks..." >>"$LOG_FILE"
+    if truthy "$enable_vulkan"; then
+      sed -i'.bak' '/#include <SDL_vulkan.h>/a\
+#include "libavutil/hwcontext.h"\
+#include "libavutil/hwcontext_vulkan.h"' "$ffmpeg_source_dir/fftools/ffplay_renderer.c"
+    fi
+		echo "INFO: Done patching ffmpeg for macOS quirks." >>"$LOG_FILE"
 	fi
 }

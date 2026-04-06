@@ -15,6 +15,8 @@ source "${SCRIPTDIR}/function.sh"
 
 require_sudo
 
+check_missing_packages # do this first since it's annoying to go through prompts then be rejected
+
 [[ -f "$LOG_FILE" ]] && rm -f "$LOG_FILE"
 
 echo -e "INFO: Build options: ${RUN_ARGS[*]}\n" 1>>"$LOG_FILE" 2>&1
@@ -458,7 +460,7 @@ while [ $# -gt 0 ]; do
     pick_gpu_type "rocm"
     shift
     ;;
-  --enable-hardware)
+  --enable-hardware|--enable-hw)
     export enable_hardware=y
     shift
     ;;
@@ -600,7 +602,7 @@ if [[ "$*" == *"--resume"* ]]; then
   fi
   if [[ -f "$RUN_STATE_FILE" ]]; then
     LINE=$(head -n 1 "$RUN_STATE_FILE")
-    STEP=$(sed -n '2{p;q;}' "$RUN_STATE_FILE")
+    STEP=$(sed -i'' -n '2{p;q;}' "$RUN_STATE_FILE")
     read -r -a args <<< "$LINE"
     idx_run=-1
     idx_build_only=-1
@@ -648,16 +650,7 @@ if ! truthy "$build_dependencies"; then
 truthy "$build_gpl" && truthy "$build_nonfree" && echo -e "ERROR: --enable-gpl is not compatible with --enable-nonfree. Remove one and run again" | tee -a "$LOG_FILE"
 fi
 
-check_missing_packages # do this first since it's annoying to go through prompts then be rejected
 intro                  # remember to always run the intro, since it adjust pwd
-
-if [ -z "$(get_cpu_count)" ]; then
-	cpu_count=$(sysctl -n hw.ncpu | tr -d '\n') # OS X cpu count
-	if [ -z "$(get_cpu_count)" ]; then
-		echo -e "warning, unable to determine cpu count, defaulting to 1" | tee -a "$LOG_FILE"
-		cpu_count=y # else default to just 1, instead of blank, which means infinite
-	fi
-fi
 
 set_box_memory_size_bytes
 if [[ $box_memory_size_bytes -lt 600000000 ]]; then

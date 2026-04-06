@@ -191,5 +191,5 @@ rm -f lib.mri
 
 clean_libs=$(echo "$raw_libs_to_keep" | awk '{for (i=1;i<=NF;i++) if (!seen[$i]++) printf("%s%s", $i, OFS)}' | sed 's/ *$//')
 if test -f ffmpegkit.pc; then
-	sed -i "s|FFMPEG_KIT_EXT_LIBS|$clean_libs|g" ffmpegkit.pc
+	sed -i'' "s|FFMPEG_KIT_EXT_LIBS|$clean_libs|g" ffmpegkit.pc
 fi

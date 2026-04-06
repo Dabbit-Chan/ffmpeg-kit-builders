@@ -403,13 +403,13 @@ EOF
 	fi
 }
 
-ffmpeg_windows_patches() {
+ffmpeg_patches() {
 	if iswindows; then
-		echo "INFO: Patching ffmpeg for qindows Mingw quirks..." >>"$LOG_FILE"
+		echo "INFO: Patching ffmpeg for windows Mingw quirks..." >>"$LOG_FILE"
 		sed -i 's/#define HAVE_SCHED_GETAFFINITY 1/#define HAVE_SCHED_GETAFFINITY 0/g' "$ffmpeg_source_dir/config.h"
 		if [[ -f "$ffmpeg_source_dir/libavfilter/dnn/dnn_backend_tf.c" ]]; then
 			sed -i 's/ctx->options.async/ctx->async/g' "$ffmpeg_source_dir/libavfilter/dnn/dnn_backend_tf.c"
 		fi
-		echo "INFO: Done patching ffmpeg for qindows Mingw quirks." >>"$LOG_FILE"
+		echo "INFO: Done patching ffmpeg for windows Mingw quirks." >>"$LOG_FILE"
 	fi
 }

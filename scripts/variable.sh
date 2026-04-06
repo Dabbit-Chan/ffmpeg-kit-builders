@@ -39,8 +39,12 @@ export original_cppflags="$CPPFLAGS"
 export original_ldflags=""
 export build_x264_with_libav=n # To build x264 with Libavformat.
 export ffmpeg_git_checkout="https://github.com/FFmpeg/FFmpeg.git"
-export cpu_count=$(nproc)
-export original_cpu_count=$(nproc) # save it away for some that revert it temporarily
+if [[ "$(uname)" == "Darwin" ]]; then
+  export cpu_count=$(sysctl -n hw.ncpu)
+else
+  export cpu_count=$(nproc)
+fi
+export original_cpu_count=$cpu_count # save it away for some that revert it temporarily
 export PKG_CONFIG_LIBDIR= # disable pkg-config from finding [and using] normal linux system installed libs [yikes]
 export original_path=$PATH:/usr/local/cargo/bin
 export license_dir_list=()
@@ -48,8 +52,8 @@ export extra_ffmpeg_c_flags=""
 
 declare -A seen_steps
 declare -A INSTALLED_LIBS
-
 declare -A BUILD_STEPS
+
 export OPTIMIZED_BUILD_STEPS=()
 
 # AI Video Focused

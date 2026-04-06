@@ -41,7 +41,7 @@ rsync -am --include='*/' \
 "$FFMPEG_SRC_DIR/fftools/" "$CURRENT_SOURCE_DIR/fftools.tmp"
 
 # remove "fftools/" from includes
-find "$CURRENT_SOURCE_DIR/fftools.tmp" -type f -name "*.c" -o -name "*.h" -exec sed -i 's|#include "fftools/|#include "|g' {} +
+find "$CURRENT_SOURCE_DIR/fftools.tmp" -type f -name "*.c" -o -name "*.h" -exec sed -i'' 's|#include "fftools/|#include "|g' {} +
 
 # move from fftools to src
 cp -r "$CURRENT_SOURCE_DIR/fftools.tmp/"* "$CURRENT_SOURCE_DIR/src/"

@@ -210,7 +210,7 @@ fix_pkgconfig_flags() {
 	find "$dependency_install_prefix/lib" -name "*.la*" -delete
 }
 
-ffmpeg_android_patches() {
+ffmpeg_patches() {
 	if isandroid && [[ "$host_arch" == "armv7a" ]]; then
 		echo "INFO: Patching ffmpeg for Android armv7a..." >>"$LOG_FILE"
 		if [[ -f "$ffmpeg_source_dir/libavutil/hwcontext_vulkan.c" ]]; then
