@@ -260,3 +260,68 @@ ffmpeg_patches() {
 		echo "INFO: Done patching ffmpeg for macOS quirks." >>"$LOG_FILE"
 	fi
 }
+
+
+get_generic_meson_cross_file() {
+	local variant_name="$1"      # e.g., "librist"
+	local extra_content="$2"     # e.g., "[built-in options]..."
+	local base_filename="$host_name-meson-cross.mingw.txt"
+	local base_filepath="$src_dir/$base_filename"
+	# 1. Generate the BASE file if it doesn't exist (Standard Logic)
+	local cpu_family="x86_64"
+	if [ "$bits_target" = 32 ]; then
+			cpu_family="x86"
+	fi
+	cat >"$base_filepath" <<EOF
+[binaries]
+c = '$CC'
+cpp = '$CXX'
+ld = '$LD'
+ar = '$AR'
+strip = '$STRIP'
+nm = '$NM'
+objc = '$CC'
+objcpp = '$CXX'
+pkgconfig = 'pkg-config'
+
+[built-in options]
+buildtype = 'release'
+wrap_mode = 'nofallback'
+default_library = 'static'
+prefer_static = true
+backend = 'ninja'
+b_lto = false
+b_staticpic = true
+c_args = ['-I${dependency_install_prefix}/include', '-arch', 'x86_64', '-isysroot', '${SDKROOT}']
+c_link_args = ['-L${dependency_install_prefix}/lib', '-arch', 'x86_64', '-isysroot', '${SDKROOT}']
+cpp_args = ['-I${dependency_install_prefix}/include', '-arch', 'x86_64', '-DGLIB_STATIC_COMPILATION', '-isysroot', '${SDKROOT}']
+cpp_link_args = ['-L${dependency_install_prefix}/lib', '-arch', 'x86_64', '-DGLIB_STATIC_COMPILATION', '-isysroot', '${SDKROOT}']
+prefix = '$dependency_install_prefix'
+libdir = '$dependency_install_prefix/lib'
+pkg_config_path = '$PKG_CONFIG_PATH'
+
+[host_machine]
+system = 'darwin'
+cpu_family = 'x86_64'
+cpu = 'x86_64'
+endian = 'little'
+
+EOF
+	# 2. Handle Custom Variant logic
+	if [[ -n "$variant_name" ]]; then
+			local custom_filepath="$(pwd)/$host_name-meson-cross.mingw.${variant_name}.txt"
+			# Always overwrite the variant with a fresh copy of the base
+			cp "$base_filepath" "$custom_filepath" 2>"$LOG_FILE"
+			# Append custom options if provided
+			if [[ -n "$extra_content" ]]; then
+					# Add a newline for safety
+					echo "" >> "$custom_filepath"
+					echo -e "$extra_content" >> "$custom_filepath"
+			fi
+			# Return the path to the NEW custom file
+			echo "$custom_filepath"
+	else
+			# No customization requested, return the standard base file
+			echo "$base_filepath"
+	fi
+}

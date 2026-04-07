@@ -663,34 +663,37 @@ setup_macos_environment() {
     export install_pkgconfig_dir="${dependency_install_prefix}/lib/pkgconfig"
     
     export PKG_CONFIG_PATH="$install_pkgconfig_dir:$ffmpeg_install_prefix/lib/pkgconfig:/usr/local/lib/pkgconfig:/opt/homebrew/lib/pkgconfig"
-    export PATH="$ffmpeg_install_prefix/bin:$dependency_install_prefix/bin:$original_path"
+    
     
     case "$host_arch" in
         "x86_64")
             export host_arch="x86_64"
             export cmake_host_arch="x86_64"
+            export build_cross_compile=y
+            export PATH="$original_path"
             ;;
         "aarch64"|"arm64")
             export host_arch="arm64"
             export cmake_host_arch="arm64"
+            export PATH="$ffmpeg_install_prefix/bin:$dependency_install_prefix/bin:$original_path"
             ;;
         *)
             exit_message 1 "setup_macos_environment: Unsupported host arch '$host_arch' for $host_platform"
             ;;
     esac
     
-    export macos_cflags="$original_cflags -Wno-pedantic -I${dependency_install_prefix}/include"
+    export macos_cflags="$original_cflags -Wno-pedantic -arch $host_arch -I${dependency_install_prefix}/include"
     export CFLAGS="$macos_cflags"
-    export macos_cppflags="$original_cppflags -I${dependency_install_prefix}/include -DMACOS"
+    export macos_cppflags="$original_cppflags -arch $host_arch -I${dependency_install_prefix}/include -DMACOS"
     export CPPFLAGS="$macos_cppflags"
-    export macos_cxxflags="$original_cxxflags -I${dependency_install_prefix}/include"
+    export macos_cxxflags="$original_cxxflags -arch $host_arch -I${dependency_install_prefix}/include"
     export CXXFLAGS="$macos_cxxflags"
-    export macos_ldflags="$original_ldflags -L${dependency_install_prefix}/lib"
+    export macos_ldflags="$original_ldflags -arch $host_arch -L${dependency_install_prefix}/lib"
     export LDFLAGS="$macos_ldflags"
     export DYLD_LIBRARY_PATH="${dependency_install_prefix}/lib:$DYLD_LIBRARY_PATH"
     
     export SDKROOT=$(xcrun --sdk macosx --show-sdk-path)
-    
+
     export CC="$(xcrun --sdk macosx --find clang)"
     export CXX="$(xcrun --sdk macosx --find clang++)"
     export AR="$(xcrun --sdk macosx --find ar)"
@@ -2517,14 +2520,15 @@ do_configure() {
 		if [[ ! -f $configure_name && -f bootstrap.sh ]]; then # fftw wants to only run this if no configure :|
 			(./bootstrap.sh) > >(redirect_output) 2>&1
 		fi
-    if [[ ! -f $configure_name && -f configure.ac ]] || needs_autoreconf > >(redirect_output) 2>&1 ; then
-      echo -e "INFO: Configure not found. Running autoreconf with existing configure.ac..." >>"$LOG_FILE"
-			autoreconf_library # a handful of them require this to create ./configure :|
-    fi
     if [[ ! -f Makefile.in && ! -f Makefile && -f Makefile.am ]] || \
     [[ ! -f config.guess || ! -f config.sub || ! -f ltmain.sh || ! -f compile || ! -f missing || ! -f install-sh ]]; then
       echo -e "INFO: Makefile and Makefile.in not found. running autoreconf and automake..." >>"$LOG_FILE"
+      glibtoolize --force --copy > >(redirect_output) 2>&1 || exit_message 1 "Failed to run glibtoolize"
       automake --force-missing --add-missing > >(redirect_output) 2>&1
+    fi
+    if [[ ! -f $configure_name && -f configure.ac ]] || needs_autoreconf > >(redirect_output) 2>&1 ; then
+      echo -e "INFO: Configure not found. Running autoreconf with existing configure.ac..." >>"$LOG_FILE"
+			autoreconf_library # a handful of them require this to create ./configure :|
     fi
 		if [[ ! -f $configure_name ]]; then
       if [[ -f gitsub.sh ]]; then
@@ -2830,6 +2834,7 @@ generic_cmake() {
   [[ "$extra_args" != *"-DCMAKE_BUILD_TYPE"* ]] && extra_args+=" -DCMAKE_BUILD_TYPE=Release"
   if ismacos; then
   [[ "$extra_args" != *"-DCMAKE_SYSTEM_NAME"* ]] && extra_args+=" -DCMAKE_SYSTEM_NAME=Darwin"
+  [[ "$extra_args" != *"-DCMAKE_OSX_ARCHITECTURES"* ]] && extra_args+=" -DCMAKE_OSX_ARCHITECTURES=$host_arch"
   else
   [[ "$extra_args" != *"-DCMAKE_SYSTEM_NAME"* ]] && extra_args+=" -DCMAKE_SYSTEM_NAME=${host_platform^}"
   fi
@@ -3654,8 +3659,12 @@ configure_ffmpeg() {
     fi
   elif islinux; then
     add_extra_libs "-lpthread -lrt -lm -ldl -lstdc++"
-  elif ! ismacos; then
-    init_options+=" --target-os=$host_platform"
+  elif ismacos; then
+    if [[ "$host_arch" != "arm64" ]]; then
+      init_options+=" --target-os=darwin"
+      export LD="$CXX"
+      init_options+=" --ld=$CXX"
+    fi
   fi
   if ! ismacos && ! isios; then
     init_options+=" --extra-ldflags=\" -Wl,--allow-multiple-definition \""
@@ -3773,10 +3782,14 @@ configure_ffmpeg() {
     truthy "$enable_libvpl" && config_options+=" --enable-libvpl"                     # enable Intel oneVPL code via libvpl if libmfx is not used [no]
   fi
   truthy "$enable_vulkan_static" && config_options+=" --enable-vulkan-static"         # enable statically link to libvulkan [no]
-  if ismacos || islinux; then
-    truthy "$enable_libtorch" && config_options+=" --enable-libtorch \
+  if truthy "$enable_libtorch" && (ismacos || islinux); then
+    config_options+=" --enable-libtorch \
   --extra-cflags=\"-I${dependency_install_prefix}/include/torch/csrc/api/include\" \
   --extra-cxxflags=\"-I${dependency_install_prefix}/include/torch/csrc/api/include\"" # enable Torch as one DNN backend [no]
+    if ismacos; then
+      add_extra_libs "-ltorch -ltorch_cpu -lc10"
+      config_options+=" --extra-cxxflags=\"-Wno-invalid-specialization\""
+    fi
   fi
   if iswindows || islinux; then
   truthy "$enable_cuvid" && config_options+=" --enable-cuvid"                         # enable Nvidia CUVID support [autodetect]
@@ -3934,6 +3947,7 @@ configure_ffmpeg() {
   truthy "$enable_whisper" && { config_options+=" --enable-whisper" \
   && add_extra_libs "-lwhisper -lggml -lggml-cpu -lggml-base"; }                      # enable whisper filter [no]
   truthy "$enable_whisper" && ! isandroid && ! ismacos && ! isios && add_extra_libs "-lgomp"
+  truthy "$enable_whisper" && { ismacos || isios; } && add_extra_libs "-lomp -lresolv"
 
   # ------------------------------ windows features -------------------------------     
   if iswindows; then
