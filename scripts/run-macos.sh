@@ -24,17 +24,17 @@ build_libjsoncpp() {
 # build_jni               # config_options+= --disable-jni                # enable JNI support [no]
 build_jni() {
   echo "INFO: Only available on Android build" >>"$LOG_FILE"
-  echo "INFO: No jni library to compile. Library built into OS." >>"$LOG_FILE"
+  echo "INFO: No jni library to compile." >>"$LOG_FILE"
 }
 # build_ladspa            # config_options+= --disable-ladspa             # enable LADSPA audio filtering [no]
 build_ladspa() {
   echo "INFO: Only available on Linux build" >>"$LOG_FILE"
-  echo "INFO: No ladspa library to compile. Library built into OS." >>"$LOG_FILE"
+  echo "INFO: No ladspa library to compile." >>"$LOG_FILE"
 }
 # build_mediacodec        # config_options+= --disable-mediacodec         # enable Android MediaCodec support [no]
 build_mediacodec() {
   echo "INFO: Only available on Android build" >>"$LOG_FILE"
-  echo "INFO: No mediacodec library to compile. Library built into OS." >>"$LOG_FILE"
+  echo "INFO: No mediacodec library to compile." >>"$LOG_FILE"
 }
 #endregion---------------------------------------------------------------------    
 #region----------------------- harmony features ------------------------------     
@@ -42,7 +42,7 @@ build_mediacodec() {
 # build_ohcodec           # config_options+= --disable-ohcodec            # enable OpenHarmony Codec support [no]
 build_ohcodec() {
   echo "INFO: Only available on Harmony build" >>"$LOG_FILE"
-  echo "INFO: No ohcodec library to compile. Library built into OS." >>"$LOG_FILE"
+  echo "INFO: No ohcodec library to compile." >>"$LOG_FILE"
 }
 #endregion---------------------------------------------------------------------    
 #region---------------------- linux/unix features -----------------------------     
@@ -50,7 +50,7 @@ build_ohcodec() {
 # build_alsa              # config_options+= --disable-alsa               # disable ALSA support [autodetect]
 build_alsa() {
   echo "INFO: Only available on Linux build" >>"$LOG_FILE"
-  echo "INFO: No alsa library to compile. Library built into OS." >>"$LOG_FILE"
+  echo "INFO: No alsa library to compile." >>"$LOG_FILE"
 }
 build_libusb() {
   local repo="https://github.com/libusb/libusb"
@@ -66,17 +66,17 @@ build_libusb() {
 }
 build_sdl12_compat() {
   echo "INFO: Only available on Linux build" >>"$LOG_FILE"
-  echo "INFO: No libdc1394 library to compile. Library built into OS." >>"$LOG_FILE"
+  echo "INFO: No libdc1394 library to compile." >>"$LOG_FILE"
 }
 # build_libdc1394         # config_options+= --enable-libdc1394           # enable IIDC-1394 grabbing using libdc1394 and libraw1394 [no]
 build_libdc1394() {
   echo "INFO: Only available on Linux build" >>"$LOG_FILE"
-  echo "INFO: No libdc1394 library to compile. Library built into OS." >>"$LOG_FILE"
+  echo "INFO: No libdc1394 library to compile." >>"$LOG_FILE"
 }
 # build_libdrm            # config_options+= --disable-libdrm             # disable DRM code (Linux) [autodetect]
 build_libdrm() {
   echo "INFO: Only available on Linux build" >>"$LOG_FILE"
-  echo "INFO: No libdrm library to compile. Library built into OS." >>"$LOG_FILE"
+  echo "INFO: No libdrm library to compile." >>"$LOG_FILE"
 }
 # contains both libavc1394 and librom1394
 build_libavc1394() {
@@ -104,7 +104,7 @@ build_libraw1394() {
 # build_libiec61883       # config_options+= --enable-libiec61883         # enable iec61883 via libiec61883 [no]
 build_libiec61883() {
   echo "INFO: Only available on Linux build" >>"$LOG_FILE"
-  echo "INFO: No libiec61883 library to compile. Library built into OS." >>"$LOG_FILE"
+  echo "INFO: No libiec61883 library to compile." >>"$LOG_FILE"
 }
 build_libjsonc() {
   local lib="json-c"
@@ -123,87 +123,87 @@ build_libjsonc() {
 # build_libv4l2           # config_options+= --enable-libv4l2             # enable libv4l2/v4l-utils [no]
 build_libv4l2() {
   echo "INFO: Only available on Linux build" >>"$LOG_FILE"
-  echo "INFO: No libv4l2 library to compile. Library built into OS." >>"$LOG_FILE"
+  echo "INFO: No libv4l2 library to compile." >>"$LOG_FILE"
 }
 # build_libxcb_shape      # config_options+= --enable-libxcb-shape        # enable X11 grabbing shape rendering [autodetect]
 build_libxcb_shape() {
   echo "INFO: Only available on Linux build" >>"$LOG_FILE"
-  echo "INFO: No libxcb-shape library to compile. Library built into OS." >>"$LOG_FILE"
+  echo "INFO: No libxcb-shape library to compile." >>"$LOG_FILE"
 }
 # build_libxcb_shm        # config_options+= --enable-libxcb-shm          # enable X11 grabbing shm communication [autodetect]
 build_libxcb_shm() {
   echo "INFO: Only available on Linux build" >>"$LOG_FILE"
-  echo "INFO: No libxcb-shm library to compile. Library built into OS." >>"$LOG_FILE"
+  echo "INFO: No libxcb-shm library to compile." >>"$LOG_FILE"
 }
 # build_libxcb_xfixes     # config_options+= --enable-libxcb-xfixes       # enable X11 grabbing mouse rendering [autodetect]
 build_libxcb_xfixes() {
   echo "INFO: Only available on Linux build" >>"$LOG_FILE"
-  echo "INFO: No libxcb-xfixes library to compile. Library built into OS." >>"$LOG_FILE"
+  echo "INFO: No libxcb-xfixes library to compile." >>"$LOG_FILE"
 }
 build_xcbproto() {
   echo "INFO: Only available on Linux build" >>"$LOG_FILE"
-  echo "INFO: No rkmpp library to compile. Library built into OS." >>"$LOG_FILE"
+  echo "INFO: No rkmpp library to compile." >>"$LOG_FILE"
 }
 build_libxau() {
   echo "INFO: Only available on Linux build" >>"$LOG_FILE"
-  echo "INFO: No rkmpp library to compile. Library built into OS." >>"$LOG_FILE"
+  echo "INFO: No rkmpp library to compile." >>"$LOG_FILE"
 }
 # build_libxcb            # config_options+= --enable-libxcb              # enable X11 grabbing using XCB [autodetect]
 build_libxcb() {
   echo "INFO: Only available on Linux build" >>"$LOG_FILE"
-  echo "INFO: No rkmpp library to compile. Library built into OS." >>"$LOG_FILE"
+  echo "INFO: No rkmpp library to compile." >>"$LOG_FILE"
 }
 # build_rkmpp             # config_options+= --enable-rkmpp               # enable Rockchip Media Process Platform code [no]
 build_rkmpp() {
   echo "INFO: Only available on Linux build" >>"$LOG_FILE"
-  echo "INFO: No rkmpp library to compile. Library built into OS." >>"$LOG_FILE"
+  echo "INFO: No rkmpp library to compile." >>"$LOG_FILE"
 }
 # build_v4l2_m2m          # config_options+= --disable-v4l2-m2m           # disable V4L2 mem2mem code [autodetect]
 build_v4l2_m2m() {
   echo "INFO: Only available on Linux build" >>"$LOG_FILE"
-  echo "INFO: No v4l2-m2m library to compile. Library built into OS." >>"$LOG_FILE"
+  echo "INFO: No v4l2-m2m library to compile." >>"$LOG_FILE"
 }
 # build_vaapi             # config_options+= --disable-vaapi              # disable Video Acceleration API (mainly Unix/Intel) code [autodetect]
 build_vaapi() {
   echo "INFO: Only available on Linux build" >>"$LOG_FILE"
-  echo "INFO: No vaapi library to compile. Library built into OS." >>"$LOG_FILE"
+  echo "INFO: No vaapi library to compile." >>"$LOG_FILE"
 }
 build_xtrans() {
   echo "INFO: Only available on Linux build" >>"$LOG_FILE"
-  echo "INFO: No rkmpp library to compile. Library built into OS." >>"$LOG_FILE"
+  echo "INFO: No rkmpp library to compile." >>"$LOG_FILE"
 }
 build_xorgproto() {
   echo "INFO: Only available on Linux build" >>"$LOG_FILE"
-  echo "INFO: No rkmpp library to compile. Library built into OS." >>"$LOG_FILE"
+  echo "INFO: No rkmpp library to compile." >>"$LOG_FILE"
 }
 build_xorg_macros() {
   echo "INFO: Only available on Linux build" >>"$LOG_FILE"
-  echo "INFO: No rkmpp library to compile. Library built into OS." >>"$LOG_FILE"
+  echo "INFO: No rkmpp library to compile." >>"$LOG_FILE"
 }
 build_libxext() {
   echo "INFO: Only available on Linux build" >>"$LOG_FILE"
-  echo "INFO: No rkmpp library to compile. Library built into OS." >>"$LOG_FILE"
+  echo "INFO: No rkmpp library to compile." >>"$LOG_FILE"
 }
 build_libxdmcp() {
   echo "INFO: Only available on Linux build" >>"$LOG_FILE"
-  echo "INFO: No rkmpp library to compile. Library built into OS." >>"$LOG_FILE"
+  echo "INFO: No rkmpp library to compile." >>"$LOG_FILE"
 }
 build_libxrender() {
   echo "INFO: Only available on Linux build" >>"$LOG_FILE"
-  echo "INFO: No rkmpp library to compile. Library built into OS." >>"$LOG_FILE"
+  echo "INFO: No rkmpp library to compile." >>"$LOG_FILE"
 }
 build_libxft() {
   echo "INFO: Only available on Linux build" >>"$LOG_FILE"
-  echo "INFO: No rkmpp library to compile. Library built into OS." >>"$LOG_FILE"
+  echo "INFO: No rkmpp library to compile." >>"$LOG_FILE"
 }
 build_x11() {
   echo "INFO: Only available on Linux build" >>"$LOG_FILE"
-  echo "INFO: No rkmpp library to compile. Library built into OS." >>"$LOG_FILE"
+  echo "INFO: No rkmpp library to compile." >>"$LOG_FILE"
 }
 # build_xlib              # config_options+= --disable-xlib               # disable xlib [autodetect]
 build_xlib() {
   echo "INFO: Only available on Linux build" >>"$LOG_FILE"
-  echo "INFO: No xlib library to compile. Library built into OS." >>"$LOG_FILE"
+  echo "INFO: No xlib library to compile." >>"$LOG_FILE"
 }
 #endregion---------------------------------------------------------------------
 #region------------------------ hardware features ----------------------------- 
@@ -256,7 +256,7 @@ build_libmfx() {
 # build_libvpl            # config_options+= --enable-libvpl              # enable Intel oneVPL code via libvpl if libmfx is not used [no]
 build_libvpl() {
   echo "INFO: Not available on MacOS build" >>"$LOG_FILE"
-  echo "INFO: No libvpl library to compile. Library built into OS." >>"$LOG_FILE"
+  echo "INFO: No libvpl library to compile." >>"$LOG_FILE"
 }
 # build_vulkan_static     # config_options+= --enable-vulkan-static       # enable statically link to libvulkan [no]
 build_vulkan_static() {
@@ -343,7 +343,7 @@ build_sdl2() {
 # build_sndio             # config_options+= --disable-sndio              # disable sndio support [autodetect]
 build_sndio() {
   echo "INFO: Only available on Linux build" >>"$LOG_FILE"
-  echo "INFO: No sndio library to compile. Library built into OS." >>"$LOG_FILE"
+  echo "INFO: No sndio library to compile." >>"$LOG_FILE"
 }
 # build_zlib              # config_options+= --disable-zlib               # disable zlib [autodetect]
 build_zlib() {
@@ -689,7 +689,7 @@ build_libass() {
   disable_nonessential "$src_dir/$lib"
   do_make_and_make_install
   change_dir "$src_dir"
-  export AS="$(xcrun --sdk macosx --find as)"
+  set_toolchain_paths
 }
 # build_libbluray         # config_options+= --enable-libbluray           # enable BluRay reading using libbluray [no]
 build_libbluray() {
@@ -708,7 +708,7 @@ build_libbluray() {
 -Denable_tools=false \
 -Denable_docs=false \
 --wrap-mode=default \
--Dc_link_args=\"-arch $host_arch -L${dependency_install_prefix}/lib $LIBS\""
+-Dc_link_args=\"-arch $host_arch -L${dependency_install_prefix}/lib -isysroot ${SDKROOT} $LIBS\""
   generic_meson "$meson_options"
   disable_nonessential "$src_dir/$lib"
   do_ninja_and_ninja_install
@@ -862,7 +862,7 @@ build_libdavs2() {
   fi
   sed -i'.bak' "s/Version:.*/Version: ${repo_ver}.0/g" "$install_pkgconfig_dir/davs2.pc"
   change_dir "$src_dir"
-  export AS="$(xcrun --sdk macosx --find as)"
+  set_toolchain_paths
 }
 # build_libdvdnav         # config_options+= --enable-libdvdnav           # enable libdvdnav, needed for DVD demuxing [no]
 build_libdvdnav() {
@@ -920,7 +920,7 @@ build_libdvdread() {
 }
 build_libasound2() {
   echo "INFO: Only available on Linux build" >>"$LOG_FILE"
-  echo "INFO: No libasound2 library to compile. Library built into OS." >>"$LOG_FILE"
+  echo "INFO: No libasound2 library to compile." >>"$LOG_FILE"
 }
 # build_libflite          # config_options+= --enable-libflite            # enable flite (voice synthesis) support via libflite [no]
 build_libflite() {
@@ -1265,7 +1265,7 @@ build_portaudio() {
 # build_libjack           # config_options+= --enable-libjack             # enable JACK audio sound server [no]
 build_libjack() {
   echo "INFO: Only available on Linux build" >>"$LOG_FILE"
-  echo "INFO: No libjack library to compile. Library built into OS." >>"$LOG_FILE"
+  echo "INFO: No libjack library to compile." >>"$LOG_FILE"
 }
 # build_libjxl            # config_options+= --enable-libjxl              # enable JPEG XL de/encoding via libjxl [no]
 build_libjxl() {
@@ -2007,7 +2007,7 @@ build_libid3tag() {
 # build_libpulse          # config_options+= --enable-libpulse            # enable Pulseaudio input via libpulse [no]
 build_libpulse() {
   echo "INFO: Only available on Linux build" >>"$LOG_FILE"
-  echo "INFO: No libpulse library to compile. Library built into OS." >>"$LOG_FILE"
+  echo "INFO: No libpulse library to compile." >>"$LOG_FILE"
 }
 # build_libqrencode       # config_options+= --enable-libqrencode         # enable QR encode generation via libqrencode [no]
 build_libqrencode() {
@@ -3187,7 +3187,7 @@ build_libvpx() {
   # disable_nonessential "$src_dir/$lib"
   do_make_and_make_install
   change_dir "$src_dir"
-  export AS="$(xcrun --sdk macosx --find as)"
+  set_toolchain_paths
 }
 # build_libvvenc          # config_options+= --enable-libvvenc            # enable H.266/VVC encoding via vvenc [no]
 build_libvvenc() {
@@ -3234,7 +3234,7 @@ build_libx264() {
   disable_nonessential "$src_dir/$lib"
   do_make_and_make_install
   change_dir "$src_dir"
-  export AS="$(xcrun --sdk macosx --find as)"
+  set_toolchain_paths
 }
 # build_libx265           # config_options+= --enable-libx265             # enable HEVC encoding via x265 [no]
 build_libx265() {
@@ -3317,7 +3317,7 @@ build_libxavs() {
   do_make_and_make_install
   change_dir "$src_dir"
   reset_allflags
-  export AS="$(xcrun --sdk macosx --find as)"
+  set_toolchain_paths
 }
 # build_libxavs2          # config_options+= --enable-libxavs2            # enable AVS2 encoding via xavs2 [no]
 build_libxavs2() {
@@ -3342,7 +3342,7 @@ build_libxavs2() {
   do_make_and_make_install
   sed -i'.bak' "s/Version:.*/Version: ${repo_ver}.0/g" "$dependency_install_prefix"/lib/pkgconfig/xavs2.pc
   change_dir "$src_dir"
-  export AS="$(xcrun --sdk macosx --find as)"
+  set_toolchain_paths
 }
 # build_libxevd           # config_options+= --enable-libxevd             # enable EVC decoding via libxevd [no]
 build_libxevd() {
@@ -3469,7 +3469,7 @@ build_libxv() {
 # build_libxvid           # config_options+= --enable-libxvid             # enable Xvid encoding via xvidcore, native MPEG-4/Xvid encoder exists [no]
 build_libxvid() {
   echo "INFO: Only available on Linux build" >>"$LOG_FILE"
-  echo "INFO: No libxvid library to compile. Library built into OS." >>"$LOG_FILE"
+  echo "INFO: No libxvid library to compile." >>"$LOG_FILE"
 }
 # build_libzimg           # config_options+= --enable-libzimg             # enable z.lib, needed for zscale filter [no]
 build_libzimg() {
@@ -3525,7 +3525,7 @@ build_libzvbi() {
   local ORIG_ACLOCAL_PATH=$ACLOCAL_PATH
   export ACLOCAL_PATH="$dependency_install_prefix/share/aclocal"
   export PATH="$dependency_install_prefix/bin:$PATH"
-  do_autogen
+  do_autogen "--build-w$bits_target"
   change_dir "$src_dir/$lib"
   touch "no.autoreconf"
   generic_configure "--enable-static \
@@ -4055,7 +4055,7 @@ build_libfdk_aac() {
 # build_cuda_llvm         # config_options+= --disable-cuda-llvm          # disable CUDA compilation using clang [autodetect]
 build_cuda_llvm() {
   echo "INFO: Only available on Windows and Linux build" >>"$LOG_FILE"
-  echo "INFO: No cuda-llvm library to compile. Library built into OS." >>"$LOG_FILE"
+  echo "INFO: No cuda-llvm library to compile." >>"$LOG_FILE"
 }
 # build_cuvid             # config_options+= --disable-cuvid              # disable Nvidia CUVID support [autodetect]
 build_cuvid() {
@@ -4072,29 +4072,29 @@ build_nvdec() {
 # build_nvenc             # config_options+= --disable-nvenc              # disable Nvidia video encoding code [autodetect]
 build_nvenc() {
   echo "INFO: Only available on Windows and Linux build" >>"$LOG_FILE"
-  echo "INFO: No nvenc library to compile. Library built into OS." >>"$LOG_FILE"
+  echo "INFO: No nvenc library to compile." >>"$LOG_FILE"
 }
 # build_vdpau             # config_options+= --disable-vdpau              # disable Nvidia Video Decode and Presentation API for Unix code [autodetect]
 build_vdpau() {
   echo "INFO: Only available on Linux build" >>"$LOG_FILE"
-  echo "INFO: No vdpau library to compile. Library built into OS." >>"$LOG_FILE"
+  echo "INFO: No vdpau library to compile." >>"$LOG_FILE"
 }
 build_libnvvm() {
   echo "INFO: Only available on Windows and Linux build" >>"$LOG_FILE"
-  echo "INFO: No libnvvm library to compile. Library built into OS." >>"$LOG_FILE"
+  echo "INFO: No libnvvm library to compile." >>"$LOG_FILE"
 }
 build_cuda_crt() {
   echo "INFO: Only available on Windows and Linux build" >>"$LOG_FILE"
-  echo "INFO: No cuda-crt library to compile. Library built into OS." >>"$LOG_FILE"
+  echo "INFO: No cuda-crt library to compile." >>"$LOG_FILE"
 }
 build_cuda_cudart() {
   echo "INFO: Only available on Windows and Linux build" >>"$LOG_FILE"
-  echo "INFO: No cuda-cudart library to compile. Library built into OS." >>"$LOG_FILE"
+  echo "INFO: No cuda-cudart library to compile." >>"$LOG_FILE"
 }
 # build_cuda_nvcc         # config_options+= --enable-cuda-nvcc           # enable Nvidia CUDA compiler [no]
 build_cuda_nvcc() {
   echo "INFO: Only available on Windows and Linux build" >>"$LOG_FILE"
-  echo "INFO: No cuda-nvcc library to compile. Library built into OS." >>"$LOG_FILE"
+  echo "INFO: No cuda-nvcc library to compile." >>"$LOG_FILE"
 }
 # build_libnpp            # config_options+= --enable-libnpp              # enable Nvidia Performance Primitives-based code [no]
 build_libnpp() {
@@ -4106,44 +4106,44 @@ build_libnpp() {
 # build_mmal              # config_options+= --disable-mmal               # enable Broadcom Multi-Media Abstraction Layer (Raspberry Pi) via MMAL [no]
 build_mmal() {
   echo "INFO: Only available on Linux build" >>"$LOG_FILE"
-  echo "INFO: No mmal library to compile. Library built into OS." >>"$LOG_FILE"
+  echo "INFO: No mmal library to compile." >>"$LOG_FILE"
 }
 # build_omx               # config_options+= --enable-omx                 # enable OpenMAX IL code [no]
 build_omx() {
   echo "INFO: Only available on Linux build" >>"$LOG_FILE"
-  echo "INFO: No omx library to compile. Library built into OS." >>"$LOG_FILE"
+  echo "INFO: No omx library to compile." >>"$LOG_FILE"
 }
 # build_omx_rpi           # config_options+= --disable-omx-rpi            # enable OpenMAX IL code for Raspberry Pi [no]
 build_omx_rpi() {
   echo "INFO: Only available on Linux build" >>"$LOG_FILE"
-  echo "INFO: No omx-rpi library to compile. Library built into OS." >>"$LOG_FILE"
+  echo "INFO: No omx-rpi library to compile." >>"$LOG_FILE"
 }
 #endregion
 #region-------------------- non-gpl windows features -------------------------- 
 # build_d3d11va           # config_options+= --disable-d3d11va            # disable Microsoft Direct3D 11 video acceleration code [autodetect]
 build_d3d11va() {
   echo "INFO: Only available on Windows build" >>"$LOG_FILE"
-  echo "INFO: No d3d11va library to compile. Library built into OS." >>"$LOG_FILE"
+  echo "INFO: No d3d11va library to compile." >>"$LOG_FILE"
 }
 # build_d3d12va           # config_options+= --disable-d3d12va            # disable Microsoft Direct3D 12 video acceleration code [autodetect]
 build_d3d12va() {
   echo "INFO: Only available on Windows build" >>"$LOG_FILE"
-  echo "INFO: No d3d12va library to compile. Library built into OS." >>"$LOG_FILE"
+  echo "INFO: No d3d12va library to compile." >>"$LOG_FILE"
 }
 # build_dxva2             # config_options+= --disable-dxva2              # disable Microsoft DirectX 9 video acceleration code [autodetect]
 build_dxva2() {
   echo "INFO: Only available on Windows build" >>"$LOG_FILE"
-  echo "INFO: No dxva2 library to compile. Library built into OS." >>"$LOG_FILE"
+  echo "INFO: No dxva2 library to compile." >>"$LOG_FILE"
 }
 # build_schannel          # config_options+= --disable-schannel           # disable SChannel SSP, needed for TLS support on Windows if openssl and gnutls are not used [autodetect]
 build_schannel() {
   echo "INFO: Only available on Windows build" >>"$LOG_FILE"
-  echo "INFO: No schannel library to compile. Library built into OS." >>"$LOG_FILE"
+  echo "INFO: No schannel library to compile." >>"$LOG_FILE"
 }
 # build_mediafoundation   # config_options+= --enable-mediafoundation     # enable encoding via MediaFoundation [auto]
 build_mediafoundation() {
   echo "INFO: Only available on Windows build" >>"$LOG_FILE"
-  echo "INFO: No mediafoundation library to compile. Library built into OS." >>"$LOG_FILE"
+  echo "INFO: No mediafoundation library to compile." >>"$LOG_FILE"
 }
 #endregion
 #region--------------------- non-gpl apple features ---------------------------     

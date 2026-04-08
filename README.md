@@ -38,13 +38,13 @@ This repository provides a comprehensive build system for FFmpeg and FFmpegKit t
   - **MacOS**: Not planned
   - **iOS**: Not planned
 
-| Platform | Status         | Architecture         |
-|----------|----------------|----------------------|
-| Android  | ✅ Supported   | armv7, arm64, x86_64 |
-| iOS      | Not Supported  |                      |
-| macOS    | Not Supported  |                      |
-| Linux    | ✅ Supported   | x86_64               |
-| Windows  | ✅ Supported   | x86_64               |
+| Platform                 | Status        | Architecture                              |
+| ------------------------ | ------------- | ----------------------------------------- |
+| Android (and Android-TV) | ✅ Supported   | armv7, arm64 (aarch64, arm64-v8a), x86_64 |
+| iOS                      | Not Supported |                                           |
+| macOS                    | ✅ Supported   | x86_64 and arm64 (aarch64)                |
+| Linux                    | ✅ Supported   | x86_64                                    |
+| Windows                  | ✅ Supported   | x86_64                                    |
 
 ## Quick Start
 
@@ -194,103 +194,103 @@ prebuilt/
 
 ### General & Platform
 
-| Option | Description |
-|--------|-------------|
-| `-h, --help` | Display help |
-| `-d, --debug` | Enable shell command tracing (`set -x`) |
-| `--debug-build\|--build-debug` | Build with debug symbols (`-g`) and no optimization |
-| `-f, --force` | Force rebuild of all dependencies (cleans `already_built` flags) |
-| `-y` | Non-interactive mode (accept defaults) |
-| `--release` | create release zip of ffmpeg-kit bundled binaries to be distributed |
-|`--release-and-clean`| create release zip of ffmpeg-kit bundled binaries to be distributed and clean ffmpeg and ffmpeg-kit build artifacts (dependencies are not deleted)|
-| `--host=*` | Target platform: `linux` or `windows` |
-| `--arch=*` | Target architecture: `x86_64` or `i686` |
+| Option                         | Description                                                                                                                                        |
+| ------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `-h, --help`                   | Display help                                                                                                                                       |
+| `-d, --debug`                  | Enable shell command tracing (`set -x`)                                                                                                            |
+| `--debug-build\|--build-debug` | Build with debug symbols (`-g`) and no optimization                                                                                                |
+| `-f, --force`                  | Force rebuild of all dependencies (cleans `already_built` flags)                                                                                   |
+| `-y`                           | Non-interactive mode (accept defaults)                                                                                                             |
+| `--release`                    | create release zip of ffmpeg-kit bundled binaries to be distributed                                                                                |
+| `--release-and-clean`          | create release zip of ffmpeg-kit bundled binaries to be distributed and clean ffmpeg and ffmpeg-kit build artifacts (dependencies are not deleted) |
+| `--host=*`                     | Target platform: `linux` or `windows`                                                                                                              |
+| `--arch=*`                     | Target architecture: `x86_64` or `i686`                                                                                                            |
 
 ### Licensing
 
-| Option | Description |
-|--------|-------------|
-| `--enable-gpl` | Enables GPL libraries (x264, xvid, etc.). Resulting binary is **GPLv3**. Cannot be combined with `--enable-nonfree`. |
+| Option             | Description                                                                                                                          |
+| ------------------ | ------------------------------------------------------------------------------------------------------------------------------------ |
+| `--enable-gpl`     | Enables GPL libraries (x264, xvid, etc.). Resulting binary is **GPLv3**. Cannot be combined with `--enable-nonfree`.                 |
 | `--enable-nonfree` | Enables non-free libraries (fdk-aac, decklink). Resulting binary is **Non-Redistributable**. Cannot be combined with `--enable-gpl`. |
 
 ### Feature presets
 
-| Option | Description |
-|--------|-------------|
-|`--enable-base`|enable only base built-in ffmpeg libraries (cannot be combined with other presets)
-|`--enable-full`|enable all available external libraries (based on gpl/non-gpl selection)
-|`--enable-small`|exclude certain extra libraries from presets to reduce size (see --list-excluded)
-|`--enable-https`|enable https libraries
-|`--enable-audio`|enable all audio processing libraries
-|`--enable-audio-ai`|enable all audio processing ai libraries
-|`--enable-video`|enable all video processing libraries
-|`--enable-video-streaming`|enable all video streaming libraries
-|`--enable-video-ai-cpu`|enable all video ai cpu based libraries
-|`--enable-video-ai-gpu`|enable all video ai pick gpu based libraries
-|`--enable-video-ai-gpu-cuda`|enable all video ai gpu cuda based libraries
-|`--enable-video-ai-gpu-rocm`|enable all video ai gpu rocm based libraries
-|`--enable-hardware`|enable all hardware accel libraries
-|`--enable-ssh`|enable SSH/SFTP support
-|`--enable-smb`|enable SMB (SAMBA) file sharing protocol support
-|`--enable-mq`|enable distributed systems support
+| Option                       | Description                                                                        |
+| ---------------------------- | ---------------------------------------------------------------------------------- |
+| `--enable-base`              | enable only base built-in ffmpeg libraries (cannot be combined with other presets) |
+| `--enable-full`              | enable all available external libraries (based on gpl/non-gpl selection)           |
+| `--enable-small`             | exclude certain extra libraries from presets to reduce size (see --list-excluded)  |
+| `--enable-https`             | enable https libraries                                                             |
+| `--enable-audio`             | enable all audio processing libraries                                              |
+| `--enable-audio-ai`          | enable all audio processing ai libraries                                           |
+| `--enable-video`             | enable all video processing libraries                                              |
+| `--enable-video-streaming`   | enable all video streaming libraries                                               |
+| `--enable-video-ai-cpu`      | enable all video ai cpu based libraries                                            |
+| `--enable-video-ai-gpu`      | enable all video ai pick gpu based libraries                                       |
+| `--enable-video-ai-gpu-cuda` | enable all video ai gpu cuda based libraries                                       |
+| `--enable-video-ai-gpu-rocm` | enable all video ai gpu rocm based libraries                                       |
+| `--enable-hardware`          | enable all hardware accel libraries                                                |
+| `--enable-ssh`               | enable SSH/SFTP support                                                            |
+| `--enable-smb`               | enable SMB (SAMBA) file sharing protocol support                                   |
+| `--enable-mq`                | enable distributed systems support                                                 |
 
 ### Bundle presets
 
-| Option | Description |
-|--------|-------------|
-|`--audio-bundle`|contains https + audio only libraries in the final bundle
-|`--audio-ai-bundle`|contains https + audio + audio only ai libraries in the final bundle
-|`--video-bundle`|contains https + audio + video libraries in the final bundle
-|`--video-ai-cpu-bundle`|contains https + audio + video + ai (cpu) libraries in the final bundle
-|`--video-ai-gpu-bundle`|contains https + audio + video + ai (pick gpu interactive) libraries in the final bundle
-|`--video-ai-gpu-cuda-bundle`|contains https + audio + video + ai (gpu:- cuda) libraries in the final bundle
-|`--video-ai-gpu-rocm-bundle`|contains https + audio + video + ai (gpu:- rocm) libraries in the final bundle
-|`--video-hw-bundle`|contains https + audio + video + hardware libraries in the final bundle
-|`--video-hw-ai-cpu-bundle`|contains https + audio + video + hardware + ai (cpu) libraries in the final bundle
-|`--video-hw-ai-gpu-bundle`|contains https + audio + video + hardware + ai (pick gpu interactive) libraries in the final bundle
-|`--video-hw-ai-gpu-cuda-bundle`|contains https + audio + video + hardware + ai (gpu:- cuda) libraries in the final bundle
-|`--video-hw-ai-gpu-rocm-bundle`|contains https + audio + video + hardware + ai (gpu:- rocm) libraries in the final bundle
-|`--streaming-bundle`|contains https + audio + video + streaming libraries in the final bundle
-|`--full-bundle`|contains https + audio + video + hardware + ai + streaming + ssh + smb + mq libraries in the final bundle
+| Option                          | Description                                                                                               |
+| ------------------------------- | --------------------------------------------------------------------------------------------------------- |
+| `--audio-bundle`                | contains https + audio only libraries in the final bundle                                                 |
+| `--audio-ai-bundle`             | contains https + audio + audio only ai libraries in the final bundle                                      |
+| `--video-bundle`                | contains https + audio + video libraries in the final bundle                                              |
+| `--video-ai-cpu-bundle`         | contains https + audio + video + ai (cpu) libraries in the final bundle                                   |
+| `--video-ai-gpu-bundle`         | contains https + audio + video + ai (pick gpu interactive) libraries in the final bundle                  |
+| `--video-ai-gpu-cuda-bundle`    | contains https + audio + video + ai (gpu:- cuda) libraries in the final bundle                            |
+| `--video-ai-gpu-rocm-bundle`    | contains https + audio + video + ai (gpu:- rocm) libraries in the final bundle                            |
+| `--video-hw-bundle`             | contains https + audio + video + hardware libraries in the final bundle                                   |
+| `--video-hw-ai-cpu-bundle`      | contains https + audio + video + hardware + ai (cpu) libraries in the final bundle                        |
+| `--video-hw-ai-gpu-bundle`      | contains https + audio + video + hardware + ai (pick gpu interactive) libraries in the final bundle       |
+| `--video-hw-ai-gpu-cuda-bundle` | contains https + audio + video + hardware + ai (gpu:- cuda) libraries in the final bundle                 |
+| `--video-hw-ai-gpu-rocm-bundle` | contains https + audio + video + hardware + ai (gpu:- rocm) libraries in the final bundle                 |
+| `--streaming-bundle`            | contains https + audio + video + streaming libraries in the final bundle                                  |
+| `--full-bundle`                 | contains https + audio + video + hardware + ai + streaming + ssh + smb + mq libraries in the final bundle |
 
 ### Build Options
 
-| Option | Default | Description |
-|--------|---------|-------------|
-| `--ffmpeg-git-checkout-version=`         | `release/8.0` | Build a particular version of FFmpeg (e.g., n3.1.1 or a specific git hash) |
-| `--ffmpeg-git-checkout=`                 | `https://github.com/FFmpeg/FFmpeg.git` | Clone FFmpeg from other repositories |
-| `--ffmpeg-source-dir=`                   | `[empty]` | Specify the directory of ffmpeg source code. When specified, git will not be used |
-| `--cflags=`                              | `-mtune=generic -O3 -pipe` | Compiler flags (default works on any CPU) |
-| `--cxxflags=`                            | `-ffunction-sections -fdata-sections -fPIC` | Compiler flags (default works on any CPU) |
-| `--cppflags=`                            |   | Compiler flags (default works on any CPU) |
-| `--ldflags=`                             |   | Compiler flags (default works on any CPU) |
-| `--git-get-latest=`                      |`y`| Do a git pull for latest code from repositories like FFmpeg |
-| `--prefer-stable=`                       |`y`| Build a few libraries from releases instead of git master |
-|`--print-total-steps\|--print-all-steps`  |  | print dependency steps and list all step names by index |
-| `--build-only={0..} OR [library_name]`   |   | Build only specific dependency (0.. or step/library name from get-all-steps) |
-| `--build-from={0..} OR [library_name]`   |   | Start building dependencies from given step (0.. or step/library name) |
-| `--build-deps=[y]`                       |`y`| Whether or not to skip building dependencies
-| `--build-deps-only`                      |   | Only build dependency binaries. Will not build app binaries. (static or shared build only affects ffmpeg and ffmpeg-kit. Dependencies are always built statically.) |
-|`--build-ffmpeg-kit-only\|--kit\|--ffmpeg-kit=[shared]\|static`|   | build ffmpeg-kit library and bundle only of type [shared] or static. By default ffmpeg-kit always needs a static build of ffmpeg to be present already. Does not (re)build ext-library dependencies. Missing dependencies will cause a failure.
-|`--build-ffmpeg-only\|--ffmpeg=[shared]\|static`    |   | build ffmpeg binaries only of type [shared] or static. Does not (re)build ext-library dependencies. By default ffmpeg-kit always needs a static build of ffmpeg to be present already. Missing dependencies will cause a failure
-|`--build-tests\|--test\|--tests`          |   | Build tests. By default tests are not built.
-|`--clean-builds=[shared]\|static`         |   | clean ffmpeg and ffmpeg-kit builds of type [shared] or static and exit
-|`--reset-and-clean(=ARG)`                 |   | reset and clean all source directories of touch files and build artifacts. ARG=library src dir name
-| `--list-libraries`                       |   | Lists ffmpeg configuration including extra libraries and exit |
-| `--enable-[library name]`                |   | Enable extra ffmpeg libraries. Run --list-libraries and see under "External library support" |
-| `--ff-*`                                 |   | Pass additional ffmpeg parameters prefixed by ff-* to ffmpeg configure. No additional checks done |
-|`--resume`                                |   | resume previously inturrupted run (based on ~run.state file)
+| Option                                                          | Default                                     | Description                                                                                                                                                                                                                                     |
+| --------------------------------------------------------------- | ------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `--ffmpeg-git-checkout-version=`                                | `release/8.0`                               | Build a particular version of FFmpeg (e.g., n3.1.1 or a specific git hash)                                                                                                                                                                      |
+| `--ffmpeg-git-checkout=`                                        | `https://github.com/FFmpeg/FFmpeg.git`      | Clone FFmpeg from other repositories                                                                                                                                                                                                            |
+| `--ffmpeg-source-dir=`                                          | `[empty]`                                   | Specify the directory of ffmpeg source code. When specified, git will not be used                                                                                                                                                               |
+| `--cflags=`                                                     | `-mtune=generic -O3 -pipe`                  | Compiler flags (default works on any CPU)                                                                                                                                                                                                       |
+| `--cxxflags=`                                                   | `-ffunction-sections -fdata-sections -fPIC` | Compiler flags (default works on any CPU)                                                                                                                                                                                                       |
+| `--cppflags=`                                                   |                                             | Compiler flags (default works on any CPU)                                                                                                                                                                                                       |
+| `--ldflags=`                                                    |                                             | Compiler flags (default works on any CPU)                                                                                                                                                                                                       |
+| `--git-get-latest=`                                             | `y`                                         | Do a git pull for latest code from repositories like FFmpeg                                                                                                                                                                                     |
+| `--prefer-stable=`                                              | `y`                                         | Build a few libraries from releases instead of git master                                                                                                                                                                                       |
+| `--print-total-steps\|--print-all-steps`                        |                                             | print dependency steps and list all step names by index                                                                                                                                                                                         |
+| `--build-only={0..} OR [library_name]`                          |                                             | Build only specific dependency (0.. or step/library name from get-all-steps)                                                                                                                                                                    |
+| `--build-from={0..} OR [library_name]`                          |                                             | Start building dependencies from given step (0.. or step/library name)                                                                                                                                                                          |
+| `--build-deps=[y]`                                              | `y`                                         | Whether or not to skip building dependencies                                                                                                                                                                                                    |
+| `--build-deps-only`                                             |                                             | Only build dependency binaries. Will not build app binaries. (static or shared build only affects ffmpeg and ffmpeg-kit. Dependencies are always built statically.)                                                                             |
+| `--build-ffmpeg-kit-only\|--kit\|--ffmpeg-kit=[shared]\|static` |                                             | build ffmpeg-kit library and bundle only of type [shared] or static. By default ffmpeg-kit always needs a static build of ffmpeg to be present already. Does not (re)build ext-library dependencies. Missing dependencies will cause a failure. |
+| `--build-ffmpeg-only\|--ffmpeg=[shared]\|static`                |                                             | build ffmpeg binaries only of type [shared] or static. Does not (re)build ext-library dependencies. By default ffmpeg-kit always needs a static build of ffmpeg to be present already. Missing dependencies will cause a failure                |
+| `--build-tests\|--test\|--tests`                                |                                             | Build tests. By default tests are not built.                                                                                                                                                                                                    |
+| `--clean-builds=[shared]\|static`                               |                                             | clean ffmpeg and ffmpeg-kit builds of type [shared] or static and exit                                                                                                                                                                          |
+| `--reset-and-clean(=ARG)`                                       |                                             | reset and clean all source directories of touch files and build artifacts. ARG=library src dir name                                                                                                                                             |
+| `--list-libraries`                                              |                                             | Lists ffmpeg configuration including extra libraries and exit                                                                                                                                                                                   |
+| `--enable-[library name]`                                       |                                             | Enable extra ffmpeg libraries. Run --list-libraries and see under "External library support"                                                                                                                                                    |
+| `--ff-*`                                                        |                                             | Pass additional ffmpeg parameters prefixed by ff-* to ffmpeg configure. No additional checks done                                                                                                                                               |
+| `--resume`                                                      |                                             | resume previously inturrupted run (based on ~run.state file)                                                                                                                                                                                    |
 
 ## Bundle Matrix
 
-|Feature  |Base    |Audio   |Video   |Video+Hardware|Full|
-|---------|--------|--------|--------|--------------|----|
-|Video    |        |        |x       |              |x   |
-|Audio    |        |x       |x       |              |x   |
-|Streaming|        |x       |x       |x             |x   |
-|Hardware |        |        |        |x             |x   |
-|AI*      |        |        |        |              |    |
-|HTTPS    |        |x       |x       |x             |x   |
+| Feature   | Base | Audio | Video | Video+Hardware | Full |
+| --------- | ---- | ----- | ----- | -------------- | ---- |
+| Video     |      |       | x     |                | x    |
+| Audio     |      | x     | x     |                | x    |
+| Streaming |      | x     | x     | x              | x    |
+| Hardware  |      |       |       | x              | x    |
+| AI*       |      |       |       |                |      |
+| HTTPS     |      | x     | x     | x              | x    |
 
 ## Bundle Contents by Platform
 
@@ -302,216 +302,216 @@ Shows which bundle first includes each library on Android, Linux, and Windows. `
 > - **Video+HW+**: v4l2-m2m *(Linux)*
 > - **Video+ (Windows only)**: avisynth
 
-| Library | Android | Linux | Windows |
-| --- | --- | --- | --- |
-| **System** | | | |
-| bzlib, iconv, lzma, zlib | a+ | a+ | a+ |
-| **TLS / HTTPS**<sup>[4](#https-info)</sup> *(one selected per build)* | | | |
-| openssl *(default)*, gnutls, mbedtls, libtls | a+ | a+ | a+ |
-| schannel | | | a+ |
-| **Streaming** | | | |
-| libsrt, librist, librtmp | a+ | a+ | a+ |
-| **Audio Codecs** | | | |
-| libcodec2, libgsm, libilbc, liblc3, libmodplug, libmp3lame, libopencore-amrnb, libopencore-amrwb, libopenmpt, libopus, libsoxr, libspeex, libtwolame, libvo-amrwbenc, libvorbis, openal | a+ | a+ | a+ |
-| alsa | | a+ | |
-| libbs2b<sup>[10](#gpl-info)</sup> | a+ | a+ | a+ |
-| **Audio Extras** *(not in `--small` builds)* | | | |
-| chromaprint, libflite, libgme, libmysofa, libshine, lv2 | a+ | a+ | a+ |
-| libcdio, librubberband<sup>[10](#gpl-info)</sup> | a+ | a+ | a+ |
-| ladspa, libpulse, sndio | | a+ | |
-| libjack<sup>[10](#gpl-info)</sup> | | a+ | |
-| **Video Libraries** | | | |
-| lcms2, libaom, libaribb24, libaribcaption, libass, libbluray, libcaca, libdav1d, libfontconfig, libfreetype, libfribidi, libharfbuzz, libjxl, libkvazaar, liblcevc-dec, liboapv, libopenh264, libopenjpeg, librav1e, librsvg, libsnappy, libsvtav1, libtheora, libuavs3d, libvpx, libvvenc, libwebp, libxevd, libxeve, libzimg, libzvbi, libxml2, sdl2 | v+ | v+ | v+ |
-| libdavs2, libdvdnav, libdvdread, libx264, libx265, libxavs, libxavs2<sup>[10](#gpl-info)</sup> | v+ | v+ | v+ |
-| libdc1394, libiec61883 | | v+ | |
-| libxvid<sup>[10](#gpl-info)</sup> | | v+ | |
-| **Video Extras** *(not in `--small` builds)* | | | |
-| libklvanc, liblensfun, libqrencode, libvmaf, vapoursynth | v+ | v+ | v+ |
-| frei0r, libvidstab<sup>[10](#gpl-info)</sup> | v+ | v+ | v+ |
-| libv4l2, libxcb, libxcb-shape, libxcb-shm, libxcb-xfixes, xlib | | v+ | |
-| avisynth<sup>[10](#gpl-info)</sup> | | | v+ |
-| decklink<sup>[9](#nonfree-info)</sup> *(--enable-nonfree)* | v+ | v+ | v+ |
-| **Hardware Acceleration** | | | |
-| amf, libglslang, libmfx, libplacebo, libshaderc, libvpl, libnpp, opencl, opengl, vulkan, vulkan-static | h+ | h+ | h+ |
-| ffnvcodec, cuvid, nvdec, nvenc<sup>[12](#redist-info)</sup> | | h+ | h+ |
-| libdrm, vaapi, rkmpp, vdpau | | h+ | |
-| v4l2-m2m<sup>[10](#gpl-info)</sup> | | h+ | |
-| mediacodec | h+ | | |
-| cuda-llvm<sup>[12](#redist-info)</sup> | | | h+ |
-| **Hardware Nonfree** *(--enable-nonfree)* | | | |
-| cuda-nvcc<sup>[9](#nonfree-info)</sup> | | h+ | |
-| d3d11va, d3d12va, dxva2, mediafoundation<sup>[9](#nonfree-info)</sup> | | | h+ |
-| **AI** *(Full bundle only)* | | | |
-| pocketsphinx, whisper | f | f | f |
-| libopencv, libquirc, libtesseract<sup>[11](#compute-info)</sup> | f | f | f |
-| libopenvino, libtensorflow<sup>[11](#compute-info)</sup> | | f | f |
-| libtorch<sup>[11](#compute-info)</sup> | | f | |
-| **Nonfree additions** *(Full + --enable-nonfree)* | | | |
-| libfdk-aac<sup>[9](#nonfree-info)</sup> | f | f | f |
-| **Platform-specific** *(Full bundle only)* | | | |
-| jni | f | | |
+| Library                                                                                                                                                                                                                                                                                                                                                | Android | Linux | Windows |
+| ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------- | ----- | ------- |
+| **System**                                                                                                                                                                                                                                                                                                                                             |         |       |         |
+| bzlib, iconv, lzma, zlib                                                                                                                                                                                                                                                                                                                               | a+      | a+    | a+      |
+| **TLS / HTTPS**<sup>[4](#https-info)</sup> *(one selected per build)*                                                                                                                                                                                                                                                                                  |         |       |         |
+| openssl *(default)*, gnutls, mbedtls, libtls                                                                                                                                                                                                                                                                                                           | a+      | a+    | a+      |
+| schannel                                                                                                                                                                                                                                                                                                                                               |         |       | a+      |
+| **Streaming**                                                                                                                                                                                                                                                                                                                                          |         |       |         |
+| libsrt, librist, librtmp                                                                                                                                                                                                                                                                                                                               | a+      | a+    | a+      |
+| **Audio Codecs**                                                                                                                                                                                                                                                                                                                                       |         |       |         |
+| libcodec2, libgsm, libilbc, liblc3, libmodplug, libmp3lame, libopencore-amrnb, libopencore-amrwb, libopenmpt, libopus, libsoxr, libspeex, libtwolame, libvo-amrwbenc, libvorbis, openal                                                                                                                                                                | a+      | a+    | a+      |
+| alsa                                                                                                                                                                                                                                                                                                                                                   |         | a+    |         |
+| libbs2b<sup>[10](#gpl-info)</sup>                                                                                                                                                                                                                                                                                                                      | a+      | a+    | a+      |
+| **Audio Extras** *(not in `--small` builds)*                                                                                                                                                                                                                                                                                                           |         |       |         |
+| chromaprint, libflite, libgme, libmysofa, libshine, lv2                                                                                                                                                                                                                                                                                                | a+      | a+    | a+      |
+| libcdio, librubberband<sup>[10](#gpl-info)</sup>                                                                                                                                                                                                                                                                                                       | a+      | a+    | a+      |
+| ladspa, libpulse, sndio                                                                                                                                                                                                                                                                                                                                |         | a+    |         |
+| libjack<sup>[10](#gpl-info)</sup>                                                                                                                                                                                                                                                                                                                      |         | a+    |         |
+| **Video Libraries**                                                                                                                                                                                                                                                                                                                                    |         |       |         |
+| lcms2, libaom, libaribb24, libaribcaption, libass, libbluray, libcaca, libdav1d, libfontconfig, libfreetype, libfribidi, libharfbuzz, libjxl, libkvazaar, liblcevc-dec, liboapv, libopenh264, libopenjpeg, librav1e, librsvg, libsnappy, libsvtav1, libtheora, libuavs3d, libvpx, libvvenc, libwebp, libxevd, libxeve, libzimg, libzvbi, libxml2, sdl2 | v+      | v+    | v+      |
+| libdavs2, libdvdnav, libdvdread, libx264, libx265, libxavs, libxavs2<sup>[10](#gpl-info)</sup>                                                                                                                                                                                                                                                         | v+      | v+    | v+      |
+| libdc1394, libiec61883                                                                                                                                                                                                                                                                                                                                 |         | v+    |         |
+| libxvid<sup>[10](#gpl-info)</sup>                                                                                                                                                                                                                                                                                                                      |         | v+    |         |
+| **Video Extras** *(not in `--small` builds)*                                                                                                                                                                                                                                                                                                           |         |       |         |
+| libklvanc, liblensfun, libqrencode, libvmaf, vapoursynth                                                                                                                                                                                                                                                                                               | v+      | v+    | v+      |
+| frei0r, libvidstab<sup>[10](#gpl-info)</sup>                                                                                                                                                                                                                                                                                                           | v+      | v+    | v+      |
+| libv4l2, libxcb, libxcb-shape, libxcb-shm, libxcb-xfixes, xlib                                                                                                                                                                                                                                                                                         |         | v+    |         |
+| avisynth<sup>[10](#gpl-info)</sup>                                                                                                                                                                                                                                                                                                                     |         |       | v+      |
+| decklink<sup>[9](#nonfree-info)</sup> *(--enable-nonfree)*                                                                                                                                                                                                                                                                                             | v+      | v+    | v+      |
+| **Hardware Acceleration**                                                                                                                                                                                                                                                                                                                              |         |       |         |
+| amf, libglslang, libmfx, libplacebo, libshaderc, libvpl, libnpp, opencl, opengl, vulkan, vulkan-static                                                                                                                                                                                                                                                 | h+      | h+    | h+      |
+| ffnvcodec, cuvid, nvdec, nvenc<sup>[12](#redist-info)</sup>                                                                                                                                                                                                                                                                                            |         | h+    | h+      |
+| libdrm, vaapi, rkmpp, vdpau                                                                                                                                                                                                                                                                                                                            |         | h+    |         |
+| v4l2-m2m<sup>[10](#gpl-info)</sup>                                                                                                                                                                                                                                                                                                                     |         | h+    |         |
+| mediacodec                                                                                                                                                                                                                                                                                                                                             | h+      |       |         |
+| cuda-llvm<sup>[12](#redist-info)</sup>                                                                                                                                                                                                                                                                                                                 |         |       | h+      |
+| **Hardware Nonfree** *(--enable-nonfree)*                                                                                                                                                                                                                                                                                                              |         |       |         |
+| cuda-nvcc<sup>[9](#nonfree-info)</sup>                                                                                                                                                                                                                                                                                                                 |         | h+    |         |
+| d3d11va, d3d12va, dxva2, mediafoundation<sup>[9](#nonfree-info)</sup>                                                                                                                                                                                                                                                                                  |         |       | h+      |
+| **AI** *(Full bundle only)*                                                                                                                                                                                                                                                                                                                            |         |       |         |
+| pocketsphinx, whisper                                                                                                                                                                                                                                                                                                                                  | f       | f     | f       |
+| libopencv, libquirc, libtesseract<sup>[11](#compute-info)</sup>                                                                                                                                                                                                                                                                                        | f       | f     | f       |
+| libopenvino, libtensorflow<sup>[11](#compute-info)</sup>                                                                                                                                                                                                                                                                                               |         | f     | f       |
+| libtorch<sup>[11](#compute-info)</sup>                                                                                                                                                                                                                                                                                                                 |         | f     |         |
+| **Nonfree additions** *(Full + --enable-nonfree)*                                                                                                                                                                                                                                                                                                      |         |       |         |
+| libfdk-aac<sup>[9](#nonfree-info)</sup>                                                                                                                                                                                                                                                                                                                | f       | f     | f       |
+| **Platform-specific** *(Full bundle only)*                                                                                                                                                                                                                                                                                                             |         |       |         |
+| jni                                                                                                                                                                                                                                                                                                                                                    | f       |       |         |
 
 ## Supported External Libraries
 
 You can also get the full list of supported external libraries by running `--list-libraries`
 
-| Library            | Description | Platform<sup>[1](#platform-info)</sup> | Extra<sup>[2](#extra-info)</sup> | Audio    | Video    | Video+Hardware | Full |
-| --- | --- | --- | --- | --- | --- | --- | --- |
-| jni<sup>[8](#install-info)</sup> | Enables Java Native Interface interactions on Android | Android |  | x | x | x | x |
-| appkit<sup>[8](#install-info)</sup> | Accesses AppKit for screen and window capture | Apple |  | [9](#nonfree-info) | [9](#nonfree-info) | [9](#nonfree-info) | [9](#nonfree-info) |
-| avfoundation<sup>[8](#install-info)</sup> | Captures input from AVFoundation devices (cameras/mics) | Apple |  | [9](#nonfree-info) | [9](#nonfree-info) | [9](#nonfree-info) | [9](#nonfree-info) |
-| pocketsphinx | Performs offline speech-to-text conversion |  |  |  |  |  | x |
-| whisper | Integrates OpenAI Whisper for speech recognition |  |  |  |  |  | x |
-| audiotoolbox<sup>[8](#install-info)</sup> | Accesses AudioToolbox for native codec support | Apple |  | [9](#nonfree-info) | [9](#nonfree-info) | [9](#nonfree-info) | [9](#nonfree-info) |
-| alsa | Accesses ALSA for audio input and output | Linux |  | x | x | x | x |
-| chromaprint | Calculates audio fingerprints for identification |  | x | x | x | x | x |
-| ladspa | Loads LADSPA plugins for audio filtering |  | x | x | x | x | x |
-| libbs2b | Simulates binaural audio via DSP |  |  | [10](#gpl-info) | [10](#gpl-info) | [10](#gpl-info) | [10](#gpl-info) |
-| libcdio | Reads and extracts audio from CDs |  | [10](#gpl-info) | [10](#gpl-info) | [10](#gpl-info) | [10](#gpl-info) | [10](#gpl-info) |
-| libcelt<sup>[13](#deprecated-info)</sup> | Decodes CELT audio streams |  |  |  |  |  |  |
-| libcodec2 | Encodes and decodes Codec2 speech format |  |  | x | x | x | x |
-| libfdk-aac | Encodes and decodes high-quality AAC audio |  |  | [9](#nonfree-info) | [9](#nonfree-info) | [9](#nonfree-info) | [9](#nonfree-info) |
-| libflite | Synthesizes speech from text (TTS) filter |  | x | x | x | x | x |
-| libgme | Emulates and plays video game music formats |  | x | x | x | x | x |
-| libgsm | Encodes and decodes GSM audio |  |  | x | x | x | x |
-| libilbc | Encodes and decodes iLBC audio |  |  | x | x | x | x |
-| libjack<sup>[8](#install-info)</sup> | Connects to the JACK audio connection kit |  | [10](#gpl-info) | [10](#gpl-info) | [10](#gpl-info) | [10](#gpl-info) | [10](#gpl-info) |
-| liblc3 | Encodes and decodes LC3 (Bluetooth LE) audio |  |  | x | x | x | x |
-| libmodplug | Decodes module music formats (MOD, etc.) |  |  | x | x | x | x |
-| libmp3lame | Encodes MP3 audio |  |  | x | x | x | x |
-| libmysofa | Reads HRTF files for the sofalizer filter |  | x | x | x | x | x |
-| libopencore-amrnb | Encodes and decodes AMR-NB audio |  |  | x | x | x | x |
-| libopencore-amrwb | Decodes AMR-WB audio |  |  | x | x | x | x |
-| libopenmpt | Decodes tracked music files (OpenMPT based) |  |  | x | x | x | x |
-| libopus | Encodes and decodes Opus audio |  |  | x | x | x | x |
-| libpulse<sup>[8](#install-info)</sup> | Captures audio via PulseAudio server | Linux | x | x | x | x | x |
-| librubberband | Performs high-quality time stretching/pitch shifting |  | [10](#gpl-info) | [10](#gpl-info) | [10](#gpl-info) | [10](#gpl-info) | [10](#gpl-info) |
-| libshine | Encodes MP3 using fixed-point math |  | x | x | x | x | x |
-| libsoxr | Resamples audio using the SoX library |  |  | x | x | x | x |
-| libspeex | Encodes and decodes Speex audio |  |  | x | x | x | x |
-| libtwolame | Encodes MP2 audio |  |  | x | x | x | x |
-| libvo-amrwbenc | Encodes AMR-WB audio |  |  | x | x | x | x |
-| libvorbis | Encodes and decodes Vorbis audio |  |  | x | x | x | x |
-| lv2 | Loads LV2 plugins for audio filtering |  | x | x | x | x | x |
-| openal | Captures audio via OpenAL 1.1 |  |  | x | x | x | x |
-| sndio | Accesses sndio for audio I/O on OpenBSD |  | x | x | x | x | x |
-| gcrypt | Provides crypto functions for RTMP/RTMPE | [3](#rtmpte-info) |  |  |  |  |  |
-| gmp | Provides math functions for crypto contexts | [3](#rtmpte-info) |  |  |  |  |  |
-| bzlib | Compresses and decompresses bzip2 streams |  |  | x | x | x | x |
-| iconv | Converts character encodings for text/subtitles |  |  | x | x | x | x |
-| libxml2 | Parses XML for DASH, IMF, and other formats |  |  |  | x | x | x |
-| lzma | Provides LZMA lossless data compression |  |  | x | x | x | x |
-| zlib | Provides Deflate/zlib lossless data compression |  |  | x | x | x | x |
-| amf | Accesses AMD Advanced Media Framework (GPU encoding) |  |  |  |  | x | x |
-| mediacodec<sup>[8](#install-info)</sup> | Accesses Android MediaCodec hardware acceleration | Android |  |  |  | x | x |
-| coreimage<sup>[8](#install-info)</sup> | Applies video filters via Apple CoreImage | Apple |  |  |  | [9](#nonfree-info) | [9](#nonfree-info) |
-| metal<sup>[8](#install-info)</sup> | Utilizes Apple Metal for GPU acceleration | Apple |  |  |  | [9](#nonfree-info) | [9](#nonfree-info) |
-| videotoolbox<sup>[8](#install-info)</sup> | Accesses VideoToolbox for hardware encoding/decoding | Apple |  |  |  | [9](#nonfree-info) | [9](#nonfree-info) |
-| cuda-llvm<sup>[8](#install-info)</sup> | Compiles CUDA kernels at runtime using Clang | Nvidia |  |  |  | [12](#redist-info) | [12](#redist-info) |
-| cuda-nvcc<sup>[8](#install-info)</sup> | Compiles CUDA kernels using NVCC | Nvidia |  |  |  | [12](#redist-info) | [12](#redist-info) |
-| cuvid<sup>[8](#install-info)</sup> | Accesses Nvidia CUVID for decoding (Legacy) | Nvidia |  |  |  | [12](#redist-info) | [12](#redist-info) |
-| ffnvcodec | Provides headers for Nvidia codec API integration | Nvidia |  |  |  | [12](#redist-info) | [12](#redist-info) |
-| libdrm | Accesses Direct Rendering Manager for Linux GPU buffer | Linux |  |  |  | x | x |
-| libglslang<sup>[14](#conflict-info)</sup> | Compiles GLSL shaders to SPIR-V for Vulkan filters |  |  |  |  | x | x |
-| libmfx<sup>[14](#conflict-info)</sup> | Accesses Intel Quick Sync Video (QSV) via MediaSDK |  |  |  |  | x | x |
-| libnpp<sup>[13](#deprecated-info)</sup> | Uses Nvidia Performance Primitives for image processing | Nvidia |  |  |  |  |  |
-| libplacebo | Applies high-quality GPU video processing filters |  |  |  |  | x | x |
-| libshaderc<sup>[14](#conflict-info)</sup> | Compiles GLSL shaders to SPIR-V (Google implementation) |  |  |  |  | x | x |
-| libvpl<sup>[14](#conflict-info)</sup> | Accesses Intel oneVPL video processing library |  |  |  |  | x | x |
-| nvdec<sup>[8](#install-info)</sup> | Accesses Nvidia NVDEC for hardware decoding | Nvidia |  |  |  | [12](#redist-info) | [12](#redist-info) |
-| nvenc<sup>[8](#install-info)</sup> | Accesses Nvidia NVENC for hardware encoding | Nvidia |  |  |  | [12](#redist-info) | [12](#redist-info) |
-| opencl | Enables OpenCL-based video filtering |  |  |  |  | x | x |
-| rkmpp | Accesses Rockchip Media Process Platform for HW codecs | Linux |  |  |  | x | x |
-| v4l2-m2m | Accesses V4L2 Memory-to-Memory hardware codecs | Linux |  |  |  | [10](#gpl-info) | [10](#gpl-info) |
-| vaapi | Accesses Video Acceleration API for HW codecs | Linux |  |  |  | x | x |
-| vdpau<sup>[8](#install-info)</sup> | Accesses VDPAU for hardware decoding on Unix | Nvidia |  |  |  | x | x |
-| vulkan | Enables Vulkan-based filtering and rendering |  |  |  |  | x | x |
-| vulkan-static | Links libvulkan statically |  |  |  |  | x | x |
-| opengl | Enables OpenGL-based rendering and filtering |  |  |  |  | x | x |
-| d3d11va<sup>[8](#install-info)</sup> | Accesses Direct3D 11 for video acceleration | Windows |  |  |  | [9](#nonfree-info) | [9](#nonfree-info) |
-| d3d12va<sup>[8](#install-info)</sup> | Accesses Direct3D 12 for video acceleration | Windows |  |  |  | [9](#nonfree-info) | [9](#nonfree-info) |
-| dxva2<sup>[8](#install-info)</sup> | Accesses DirectX 9 for video acceleration | Windows |  |  |  | [9](#nonfree-info) | [9](#nonfree-info) |
-| mediafoundation<sup>[8](#install-info)</sup> | Accesses Windows Media Foundation for encoding | Windows |  |  |  | [9](#nonfree-info) | [9](#nonfree-info) |
-| ohcodec<sup>[8](#install-info)</sup> | Accesses OpenHarmony multimedia codec capabilities | HarmonyOS |  |  |  | [9](#nonfree-info) | [9](#nonfree-info) |
-| mmal | Accesses Broadcom MMAL for Raspberry Pi multimedia | Raspberry Pi |  |  |  | [9](#nonfree-info) | [9](#nonfree-info) |
-| omx | Accesses OpenMAX IL for hardware acceleration | Raspberry Pi |  |  |  | [9](#nonfree-info) | [9](#nonfree-info) |
-| omx-rpi | Accesses OpenMAX IL implementation for Raspberry Pi | Raspberry Pi |  |  |  | [9](#nonfree-info) | [9](#nonfree-info) |
-| securetransport<sup>[8](#install-info)</sup> | Provides TLS/SSL support via Apple Secure Transport | Apple |  | [4](#https-info) | [4](#https-info) | [4](#https-info) | [4](#https-info) |
-| gnutls | Provides TLS/SSL support via GnuTLS |  |  | [4](#https-info) | [4](#https-info) | [4](#https-info) | [4](#https-info) |
-| libtls | Provides TLS/SSL support via LibreSSL |  |  | [4](#https-info) | [4](#https-info) | [4](#https-info) | [4](#https-info) |
-| mbedtls | Provides TLS/SSL support via mbedTLS |  |  | [4](#https-info) | [4](#https-info) | [4](#https-info) | [4](#https-info) |
-| openssl | Provides TLS/SSL support via OpenSSL |  |  | [4](#https-info) | [4](#https-info) | [4](#https-info) | [4](#https-info) |
-| schannel<sup>[8](#install-info)</sup> | Provides TLS/SSL support via Windows SChannel | Windows |  | [4](#https-info) | [4](#https-info) | [4](#https-info) | [4](#https-info) |
-| librabbitmq | Enables AMQP protocol support (RabbitMQ) |  | [5](#mq-info) |  |  |  |  |
-| libzmq | Enables ZeroMQ message passing protocol |  | [5](#mq-info) |  |  |  |  |
-| libsmbclient | Enables SMB/CIFS protocol support |  | [6](#smb-info) & [10](#gpl-info) |  |  |  |  |
-| libssh | Enables SFTP protocol support |  | [7](#ssh-info) |  |  |  |  |
-| librist | Enables Reliable Internet Stream Transport (RIST) |  |  | x | x | x | x |
-| librtmp | Enables RTMP and RTMPE stream support |  |  | x | x | x | x |
-| libsrt | Enables Secure Reliable Transport (SRT) protocol |  |  | x | x | x | x |
-| libopencv | Applies computer vision filters via OpenCV |  |  |  |  |  | x |
-| libopenvino<sup>[8](#install-info)</sup> | Runs DNN-based filters using Intel OpenVINO backend |  |  |  |  |  | [11](#compute-info) |
-| libtensorflow<sup>[8](#install-info)</sup> | Runs DNN-based filters using TensorFlow backend |  |  |  |  |  | [11](#compute-info) |
-| libtorch<sup>[8](#install-info)</sup> | Runs DNN-based filters using PyTorch backend |  |  |  |  |  | [11](#compute-info) |
-| libquirc | Decodes QR codes from video streams |  |  |  |  |  | x |
-| libtesseract | Performs Optical Character Recognition (OCR) |  |  |  |  |  | x |
-| sdl2 | Outputs audio/video to window using SDL2 |  |  | x | x | x | x |
-| avisynth | Reads and demuxes AviSynth script files |  | [10](#gpl-info) |  | [10](#gpl-info) | [10](#gpl-info) | [10](#gpl-info) |
-| decklink | Captures/Outputs via Blackmagic DeckLink devices |  |  |  | [9](#nonfree-info) | [9](#nonfree-info) | [9](#nonfree-info) |
-| frei0r | Loads Frei0r plugins for video filtering |  | [10](#gpl-info) |  | [10](#gpl-info) | [10](#gpl-info) | [10](#gpl-info) |
-| lcms2 | Applies ICC color profiles using LittleCMS 2 |  |  |  | x | x | x |
-| libaom | Encodes and decodes AV1 video |  |  |  | x | x | x |
-| libaribb24 | Decodes ARIB STD-B24 captions |  |  |  | x | x | x |
-| libaribcaption | Decodes ARIB captions (alternative library) |  |  |  | x | x | x |
-| libass | Renders ASS/SSA subtitles |  |  |  | x | x | x |
-| libbluray | Reads Blu-ray playlists and protocols |  |  |  | x | x | x |
-| libcaca | Renders video as ASCII characters |  |  |  | x | x | x |
-| libdav1d | Decodes AV1 video (high performance) |  |  |  | x | x | x |
-| libdavs2 | Decodes AVS2 video |  |  |  | [10](#gpl-info) | [10](#gpl-info) | [10](#gpl-info) |
-| libdc1394 | Captures video from FireWire cameras |  |  |  | x | x | x |
-| libdvdnav | Navigates and demuxes DVD menus/content |  |  |  | [10](#gpl-info) | [10](#gpl-info) | [10](#gpl-info) |
-| libdvdread | Reads DVD filesystem structures |  |  |  | [10](#gpl-info) | [10](#gpl-info) | [10](#gpl-info) |
-| libfontconfig | Configures and locates fonts for text rendering |  |  |  | x | x | x |
-| libfreetype | Renders fonts for text overlays |  |  |  | x | x | x |
-| libfribidi | Handles bi-directional text logic |  |  |  | x | x | x |
-| libharfbuzz | Shapes complex text for subtitles |  |  |  | x | x | x |
-| libiec61883 | Captures DV/HDV via FireWire | Linux |  |  | x | x | x |
-| libjxl | Encodes and decodes JPEG XL images |  |  |  | x | x | x |
-| libklvanc | Processes Vertical Ancillary Data (VANC) |  | x |  | x | x | x |
-| libkvazaar | Encodes HEVC video |  |  |  | x | x | x |
-| liblcevc-dec | Decodes LCEVC video enhancement layers |  |  |  | x | x | x |
-| liblensfun | Corrects lens distortion using Lensfun |  | x |  | x | x | x |
-| liboapv | Encodes OAPV (Open Advanced Photos/Video) |  |  |  | x | x | x |
-| libopenh264 | Encodes H.264 video (Cisco implementation) |  |  |  | x | x | x |
-| libopenjpeg | Encodes and decodes JPEG 2000 images |  |  |  | x | x | x |
-| libqrencode | Generates QR codes as video sources |  | x |  | x | x | x |
-| librav1e | Encodes AV1 video (Rust implementation) |  |  |  | x | x | x |
-| librsvg | Renders SVG files for overlays |  |  |  | x | x | x |
-| libsnappy | Compresses data for the Hap codec |  |  |  | x | x | x |
-| libsvtav1 | Encodes AV1 video (SVT implementation) |  |  |  | x | x | x |
-| libtheora | Encodes Theora video |  |  |  | x | x | x |
-| libuavs3d | Decodes AVS3 video |  |  |  | x | x | x |
-| libv4l2 | Accesses V4L2 devices and utilities | Linux | x |  | x | x | x |
-| libvidstab | Stabilizes video using motion analysis |  | [10](#gpl-info) |  | [10](#gpl-info) | [10](#gpl-info) | [10](#gpl-info) |
-| libvmaf | Calculates VMAF video quality scores |  | x |  | x | x | x |
-| libvpx | Encodes and decodes VP8 and VP9 video |  |  |  | x | x | x |
-| libvvenc | Encodes H.266/VVC video |  |  |  | x | x | x |
-| libwebp | Encodes WebP images |  |  |  | x | x | x |
-| libx264 | Encodes H.264/AVC video |  |  |  | [10](#gpl-info) | [10](#gpl-info) | [10](#gpl-info) |
-| libx265 | Encodes HEVC/H.265 video |  |  |  | [10](#gpl-info) | [10](#gpl-info) | [10](#gpl-info) |
-| libxavs | Encodes AVS video |  |  |  | [10](#gpl-info) | [10](#gpl-info) | [10](#gpl-info) |
-| libxavs2 | Encodes AVS2 video |  |  |  | [10](#gpl-info) | [10](#gpl-info) | [10](#gpl-info) |
-| libxcb | Captures screen content via XCB | Linux | x |  | x | x | x |
-| libxcb-shape | Handles X11 shapes during capture | Linux | x |  | x | x | x |
-| libxcb-shm | Uses shared memory for X11 capture | Linux | x |  | x | x | x |
-| libxcb-xfixes | Fixes cursor rendering in X11 capture | Linux | x |  | x | x | x |
-| libxevd | Decodes EVC video |  |  |  | x | x | x |
-| libxeve | Encodes EVC video |  |  |  | x | x | x |
-| libxvid | Encodes MPEG-4 video (Xvid) |  |  |  | [10](#gpl-info) | [10](#gpl-info) | [10](#gpl-info) |
-| libzimg | Performs scaling and color conversion (zscale) |  |  |  | x | x | x |
-| libzvbi | Decodes VBI teletext data |  |  |  | x | x | x |
-| vapoursynth | Demuxes VapourSynth script frames |  | x |  | x | x | x |
-| xlib | Captures screen content via Xlib | Linux | x |  | x | x | x |
+| Library                                      | Description                                             | Platform<sup>[1](#platform-info)</sup> | Extra<sup>[2](#extra-info)</sup> | Audio              | Video              | Video+Hardware     | Full                |
+| -------------------------------------------- | ------------------------------------------------------- | -------------------------------------- | -------------------------------- | ------------------ | ------------------ | ------------------ | ------------------- |
+| jni<sup>[8](#install-info)</sup>             | Enables Java Native Interface interactions on Android   | Android                                |                                  | x                  | x                  | x                  | x                   |
+| appkit<sup>[8](#install-info)</sup>          | Accesses AppKit for screen and window capture           | Apple                                  |                                  | [9](#nonfree-info) | [9](#nonfree-info) | [9](#nonfree-info) | [9](#nonfree-info)  |
+| avfoundation<sup>[8](#install-info)</sup>    | Captures input from AVFoundation devices (cameras/mics) | Apple                                  |                                  | [9](#nonfree-info) | [9](#nonfree-info) | [9](#nonfree-info) | [9](#nonfree-info)  |
+| pocketsphinx                                 | Performs offline speech-to-text conversion              |                                        |                                  |                    |                    |                    | x                   |
+| whisper                                      | Integrates OpenAI Whisper for speech recognition        |                                        |                                  |                    |                    |                    | x                   |
+| audiotoolbox<sup>[8](#install-info)</sup>    | Accesses AudioToolbox for native codec support          | Apple                                  |                                  | [9](#nonfree-info) | [9](#nonfree-info) | [9](#nonfree-info) | [9](#nonfree-info)  |
+| alsa                                         | Accesses ALSA for audio input and output                | Linux                                  |                                  | x                  | x                  | x                  | x                   |
+| chromaprint                                  | Calculates audio fingerprints for identification        |                                        | x                                | x                  | x                  | x                  | x                   |
+| ladspa                                       | Loads LADSPA plugins for audio filtering                |                                        | x                                | x                  | x                  | x                  | x                   |
+| libbs2b                                      | Simulates binaural audio via DSP                        |                                        |                                  | [10](#gpl-info)    | [10](#gpl-info)    | [10](#gpl-info)    | [10](#gpl-info)     |
+| libcdio                                      | Reads and extracts audio from CDs                       |                                        | [10](#gpl-info)                  | [10](#gpl-info)    | [10](#gpl-info)    | [10](#gpl-info)    | [10](#gpl-info)     |
+| libcelt<sup>[13](#deprecated-info)</sup>     | Decodes CELT audio streams                              |                                        |                                  |                    |                    |                    |                     |
+| libcodec2                                    | Encodes and decodes Codec2 speech format                |                                        |                                  | x                  | x                  | x                  | x                   |
+| libfdk-aac                                   | Encodes and decodes high-quality AAC audio              |                                        |                                  | [9](#nonfree-info) | [9](#nonfree-info) | [9](#nonfree-info) | [9](#nonfree-info)  |
+| libflite                                     | Synthesizes speech from text (TTS) filter               |                                        | x                                | x                  | x                  | x                  | x                   |
+| libgme                                       | Emulates and plays video game music formats             |                                        | x                                | x                  | x                  | x                  | x                   |
+| libgsm                                       | Encodes and decodes GSM audio                           |                                        |                                  | x                  | x                  | x                  | x                   |
+| libilbc                                      | Encodes and decodes iLBC audio                          |                                        |                                  | x                  | x                  | x                  | x                   |
+| libjack<sup>[8](#install-info)</sup>         | Connects to the JACK audio connection kit               |                                        | [10](#gpl-info)                  | [10](#gpl-info)    | [10](#gpl-info)    | [10](#gpl-info)    | [10](#gpl-info)     |
+| liblc3                                       | Encodes and decodes LC3 (Bluetooth LE) audio            |                                        |                                  | x                  | x                  | x                  | x                   |
+| libmodplug                                   | Decodes module music formats (MOD, etc.)                |                                        |                                  | x                  | x                  | x                  | x                   |
+| libmp3lame                                   | Encodes MP3 audio                                       |                                        |                                  | x                  | x                  | x                  | x                   |
+| libmysofa                                    | Reads HRTF files for the sofalizer filter               |                                        | x                                | x                  | x                  | x                  | x                   |
+| libopencore-amrnb                            | Encodes and decodes AMR-NB audio                        |                                        |                                  | x                  | x                  | x                  | x                   |
+| libopencore-amrwb                            | Decodes AMR-WB audio                                    |                                        |                                  | x                  | x                  | x                  | x                   |
+| libopenmpt                                   | Decodes tracked music files (OpenMPT based)             |                                        |                                  | x                  | x                  | x                  | x                   |
+| libopus                                      | Encodes and decodes Opus audio                          |                                        |                                  | x                  | x                  | x                  | x                   |
+| libpulse<sup>[8](#install-info)</sup>        | Captures audio via PulseAudio server                    | Linux                                  | x                                | x                  | x                  | x                  | x                   |
+| librubberband                                | Performs high-quality time stretching/pitch shifting    |                                        | [10](#gpl-info)                  | [10](#gpl-info)    | [10](#gpl-info)    | [10](#gpl-info)    | [10](#gpl-info)     |
+| libshine                                     | Encodes MP3 using fixed-point math                      |                                        | x                                | x                  | x                  | x                  | x                   |
+| libsoxr                                      | Resamples audio using the SoX library                   |                                        |                                  | x                  | x                  | x                  | x                   |
+| libspeex                                     | Encodes and decodes Speex audio                         |                                        |                                  | x                  | x                  | x                  | x                   |
+| libtwolame                                   | Encodes MP2 audio                                       |                                        |                                  | x                  | x                  | x                  | x                   |
+| libvo-amrwbenc                               | Encodes AMR-WB audio                                    |                                        |                                  | x                  | x                  | x                  | x                   |
+| libvorbis                                    | Encodes and decodes Vorbis audio                        |                                        |                                  | x                  | x                  | x                  | x                   |
+| lv2                                          | Loads LV2 plugins for audio filtering                   |                                        | x                                | x                  | x                  | x                  | x                   |
+| openal                                       | Captures audio via OpenAL 1.1                           |                                        |                                  | x                  | x                  | x                  | x                   |
+| sndio                                        | Accesses sndio for audio I/O on OpenBSD                 |                                        | x                                | x                  | x                  | x                  | x                   |
+| gcrypt                                       | Provides crypto functions for RTMP/RTMPE                | [3](#rtmpte-info)                      |                                  |                    |                    |                    |                     |
+| gmp                                          | Provides math functions for crypto contexts             | [3](#rtmpte-info)                      |                                  |                    |                    |                    |                     |
+| bzlib                                        | Compresses and decompresses bzip2 streams               |                                        |                                  | x                  | x                  | x                  | x                   |
+| iconv                                        | Converts character encodings for text/subtitles         |                                        |                                  | x                  | x                  | x                  | x                   |
+| libxml2                                      | Parses XML for DASH, IMF, and other formats             |                                        |                                  |                    | x                  | x                  | x                   |
+| lzma                                         | Provides LZMA lossless data compression                 |                                        |                                  | x                  | x                  | x                  | x                   |
+| zlib                                         | Provides Deflate/zlib lossless data compression         |                                        |                                  | x                  | x                  | x                  | x                   |
+| amf                                          | Accesses AMD Advanced Media Framework (GPU encoding)    |                                        |                                  |                    |                    | x                  | x                   |
+| mediacodec<sup>[8](#install-info)</sup>      | Accesses Android MediaCodec hardware acceleration       | Android                                |                                  |                    |                    | x                  | x                   |
+| coreimage<sup>[8](#install-info)</sup>       | Applies video filters via Apple CoreImage               | Apple                                  |                                  |                    |                    | [9](#nonfree-info) | [9](#nonfree-info)  |
+| metal<sup>[8](#install-info)</sup>           | Utilizes Apple Metal for GPU acceleration               | Apple                                  |                                  |                    |                    | [9](#nonfree-info) | [9](#nonfree-info)  |
+| videotoolbox<sup>[8](#install-info)</sup>    | Accesses VideoToolbox for hardware encoding/decoding    | Apple                                  |                                  |                    |                    | [9](#nonfree-info) | [9](#nonfree-info)  |
+| cuda-llvm<sup>[8](#install-info)</sup>       | Compiles CUDA kernels at runtime using Clang            | Nvidia                                 |                                  |                    |                    | [12](#redist-info) | [12](#redist-info)  |
+| cuda-nvcc<sup>[8](#install-info)</sup>       | Compiles CUDA kernels using NVCC                        | Nvidia                                 |                                  |                    |                    | [12](#redist-info) | [12](#redist-info)  |
+| cuvid<sup>[8](#install-info)</sup>           | Accesses Nvidia CUVID for decoding (Legacy)             | Nvidia                                 |                                  |                    |                    | [12](#redist-info) | [12](#redist-info)  |
+| ffnvcodec                                    | Provides headers for Nvidia codec API integration       | Nvidia                                 |                                  |                    |                    | [12](#redist-info) | [12](#redist-info)  |
+| libdrm                                       | Accesses Direct Rendering Manager for Linux GPU buffer  | Linux                                  |                                  |                    |                    | x                  | x                   |
+| libglslang<sup>[14](#conflict-info)</sup>    | Compiles GLSL shaders to SPIR-V for Vulkan filters      |                                        |                                  |                    |                    | x                  | x                   |
+| libmfx<sup>[14](#conflict-info)</sup>        | Accesses Intel Quick Sync Video (QSV) via MediaSDK      |                                        |                                  |                    |                    | x                  | x                   |
+| libnpp<sup>[13](#deprecated-info)</sup>      | Uses Nvidia Performance Primitives for image processing | Nvidia                                 |                                  |                    |                    |                    |                     |
+| libplacebo                                   | Applies high-quality GPU video processing filters       |                                        |                                  |                    |                    | x                  | x                   |
+| libshaderc<sup>[14](#conflict-info)</sup>    | Compiles GLSL shaders to SPIR-V (Google implementation) |                                        |                                  |                    |                    | x                  | x                   |
+| libvpl<sup>[14](#conflict-info)</sup>        | Accesses Intel oneVPL video processing library          |                                        |                                  |                    |                    | x                  | x                   |
+| nvdec<sup>[8](#install-info)</sup>           | Accesses Nvidia NVDEC for hardware decoding             | Nvidia                                 |                                  |                    |                    | [12](#redist-info) | [12](#redist-info)  |
+| nvenc<sup>[8](#install-info)</sup>           | Accesses Nvidia NVENC for hardware encoding             | Nvidia                                 |                                  |                    |                    | [12](#redist-info) | [12](#redist-info)  |
+| opencl                                       | Enables OpenCL-based video filtering                    |                                        |                                  |                    |                    | x                  | x                   |
+| rkmpp                                        | Accesses Rockchip Media Process Platform for HW codecs  | Linux                                  |                                  |                    |                    | x                  | x                   |
+| v4l2-m2m                                     | Accesses V4L2 Memory-to-Memory hardware codecs          | Linux                                  |                                  |                    |                    | [10](#gpl-info)    | [10](#gpl-info)     |
+| vaapi                                        | Accesses Video Acceleration API for HW codecs           | Linux                                  |                                  |                    |                    | x                  | x                   |
+| vdpau<sup>[8](#install-info)</sup>           | Accesses VDPAU for hardware decoding on Unix            | Nvidia                                 |                                  |                    |                    | x                  | x                   |
+| vulkan                                       | Enables Vulkan-based filtering and rendering            |                                        |                                  |                    |                    | x                  | x                   |
+| vulkan-static                                | Links libvulkan statically                              |                                        |                                  |                    |                    | x                  | x                   |
+| opengl                                       | Enables OpenGL-based rendering and filtering            |                                        |                                  |                    |                    | x                  | x                   |
+| d3d11va<sup>[8](#install-info)</sup>         | Accesses Direct3D 11 for video acceleration             | Windows                                |                                  |                    |                    | [9](#nonfree-info) | [9](#nonfree-info)  |
+| d3d12va<sup>[8](#install-info)</sup>         | Accesses Direct3D 12 for video acceleration             | Windows                                |                                  |                    |                    | [9](#nonfree-info) | [9](#nonfree-info)  |
+| dxva2<sup>[8](#install-info)</sup>           | Accesses DirectX 9 for video acceleration               | Windows                                |                                  |                    |                    | [9](#nonfree-info) | [9](#nonfree-info)  |
+| mediafoundation<sup>[8](#install-info)</sup> | Accesses Windows Media Foundation for encoding          | Windows                                |                                  |                    |                    | [9](#nonfree-info) | [9](#nonfree-info)  |
+| ohcodec<sup>[8](#install-info)</sup>         | Accesses OpenHarmony multimedia codec capabilities      | HarmonyOS                              |                                  |                    |                    | [9](#nonfree-info) | [9](#nonfree-info)  |
+| mmal                                         | Accesses Broadcom MMAL for Raspberry Pi multimedia      | Raspberry Pi                           |                                  |                    |                    | [9](#nonfree-info) | [9](#nonfree-info)  |
+| omx                                          | Accesses OpenMAX IL for hardware acceleration           | Raspberry Pi                           |                                  |                    |                    | [9](#nonfree-info) | [9](#nonfree-info)  |
+| omx-rpi                                      | Accesses OpenMAX IL implementation for Raspberry Pi     | Raspberry Pi                           |                                  |                    |                    | [9](#nonfree-info) | [9](#nonfree-info)  |
+| securetransport<sup>[8](#install-info)</sup> | Provides TLS/SSL support via Apple Secure Transport     | Apple                                  |                                  | [4](#https-info)   | [4](#https-info)   | [4](#https-info)   | [4](#https-info)    |
+| gnutls                                       | Provides TLS/SSL support via GnuTLS                     |                                        |                                  | [4](#https-info)   | [4](#https-info)   | [4](#https-info)   | [4](#https-info)    |
+| libtls                                       | Provides TLS/SSL support via LibreSSL                   |                                        |                                  | [4](#https-info)   | [4](#https-info)   | [4](#https-info)   | [4](#https-info)    |
+| mbedtls                                      | Provides TLS/SSL support via mbedTLS                    |                                        |                                  | [4](#https-info)   | [4](#https-info)   | [4](#https-info)   | [4](#https-info)    |
+| openssl                                      | Provides TLS/SSL support via OpenSSL                    |                                        |                                  | [4](#https-info)   | [4](#https-info)   | [4](#https-info)   | [4](#https-info)    |
+| schannel<sup>[8](#install-info)</sup>        | Provides TLS/SSL support via Windows SChannel           | Windows                                |                                  | [4](#https-info)   | [4](#https-info)   | [4](#https-info)   | [4](#https-info)    |
+| librabbitmq                                  | Enables AMQP protocol support (RabbitMQ)                |                                        | [5](#mq-info)                    |                    |                    |                    |                     |
+| libzmq                                       | Enables ZeroMQ message passing protocol                 |                                        | [5](#mq-info)                    |                    |                    |                    |                     |
+| libsmbclient                                 | Enables SMB/CIFS protocol support                       |                                        | [6](#smb-info) & [10](#gpl-info) |                    |                    |                    |                     |
+| libssh                                       | Enables SFTP protocol support                           |                                        | [7](#ssh-info)                   |                    |                    |                    |                     |
+| librist                                      | Enables Reliable Internet Stream Transport (RIST)       |                                        |                                  | x                  | x                  | x                  | x                   |
+| librtmp                                      | Enables RTMP and RTMPE stream support                   |                                        |                                  | x                  | x                  | x                  | x                   |
+| libsrt                                       | Enables Secure Reliable Transport (SRT) protocol        |                                        |                                  | x                  | x                  | x                  | x                   |
+| libopencv                                    | Applies computer vision filters via OpenCV              |                                        |                                  |                    |                    |                    | x                   |
+| libopenvino<sup>[8](#install-info)</sup>     | Runs DNN-based filters using Intel OpenVINO backend     |                                        |                                  |                    |                    |                    | [11](#compute-info) |
+| libtensorflow<sup>[8](#install-info)</sup>   | Runs DNN-based filters using TensorFlow backend         |                                        |                                  |                    |                    |                    | [11](#compute-info) |
+| libtorch<sup>[8](#install-info)</sup>        | Runs DNN-based filters using PyTorch backend            |                                        |                                  |                    |                    |                    | [11](#compute-info) |
+| libquirc                                     | Decodes QR codes from video streams                     |                                        |                                  |                    |                    |                    | x                   |
+| libtesseract                                 | Performs Optical Character Recognition (OCR)            |                                        |                                  |                    |                    |                    | x                   |
+| sdl2                                         | Outputs audio/video to window using SDL2                |                                        |                                  | x                  | x                  | x                  | x                   |
+| avisynth                                     | Reads and demuxes AviSynth script files                 |                                        | [10](#gpl-info)                  |                    | [10](#gpl-info)    | [10](#gpl-info)    | [10](#gpl-info)     |
+| decklink                                     | Captures/Outputs via Blackmagic DeckLink devices        |                                        |                                  |                    | [9](#nonfree-info) | [9](#nonfree-info) | [9](#nonfree-info)  |
+| frei0r                                       | Loads Frei0r plugins for video filtering                |                                        | [10](#gpl-info)                  |                    | [10](#gpl-info)    | [10](#gpl-info)    | [10](#gpl-info)     |
+| lcms2                                        | Applies ICC color profiles using LittleCMS 2            |                                        |                                  |                    | x                  | x                  | x                   |
+| libaom                                       | Encodes and decodes AV1 video                           |                                        |                                  |                    | x                  | x                  | x                   |
+| libaribb24                                   | Decodes ARIB STD-B24 captions                           |                                        |                                  |                    | x                  | x                  | x                   |
+| libaribcaption                               | Decodes ARIB captions (alternative library)             |                                        |                                  |                    | x                  | x                  | x                   |
+| libass                                       | Renders ASS/SSA subtitles                               |                                        |                                  |                    | x                  | x                  | x                   |
+| libbluray                                    | Reads Blu-ray playlists and protocols                   |                                        |                                  |                    | x                  | x                  | x                   |
+| libcaca                                      | Renders video as ASCII characters                       |                                        |                                  |                    | x                  | x                  | x                   |
+| libdav1d                                     | Decodes AV1 video (high performance)                    |                                        |                                  |                    | x                  | x                  | x                   |
+| libdavs2                                     | Decodes AVS2 video                                      |                                        |                                  |                    | [10](#gpl-info)    | [10](#gpl-info)    | [10](#gpl-info)     |
+| libdc1394                                    | Captures video from FireWire cameras                    |                                        |                                  |                    | x                  | x                  | x                   |
+| libdvdnav                                    | Navigates and demuxes DVD menus/content                 |                                        |                                  |                    | [10](#gpl-info)    | [10](#gpl-info)    | [10](#gpl-info)     |
+| libdvdread                                   | Reads DVD filesystem structures                         |                                        |                                  |                    | [10](#gpl-info)    | [10](#gpl-info)    | [10](#gpl-info)     |
+| libfontconfig                                | Configures and locates fonts for text rendering         |                                        |                                  |                    | x                  | x                  | x                   |
+| libfreetype                                  | Renders fonts for text overlays                         |                                        |                                  |                    | x                  | x                  | x                   |
+| libfribidi                                   | Handles bi-directional text logic                       |                                        |                                  |                    | x                  | x                  | x                   |
+| libharfbuzz                                  | Shapes complex text for subtitles                       |                                        |                                  |                    | x                  | x                  | x                   |
+| libiec61883                                  | Captures DV/HDV via FireWire                            | Linux                                  |                                  |                    | x                  | x                  | x                   |
+| libjxl                                       | Encodes and decodes JPEG XL images                      |                                        |                                  |                    | x                  | x                  | x                   |
+| libklvanc                                    | Processes Vertical Ancillary Data (VANC)                |                                        | x                                |                    | x                  | x                  | x                   |
+| libkvazaar                                   | Encodes HEVC video                                      |                                        |                                  |                    | x                  | x                  | x                   |
+| liblcevc-dec                                 | Decodes LCEVC video enhancement layers                  |                                        |                                  |                    | x                  | x                  | x                   |
+| liblensfun                                   | Corrects lens distortion using Lensfun                  |                                        | x                                |                    | x                  | x                  | x                   |
+| liboapv                                      | Encodes OAPV (Open Advanced Photos/Video)               |                                        |                                  |                    | x                  | x                  | x                   |
+| libopenh264                                  | Encodes H.264 video (Cisco implementation)              |                                        |                                  |                    | x                  | x                  | x                   |
+| libopenjpeg                                  | Encodes and decodes JPEG 2000 images                    |                                        |                                  |                    | x                  | x                  | x                   |
+| libqrencode                                  | Generates QR codes as video sources                     |                                        | x                                |                    | x                  | x                  | x                   |
+| librav1e                                     | Encodes AV1 video (Rust implementation)                 |                                        |                                  |                    | x                  | x                  | x                   |
+| librsvg                                      | Renders SVG files for overlays                          |                                        |                                  |                    | x                  | x                  | x                   |
+| libsnappy                                    | Compresses data for the Hap codec                       |                                        |                                  |                    | x                  | x                  | x                   |
+| libsvtav1                                    | Encodes AV1 video (SVT implementation)                  |                                        |                                  |                    | x                  | x                  | x                   |
+| libtheora                                    | Encodes Theora video                                    |                                        |                                  |                    | x                  | x                  | x                   |
+| libuavs3d                                    | Decodes AVS3 video                                      |                                        |                                  |                    | x                  | x                  | x                   |
+| libv4l2                                      | Accesses V4L2 devices and utilities                     | Linux                                  | x                                |                    | x                  | x                  | x                   |
+| libvidstab                                   | Stabilizes video using motion analysis                  |                                        | [10](#gpl-info)                  |                    | [10](#gpl-info)    | [10](#gpl-info)    | [10](#gpl-info)     |
+| libvmaf                                      | Calculates VMAF video quality scores                    |                                        | x                                |                    | x                  | x                  | x                   |
+| libvpx                                       | Encodes and decodes VP8 and VP9 video                   |                                        |                                  |                    | x                  | x                  | x                   |
+| libvvenc                                     | Encodes H.266/VVC video                                 |                                        |                                  |                    | x                  | x                  | x                   |
+| libwebp                                      | Encodes WebP images                                     |                                        |                                  |                    | x                  | x                  | x                   |
+| libx264                                      | Encodes H.264/AVC video                                 |                                        |                                  |                    | [10](#gpl-info)    | [10](#gpl-info)    | [10](#gpl-info)     |
+| libx265                                      | Encodes HEVC/H.265 video                                |                                        |                                  |                    | [10](#gpl-info)    | [10](#gpl-info)    | [10](#gpl-info)     |
+| libxavs                                      | Encodes AVS video                                       |                                        |                                  |                    | [10](#gpl-info)    | [10](#gpl-info)    | [10](#gpl-info)     |
+| libxavs2                                     | Encodes AVS2 video                                      |                                        |                                  |                    | [10](#gpl-info)    | [10](#gpl-info)    | [10](#gpl-info)     |
+| libxcb                                       | Captures screen content via XCB                         | Linux                                  | x                                |                    | x                  | x                  | x                   |
+| libxcb-shape                                 | Handles X11 shapes during capture                       | Linux                                  | x                                |                    | x                  | x                  | x                   |
+| libxcb-shm                                   | Uses shared memory for X11 capture                      | Linux                                  | x                                |                    | x                  | x                  | x                   |
+| libxcb-xfixes                                | Fixes cursor rendering in X11 capture                   | Linux                                  | x                                |                    | x                  | x                  | x                   |
+| libxevd                                      | Decodes EVC video                                       |                                        |                                  |                    | x                  | x                  | x                   |
+| libxeve                                      | Encodes EVC video                                       |                                        |                                  |                    | x                  | x                  | x                   |
+| libxvid                                      | Encodes MPEG-4 video (Xvid)                             |                                        |                                  |                    | [10](#gpl-info)    | [10](#gpl-info)    | [10](#gpl-info)     |
+| libzimg                                      | Performs scaling and color conversion (zscale)          |                                        |                                  |                    | x                  | x                  | x                   |
+| libzvbi                                      | Decodes VBI teletext data                               |                                        |                                  |                    | x                  | x                  | x                   |
+| vapoursynth                                  | Demuxes VapourSynth script frames                       |                                        | x                                |                    | x                  | x                  | x                   |
+| xlib                                         | Captures screen content via Xlib                        | Linux                                  | x                                |                    | x                  | x                  | x                   |
 
 <sup>1</sup> Platform specific libraries are enabled by default for target platform and bundle.<a id="platform-info"></a></br>
 <sup>2</sup> Extra libraries are enabled on non-small bundles.<a id="extra-info"></a></br>

@@ -1556,7 +1556,7 @@ build_libzvbi() {
   change_dir "$src_dir/$lib"
   export LIBS="-lpng -lz -liconv"
   export LDFLAGS="$LDFLAGS $LIBS"
-  do_autogen || exit_message 1 "There was an error running autogen.\n See $LOG_FILE for details"
+  do_autogen "--build-w$bits_target" || exit_message 1 "There was an error running autogen.\n See $LOG_FILE for details"
   change_dir "$src_dir/$lib"
   touch "no.autoreconf"
 	generic_configure "--enable-static \

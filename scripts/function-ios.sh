@@ -6,17 +6,17 @@ get_common_cflags() {
   if [[ -n ${FFMPEG_KIT_LTS_BUILD} ]]; then
     case $1 in
     ffmpeg-kit)
-      echo "${macos_cflags} ${LLVM_CONFIG_CFLAGS}"
+      echo "${ios_cflags} ${LLVM_CONFIG_CFLAGS}"
       ;;
     *)
-      echo "${macos_cflags} ${LLVM_CONFIG_CFLAGS}"
+      echo "${ios_cflags} ${LLVM_CONFIG_CFLAGS}"
       ;;
     esac
   fi
 }
 
 get_common_cxxflags() {
-  echo "$macos_cxxflags"
+  echo "$ios_cxxflags"
 }
 
 get_size_optimization_cflags() {
@@ -172,7 +172,7 @@ configure_ffmpeg_kit() {
 	change_dir "${ffmpeg_kit_src_dir}"
 	make distclean > >(redirect_output) 2>&1
 
-  local cmake_params="-DCMAKE_SYSTEM_NAME=Darwin \
+  local cmake_params="-DCMAKE_SYSTEM_NAME=iOS \
 -DCMAKE_C_COMPILER=$CC \
 -DCMAKE_CXX_COMPILER=$CXX \
 -DFFMPEG_SRC_DIR=\"$ffmpeg_source_dir\" \
@@ -267,22 +267,26 @@ get_generic_meson_cross_file() {
 	local extra_content="$2"     # e.g., "[built-in options]..."
 	local base_filename="$host_name-meson-cross.mingw.txt"
 	local base_filepath="$src_dir/$base_filename"
-	# 1. Generate the BASE file if it doesn't exist (Standard Logic)
-	local cpu_family="x86_64"
-	if [ "$bits_target" = 32 ]; then
-			cpu_family="x86"
-	fi
+  BUILD_ARCH=$(uname -m)
+  BUILD_SYS=$(uname)
+  if [ "$BUILD_ARCH" = "arm64" ]; then
+      BUILD_ARCH="aarch64"
+  fi
+  export CC_FOR_BUILD=clang
+  export CXX_FOR_BUILD=clang++
 	cat >"$base_filepath" <<EOF
 [binaries]
-c = '$CC'
-cpp = '$CXX'
-ld = '$LD'
-ar = '$AR'
-strip = '$STRIP'
-nm = '$NM'
-objc = '$CC'
-objcpp = '$CXX'
+c = '$(xcrun --sdk "$toolchain_sys" --find clang)'
+cpp = '$(xcrun --sdk "$toolchain_sys" --find clang++)'
+ld = '$(xcrun --sdk "$toolchain_sys" --find ld)'
+ar = '$(xcrun --sdk "$toolchain_sys" --find ar)'
+strip = '$(xcrun --sdk "$toolchain_sys" --find strip)'
+nm = '$(xcrun --sdk "$toolchain_sys" --find nm)'
+objc = '$(xcrun --sdk "$toolchain_sys" --find clang)'
+objcpp = '$(xcrun --sdk "$toolchain_sys" --find clang++)'
 pkgconfig = 'pkg-config'
+nasm = 'nasm'
+cmake = 'cmake'
 
 [built-in options]
 buildtype = 'release'
@@ -292,18 +296,24 @@ prefer_static = true
 backend = 'ninja'
 b_lto = false
 b_staticpic = true
-c_args = ['-I${dependency_install_prefix}/include', '-arch', '$host_arch', '-isysroot', '${SDKROOT}']
-c_link_args = ['-L${dependency_install_prefix}/lib', '-arch', '$host_arch', '-isysroot', '${SDKROOT}']
-cpp_args = ['-I${dependency_install_prefix}/include', '-arch', '$host_arch', '-DGLIB_STATIC_COMPILATION', '-isysroot', '${SDKROOT}']
-cpp_link_args = ['-L${dependency_install_prefix}/lib', '-arch', '$host_arch', '-DGLIB_STATIC_COMPILATION', '-isysroot', '${SDKROOT}']
+c_args = ['-I${dependency_install_prefix}/include', '-arch', '$host_arch', '-miphoneos-version-min=$MIN_IOS_VERSION', '-isysroot', '$IOS_SYSROOT']
+c_link_args = ['-L${dependency_install_prefix}/lib', '-arch', '$host_arch', '-miphoneos-version-min=$MIN_IOS_VERSION', '-isysroot', '$IOS_SYSROOT']
+cpp_args = ['-I${dependency_install_prefix}/include', '-arch', '$host_arch', '-DGLIB_STATIC_COMPILATION', '-miphoneos-version-min=$MIN_IOS_VERSION', '-isysroot', '$IOS_SYSROOT']
+cpp_link_args = ['-L${dependency_install_prefix}/lib', '-arch', '$host_arch', '-DGLIB_STATIC_COMPILATION', '-miphoneos-version-min=$MIN_IOS_VERSION', '-isysroot', '$IOS_SYSROOT']
 prefix = '$dependency_install_prefix'
 libdir = '$dependency_install_prefix/lib'
 pkg_config_path = '$PKG_CONFIG_PATH'
 
+[build_machine]
+system = '${BUILD_SYS,,}'
+cpu_family = '$BUILD_ARCH'
+cpu = '$BUILD_ARCH'
+endian = 'little'
+
 [host_machine]
 system = 'darwin'
-cpu_family = '$host_arch'
-cpu = '$host_arch'
+cpu_family = '$meson_cpu_family'
+cpu = '$meson_cpu_family'
 endian = 'little'
 
 [properties]
@@ -327,4 +337,105 @@ EOF
 			# No customization requested, return the standard base file
 			echo "$base_filepath"
 	fi
+}
+
+get_generic_meson_native_file() {
+	local variant_name="$1"      # e.g., "librist"
+	local extra_content="$2"     # e.g., "[built-in options]..."
+	local base_filename="$host_name-meson-native.mingw.txt"
+	local base_filepath="$src_dir/$base_filename"
+	BUILD_ARCH=$(uname -m)
+  BUILD_SYS=$(uname)
+  if [ "$BUILD_ARCH" = "arm64" ]; then
+      BUILD_ARCH="aarch64"
+  fi
+	cat >"$base_filepath" <<EOF
+[binaries]
+c = '$(xcrun --sdk macosx --find clang)'
+cpp = '$(xcrun --sdk macosx --find clang++)'
+ld = '$(xcrun --sdk macosx --find ld)'
+ar = '$(xcrun --sdk macosx --find ar)'
+strip = '$(xcrun --sdk macosx --find strip)'
+nm = '$(xcrun --sdk macosx --find nm)'
+objc = '$(xcrun --sdk macosx --find clang)'
+objcpp = '$(xcrun --sdk macosx --find clang++)'
+pkgconfig = 'pkg-config'
+nasm = 'nasm'
+cmake = 'cmake'
+
+[built-in options]
+c_args = ['-O3', '-march=native']
+cpp_args = ['-O3', '-march=native']
+EOF
+	# 2. Handle Custom Variant logic
+	if [[ -n "$variant_name" ]]; then
+			local custom_filepath="$(pwd)/$host_name-meson-cross.mingw.${variant_name}.txt"
+			# Always overwrite the variant with a fresh copy of the base
+			cp "$base_filepath" "$custom_filepath" 2>"$LOG_FILE"
+			# Append custom options if provided
+			if [[ -n "$extra_content" ]]; then
+					# Add a newline for safety
+					echo "" >> "$custom_filepath"
+					echo -e "$extra_content" >> "$custom_filepath"
+			fi
+			# Return the path to the NEW custom file
+			echo "$custom_filepath"
+	else
+			# No customization requested, return the standard base file
+			echo "$base_filepath"
+	fi
+}
+
+# 1. variant
+# @. custom values
+# Usage: get_generic_cmake_toolchain [variant_suffix] [VAR="VALUE" ...]
+# Example: get_generic_cmake_toolchain "rabbitmq" CMAKE_C_FLAGS_INIT="-static -Wno-error"
+get_generic_cmake_toolchain() {
+		local variant="$1"
+		local base_filename="$host_name-toolchain.cmake"
+		local base_filepath="$src_dir/$base_filename"
+		shift
+		# Determine filename based on variant presence
+		local toolchain_filename="$host_name-toolchain.cmake"
+		if [[ -n "$variant" ]]; then
+			toolchain_filename="$host_name-toolchain-$variant.cmake"
+			local toolchain_path="$(pwd)/$toolchain_filename"
+		else
+			toolchain_filename="$host_name-toolchain.cmake"
+			local toolchain_path="$src_dir/$toolchain_filename"
+		fi
+		local cpu_family="x86_64"
+		if [ "$bits_target" = 32 ]; then
+				cpu_family="x86"
+		fi
+		declare -A cmake_config
+		# System info
+		cmake_config["CMAKE_SYSTEM_NAME"]="iOS"
+		cmake_config["CMAKE_SYSTEM_PROCESSOR"]="${target_proc:-$cpu_family}"
+		cmake_config["CMAKE_SYSROOT"]="$(xcrun --sdk iphoneos --show-sdk-path)"
+		# Toolchain locations
+		cmake_config["TOOLCHAIN_PREFIX"]="${host_target}"
+		cmake_config["TOOLCHAIN_ROOT"]="${toolchain_root_dir}"
+		# Compilers
+		cmake_config["CMAKE_C_COMPILER"]="$CC"
+		cmake_config["CMAKE_CXX_COMPILER"]="$CXX"
+		cmake_config["CMAKE_AR"]="$AR"
+		cmake_config["CMAKE_RANLIB"]="$RANLIB"
+		cmake_config["CMAKE_STRIP"]="$STRIP"
+		# Loop through remaining args in format KEY="VALUE"
+		for arg in "$@"; do
+				local key="${arg%%=*}"
+				local value="${arg#*=}"
+				echo "DEBUG: adding KEY:$key and VALUE:$value to cmake toolchain file for $variant" >>"$LOG_FILE"
+				cmake_config["$key"]="$value"
+		done
+		echo "# Generated via get_generic_cmake_toolchain" > "$toolchain_path"
+		# Write CMAKE_SYSTEM_NAME first (convention)
+		echo "set(CMAKE_SYSTEM_NAME \"${cmake_config[CMAKE_SYSTEM_NAME]}\")" >> "$toolchain_path"
+		unset 'cmake_config[CMAKE_SYSTEM_NAME]'
+		# Write the rest
+		for key in "${!cmake_config[@]}"; do
+				echo "set($key \"${cmake_config[$key]}\")" >> "$toolchain_path"
+		done
+		echo "$toolchain_path"
 }

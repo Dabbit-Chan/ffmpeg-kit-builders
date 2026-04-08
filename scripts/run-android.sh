@@ -4012,7 +4012,7 @@ build_libzvbi() {
     mv "$dependency_install_prefix/bin/xz" "$dependency_install_prefix/bin/xz.bak"
     ln -s /usr/bin/xz "$dependency_install_prefix/bin/xz"
   fi
-  do_autogen
+  do_autogen "--build-w$bits_target"
   change_dir "$src_dir/$lib"
   touch "no.autoreconf"
   generic_configure "--enable-static \
