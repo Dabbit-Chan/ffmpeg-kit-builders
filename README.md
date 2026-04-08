@@ -38,13 +38,14 @@ This repository provides a comprehensive build system for FFmpeg and FFmpegKit t
   - **MacOS**: Not planned
   - **iOS**: Not planned
 
-| Platform                 | Status        | Architecture                              |
-| ------------------------ | ------------- | ----------------------------------------- |
-| Android (and Android-TV) | ✅ Supported   | armv7, arm64 (aarch64, arm64-v8a), x86_64 |
-| iOS                      | Not Supported |                                           |
-| macOS                    | ✅ Supported   | x86_64 and arm64 (aarch64)                |
-| Linux                    | ✅ Supported   | x86_64                                    |
-| Windows                  | ✅ Supported   | x86_64                                    |
+| Platform                 | Status      | Architecture                              | Min Version |
+| ------------------------ | ----------- | ----------------------------------------- | ----------- |
+| Android (and Android-TV) | ✅ Supported | armv7, arm64 (aarch64, arm64-v8a), x86_64 | 26+         |
+| iOS                      | ✅ Supported | arm64 (aarch64)                           | 13+         |
+| macOS                    | ✅ Supported | x86_64 and arm64 (aarch64)                |             |
+| tvOS                     | Coming Soon | arm64 (aarch64)                           |             |
+| Linux                    | ✅ Supported | x86_64                                    |             |
+| Windows                  | ✅ Supported | x86_64                                    | Windows 8+  |
 
 ## Quick Start
 
