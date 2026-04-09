@@ -272,16 +272,8 @@ build_vulkan_static() {
 }
 # build_avisynth          # config_options+= --enable-avisynth            # enable reading of AviSynth script files [no]
 build_avisynth() {
-  local lib="avisynth"
-  local repo="https://github.com/AviSynth/AviSynthPlus"
-  local repo_ver="v3.7.5"
-  change_dir "$src_dir"
-  do_git_checkout "$repo" "$src_dir/$lib" "$repo_ver"
-  change_dir "$src_dir/$lib/build" 1
-  do_cmake_from_build_dir "$src_dir/avisynth" "-DHEADERS_ONLY:bool=on -DCMAKE_OSX_ARCHITECTURES= -DCMAKE_TOOLCHAIN_FILE=$(get_generic_cmake_toolchain)"
-  disable_nonessential "$src_dir/$lib/build"
-  do_make "VersionGen install"
-  change_dir "$src_dir"
+  echo "INFO: Not available on iOS build" >>"$LOG_FILE"
+  echo "INFO: No avisynth library to compile." >>"$LOG_FILE"
 }
 #endregion---------------------------------------------------------------------
 #region--------------------- cross-platform features --------------------------
@@ -635,6 +627,8 @@ build_libpng() {
   local cmake_args="-DPNG_STATIC=ON \
 -DPNG_TESTS=OFF \
 -DPNG_TOOLS=OFF \
+-DZLIB_LIBRARY=${dependency_install_prefix}/lib/libz.a \
+-DZLIB_INCLUDE_DIR=${dependency_install_prefix}/include \
 -DPNG_TARGET_ARCHITECTURE=$host_arch"
   if [[ $host_arch == "arm64" ]]; then
     cmake_args+=" -DPNG_ARM_NEON=on"
@@ -659,7 +653,7 @@ build_libaribb24() {
   local repo="https://github.com/nkoriyama/aribb24"
   change_dir "$src_dir"
   do_git_checkout "$repo" "$src_dir/$lib" "$repo_ver"
-  generic_configure
+  generic_configure "LIBS=\"-lpng16\""
   disable_nonessential "$src_dir/$lib"
   do_make_and_make_install
   change_dir "$src_dir"
@@ -794,7 +788,7 @@ build_libcodec2() {
   change_dir "$src_dir/$lib/build" 1
   do_cmake_from_build_dir "$src_dir/$lib" "-DUNITTEST=OFF \
 -DBUILD_SHARED_LIBS=OFF \
--DCMAKE_OSX_SYSROOT=$(xcrun --sdk iphoneos --show-sdk-path) \
+-DCMAKE_OSX_SYSROOT=$(xcrun --sdk "$toolchain_sys" --show-sdk-path) \
 -DCMAKE_OSX_DEPLOYMENT_TARGET=12.0 \
 -DCMAKE_CROSSCOMPILING=ON \
 -DGENERATE_CODEBOOK=\"$src_dir/$lib/build_native/src/generate_codebook\""
@@ -939,13 +933,23 @@ build_libfribidi() {
   change_dir "$src_dir"
   do_git_checkout "$repo" "$src_dir/$lib" "$repo_ver"
   change_dir "$src_dir/$lib"
-  export SDKROOT=$(xcrun --sdk iphoneos --show-sdk-path)
-  export CC=$(xcrun --sdk iphoneos --find clang)
+  export SDKROOT=$(xcrun --sdk "$toolchain_sys" --show-sdk-path)
+  export CC=$(xcrun --sdk "$toolchain_sys" --find clang)
   export CC_FOR_BUILD=$(xcrun --sdk macosx --find clang)
-  export CFLAGS="-arch arm64 -isysroot $SDKROOT -mios-version-min=12.0"
-  export LDFLAGS="-arch arm64 -isysroot $SDKROOT"
-  export CFLAGS_FOR_BUILD="-arch arm64 -isysroot $(xcrun --sdk macosx --show-sdk-path)"
-  do_autogen "--host=aarch64-apple-ios --disable-shared --enable-static --disable-docs --disable-deprecated --prefix=$dependency_install_prefix"
+  if isiossimulator; then
+  export CFLAGS="-arch $host_arch -isysroot $SDKROOT -mios-simulator-version-min=12.0"
+  else
+  export CFLAGS="-arch $host_arch -isysroot $SDKROOT -mios-version-min=12.0"
+  fi
+  export LDFLAGS="-arch $host_arch -isysroot $SDKROOT"
+  export CFLAGS_FOR_BUILD="-arch $BUILD_ARCH -isysroot $(xcrun --sdk macosx --show-sdk-path)"
+  get_config_sub "$src_dir/$lib"
+  get_config_guess "$src_dir/$lib"
+  if isiossimulator; then
+    do_autogen "--host=$meson_cpu_family-apple-ios-simulator --disable-shared --enable-static --disable-docs --disable-deprecated --prefix=$dependency_install_prefix"
+  else
+    do_autogen "--host=$meson_cpu_family-apple-$host_platform --disable-shared --enable-static --disable-docs --disable-deprecated --prefix=$dependency_install_prefix"
+  fi
   # {
   #   ./configure --host=aarch64-apple-ios --disable-shared --enable-static --disable-docs --disable-deprecated --prefix=$dependency_install_prefix
   # } > >(redirect_output) 2>&1 || exit_message 1 "build_libfribidi: could not configure"
@@ -1360,6 +1364,12 @@ build_iconv_minimal() {
   change_dir "$src_dir"
   download_and_unpack_file "$repo" "$lib"
   change_dir "$src_dir/$lib"
+  if isiossimulator; then
+  get_config_sub "$src_dir/$lib/build-aux"
+  get_config_guess "$src_dir/$lib/build-aux"
+  get_config_sub "$src_dir/$lib/libcharset/build-aux"
+  get_config_guess "$src_dir/$lib/libcharset/build-aux"
+  fi
   touch "no.autoreconf"
   generic_configure "--enable-static \
 --with-sysroot=${dependency_install_prefix} \
@@ -1396,6 +1406,12 @@ build_iconv() {
   change_dir "$src_dir/$lib"
   export CFLAGS="$CFLAGS -fPIC"
   export CXXFLAGS="$CXXFLAGS -fPIC"
+  if isiossimulator; then
+  get_config_sub "$src_dir/$lib/build-aux"
+  get_config_guess "$src_dir/$lib/build-aux"
+  get_config_sub "$src_dir/$lib/libcharset/build-aux"
+  get_config_guess "$src_dir/$lib/libcharset/build-aux"
+  fi
   touch "no.autoreconf"
   generic_configure "--prefix=${dependency_install_prefix} \
 --enable-static \
@@ -1467,20 +1483,20 @@ EOF
 CFLAGS=\"$cflags\" \
 LIBS=\"$LIBS\""
   do_make_and_make_install
-  change_dir "$src_dir/$lib/gettext-tools"
-  touch "no.autoreconf"
-  config+=" --disable-curses \
---disable-examples \
---disable-nls \
---disable-libasprintf \
---without-libtextstyle-prefix"
-  generic_configure "$config \
-CFLAGS=\"$cflags\" \
-LIBS=\"$LIBS\" \
-LDFLAGS=\"$LDFLAGS $LIBS\""
-  disable_nonessential "$src_dir/$lib/gettext-tools" "examples" "tests"
-  local make_config="LDFLAGS=\"-L$src_dir/$lib/gettext-tools/.libs -L$src_dir/$lib/gettext-tools/src/.libs ${LDFLAGS}\" LIBS=\"$LIBS\""
-  do_make_and_make_install "$make_config" "$make_config"
+#   change_dir "$src_dir/$lib/gettext-tools"
+#   touch "no.autoreconf"
+#   config+=" --disable-curses \
+# --disable-examples \
+# --disable-nls \
+# --disable-libasprintf \
+# --without-libtextstyle-prefix"
+#   generic_configure "$config \
+# CFLAGS=\"$cflags\" \
+# LIBS=\"$LIBS\" \
+# LDFLAGS=\"$LDFLAGS $LIBS\""
+#   disable_nonessential "$src_dir/$lib/gettext-tools" "examples" "tests"
+#   local make_config="LDFLAGS=\"-L$src_dir/$lib/gettext-tools/.libs -L$src_dir/$lib/gettext-tools/src/.libs ${LDFLAGS}\" LIBS=\"$LIBS\""
+#   do_make_and_make_install "$make_config" "$make_config"
   unset LIBS
   reset_allflags
 }
@@ -1546,6 +1562,7 @@ build_glib() {
 -Dc_link_args=\"-arch $host_arch -L${dependency_install_prefix}/lib -liconv -lintl -lresolv -framework CoreFoundation -isysroot ${IOS_SYSROOT}\" \
 -Dcpp_link_args=\"-arch $host_arch -L${dependency_install_prefix}/lib -liconv -lintl -lresolv -framework CoreFoundation -isysroot ${IOS_SYSROOT}\" \
 --wrap-mode=nofallback"
+  sed -i'.bak' '/#ifdef HAVE_PIPE2/,/#endif/d' "$src_dir/$lib/glib/glib-unixprivate.h"
   generic_meson "$meson_options"
   do_ninja_and_ninja_install
   sed -i'.bak' 's/-lglib-2.0.*$/-lglib-2.0 -lm -liconv -lintl/' "$install_pkgconfig_dir/glib-2.0.pc"
@@ -1740,6 +1757,9 @@ build_libopenh264() {
   change_dir "$src_dir"
   do_git_checkout "$repo" "$src_dir/$lib" "$repo_ver"
   change_dir "$src_dir/$lib"
+  if isiossimulator; then
+    sed -i'.bak' "s/'ios',/'ios', 'ios-simulator',/g" "$src_dir/$lib/meson.build"
+  fi
   local meson_options="-Dtests=disabled"
   generic_meson "$meson_options"
   do_ninja_and_ninja_install
@@ -1817,6 +1837,8 @@ build_libopenmpt() {
   export CFLAGS="$CFLAGS -I${dependency_install_prefix}/include "
   export CXXFLAGS="$CXXFLAGS -I${dependency_install_prefix}/include -std=c++17"
   export LDFLAGS="$LDFLAGS -L${dependency_install_prefix}/lib -L${dependency_install_prefix}/lib/${host_target} "
+  get_config_guess "$src_dir/$lib/build-aux"
+  get_config_sub "$src_dir/$lib/build-aux"
   generic_configure "--enable-shared=no \
 --enable-static=yes \
 --without-pulseaudio \
@@ -2194,7 +2216,7 @@ build_pango() {
   change_dir "$src_dir"
   do_git_checkout "$repo" "$src_dir/$lib" "$repo_ver"
   change_dir "$src_dir/$lib"
-  export LIBS="-lfontconfig -lexpat -lfreetype -lbrotlidec -lbrotlicommon -lpng -lz -lbz2 -lintl -liconv -ldl"
+  export LIBS="-lfontconfig -lexpat -lfreetype -lbrotlidec -lbrotlicommon -lpng -lz -lbz2 -lintl -liconv -ldl -framework CoreFoundation"
   export LDFLAGS="$LDFLAGS $LIBS"
   local meson_options="-Ddocumentation=false \
 -Dgtk_doc=false \
@@ -2206,8 +2228,8 @@ build_pango() {
 -Dbuild-examples=false \
 -Dintrospection=disabled \
 -Dxft=disabled \
--Dc_args=\"-arch $host_arch -I${dependency_install_prefix}/include -isysroot ${SDKROOT} -DGLIB_STATIC_COMPILATION \" \
--Dcpp_args=\"-arch $host_arch -I${dependency_install_prefix}/include -isysroot ${SDKROOT} -DGLIB_STATIC_COMPILATION \" \
+-Dc_args=\"-arch $host_arch -I${dependency_install_prefix}/include -isysroot ${SDKROOT} -DGLIB_STATIC_COMPILATION\" \
+-Dcpp_args=\"-arch $host_arch -I${dependency_install_prefix}/include -isysroot ${SDKROOT} -DGLIB_STATIC_COMPILATION\" \
 -Dc_link_args=\"-arch $host_arch -L${dependency_install_prefix}/lib -isysroot ${SDKROOT} $LIBS\" \
 -Dcpp_link_args=\"-arch $host_arch -L${dependency_install_prefix}/lib -isysroot ${SDKROOT} $LIBS\""
   # disable tools - not needed for ffmpeg
@@ -2229,6 +2251,13 @@ build_librsvg() {
   change_dir "$src_dir"
   do_git_checkout "$repo" "$src_dir/$lib" "$repo_ver"
   change_dir "$src_dir/$lib"
+  if isiossimulator; then
+    min_ver="-mios-simulator-version-min=$MIN_IOS_VERSION"
+    target_min="$host_arch-apple-ios$MIN_IOS_VERSION-simulator"
+  else
+    min_ver="-miphoneos-version-min=$MIN_IOS_VERSION"
+    target_min="$host_arch-apple-ios$MIN_IOS_VERSION"
+  fi
   local meson_options="-Ddocs=disabled \
 -Dintrospection=disabled \
 -Dvala=disabled \
@@ -2237,10 +2266,10 @@ build_librsvg() {
 -Dtests=false \
 -Drsvg-convert=disabled \
 -Dtriplet=$rust_target \
--Dc_args=\"-arch $host_arch -I${dependency_install_prefix}/include -isysroot ${SDKROOT} -DGLIB_STATIC_COMPILATION\" \
--Dcpp_args=\"-arch $host_arch -I${dependency_install_prefix}/include -isysroot ${SDKROOT} -DGLIB_STATIC_COMPILATION\" \
--Dc_link_args=\"-arch $host_arch -L${dependency_install_prefix}/lib -lresolv -isysroot ${SDKROOT}\" \
--Dcpp_link_args=\"-arch $host_arch -L${dependency_install_prefix}/lib -lresolv -isysroot ${SDKROOT}\""
+-Dc_args=\"-arch $host_arch -I${dependency_install_prefix}/include -target $target_min $min_ver -isysroot ${SDKROOT} -DGLIB_STATIC_COMPILATION\" \
+-Dcpp_args=\"-arch $host_arch -I${dependency_install_prefix}/include -target $target_min $min_ver -isysroot ${SDKROOT} -DGLIB_STATIC_COMPILATION\" \
+-Dc_link_args=\"-arch $host_arch -L${dependency_install_prefix}/lib -target $target_min $min_ver -lresolv -isysroot ${SDKROOT}\" \
+-Dcpp_link_args=\"-arch $host_arch -L${dependency_install_prefix}/lib -target $target_min $min_ver -lresolv -isysroot ${SDKROOT}\""
   generic_meson "$meson_options"
   do_ninja_and_ninja_install
   change_dir "$src_dir"
@@ -2287,7 +2316,7 @@ build_librubberband() {
   change_dir "$src_dir"
   do_git_checkout "$repo" "$src_dir/$lib" "$repo_ver"
   change_dir "$src_dir/$lib"
-  local meson_options="-Dtests=disabled -Dcmdline=disabled"
+  local meson_options="-Dtests=disabled -Dcmdline=disabled -Dladspa=disabled -Dlv2=disabled"
   generic_meson "$meson_options"
   local FILE_PATH="$src_dir/$lib/src/common/mathmisc.cpp"
   if ! grep -q "<cstddef>" "$FILE_PATH"; then
@@ -2863,7 +2892,7 @@ build_libtesseract() {
   change_dir "$src_dir"
   do_git_checkout "$repo" "$src_dir/$lib" "$repo_ver"
   change_dir "$src_dir/$lib"
-  export LDFLAGS="${LDFLAGS} -Wl,-undefined,dynamic_lookup"
+  export LDFLAGS="${LDFLAGS} -Wl,-undefined,dynamic_lookup -lleptonica"
   generic_configure "--disable-openmp \
 --with-archive \
 --disable-graphics \
@@ -2997,7 +3026,12 @@ build_libvmaf() {
   change_dir "$src_dir"
   do_git_checkout "$repo" "$src_dir/$lib" "$repo_ver"
   change_dir "$src_dir/$lib/libvmaf"
-  local meson_options="-Denable_float=true -Dbuilt_in_models=true -Denable_tests=false -Denable_docs=false"
+  export CFLAGS="$CFLAGS -D_DARWIN_C_SOURCE"
+  local meson_options="-Denable_float=true \
+-Dbuilt_in_models=true \
+-Denable_tests=false \
+-Denable_docs=false \
+-Dc_args='-arch $host_arch -I${dependency_install_prefix}/include -isysroot ${SDKROOT} -D_DARWIN_C_SOURCE'"
   generic_meson "$meson_options"
   disable_nonessential "$src_dir/$lib"
   do_ninja_and_ninja_install
@@ -3029,7 +3063,16 @@ build_libvpx() {
   if [[ "$host_arch" == "x86_64" ]]; then
     export AS=nasm
   fi
-  do_configure "--target=$host_arch-darwin-gcc \
+  if isiossimulator; then
+    sed -i '' '/arm64-darwin24-gcc/a\
+all_platforms="${all_platforms} arm64-iphonesimulator-gcc"' "$src_dir/$lib/configure"
+    sed -i '' 's/-miphoneos-version-min=\${IOS_VERSION_MIN}"$/-mios-simulator-version-min=${IOS_VERSION_MIN}"/g' "$src_dir/$lib/build/make/configure.sh"
+    vpx_target="arm64-iphonesimulator-gcc"
+  else
+    vpx_target="arm64-darwin-gcc"
+  fi
+  touch "no.autoreconf"
+  do_configure "--target=$vpx_target \
 --prefix=$dependency_install_prefix \
 --enable-static \
 --disable-shared \
@@ -3086,15 +3129,22 @@ build_libx264() {
   if [[ "$host_arch" == "x86_64" ]]; then
     export AS=nasm
   fi
+  get_config_guess "$src_dir/$lib"
+  get_config_sub "$src_dir/$lib"
+  unset CFLAGS ASFLAGS LDFLAGS CPPFLAGS CXXFLAGS
   {
-    wget -O build-x264.sh https://raw.githubusercontent.com/kewlbear/x264-ios/refs/heads/master/build-x264.sh
-    chmod +x build-x264.sh
-    sed -i'.bak' -E 's|--prefix="\$THIN\/\$ARCH"|--prefix="'"$dependency_install_prefix"'"|' build-x264.sh
-    sed -i'.bak' -E 's|\$CWD\/\$SOURCE|\$CWD|g' build-x264.sh
-    CFLAGS="$CFLAGS -mfpu=neon" ./build-x264.sh arm64
-  } > >(redirect_output) 2>&1
+    copy_path "$PATCHDIR/build-x264.sh" "$src_dir/$lib/build-x264.sh" "-f"
+    chmod +x "$src_dir/$lib/build-x264.sh"
+    if isiossimulator; then
+      IS_SIMULATOR=y ./build-x264.sh $host_arch
+    else
+      CFLAGS="$CFLAGS -mfpu=neon" ./build-x264.sh $host_arch
+    fi
+  } > >(redirect_output) 2>&1 || exit_message 1 "build_libx264: Failed to build x264"
+  copy_path "$src_dir/$lib/thin-x264/$host_arch/lib/libx264.a" "$dependency_install_prefix/lib/libx264.a" "-f"
   change_dir "$src_dir"
-  set_toolchain_paths
+  reset_allflags
+  reset_cross_vars
 }
 # build_libx265           # config_options+= --enable-libx265             # enable HEVC encoding via x265 [no]
 build_libx265() {
@@ -3396,11 +3446,6 @@ build_libzvbi() {
   do_git_checkout "$repo" "$src_dir/$lib" "$repo_ver"
   change_dir "$src_dir/$lib"
   export LIBS="-lpng -lz -liconv -lm"
-  export LDFLAGS="$LDFLAGS"
-  local ORIG_PATH=$PATH
-  local ORIG_ACLOCAL_PATH=$ACLOCAL_PATH
-  export ACLOCAL_PATH="$dependency_install_prefix/share/aclocal"
-  export PATH="$dependency_install_prefix/bin:$PATH"
   do_autogen "--build-w$bits_target"
   change_dir "$src_dir/$lib"
   touch "no.autoreconf"
@@ -3423,8 +3468,6 @@ ac_cv_func_malloc_0_nonnull=yes"
   change_dir "$src_dir"
   reset_ldflags
   unset LIBS
-  export PATH=$ORIG_PATH
-  export ACLOCAL_PATH=$ORIG_ACLOCAL_PATH
 }
 build_sratom() {
   # run_valid_function "build_sord"
@@ -3500,6 +3543,12 @@ build_zix() {
 -Dtests_cpp=disabled \
 -Ddocs=disabled"
   generic_meson "$meson_options"
+  perl -i'.bak' -0pe \
+  's/#ifdef __APPLE__\n  const int rc = dst_fd >= 0 \? fcntl\(dst_fd, F_FULLFSYNC\) : 0;\n#else\n  const int rc = dst_fd >= 0 \? fdatasync\(dst_fd\) : 0;/#if defined(__APPLE__) \&\& defined(F_FULLFSYNC)\n  const int rc = dst_fd >= 0 ? fcntl(dst_fd, F_FULLFSYNC) : 0;\n#elif defined(__APPLE__)\n  const int rc = dst_fd >= 0 ? fsync(dst_fd) : 0;\n#else\n  const int rc = dst_fd >= 0 ? fdatasync(dst_fd) : 0;/' \
+  "$src_dir/$lib/src/posix/filesystem_posix.c"
+  perl -i'.bak' -0pe \
+  's/(#include <zix\/filesystem\.h>)/#ifdef __APPLE__\nchar* mkdtemp(char*);\n#endif\n$1/' \
+  "$src_dir/$lib/src/posix/filesystem_posix.c"
   disable_nonessential "$src_dir/$lib"
   do_ninja_and_ninja_install
   change_dir "$dependency_install_prefix/lib"
@@ -3765,6 +3814,7 @@ build_pocketsphinx() {
 -Dc_link_args=\"-arch $host_arch -L${dependency_install_prefix}/lib -isysroot ${SDKROOT} -lresolv -framework CoreFoundation -framework Foundation -lobjc -llzma\""
   generic_meson "$meson_options"
   disable_nonessential "$src_dir/$parent/$lib"
+  sed -i'.bak' 's/-Wl,--export-dynamic//g' "$src_dir/$parent/$lib/build/build.ninja"
   do_ninja_and_ninja_install
   reset_ldflags
   change_dir "$src_dir"

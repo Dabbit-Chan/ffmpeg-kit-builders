@@ -364,6 +364,7 @@ setup_build_environment() {
         "android") setup_android_environment ;;
         "macos") setup_macos_environment ;;
         "ios") setup_ios_environment ;;
+        "iphonesimulator") setup_ios_environment "iphonesimulator" ;;
         *) exit_message 1 "setup_build_environment: Unknown host platform '$host_platform'" ;;
     esac
     create_dir "$src_dir"
@@ -692,24 +693,36 @@ setup_macos_environment() {
 }
 
 setup_ios_environment() {
+    export toolchain_sys="${1:-"iphoneos"}"
     export PATCHDIR="$SCRIPTDIR/ios/patches"
     export dependency_install_prefix="$work_dir/libraries"
     export install_pkgconfig_dir="${dependency_install_prefix}/lib/pkgconfig"
-    # iOS SDK setup
+
+    # SDK setup — toolchain_sys must be set to 'iphoneos' or 'iphonesimulator' before calling
     export IOS_SDK_PATH="$(xcrun --sdk "$toolchain_sys" --show-sdk-path)"
-    export SDKROOT=$(xcrun --sdk "$toolchain_sys" --show-sdk-path)
+    export SDKROOT="$IOS_SDK_PATH"
     export IOS_SYSROOT="$IOS_SDK_PATH"
-    
+
     export PKG_CONFIG_PATH="$install_pkgconfig_dir:$ffmpeg_install_prefix/lib/pkgconfig"
     export PATH="$original_path"
+
+    export MIN_IOS_VERSION="13.0"
+
     case "$host_arch" in
         "aarch64"|"arm64")
             export host_arch="arm64"
             export cmake_host_arch="arm64"
-            export host_target="arm64-apple-ios"
-            export rust_target="aarch64-apple-ios"
             export meson_cpu_family="aarch64"
             export ios_arch="arm64"
+            if [ "$toolchain_sys" = "iphonesimulator" ]; then
+                export host_target="arm64-apple-ios-simulator"
+                export rust_target="aarch64-apple-ios-sim"
+                export cflags_target="arm64-apple-ios${MIN_IOS_VERSION}-simulator"
+            else
+                export host_target="arm64-apple-ios"
+                export rust_target="aarch64-apple-ios"
+                export cflags_target="arm64-apple-ios${MIN_IOS_VERSION}"
+            fi
             ;;
         *)
             exit_message 1 "setup_ios_environment: Unsupported host arch '$host_arch' for $host_platform"
@@ -717,6 +730,7 @@ setup_ios_environment() {
     esac
 
     reset_cross_vars
+
     # Cross-compilation tools
     export cross_prefix="$(xcrun --sdk "$toolchain_sys" --find clang)-"
     export CC="$(xcrun --sdk "$toolchain_sys" --find clang)"
@@ -727,19 +741,26 @@ setup_ios_environment() {
     export LD="$(xcrun --sdk "$toolchain_sys" --find ld)"
     export STRIP="$(xcrun --sdk "$toolchain_sys" --find strip)"
     export NM="$(xcrun --sdk "$toolchain_sys" --find nm)"
-    export MIN_IOS_VERSION="13.0"
-    export ios_cflags="$original_cflags -arch $ios_arch -I${dependency_install_prefix}/include -miphoneos-version-min=$MIN_IOS_VERSION"
-    export CFLAGS="$ios_cflags"
-    export ios_cppflags="$original_cppflags -arch $ios_arch -I${dependency_install_prefix}/include -DIOS"
+
+    if [ "$toolchain_sys" = "iphonesimulator" ]; then
+        export ios_version_flag="-mios-simulator-version-min=$MIN_IOS_VERSION"
+        export ios_cppflags="$original_cppflags -arch $ios_arch -I${dependency_install_prefix}/include -DIOS -DIOS_SIMULATOR"
+    else
+        export ios_version_flag="-miphoneos-version-min=$MIN_IOS_VERSION"
+        export ios_cppflags="$original_cppflags -arch $ios_arch -I${dependency_install_prefix}/include -DIOS"
+    fi
+
     export CPPFLAGS="$ios_cppflags"
+    export ios_cflags="$original_cflags -arch $ios_arch -I${dependency_install_prefix}/include $ios_version_flag -target $cflags_target -isysroot $IOS_SYSROOT"
+    export CFLAGS="$ios_cflags"
     export ios_cxxflags="$original_cxxflags -arch $ios_arch -I${dependency_install_prefix}/include"
     export CXXFLAGS="$ios_cxxflags"
-    export ios_ldflags="$original_ldflags -arch $ios_arch -L${dependency_install_prefix}/lib -miphoneos-version-min=$MIN_IOS_VERSION"
+    export ios_ldflags="$original_ldflags -arch $ios_arch -L${dependency_install_prefix}/lib $ios_version_flag -target $cflags_target -isysroot $IOS_SYSROOT"
     export LDFLAGS="$ios_ldflags"
-    
+
     export PREFIX="$dependency_install_prefix"
     export build_cross_compile=y
-    
+
     create_dir "$install_pkgconfig_dir"
     create_dir "$work_dir/pkgconfig"
     create_dir "$dependency_install_prefix/{bin,lib/pkgconfig,include,usr/include}"
@@ -775,6 +796,13 @@ ismacos() {
 
 isios() {
   if [[ "$host_platform" == "ios" || "$host_platform" == "iphonesimulator" ]]; then
+    return 0
+  fi
+  return 1
+}
+
+isiossimulator() {
+  if [[ "$host_platform" == "iphonesimulator" ]]; then
     return 0
   fi
   return 1
@@ -2873,6 +2901,11 @@ generic_cmake() {
   if ismacos; then
   [[ "$extra_args" != *"-DCMAKE_SYSTEM_NAME"* ]] && extra_args+=" -DCMAKE_SYSTEM_NAME=Darwin"
   [[ "$extra_args" != *"-DCMAKE_OSX_ARCHITECTURES"* ]] && extra_args+=" -DCMAKE_OSX_ARCHITECTURES=$host_arch"
+  elif isiossimulator; then
+  [[ "$extra_args" != *"-DCMAKE_SYSTEM_NAME"* ]] && extra_args+=" -DCMAKE_SYSTEM_NAME=iOS"
+  [[ "$extra_args" != *"-DCMAKE_OSX_ARCHITECTURES"* ]] && extra_args+=" -DCMAKE_OSX_ARCHITECTURES=$host_arch"
+  [[ "$extra_args" != *"-DCMAKE_OSX_DEPLOYMENT_TARGET"* ]] && extra_args+=" -DCMAKE_OSX_DEPLOYMENT_TARGET=$MIN_IOS_VERSION"
+  [[ "$extra_args" != *"-DCMAKE_OSX_SYSROOT"* ]] && extra_args+=" -DCMAKE_OSX_SYSROOT=$(xcrun --sdk "$toolchain_sys" --show-sdk-path)"
   elif isios; then
   [[ "$extra_args" != *"-DCMAKE_SYSTEM_NAME"* ]] && extra_args+=" -DCMAKE_SYSTEM_NAME=iOS"
   [[ "$extra_args" != *"-DCMAKE_OSX_ARCHITECTURES"* ]] && extra_args+=" -DCMAKE_OSX_ARCHITECTURES=$host_arch"
@@ -3707,7 +3740,7 @@ configure_ffmpeg() {
       export LD="$CXX"
       init_options+=" --ld=$CXX"
     fi
-  elif isios; then
+  elif isios || isiossimulator; then
     if [[ ! -f /usr/local/bin/gas-preprocessor.pl ]]; then
       {
       wget -O gas-preprocessor.pl https://raw.githubusercontent.com/FFmpeg/gas-preprocessor/master/gas-preprocessor.pl
@@ -3717,15 +3750,15 @@ configure_ffmpeg() {
     fi
     init_options+=" --target-os=darwin"
     init_options+=" --disable-programs"
-    init_options+=" --cc=$(xcrun --sdk iphoneos --find clang)"
-    init_options+=" --cxx=$(xcrun --sdk iphoneos --find clang++)"
-    init_options+=" --ar=$(xcrun --sdk iphoneos --find ar)"
-    init_options+=" --as='gas-preprocessor.pl -arch aarch64 -- $(xcrun --sdk iphoneos --find clang)'"
-    init_options+=" --strip=$(xcrun --sdk iphoneos --find strip)"
-    init_options+=" --nm=$(xcrun --sdk iphoneos --find nm)"
-    init_options+=" --ranlib=$(xcrun --sdk iphoneos --find ranlib)"
-    init_options+=" --extra-cflags='-isysroot $(xcrun --sdk iphoneos --show-sdk-path)'"
-    init_options+=" --extra-ldflags='-isysroot $(xcrun --sdk iphoneos --show-sdk-path)'"
+    init_options+=" --cc=$(xcrun --sdk "$toolchain_sys" --find clang)"
+    init_options+=" --cxx=$(xcrun --sdk "$toolchain_sys" --find clang++)"
+    init_options+=" --ar=$(xcrun --sdk "$toolchain_sys" --find ar)"
+    init_options+=" --as='gas-preprocessor.pl -arch aarch64 -- $(xcrun --sdk "$toolchain_sys" --find clang)'"
+    init_options+=" --strip=$(xcrun --sdk "$toolchain_sys" --find strip)"
+    init_options+=" --nm=$(xcrun --sdk "$toolchain_sys" --find nm)"
+    init_options+=" --ranlib=$(xcrun --sdk "$toolchain_sys" --find ranlib)"
+    init_options+=" --extra-cflags='-isysroot $(xcrun --sdk "$toolchain_sys" --show-sdk-path)'"
+    init_options+=" --extra-ldflags='-isysroot $(xcrun --sdk "$toolchain_sys" --show-sdk-path)'"
   fi
   if ! ismacos && ! isios; then
     init_options+=" --extra-ldflags=\" -Wl,--allow-multiple-definition \""
@@ -3871,7 +3904,7 @@ configure_ffmpeg() {
   #------------------------------------------------------------------------------
   # ----------------------------- windows features ------------------------------ 
   #------------------------------------------------------------------------------
-  if iswindows; then
+  if iswindows || islinux || ismacos; then
   truthy "$enable_avisynth" && config_options+=" --enable-avisynth"                   # enable reading of AviSynth script files [no]
   fi
   #------------------------------------------------------------------------------
@@ -5283,8 +5316,13 @@ add_src_dir() {
     create_touch_file 0 "$dir/$host_touch"
     if iswindows; then
       find "$dependency_install_prefix/lib" -name "*.la" -delete
-      find "$install_pkgconfig_dir" -name "*.pc" -exec sed -i'.bak' -e -E 's/[[:space:]]-lm\b//g' \
-        -e 's|/usr/local/mingw-w64/[^ ]+/lib/lib([a-zA-Z0-9]+)\.a|-l\1|g' {} +
+      find "$install_pkgconfig_dir" -type f -name "*.pc" -exec sed -i'.bak' -e -E 's/[[:space:]]-lm\b//g' \
+        -e 's|/usr/local/mingw-w64/[^ ]+/lib/lib([a-zA-Z0-9]+)\.a|-l\1|g' \
+        -e 's|-L/opt/homebrew/opt/([a-zA-Z0-9_-]+(/[a-zA-Z0-9_-]+)*)/lib||g' \
+        -e 's|-Wl,--export-dynamic||g' {} +
+    elif ismacos || isios || isiossimulator; then
+      find "$install_pkgconfig_dir" -type f -name "*.pc" -exec sed -i'.bak' -e 's|-Wl,--export-dynamic||g' \
+        -e 's|-L/opt/homebrew/opt/([a-zA-Z0-9_-]+(/[a-zA-Z0-9_-]+)*)/lib||g' {} +
     else
       find "$dependency_install_prefix/lib" -type f -name "*.la" -exec sed -i'.bak' -e 's|=\/|/|g' {} +
     fi

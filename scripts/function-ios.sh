@@ -274,6 +274,13 @@ get_generic_meson_cross_file() {
   fi
   export CC_FOR_BUILD=clang
   export CXX_FOR_BUILD=clang++
+  if isiossimulator; then
+    min_ver="-mios-simulator-version-min=$MIN_IOS_VERSION"
+    target_min="$host_arch-apple-ios$MIN_IOS_VERSION-simulator"
+  else
+    min_ver="-miphoneos-version-min=$MIN_IOS_VERSION"
+    target_min="$host_arch-apple-ios$MIN_IOS_VERSION"
+  fi
 	cat >"$base_filepath" <<EOF
 [binaries]
 c = '$(xcrun --sdk "$toolchain_sys" --find clang)'
@@ -296,10 +303,10 @@ prefer_static = true
 backend = 'ninja'
 b_lto = false
 b_staticpic = true
-c_args = ['-I${dependency_install_prefix}/include', '-arch', '$host_arch', '-miphoneos-version-min=$MIN_IOS_VERSION', '-isysroot', '$IOS_SYSROOT']
-c_link_args = ['-L${dependency_install_prefix}/lib', '-arch', '$host_arch', '-miphoneos-version-min=$MIN_IOS_VERSION', '-isysroot', '$IOS_SYSROOT']
-cpp_args = ['-I${dependency_install_prefix}/include', '-arch', '$host_arch', '-DGLIB_STATIC_COMPILATION', '-miphoneos-version-min=$MIN_IOS_VERSION', '-isysroot', '$IOS_SYSROOT']
-cpp_link_args = ['-L${dependency_install_prefix}/lib', '-arch', '$host_arch', '-DGLIB_STATIC_COMPILATION', '-miphoneos-version-min=$MIN_IOS_VERSION', '-isysroot', '$IOS_SYSROOT']
+c_args = ['-I${dependency_install_prefix}/include', '-arch', '$host_arch', '-target', '$target_min', '$min_ver', '-isysroot', '$IOS_SYSROOT']
+c_link_args = ['-L${dependency_install_prefix}/lib', '-arch', '$host_arch', '-target', '$target_min', '$min_ver', '-isysroot', '$IOS_SYSROOT']
+cpp_args = ['-I${dependency_install_prefix}/include', '-arch', '$host_arch', '-DGLIB_STATIC_COMPILATION', '-target', '$target_min', '$min_ver', '-isysroot', '$IOS_SYSROOT']
+cpp_link_args = ['-L${dependency_install_prefix}/lib', '-arch', '$host_arch', '-DGLIB_STATIC_COMPILATION', '-target', '$target_min', '$min_ver', '-isysroot', '$IOS_SYSROOT']
 prefix = '$dependency_install_prefix'
 libdir = '$dependency_install_prefix/lib'
 pkg_config_path = '$PKG_CONFIG_PATH'
@@ -311,13 +318,14 @@ cpu = '$BUILD_ARCH'
 endian = 'little'
 
 [host_machine]
-system = 'darwin'
+system = '$( if isiossimulator; then echo ios-simulator; else echo ios; fi )'
 cpu_family = '$meson_cpu_family'
 cpu = '$meson_cpu_family'
 endian = 'little'
 
 [properties]
 needs_exe_wrapper    = true
+pkg_config_libdir = '$dependency_install_prefix/lib/pkgconfig'
 
 EOF
 	# 2. Handle Custom Variant logic
@@ -412,7 +420,7 @@ get_generic_cmake_toolchain() {
 		# System info
 		cmake_config["CMAKE_SYSTEM_NAME"]="iOS"
 		cmake_config["CMAKE_SYSTEM_PROCESSOR"]="${target_proc:-$cpu_family}"
-		cmake_config["CMAKE_SYSROOT"]="$(xcrun --sdk iphoneos --show-sdk-path)"
+		cmake_config["CMAKE_SYSROOT"]="$(xcrun --sdk "$toolchain_sys" --show-sdk-path)"
 		# Toolchain locations
 		cmake_config["TOOLCHAIN_PREFIX"]="${host_target}"
 		cmake_config["TOOLCHAIN_ROOT"]="${toolchain_root_dir}"

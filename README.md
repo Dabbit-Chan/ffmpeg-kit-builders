@@ -11,7 +11,7 @@ FFmpeg-Kit Extended is a native library that allows programatic access to execut
 
 # FFmpeg-Kit Builders
 
-Cross-platform build system for FFmpeg and FFmpegKit supporting Linux, Windows, and Android platforms.
+Cross-platform build system for FFmpeg and FFmpegKit supporting Windows, Linux, MacOS, iOS, and Android platforms.
 
 ## Features
 
@@ -22,30 +22,28 @@ Cross-platform build system for FFmpeg and FFmpegKit supporting Linux, Windows, 
 - **Callback Support** - Detailed hooks for logs, statistics, and session completion.
 - **Extensible** - Designed to allow custom native library loading and configuration.
 - **Deploy Custom Builds** - You can deploy custom builds of ffmpeg-kit-extended.
-- **Cross-Platform Support** - Works on Windows, Linux, and Android!
+- **Cross-Platform Support** - Works on Windows, Linux, MacOS, iOS, and Android!
 
 ## Overview
 
-This repository provides a comprehensive build system for FFmpeg and FFmpegKit that supports multiple platforms and architectures. The system handles the complete build pipeline from toolchain installation through dependency compilation to final bundle creation, with support for both native Linux builds and cross-compilation to Windows from Linux hosts.
+This repository provides a comprehensive build system for FFmpeg and FFmpegKit that supports multiple platforms and architectures. The system handles the complete build pipeline from toolchain installation through dependency compilation to final bundle creation, with support for both native Linux builds and cross-compilation to Windows from Linux hosts, native MacOS build, cross-compilation to iOS on MacOS host, and cross-compilation to Android on Linux host.
 
 ## Platform Support
 
 - **Linux**: Native builds for x86_64 architecture with shared libraries (.so) and static libraries (.a).
 - **Windows**: Cross-compilation from Linux hosts using MinGW-w64 toolchain with shared libraries (.dll) and static mingw libraries (.a).
   - *Note: Compiling using MSVC ABI is not supported by the build script.*
-- **Android**: In beta NOW! Available on armv7, arm64, and x86_64 architectures!
-- **Apple**: Apple platforms are not currently planned as I dont have one of those to develop and test. The framework is there so you are welcome to contribute!
-  - **MacOS**: Not planned
-  - **iOS**: Not planned
+- **Apple**: MacOS and iOS build scripts must be run on a MacOS to.
+  - **iOS**: iOS-Simulator (arm64) fully supported to deploy on simulator builds.
 
-| Platform                 | Status      | Architecture                              | Min Version |
-| ------------------------ | ----------- | ----------------------------------------- | ----------- |
-| Android (and Android-TV) | ✅ Supported | armv7, arm64 (aarch64, arm64-v8a), x86_64 | 26+         |
-| iOS                      | ✅ Supported | arm64 (aarch64)                           | 13+         |
-| macOS                    | ✅ Supported | x86_64 and arm64 (aarch64)                |             |
-| tvOS                     | Coming Soon | arm64 (aarch64)                           |             |
-| Linux                    | ✅ Supported | x86_64                                    |             |
-| Windows                  | ✅ Supported | x86_64                                    | Windows 8+  |
+| Platform                 | Status      | Architecture                                        | Min Version |
+| ------------------------ | ----------- | --------------------------------------------------- | ----------- |
+| Android (and Android-TV) | ✅ Supported | armv7 (arm-v7a), arm64 (aarch64, arm64-v8a), x86_64 | 26+         |
+| iOS                      | ✅ Supported | arm64 (aarch64)                                     | 13+         |
+| macOS                    | ✅ Supported | x86_64 and arm64 (aarch64)                          |             |
+| tvOS                     | Coming Soon | arm64 (aarch64)                                     |             |
+| Linux                    | ✅ Supported | x86_64                                              |             |
+| Windows                  | ✅ Supported | x86_64                                              | Windows 8+  |
 
 ## Quick Start
 
@@ -204,8 +202,8 @@ prebuilt/
 | `-y`                           | Non-interactive mode (accept defaults)                                                                                                             |
 | `--release`                    | create release zip of ffmpeg-kit bundled binaries to be distributed                                                                                |
 | `--release-and-clean`          | create release zip of ffmpeg-kit bundled binaries to be distributed and clean ffmpeg and ffmpeg-kit build artifacts (dependencies are not deleted) |
-| `--host=*`                     | Target platform: `linux` or `windows`                                                                                                              |
-| `--arch=*`                     | Target architecture: `x86_64` or `i686`                                                                                                            |
+| `--host=*`                     | Target platform: `linux`, `windows`, `macos`, `ios`, `iphonesimulator`, `android`                                                                  |
+| `--arch=*`                     | Target architecture: `x86_64`, `arm64`, `armv7`                                                                                                    |
 
 ### Licensing
 
@@ -301,8 +299,8 @@ Shows which bundle first includes each library on Android, Linux, and Windows. `
 > - **Audio+**: libbs2b, libcdio, librubberband, libjack *(Linux)*
 > - **Video+**: libx264, libx265, libdavs2, libdvdnav, libdvdread, libxavs, libxavs2, libxvid *(Linux)*, frei0r, libvidstab
 > - **Video+HW+**: v4l2-m2m *(Linux)*
-> - **Video+ (Windows only)**: avisynth
-
+> - **Video+ (Windows only)**: avisy
+> - **AI**: libopenvino, and libtensorflow only available on Desktop builds (MacOS, Linux, and Windows). libtorch only availa
 | Library                                                                                                                                                                                                                                                                                                                                                | Android | Linux | Windows |
 | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------- | ----- | ------- |
 | **System**                                                                                                                                                                                                                                                                                                                                             |         |       |         |

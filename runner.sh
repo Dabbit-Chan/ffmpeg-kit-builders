@@ -666,9 +666,15 @@ else
 	gcc_cpu_count=y # compatible low RAM...
 fi
 
-source "${SCRIPTDIR}/function-$host_platform.sh"
-source "${SCRIPTDIR}/run-$host_platform.sh"
-source "${SCRIPTDIR}/deps-$host_platform.sh"
+if [[ $host_platform == "iphonesimulator" ]]; then
+	source_platform="ios"
+else
+	source_platform="$host_platform"
+fi
+
+source "${SCRIPTDIR}/function-$source_platform.sh"
+source "${SCRIPTDIR}/run-$source_platform.sh"
+source "${SCRIPTDIR}/deps-$source_platform.sh"
 
 # Setup config variables
 
