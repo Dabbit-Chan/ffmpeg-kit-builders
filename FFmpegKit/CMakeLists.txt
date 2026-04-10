@@ -375,9 +375,13 @@ function(configure_library_linking LIBRARY_NAME STATIC_LINKING)
     if(NOT ${LIBRARY_NAME}_LIBS OR ${LIBRARY_NAME}_LIBS MATCHES "-NOTFOUND$")
         set(${LIBRARY_NAME}_LIBS "${${LIBRARY_NAME}_LINK_LIBRARIES}")
     endif()
-
+    if(CMAKE_SYSTEM_NAME STREQUAL "iOS")
+        set(${LIBRARY_NAME}_LIBS_LIST "${${LIBRARY_NAME}_LIBRARIES}")
+    else()
+        set(${LIBRARY_NAME}_LIBS_LIST "${${LIBRARY_NAME}_LIBS}")
+    endif()
     set(FIXED_LIBS "")
-    foreach(LIB_PATH IN LISTS ${LIBRARY_NAME}_LIBS)
+    foreach(LIB_PATH IN LISTS ${LIBRARY_NAME}_LIBS_LIST)
         message(DEBUG "configure_library_linking(${LIBRARY_NAME}): checking entry '${LIB_PATH}'")
         if(LIB_PATH MATCHES "-NOTFOUND$" OR LIB_PATH STREQUAL "")
             message(WARNING "configure_library_linking(${LIBRARY_NAME}): skipping unresolved entry '${LIB_PATH}'")
@@ -662,15 +666,19 @@ elseif(APPLE)
         -fstack-protector-strong
         -fvisibility=default
     )
+    if(CMAKE_SYSTEM_NAME STREQUAL "Darwin")
+        target_link_libraries(ffmpegkit PRIVATE 
+            "-framework ForceFeedback"
+            "-framework Carbon"
+        )
+    endif()
     target_link_libraries(ffmpegkit PRIVATE
         "-framework AudioToolbox"
         "-framework AVFoundation"
         "-framework CoreAudio"
         "-framework Foundation"
-        "-framework ForceFeedback"
         "-framework GameController"
         "-framework CoreHaptics"
-        "-framework Carbon"
     )
 
     if(CMAKE_SYSTEM_NAME STREQUAL "iOS")
