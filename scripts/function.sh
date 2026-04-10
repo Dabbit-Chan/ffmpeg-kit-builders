@@ -3895,7 +3895,7 @@ configure_ffmpeg() {
       config_options+=" --extra-cxxflags=\"-Wno-invalid-specialization\""
     fi
   fi
-  if iswindows || islinux; then
+  if iswindows || islinux || ismacos; then
   truthy "$enable_cuvid" && config_options+=" --enable-cuvid"                         # enable Nvidia CUVID support [autodetect]
   truthy "$enable_ffnvcodec" && config_options+=" --enable-ffnvcodec"                 # enable dynamically linked Nvidia code [autodetect]
   truthy "$enable_nvdec" && config_options+=" --enable-nvdec"                         # enable Nvidia video decoding acceleration (via hwaccel) [autodetect]
@@ -4674,7 +4674,11 @@ pick_clean_type() {
     echo "$clean_type"
     return 0
   fi
-	while [[ ! "$clean_type" =~ ^([1-5]|all|ffmpeg|ffmpeg-kit|ffmpeg-kit-bundle)$ ]]; do
+  unknown_opts=()
+  if [[ ! "$1" =~ ^([1-5]|all|ffmpeg|ffmpeg-kit|ffmpeg-kit-bundle|kit|bundle)$ ]]; then
+     unknown_opts+=("$1")
+   fi
+	while [[ ! "$clean_type" =~ ^([1-5]|all|ffmpeg|ffmpeg-kit|ffmpeg-kit-bundle|kit|bundle)$ ]]; do
 		# shellcheck disable=SC2199
 		if [[ -n "${unknown_opts[@]}" ]]; then
 			echo -e -n 'Unknown option(s)'
@@ -4715,8 +4719,8 @@ EOF
 	case "$clean_type" in
 	1|all) export clean_type="all" ;;
 	2|ffmpeg) export clean_type="ffmpeg" ;;
-	3|ffmpeg-kit) export clean_type="ffmpeg-kit" ;;
-	4|ffmpeg-kit-bundle) export clean_type="ffmpeg-kit-bundle" ;;
+	3|ffmpeg-kit|kit) export clean_type="ffmpeg-kit" ;;
+	4|ffmpeg-kit-bundle|bundle) export clean_type="ffmpeg-kit-bundle" ;;
 	5)
 		exit_message 0 "pick_clean_type: exiting"
 		;;
@@ -4762,8 +4766,12 @@ pick_host_platform() {
     set_linux
     return 0
   fi
+  unknown_opts=()
+  if [[ ! "$1" =~ ^([1-7]|linux|windows|android|mac(os)?|iphone(os|simulator)?|ios(-sim(ulator)?)?|iphonesim(ulator)?)$ ]]; then
+     unknown_opts+=("$1")
+   fi
   export host_platform=${1:-host_platform}
-	while [[ ! "${host_platform,,}" =~ ^([1-4]|linux|windows|android|macos|ios|iphonesimulator)$ ]]; do
+	while [[ ! "${host_platform,,}" =~ ^([1-7]|linux|windows|android|mac(os)?|iphone(os|simulator)?|ios(-sim(ulator)?)?|iphonesim(ulator)?)$ ]]; do
 		# shellcheck disable=SC2199
 		if [[ -n "${unknown_opts[@]}" ]]; then
 			echo -e -n 'Unknown option(s)'
@@ -4783,7 +4791,7 @@ Which host platform are you trying to build, update, or clean for?
   6. iOS-Simulator
   7. Exit
 EOF
-		echo -e -n 'Input your choice [1-6]: '
+		echo -e -n 'Input your choice [1-7]: '
 		read -r host_platform
 	done
   if [[ -z "$host_platform" ]] && truthy "$accept_defaults"; then
@@ -4795,27 +4803,29 @@ EOF
 	1|linux) set_linux
   return 0
   ;;
-	2|windows) set_windows
+	2|win*) set_windows
   return 0
   ;;
 	3|android) set_android
   return 0
   ;;
-	4|macos|macosx) set_macos
+	4|mac*) set_macos
   return 0
   ;;
 	5|ios|iphone|iphoneos) set_ios
   return 0
   ;;
-	6|ios-simulator|iphonesimulator|iphone-simulator) set_ios_simulator
+	6|ios-sim*|iphonesim*|iphone-sim*) set_ios_simulator
   return 0
   ;;
 	7)
   exit_message 0 "pick_host_platform: exiting"
   ;;
 	*)
+  unknown_opts+=("$host_platform")
   echo -e 'Your choice was not valid, please try again.'
   echo
+  host_platform=""  # Reset to trigger loop again
   ;;
 	esac
 }
@@ -4845,6 +4855,10 @@ pick_host_arch() {
     set_x86_64
     return 0
   fi
+  unknown_opts=()
+  if [[ ! "$1" =~ ^([1-5]|x86_64|x64|i386|i686|x86|x32|aarch64|arm64|arm64-v8a|armv7a|arm|armeabi-v7a)$ ]]; then
+     unknown_opts+=("$1")
+   fi
   export host_arch=${1:-host_arch}
 	while [[ ! "${host_arch,,}" =~ ^([1-5]|"x86_64"|"x64"|"i386"|"i686"|"x86"|"x32"|"aarch64"|"arm64"|"arm64-v8a"|"armv7a"|"arm"|"armeabi-v7a")$ ]]; do
 		# shellcheck disable=SC2199
@@ -4900,6 +4914,10 @@ pick_gpu_type() {
       export gpu_type="cuda"
       return 0
     fi
+    unknown_opts=()
+    if [[ ! "$1" =~ ^([1-2]|cuda|nvdia|rocm|amd)$ ]]; then
+       unknown_opts+=("$1")
+     fi
     export gpu_type=${1:-gpu_type}
     while [[ ! "${gpu_type,,}" =~ ^([1-2]|cuda|nvdia|rocm|amd)$ ]]; do
         # shellcheck disable=SC2199
@@ -4996,8 +5014,12 @@ pick_ssl_type() {
     set_system
     return 0
   fi
+  unknown_opts=()
+  if [[ ! "$1" =~ ^([1-5]|openssl|gnutls|libtls|mbedtls|system|os|os-default)$ ]]; then
+    unknown_opts+=("$1")
+  fi
   export ssl_type=${1:-ssl_type}
-    while [[ ! "${ssl_type,,}" =~ ^([1-4]|openssl|gnutls|libtls|mbedtls|system)$ ]]; do
+    while [[ ! "${ssl_type,,}" =~ ^([1-6]|openssl|gnutls|libtls|mbedtls|system|os|os-default)$ ]]; do
         # shellcheck disable=SC2199
         if [[ -n "${unknown_opts[@]}" ]]; then
             echo -e -n 'Unknown option(s)'
@@ -5018,15 +5040,15 @@ Which TLS/SSL library needed for https do you want to include?
 EOF
         local timeout=10
         export ssl_type=""
-        echo -ne 'Input your choice [1-4] (defaulting to "OpenSSL" in 10 seconds): '
+        echo -ne 'Input your choice [1-6] (defaulting to "OpenSSL" in 10 seconds): '
         for ((i=timeout; i>0; i--)); do
             if read -r -t 1 ssl_type; then
                 break
             fi
             if (( i > 1 )); then
-                echo -ne "\rInput your choice [1-4] (defaulting to \"OpenSSL\" in $((i-1)) seconds): "
+                echo -ne "\rInput your choice [1-6] (defaulting to \"OpenSSL\" in $((i-1)) seconds): "
             else
-                echo -ne "\rInput your choice [1-4] (defaulting to \"OpenSSL\" in 0 seconds): "
+                echo -ne "\rInput your choice [1-6] (defaulting to \"OpenSSL\" in 0 seconds): "
             fi
         done
         
@@ -5045,7 +5067,7 @@ EOF
             ;;
         4|mbedtls) set_mbedtls
             ;;
-        5|system|os-default) set_system
+        5|system|os-default|os) set_system
             ;;
         6|exit) exit 0
             ;;
@@ -5062,6 +5084,10 @@ pick_cryto_lib() {
       enable_library "gcrypt"
       disable_library "gmp"
       return 0
+    fi
+    unknown_opts=()
+    if [[ ! "$1" =~ ^([1-2]|gcrypt|gmp)$ ]]; then
+      unknown_opts+=("$1")
     fi
     export crypto_type=${1:-crypto_type}
     while [[ ! "${crypto_type,,}" =~ ^([1-2]|gcrypt|gmp)$ ]]; do
@@ -5124,6 +5150,10 @@ pick_mq_lib() {
       apply_preset "$CONFIG_MQ"
       return 0
     fi
+    unknown_opts=()
+    if [[ ! "$1" =~ ^([1-3]|rabbitmq|zeromq|librabbitmq|libzmq)$ ]]; then
+      unknown_opts+=("$1")
+    fi
     export mq_type=${1:-mq_type}
     while [[ ! "${mq_type,,}" =~ ^([1-3]|rabbitmq|zeromq|librabbitmq|libzmq)$ ]]; do
         # shellcheck disable=SC2199
@@ -5163,7 +5193,7 @@ EOF
             apply_preset "$CONFIG_MQ"
         fi
     done
-    case "${crypto_type,,}" in
+    case "${mq_type,,}" in
         1|librabbitmq|rabbitmq) 
             enable_library "librabbitmq"
             disable_library "libzmq"
