@@ -38,12 +38,12 @@
 /**
  * program name, defined by the program for show_version().
  */
-extern FFMPEG_THREAD_LOCAL const char program_name[];
+extern FFMPEG_THREAD_LOCAL const char *program_name;
 
 /**
  * program birth year, defined by the program for show_banner()
  */
-extern FFMPEG_THREAD_LOCAL const int program_birth_year;
+extern FFMPEG_THREAD_LOCAL int program_birth_year;
 
 extern AVDictionary *sws_dict;
 extern AVDictionary *swr_opts;

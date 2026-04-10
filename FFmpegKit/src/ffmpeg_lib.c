@@ -32,8 +32,8 @@
 #include <unistd.h>
 #endif
 
-FFMPEG_THREAD_LOCAL const char program_name[] = "ffmpeg";
-FFMPEG_THREAD_LOCAL const int program_birth_year = 2000;
+FFMPEG_WEAK_SYMBOL FFMPEG_THREAD_LOCAL const char *program_name = "ffmpeg";
+FFMPEG_WEAK_SYMBOL FFMPEG_THREAD_LOCAL int program_birth_year = 2000;
 void FFMPEG_THREAD_LOCAL (*show_help_default_func)(const char *opt, const char *arg);
 extern void ffmpeg_show_help_default(const char *opt, const char *arg);
 

@@ -66,7 +66,9 @@ echo "Patch file created: $PATCH_FILE"
 
 SRC_DIR=$(basename "$CURRENT_SOURCE_DIR")
 
-sed -i'' "s|a/.*/${FILE_NAME}_orig.$FILE_EXT|a/$SRC_DIR/$FILE_NAME.$FILE_EXT|g" "$PATCH_FILE"
-sed -i'' "s|b/.*/${FILE_NAME}_bak.$FILE_EXT|b/$SRC_DIR/$FILE_NAME.$FILE_EXT|g" "$PATCH_FILE"
+sed -i'.patchbak' "s|a/.*/${FILE_NAME}_orig.$FILE_EXT|a/$SRC_DIR/$FILE_NAME.$FILE_EXT|g" "$PATCH_FILE"
+sed -i'.patchbak' "s|b/.*/${FILE_NAME}_bak.$FILE_EXT|b/$SRC_DIR/$FILE_NAME.$FILE_EXT|g" "$PATCH_FILE"
+
+rm -f "$PATCH_FILE.patchbak"
 
 echo "Patch file updated: $PATCH_FILE"

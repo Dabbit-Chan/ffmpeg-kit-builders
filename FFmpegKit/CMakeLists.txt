@@ -8,6 +8,12 @@
 
 cmake_minimum_required(VERSION 3.16)
 
+if(APPLE)
+    include("${CMAKE_CURRENT_SOURCE_DIR}/cmake/AppleResourceGen.cmake")
+endif()
+
+# set(CMAKE_MESSAGE_LOG_LEVEL DEBUG)
+
 # Enforce MinGW when building for Windows
 if(WIN32 AND NOT MINGW)
     message(FATAL_ERROR "Windows builds require MinGW. Use MinGW-w64 toolchain for cross-compilation. MSVC is currently not supported.")
@@ -130,26 +136,27 @@ endif()
 # ==============================================================================
 if(IS_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/patches")
     message(STATUS "Checking for patches in 'patches' directory...")
-    find_program(PATCH_EXECUTABLE patch REQUIRED)
+    find_program(PATCH_EXECUTABLE NAMES gpatch patch REQUIRED)
+    message(STATUS "Using patch executable: ${PATCH_EXECUTABLE}")
     file(GLOB PATCH_FILES "${CMAKE_CURRENT_SOURCE_DIR}/patches/*.patch")
-    
+
     foreach(PATCH_FILE ${PATCH_FILES})
         get_filename_component(PATCH_NAME ${PATCH_FILE} NAME)
         message(STATUS "Processing patch: ${PATCH_NAME}")
-        
-        # Check if applied (Reverse dry-run)
+
         execute_process(
-            COMMAND ${PATCH_EXECUTABLE} -p1 -R --dry-run -s
+            COMMAND ${PATCH_EXECUTABLE} -p1 -R -C -s
             INPUT_FILE ${PATCH_FILE}
             WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
             RESULT_VARIABLE PATCH_APPLIED_EXIT_CODE
             OUTPUT_QUIET ERROR_QUIET
         )
-        
+
         if(PATCH_APPLIED_EXIT_CODE EQUAL 0)
             message(STATUS "  - Already applied.")
         else()
             # Apply Patch
+            # -N: skip hunks that are already applied (forward-apply guard).
             execute_process(
                 COMMAND ${PATCH_EXECUTABLE} -p1 -N
                 INPUT_FILE ${PATCH_FILE}
@@ -196,7 +203,16 @@ if(NOT FFMPEG_KIT_BUNDLE_TYPE)
 endif()
 
 # Find all sources
-file(GLOB_RECURSE KIT_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/src/*.c" "${CMAKE_CURRENT_SOURCE_DIR}/src/*.cpp")
+file(GLOB_RECURSE KIT_SOURCES
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/*.c"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/*.cpp"
+)
+# Objective-C platform glue (iOS/macOS only)
+if(APPLE)
+    file(GLOB_RECURSE KIT_OBJC_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/src/*.m")
+    list(APPEND KIT_SOURCES ${KIT_OBJC_SOURCES})
+    enable_language(OBJC)
+endif()
 file(GLOB_RECURSE KIT_HEADERS "${CMAKE_CURRENT_SOURCE_DIR}/src/*.h")
 
 # Exclude ffplay.c and ffprobe.c as they are included in ffplay_lib.c and ffprobe_lib.c respectively
@@ -206,6 +222,17 @@ list(REMOVE_ITEM KIT_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/src/ffprobe.c")
 # exclude _bak and _orig files
 list(FILTER KIT_SOURCES EXCLUDE REGEX ".*_(bak|orig)\\.(c|cpp)$")
 list(FILTER KIT_HEADERS EXCLUDE REGEX ".*_(bak|orig)\\.h$")
+
+# =============================================================================
+# 4.1 RESOURCE FILE COMPILATION: Apple Platform Resource Embedding
+# =============================================================================
+# - Build bin2c host tool from FFmpeg source
+# - Generate C source files from graph.css and graph.html
+# - Add generated resources to KIT_SOURCES for compilation
+# ==============================================================================
+if(APPLE)
+    generate_apple_resource_files()
+endif()
 
 # print KIT_SOURCES and KIT_HEADERS
 # message(STATUS "KIT_SOURCES: ${KIT_SOURCES}")
@@ -282,6 +309,19 @@ function(replace_shared_with_static INPUT_LIB OUTPUT_VAR)
                 set(${OUTPUT_VAR} "${INPUT_LIB}" PARENT_SCOPE)
             endif()
         endif()
+    elseif(INPUT_LIB MATCHES "\\.dylib$")
+        # Skip system libraries for macOS builds
+        if(INPUT_LIB MATCHES "^/(lib|lib64|usr/lib|usr/lib64|/opt/homebrew)/")
+            set(${OUTPUT_VAR} "${INPUT_LIB}" PARENT_SCOPE)
+        else()
+            string(REPLACE ".dylib" ".a" STATIC_PATH "${INPUT_LIB}")
+            if(EXISTS "${STATIC_PATH}")
+                set(${OUTPUT_VAR} "${STATIC_PATH}" PARENT_SCOPE)
+                message(STATUS "Replaced ${INPUT_LIB} with ${STATIC_PATH}")
+            else()
+                set(${OUTPUT_VAR} "${INPUT_LIB}" PARENT_SCOPE)
+            endif()
+        endif()
     else()
         set(${OUTPUT_VAR} "${INPUT_LIB}" PARENT_SCOPE)
     endif()
@@ -332,9 +372,17 @@ endfunction()
 function(configure_library_linking LIBRARY_NAME STATIC_LINKING)
     # Get the interface link libraries
     get_target_property(${LIBRARY_NAME}_LIBS PkgConfig::${LIBRARY_NAME} INTERFACE_LINK_LIBRARIES)
+    if(NOT ${LIBRARY_NAME}_LIBS OR ${LIBRARY_NAME}_LIBS MATCHES "-NOTFOUND$")
+        set(${LIBRARY_NAME}_LIBS "${${LIBRARY_NAME}_LINK_LIBRARIES}")
+    endif()
 
     set(FIXED_LIBS "")
     foreach(LIB_PATH IN LISTS ${LIBRARY_NAME}_LIBS)
+        message(DEBUG "configure_library_linking(${LIBRARY_NAME}): checking entry '${LIB_PATH}'")
+        if(LIB_PATH MATCHES "-NOTFOUND$" OR LIB_PATH STREQUAL "")
+            message(WARNING "configure_library_linking(${LIBRARY_NAME}): skipping unresolved entry '${LIB_PATH}'")
+            continue()
+        endif()
         if(STATIC_LINKING)
             replace_shared_with_static("${LIB_PATH}" RESOLVED_LIB)
         else()
@@ -348,6 +396,7 @@ function(configure_library_linking LIBRARY_NAME STATIC_LINKING)
     endforeach()
     set_target_properties(PkgConfig::${LIBRARY_NAME} PROPERTIES INTERFACE_LINK_LIBRARIES "${FIXED_LIBS}")
     list(APPEND BUNDLE_LIBRARIES ${FIXED_LIBS})
+    list(REMOVE_DUPLICATES BUNDLE_LIBRARIES)
     set(BUNDLE_LIBRARIES "${BUNDLE_LIBRARIES}" PARENT_SCOPE)
 endfunction()
 
@@ -380,12 +429,12 @@ if(ENABLE_OPENVINO)
     configure_library_linking(OPENVINO OFF)
     target_link_libraries(ffmpegkit PRIVATE PkgConfig::OPENVINO)
     # Try tbb12 first, fallback to tbb
-    pkg_check_modules(TBB12 QUIET IMPORTED_TARGET tbb12)
-    if(NOT TBB12_FOUND)
-        pkg_check_modules(TBB12 REQUIRED IMPORTED_TARGET tbb)
+    pkg_check_modules(TBB QUIET IMPORTED_TARGET tbb12)
+    if(NOT PkgConfig::TBB)
+        pkg_check_modules(TBB REQUIRED IMPORTED_TARGET tbb)
     endif()
-    configure_library_linking(TBB12 OFF)
-    target_link_libraries(ffmpegkit PRIVATE PkgConfig::TBB12)
+    configure_library_linking(TBB OFF)
+    target_link_libraries(ffmpegkit PRIVATE PkgConfig::TBB)
     set(PKG_CONFIG_USE_STATIC_LIBS ${_OLD_PKG_CONFIG_USE_STATIC_LIBS})
 endif()
 
@@ -395,53 +444,56 @@ if(ENABLE_LIBTORCH)
         set(PKG_CONFIG_USE_STATIC_LIBS OFF)
         pkg_check_modules(LIBTORCH REQUIRED IMPORTED_TARGET libtorch)
         configure_library_linking(LIBTORCH OFF)
-        find_library(PYTHON311_LIB
-            NAMES
-                python3.11
-            PATHS
-                /usr/lib64
-                /usr/lib
-                /usr/local/lib64
-                /usr/local/lib
-            NO_DEFAULT_PATH
-        )
-        if(NOT PYTHON311_LIB)
-            if(EXISTS "/usr/lib64/libpython3.11.so.1.0")
-                set(PYTHON311_LIB "/usr/lib64/libpython3.11.so.1.0")
-            elseif(EXISTS "/usr/lib/libpython3.11.so.1.0")
-                set(PYTHON311_LIB "/usr/lib/libpython3.11.so.1.0")
+        if(NOT APPLE)
+            find_library(PYTHON311_LIB
+                NAMES
+                    python3.11
+                PATHS
+                    /usr/lib64
+                    /usr/lib
+                    /usr/local/lib64
+                    /usr/local/lib
+                    /opt/homebrew/lib
+                NO_DEFAULT_PATH
+            )
+            if(NOT PYTHON311_LIB)
+                if(EXISTS "/usr/lib64/libpython3.11.so.1.0")
+                    set(PYTHON311_LIB "/usr/lib64/libpython3.11.so.1.0")
+                elseif(EXISTS "/usr/lib/libpython3.11.so.1.0")
+                    set(PYTHON311_LIB "/usr/lib/libpython3.11.so.1.0")
+                endif()
+            endif()
+            if(NOT PYTHON311_LIB)
+                message(FATAL_ERROR "Could not find libpython3.11 in /usr/lib64 or /usr/lib")
+            else()
+                message(STATUS "Found Python 3.11 library: ${PYTHON311_LIB}")
             endif()
         endif()
-        if(NOT PYTHON311_LIB)
-            message(FATAL_ERROR "Could not find libpython3.11 in /usr/lib64 or /usr/lib")
-        else()
-            message(STATUS "Found Python 3.11 library: ${PYTHON311_LIB}")
-        endif()
-        # Link system LLVM before libtorch so the dynamic linker loads it first.
-        # libtensorflow_framework (a libtorch dep) bundles its own LLVM and exports
-        # those symbols globally. If system libLLVM-17 loads after it, LLVM vtables
-        # get crossed and cause a segfault when Mesa later loads swrast_dri.so.
-        find_library(LLVM17_LIB
-            NAMES LLVM-17 LLVM libLLVM-17
-            PATHS /usr/lib64/llvm17/lib /usr/lib64 /usr/lib
-            NO_DEFAULT_PATH
-        )
-        if(LLVM17_LIB)
-            message(STATUS "Found system LLVM-17: ${LLVM17_LIB} (linked before libtorch to prevent symbol conflicts)")
-            target_link_libraries(ffmpegkit PRIVATE ${LLVM17_LIB})
-            get_filename_component(LLVM17_LIB_DIR "${LLVM17_LIB}" DIRECTORY)
-        else()
-            message(WARNING "System LLVM-17 not found. LLVM symbol conflicts with libtensorflow may cause crashes.")
+        if(CMAKE_SYSTEM_NAME MATCHES "Linux")
+            find_library(LLVM17_LIB
+                NAMES LLVM-17 LLVM libLLVM-17
+                PATHS /usr/lib64/llvm17/lib /usr/lib64 /usr/lib
+                NO_DEFAULT_PATH
+            )
+            if(LLVM17_LIB)
+                message(STATUS "Found system LLVM-17: ${LLVM17_LIB} (linked before libtorch to prevent symbol conflicts)")
+                target_link_libraries(ffmpegkit PRIVATE ${LLVM17_LIB})
+                get_filename_component(LLVM17_LIB_DIR "${LLVM17_LIB}" DIRECTORY)
+            else()
+                message(WARNING "System LLVM-17 not found. LLVM symbol conflicts with libtensorflow may cause crashes.")
+            endif()
         endif()
 
         target_link_libraries(ffmpegkit PRIVATE
             PkgConfig::LIBTORCH
             ${PYTHON311_LIB}
         )
-        target_link_options(ffmpegkit PRIVATE
-            "-Wl,-rpath,/usr/lib64"
-            $<$<BOOL:${LLVM17_LIB_DIR}>:-Wl,-rpath,${LLVM17_LIB_DIR}>
-        )
+        if(CMAKE_SYSTEM_NAME MATCHES "Linux")
+            target_link_options(ffmpegkit PRIVATE
+                "-Wl,-rpath,/usr/lib64"
+                $<$<BOOL:${LLVM17_LIB_DIR}>:-Wl,-rpath,${LLVM17_LIB_DIR}>
+            )
+        endif()
         set(PKG_CONFIG_USE_STATIC_LIBS ${_OLD_PKG_CONFIG_USE_STATIC_LIBS})
     endif()
 endif()
@@ -565,8 +617,8 @@ elseif(CMAKE_SYSTEM_NAME MATCHES "Linux")
     )
 elseif(ANDROID)
     # Define Android-specific macros for source code compatibility
-    target_compile_definitions(ffmpegkit PRIVATE 
-        TARGET_OS_ANDROID 
+    target_compile_definitions(ffmpegkit PRIVATE
+        TARGET_OS_ANDROID
         __ANDROID_API__=${ANDROID_NATIVE_API_LEVEL}
         _FORTIFY_SOURCE=2
     )
@@ -574,19 +626,19 @@ elseif(ANDROID)
     # Link essential Android system libraries
     # 'log' is required for av_log redirection to logcat
     # 'android' and 'jnigraphics' provide native window and bitmap support
-    target_link_libraries(ffmpegkit PRIVATE 
-        log 
-        android 
-        jnigraphics 
-        m 
-        z 
-        atomic 
+    target_link_libraries(ffmpegkit PRIVATE
+        log
+        android
+        jnigraphics
+        m
+        z
+        atomic
         dl
     )
 
     # Android-specific hardening and visibility
-    target_compile_options(ffmpegkit PRIVATE 
-        -fstack-protector-strong 
+    target_compile_options(ffmpegkit PRIVATE
+        -fstack-protector-strong
         -fvisibility=default
         -fPIC
     )
@@ -601,6 +653,42 @@ elseif(ANDROID)
         "-Wl,--allow-multiple-definition"
         "-Wl,--as-needed"
         "-Wl,--verbose"
+    )
+elseif(APPLE)
+    # iOS/macOS platform configuration
+    target_compile_definitions(ffmpegkit PRIVATE TARGET_OS_APPLE _FORTIFY_SOURCE=2)
+
+    target_compile_options(ffmpegkit PRIVATE
+        -fstack-protector-strong
+        -fvisibility=default
+    )
+    target_link_libraries(ffmpegkit PRIVATE
+        "-framework AudioToolbox"
+        "-framework AVFoundation"
+        "-framework CoreAudio"
+        "-framework Foundation"
+        "-framework ForceFeedback"
+        "-framework GameController"
+        "-framework CoreHaptics"
+        "-framework Carbon"
+    )
+
+    if(CMAKE_SYSTEM_NAME STREQUAL "iOS")
+        target_compile_definitions(ffmpegkit PRIVATE TARGET_OS_IOS)
+        target_link_libraries(ffmpegkit PRIVATE "-framework UIKit")
+    else()
+        # macOS
+        target_compile_definitions(ffmpegkit PRIVATE TARGET_OS_OSX)
+        target_link_libraries(ffmpegkit PRIVATE "-framework AppKit")
+    endif()
+    target_link_options(ffmpegkit PRIVATE
+        "-v"
+        "-ld64"
+        "-Wl,-w"
+        "-Wl,-dead_strip"
+        "-Wl,-undefined,suppress"
+        "-Wl,-flat_namespace"
+        "-Wl,-undefined,dynamic_lookup"
     )
 endif()
 
@@ -618,7 +706,11 @@ target_link_directories(ffmpegkit PRIVATE "${FFMPEG_BUILD_DIR}/lib")
 
 if(BUILD_SHARED_LIBS)
     target_compile_definitions(ffmpegkit PRIVATE DLL_EXPORT PIC)
-    target_link_options(ffmpegkit PRIVATE -Wl,--no-undefined)
+    if(NOT APPLE)
+        # Darwin dylibs error on undefined symbols by default; no flag needed.
+        # Linux shared libs require this opt-in.
+        target_link_options(ffmpegkit PRIVATE -Wl,--no-undefined)
+    endif()
 
     if(FFMPEG_STATIC)
         # Static Link Path: Use absolute paths and whole-archive to prevent symbol stripping
@@ -651,7 +743,7 @@ if(BUILD_SHARED_LIBS)
                 #    etc.) - grouped to resolve circular references between them.
                 #    This is the block that was previously misplaced after -Bdynamic.
                 "-Wl,--start-group"
-                PkgConfig::FFMPEG
+                ${BUNDLE_LIBRARIES}
                 "-Wl,--end-group"
 
                 # 4. Windows system DLLs - always dynamic, always last
@@ -669,31 +761,36 @@ if(BUILD_SHARED_LIBS)
                 ${FFMPEG_STATIC_LIBS}
                 ${ALSA_LIBRARIES}
                 "-Wl,--no-whole-archive"
-                PkgConfig::FFMPEG
+                ${BUNDLE_LIBRARIES}
             )
         elseif(ANDROID)
-            target_link_libraries(ffmpegkit PRIVATE 
+            target_link_libraries(ffmpegkit PRIVATE
                 "-Wl,--whole-archive"
                 ${FFMPEG_STATIC_LIBS}
                 "-Wl,--no-whole-archive"
-                PkgConfig::FFMPEG
+                ${BUNDLE_LIBRARIES}
+            )
+        elseif(APPLE)
+            target_link_libraries(ffmpegkit PRIVATE
+                ${FFMPEG_STATIC_LIBS}
+                ${BUNDLE_LIBRARIES}
             )
         else()
-            target_link_libraries(ffmpegkit PRIVATE ${FFMPEG_STATIC_LIBS} PkgConfig::FFMPEG)
+            target_link_libraries(ffmpegkit PRIVATE ${FFMPEG_STATIC_LIBS} ${BUNDLE_LIBRARIES})
         endif()
     else()
         if(MINGW)
             target_link_libraries(ffmpegkit PRIVATE 
                 "-Wl,--start-group"
                 "${PTW32_STATIC_LIB}"
-                PkgConfig::FFMPEG
+                ${BUNDLE_LIBRARIES}
                 "pthread"
                 "ws2_32" 
                 "bcrypt"
                 "-Wl,--end-group"
             )
         else()
-            target_link_libraries(ffmpegkit PRIVATE PkgConfig::FFMPEG)  
+            target_link_libraries(ffmpegkit PRIVATE ${BUNDLE_LIBRARIES})  
         endif()
     endif()
 
@@ -736,7 +833,10 @@ if(BUILD_SHARED_LIBS)
         *;
 };
 ")
-    target_link_options(ffmpegkit PRIVATE "-Wl,--version-script=${LINKER_SCRIPT}")
+    if(NOT APPLE)
+        # --version-script is ELF/GNU ld only; macOS uses -exported_symbols_list instead.
+        target_link_options(ffmpegkit PRIVATE "-Wl,--version-script=${LINKER_SCRIPT}")
+    endif()
 
     # set(CMAKE_MESSAGE_LOG_LEVEL VERBOSE)
     # message(STATUS "BUNDLE_LIBRARIES: ${BUNDLE_LIBRARIES}")

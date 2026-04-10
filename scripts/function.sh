@@ -640,43 +640,48 @@ setup_android_environment() {
 
 setup_macos_environment() {
     export PATCHDIR="$SCRIPTDIR/macos/patches"
-    export host_target="$host_arch-apple-darwin"
-    export rust_target="$host_arch-apple-darwin"
     export dependency_install_prefix="$work_dir/libraries"
     export install_pkgconfig_dir="${dependency_install_prefix}/lib/pkgconfig"
     export toolchain_sys="macosx"
     export PKG_CONFIG_PATH="$install_pkgconfig_dir:$ffmpeg_install_prefix/lib/pkgconfig:/usr/local/lib/pkgconfig:/opt/homebrew/lib/pkgconfig"
-    
-    
+    export SDKROOT=$(xcrun --sdk "$toolchain_sys" --show-sdk-path)
+    export MIN_MACOS_VERSION="13.0"
+
     case "$host_arch" in
         "x86_64")
             export host_arch="x86_64"
             export cmake_host_arch="x86_64"
             export build_cross_compile=y
             export PATH="$original_path"
+            export host_target="x86_64-apple-darwin"
+            export rust_target="x86_64-apple-darwin"
+            export cflags_target="x86_64-apple-darwin$MIN_MACOS_VERSION"
+            export macos_version_flag="-mmacosx-version-min=$MIN_MACOS_VERSION"
             ;;
         "aarch64"|"arm64")
             export host_arch="arm64"
             export cmake_host_arch="arm64"
             export meson_cpu_family="aarch64"
             export PATH="$ffmpeg_install_prefix/bin:$dependency_install_prefix/bin:$original_path"
+            export host_target="arm64-apple-darwin"
+            export rust_target="aarch64-apple-darwin"
+            export cflags_target="arm64-apple-darwin$MIN_MACOS_VERSION"
+            export macos_version_flag="-mmacosx-version-min=$MIN_MACOS_VERSION"
             ;;
         *)
             exit_message 1 "setup_macos_environment: Unsupported host arch '$host_arch' for $host_platform"
             ;;
     esac
     
-    export macos_cflags="$original_cflags -Wno-pedantic -arch $host_arch -I${dependency_install_prefix}/include"
+    export macos_cflags="$original_cflags -Wno-pedantic -arch $host_arch -I${dependency_install_prefix}/include -isysroot $SDKROOT $macos_version_flag -target $cflags_target"
     export CFLAGS="$macos_cflags"
-    export macos_cppflags="$original_cppflags -arch $host_arch -I${dependency_install_prefix}/include -DMACOS"
+    export macos_cppflags="$original_cppflags -arch $host_arch -I${dependency_install_prefix}/include -DMACOS -isysroot $SDKROOT $macos_version_flag -target $cflags_target"
     export CPPFLAGS="$macos_cppflags"
-    export macos_cxxflags="$original_cxxflags -arch $host_arch -I${dependency_install_prefix}/include"
+    export macos_cxxflags="$original_cxxflags -arch $host_arch -I${dependency_install_prefix}/include -isysroot $SDKROOT $macos_version_flag -target $cflags_target"
     export CXXFLAGS="$macos_cxxflags"
-    export macos_ldflags="$original_ldflags -arch $host_arch -L${dependency_install_prefix}/lib"
+    export macos_ldflags="$original_ldflags -arch $host_arch -L${dependency_install_prefix}/lib -isysroot $SDKROOT $macos_version_flag -target $cflags_target"
     export LDFLAGS="$macos_ldflags"
     export DYLD_LIBRARY_PATH="${dependency_install_prefix}/lib:$DYLD_LIBRARY_PATH"
-    
-    export SDKROOT=$(xcrun --sdk "$toolchain_sys" --show-sdk-path)
 
     export CC="$(xcrun --sdk "$toolchain_sys" --find clang)"
     export CXX="$(xcrun --sdk "$toolchain_sys" --find clang++)"
@@ -1505,7 +1510,7 @@ check_missing_packages() {
     check_packages+=('zstd' 'cython3' 'xutils-dev' 'python3-venv' 'python3-numpy')
   elif [ "${VENDOR}" == "macos" ]; then
     # also needs 'python@3.10' 'python@3.12' 'python@3.14'
-    check_packages+=('libtool' 'texinfo' 'glib' 'llvm' 'lld' 'pipx' 'autoconf-archive' 'bc' 'binutils')
+    check_packages+=('libtool' 'texinfo' 'glib' 'llvm' 'lld' 'pipx' 'autoconf-archive' 'bc' 'binutils' 'gpatch' 'glibtool' 'gsed')
   else
     check_packages+=('libtoolize') # the rest of the world
 	fi
@@ -2901,6 +2906,8 @@ generic_cmake() {
   if ismacos; then
   [[ "$extra_args" != *"-DCMAKE_SYSTEM_NAME"* ]] && extra_args+=" -DCMAKE_SYSTEM_NAME=Darwin"
   [[ "$extra_args" != *"-DCMAKE_OSX_ARCHITECTURES"* ]] && extra_args+=" -DCMAKE_OSX_ARCHITECTURES=$host_arch"
+  [[ "$extra_args" != *"-DCMAKE_OSX_DEPLOYMENT_TARGET"* ]] && extra_args+=" -DCMAKE_OSX_DEPLOYMENT_TARGET=$MIN_MACOS_VERSION"
+  [[ "$extra_args" != *"-DCMAKE_OSX_SYSROOT"* ]] && extra_args+=" -DCMAKE_OSX_SYSROOT=$(xcrun --sdk "$toolchain_sys" --show-sdk-path)"
   elif isiossimulator; then
   [[ "$extra_args" != *"-DCMAKE_SYSTEM_NAME"* ]] && extra_args+=" -DCMAKE_SYSTEM_NAME=iOS"
   [[ "$extra_args" != *"-DCMAKE_OSX_ARCHITECTURES"* ]] && extra_args+=" -DCMAKE_OSX_ARCHITECTURES=$host_arch"
@@ -2910,6 +2917,7 @@ generic_cmake() {
   [[ "$extra_args" != *"-DCMAKE_SYSTEM_NAME"* ]] && extra_args+=" -DCMAKE_SYSTEM_NAME=iOS"
   [[ "$extra_args" != *"-DCMAKE_OSX_ARCHITECTURES"* ]] && extra_args+=" -DCMAKE_OSX_ARCHITECTURES=$host_arch"
   [[ "$extra_args" != *"-DCMAKE_OSX_DEPLOYMENT_TARGET"* ]] && extra_args+=" -DCMAKE_OSX_DEPLOYMENT_TARGET=$MIN_IOS_VERSION"
+  [[ "$extra_args" != *"-DCMAKE_OSX_SYSROOT"* ]] && extra_args+=" -DCMAKE_OSX_SYSROOT=$(xcrun --sdk "$toolchain_sys" --show-sdk-path)"
   else
   [[ "$extra_args" != *"-DCMAKE_SYSTEM_NAME"* ]] && extra_args+=" -DCMAKE_SYSTEM_NAME=${host_platform^}"
   fi
@@ -3697,6 +3705,16 @@ configure_ffmpeg() {
   }
   (iswindows || isandroid) && fix_pkgconfig_flags
   # Common compiler flags for Windows    
+  if ismacos || isios || isiossimulator; then
+    if [[ ! -f /usr/local/bin/gas-preprocessor.pl ]]; then
+      {
+      wget -O gas-preprocessor.pl https://raw.githubusercontent.com/FFmpeg/gas-preprocessor/master/gas-preprocessor.pl
+      copy_path "gas-preprocessor.pl" "/usr/local/bin/gas-preprocessor.pl" "-f"
+      chmod +x "/usr/local/bin/gas-preprocessor.pl"
+      } > >(redirect_output) 2>&1 || exit_message 1 "configure_ffmpeg: Failed to download gas-preprocessor.pl"
+    fi
+    init_options+=" --as='gas-preprocessor.pl -arch $meson_cpu_family -- $(xcrun --sdk "$toolchain_sys" --find clang)'"
+  fi
   if iswindows; then
     export LDFLAGS="$LDFLAGS -Wl,-Bstatic -l:libpthreadGC3.a"
     export CFLAGS="$CFLAGS -mstackrealign"
@@ -3741,19 +3759,11 @@ configure_ffmpeg() {
       init_options+=" --ld=$CXX"
     fi
   elif isios || isiossimulator; then
-    if [[ ! -f /usr/local/bin/gas-preprocessor.pl ]]; then
-      {
-      wget -O gas-preprocessor.pl https://raw.githubusercontent.com/FFmpeg/gas-preprocessor/master/gas-preprocessor.pl
-      copy_path "gas-preprocessor.pl" "/usr/local/bin/gas-preprocessor.pl" "-f"
-      chmod +x "/usr/local/bin/gas-preprocessor.pl"
-      } > >(redirect_output) 2>&1 || exit_message 1 "configure_ffmpeg: Failed to download gas-preprocessor.pl"
-    fi
     init_options+=" --target-os=darwin"
     init_options+=" --disable-programs"
     init_options+=" --cc=$(xcrun --sdk "$toolchain_sys" --find clang)"
     init_options+=" --cxx=$(xcrun --sdk "$toolchain_sys" --find clang++)"
     init_options+=" --ar=$(xcrun --sdk "$toolchain_sys" --find ar)"
-    init_options+=" --as='gas-preprocessor.pl -arch aarch64 -- $(xcrun --sdk "$toolchain_sys" --find clang)'"
     init_options+=" --strip=$(xcrun --sdk "$toolchain_sys" --find strip)"
     init_options+=" --nm=$(xcrun --sdk "$toolchain_sys" --find nm)"
     init_options+=" --ranlib=$(xcrun --sdk "$toolchain_sys" --find ranlib)"
@@ -3987,6 +3997,7 @@ configure_ffmpeg() {
   truthy "$enable_librav1e" && config_options+=" --enable-librav1e"                   # enable AV1 encoding via rav1e [no]
   truthy "$enable_librist" && config_options+=" --enable-librist"                     # enable RIST via librist [no]
   truthy "$enable_librsvg" && config_options+=" --enable-librsvg"                     # enable SVG rasterization via librsvg [no]
+  truthy "$enable_librsvg" && ismacos && add_extra_libs "-lresolv"
   truthy "$enable_librtmp" && config_options+=" --enable-librtmp"                     # enable RTMP[E] support via librtmp [no]
   truthy "$enable_librubberband" && config_options+=" --enable-librubberband"         # enable rubberband needed for rubberband filter [no]
   truthy "$enable_libshaderc" && config_options+=" --enable-libshaderc"               # enable GLSL->SPIRV compilation via libshaderc [no]
@@ -4047,6 +4058,7 @@ configure_ffmpeg() {
   fi
   truthy "$enable_openssl" && config_options+=" --enable-openssl"                     # enable openssl, needed for https support if gnutls, libtls or mbedtls is not used [no]
   truthy "$enable_pocketsphinx" && config_options+=" --enable-pocketsphinx"           # enable PocketSphinx, needed for asr filter [no]
+  truthy "$enable_pocketsphinx" && ismacos && add_extra_libs "-lresolv"
   truthy "$enable_vapoursynth" && config_options+=" --enable-vapoursynth"             # enable VapourSynth demuxer [no]
   truthy "$enable_whisper" && { config_options+=" --enable-whisper" \
   && add_extra_libs "-lwhisper -lggml -lggml-cpu -lggml-base"; }                      # enable whisper filter [no]
@@ -4191,7 +4203,9 @@ install_ffmpeg() {
   ffmpeg_patches
   iswindows && export LD=${cross_prefix}gcc # ld weirdness with windows
   isandroid && export AS="$CC" && export LD="$CC"
-  isios && export AS="gas-preprocessor.pl -arch aarch64 -- $(xcrun --sdk iphoneos --find clang)"
+  if ismacos || isios || isiossimulator; then 
+    export AS="gas-preprocessor.pl -arch $meson_cpu_family -- $(xcrun --sdk "$toolchain_sys" --find clang)"
+  fi
 	do_make "AS=\"$AS\" PREFIX=\"$ffmpeg_install_prefix\"" "${touch_postfix}" 1 || exit_message 1 "install_ffmpeg: unable to make ffmpeg. see $LOG_FILE for details."
   do_make_install "PREFIX=\"$ffmpeg_install_prefix\"" "" "${touch_postfix}" 1 || exit_message 1 "install_ffmpeg: unable to make install ffmpeg. see $LOG_FILE for details."
 
@@ -4279,8 +4293,8 @@ install_ffmpeg_kit() {
     export LDFLAGS="${LDFLAGS} -Wl,--allow-multiple-definition -L$CLANG_RT_DIR -lclang_rt.builtins-$host_arch-android -Wl,--exclude-libs,libunwind.a"
     export LDFLAGS=$(echo "${LDFLAGS}" | sed -e 's/-Wl,--fatal-warnings//g')
   fi
-	
-  change_dir "${ffmpeg_kit_src_dir}/build"
+  
+  change_dir "${ffmpeg_kit_src_dir}/build" 1
 
   remove_path -rf "$ffmpeg_kit_install"
   
@@ -4348,7 +4362,7 @@ create_ffmpeg_kit_bundle() {
       [[  -f "$ffmpeg_kit_src_dir/build/libffmpegkit.map" ]] && cp -rP "$ffmpeg_kit_src_dir/build/libffmpegkit.map" "${ffmpeg_kit_bundle}/bin"
     } >>"$LOG_FILE"
 
-    find "${ffmpeg_kit_bundle}/lib/pkgconfig" -type f -name "*.pc" -exec sed -i'.bak' -e \
+    find "${ffmpeg_kit_bundle}/lib/pkgconfig" -type f -name "*.pc" -exec sed -i'.bak' \
     -e "s|prefix=.*|prefix=${ffmpeg_kit_bundle}|g" \
     -e "s|exec_prefix=.*|exec_prefix=\${prefix}|g" \
     -e "s|libdir=.*|libdir=\${prefix}/lib|g" \
@@ -5321,6 +5335,7 @@ add_src_dir() {
         -e 's|-L/opt/homebrew/opt/([a-zA-Z0-9_-]+(/[a-zA-Z0-9_-]+)*)/lib||g' \
         -e 's|-Wl,--export-dynamic||g' {} +
     elif ismacos || isios || isiossimulator; then
+      find "$dependency_install_prefix/lib" -name "*.la" -delete
       find "$install_pkgconfig_dir" -type f -name "*.pc" -exec sed -i'.bak' -e 's|-Wl,--export-dynamic||g' \
         -e 's|-L/opt/homebrew/opt/([a-zA-Z0-9_-]+(/[a-zA-Z0-9_-]+)*)/lib||g' {} +
     else

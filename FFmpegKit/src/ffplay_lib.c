@@ -21,8 +21,8 @@
 #include "ffmpeg_kit_assert_override.h"
 #include <SDL.h>
 
-FFMPEG_THREAD_LOCAL const char program_name[] = "ffplay";
-FFMPEG_THREAD_LOCAL const int program_birth_year = 2003;
+FFMPEG_WEAK_SYMBOL FFMPEG_THREAD_LOCAL const char *program_name = "ffplay";
+FFMPEG_WEAK_SYMBOL FFMPEG_THREAD_LOCAL int program_birth_year = 2000;
 extern void (*show_help_default_func)(const char *opt, const char *arg);
 extern void ffplay_show_help_default(const char *opt, const char *arg);
 
@@ -130,14 +130,43 @@ static SDL_Window *ffplay_kit_SDL_CreateWindow(
 }
 #define SDL_CreateWindow ffplay_kit_SDL_CreateWindow
 
-#else /* !__ANDROID__ — Linux / Windows */
+#else /* !__ANDROID__ — Linux / Windows / macOS / iOS */
 
-/* Global frame callback for desktop video output.
+/* Global frame callback for non-Android video output (Linux, Windows, macOS, iOS).
  * Set by ffplay_set_frame_callback() before ffplay_init().
  * Called inside ffplay_step() with RGBA8888 pixel data after each video frame. */
 static FFplayFrameCallback g_frame_callback = NULL;
 static void *g_frame_callback_userdata = NULL;
 
+#ifdef __APPLE__
+#include <TargetConditionals.h>
+#include <os/log.h>
+
+#define FFPLAY_LOG_TAG "FFplayLib"
+/* os_log handle; created lazily in ffplay_init().  Falls back to OS_LOG_DEFAULT until then. */
+static os_log_t _ffplay_apple_log = NULL;
+#define FFPLAY_LOGI(fmt, ...) os_log_info(_ffplay_apple_log ? _ffplay_apple_log : OS_LOG_DEFAULT, fmt, ##__VA_ARGS__)
+#define FFPLAY_LOGD(fmt, ...) os_log_debug(_ffplay_apple_log ? _ffplay_apple_log : OS_LOG_DEFAULT, fmt, ##__VA_ARGS__)
+#define FFPLAY_LOGE(fmt, ...) os_log_error(_ffplay_apple_log ? _ffplay_apple_log : OS_LOG_DEFAULT, fmt, ##__VA_ARGS__)
+
+/* SDL_SetMainReady() is declared in SDL_main.h, but including that header
+ * redirects `main` to `SDL_main` which breaks library-mode compilation.
+ * Declare it directly instead. */
+extern void SDL_SetMainReady(void);
+
+/* SDL_CreateWindow interceptor — logs dimensions before forwarding to SDL. */
+static SDL_Window *ffplay_kit_SDL_CreateWindow(
+        const char *title, int x, int y, int w, int h, Uint32 flags)
+{
+    FFPLAY_LOGI("[ffplay_lib] SDL_CreateWindow: %dx%d title=%{public}s flags=0x%x",
+        w, h, title ? title : "(null)", (unsigned)flags);
+    SDL_Window *win = SDL_CreateWindow(title, x, y, w, h, flags);
+    FFPLAY_LOGI("[ffplay_lib] SDL_CreateWindow => win=%p err='%{public}s'", win, SDL_GetError());
+    return win;
+}
+#define SDL_CreateWindow ffplay_kit_SDL_CreateWindow
+
+#endif /* __APPLE__ */
 #endif /* __ANDROID__ */
 
 // Keep the SDL window hidden and suppress SDL_RenderPresent: pixels are read via
@@ -293,9 +322,16 @@ FFplayContext* ffplay_init(const char* args_string, const FFplayCallbacks *cb) {
 #else /* !__ANDROID__ */
     // Use SDL_SetHintWithPriority (not SDL_setenv) so the hint lands in SDL's
     // own table, which is reliable across CRT instances on Windows.
-#ifdef _WIN32
+#if defined(_WIN32)
     // Windows: 'dummy' driver provides an in-memory surface without a visible window.
     SDL_SetHintWithPriority(SDL_HINT_VIDEODRIVER, "dummy", SDL_HINT_OVERRIDE);
+#elif defined(__APPLE__)
+    // iOS/macOS: SDL used as a library — bypass SDLUIKitDelegate/SDLAppDelegate
+    // startup requirements (identical to the Android SDL_SetMainReady() call above).
+    SDL_SetMainReady();
+    // 'offscreen' provides a CPU-backed framebuffer; pixels are delivered per-frame
+    // via the FFplayFrameCallback registered with ffplay_set_frame_callback().
+    SDL_SetHintWithPriority(SDL_HINT_VIDEODRIVER, "offscreen", SDL_HINT_OVERRIDE);
 #else
     // Linux: 'offscreen' provides a CPU-backed framebuffer supporting
     // SDL_CreateRenderer + SDL_RenderReadPixels without a display server.
@@ -304,9 +340,22 @@ FFplayContext* ffplay_init(const char* args_string, const FFplayCallbacks *cb) {
     SDL_SetHintWithPriority(SDL_HINT_VIDEODRIVER, "offscreen", SDL_HINT_OVERRIDE);
 #endif
     SDL_SetHintWithPriority(SDL_HINT_RENDER_DRIVER, "software", SDL_HINT_OVERRIDE);
-    // Force dummy audio driver unless the caller has overridden SDL_AUDIODRIVER.
+#if defined(__APPLE__)
+    // iOS/macOS: CoreAudio provides real audio output via the system audio stack.
+    if (!SDL_getenv("SDL_AUDIODRIVER"))
+        SDL_setenv("SDL_AUDIODRIVER", "coreaudio", 0);
+    /* Initialise the os_log subsystem now that we have the args context. */
+    if (!_ffplay_apple_log)
+        _ffplay_apple_log = os_log_create("com.akashskypatel.ffmpegkit", FFPLAY_LOG_TAG);
+    FFPLAY_LOGI("[ffplay_lib] ffplay_init: SDL_VIDEODRIVER='offscreen' SDL_RENDER_DRIVER='software' "
+        "SDL_AUDIODRIVER='%{public}s' args='%{public}.200s'",
+        SDL_getenv("SDL_AUDIODRIVER") ? SDL_getenv("SDL_AUDIODRIVER") : "(null)",
+        args_string ? args_string : "(null)");
+#else
+    // Linux/Windows: use dummy audio unless the caller has set SDL_AUDIODRIVER.
     if (!SDL_getenv("SDL_AUDIODRIVER"))
         SDL_setenv("SDL_AUDIODRIVER", "dummy", 0);
+#endif
 #endif /* !__ANDROID__ */
         
     // Reset global state in ffplay.c
@@ -702,7 +751,7 @@ int ffplay_step(FFplayContext* ctx) {
     }
     if (blit_window) ANativeWindow_release(blit_window);
 
-#else /* !__ANDROID__ — Linux / Windows: fire pixel callback */
+#else /* !__ANDROID__ — Linux / Windows / macOS / iOS: fire pixel callback */
 
     /* Hold the API mutex for the entire check-and-call block.
      * ffplay_set_frame_callback() holds the same mutex, so once it returns

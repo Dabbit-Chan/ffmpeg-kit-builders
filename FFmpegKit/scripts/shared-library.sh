@@ -60,6 +60,7 @@ is_system_path() {
 	local p="$1"
 	# Skip standard Linux system library directories
 	if [[ "$p" == "/usr/lib"* ]] ||
+	  [[ "$p" == "/opt/homebrew/lib"* ]] ||
 		[[ "$p" == "/lib"* ]] ||
 		[[ "$p" == "/lib64"* ]] ||
 		[[ "$p" == "/usr/lib64"* ]] ||
@@ -193,5 +194,5 @@ if test -f bundle_manifest.txt; then
 fi
 clean_libs=$(echo "$raw_libs_to_keep" | awk '{for (i=1;i<=NF;i++) if (!seen[$i]++) printf("%s%s", $i, OFS)}' | sed 's/ *$//')
 if test -f ffmpegkit.pc; then
-	sed -i "s|FFMPEG_KIT_EXT_LIBS|$clean_libs|g" ffmpegkit.pc
+  perl -i -pe "s|FFMPEG_KIT_EXT_LIBS|\Q$clean_libs\E|g" ffmpegkit.pc
 fi

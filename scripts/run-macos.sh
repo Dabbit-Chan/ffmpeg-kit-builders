@@ -278,6 +278,12 @@ build_avisynth() {
   change_dir "$src_dir"
   do_git_checkout "$repo" "$src_dir/$lib" "$repo_ver"
   change_dir "$src_dir/$lib/build" 1
+  sed -i '' \
+  's/elseif("${osx_arch}" STREQUAL "ppc64" AND ppc_support)/elseif("${osx_arch}" STREQUAL "arm64")\n                set(osx_arch_arm64 TRUE)\n            elseif("${osx_arch}" STREQUAL "ppc64" AND ppc_support)/' \
+  "$src_dir/$lib/avs_core/TargetArch.cmake"
+  sed -i '' \
+    's/if(osx_arch_ppc64)/if(osx_arch_arm64)\n            list(APPEND ARCH arm64)\n        endif()\n        if(osx_arch_ppc64)/' \
+    "$src_dir/$lib/avs_core/TargetArch.cmake"
   do_cmake_from_build_dir "$src_dir/avisynth" "-DHEADERS_ONLY:bool=on"
   disable_nonessential "$src_dir/$lib/build"
   do_make "VersionGen install"
@@ -631,9 +637,9 @@ build_libpng() {
 -DPNG_TARGET_ARCHITECTURE=$host_arch \
 -DPNG_EXECUTABLES=OFF"
   if [[ $host_arch == "arm64" ]]; then
-    cmake_args+=" -DPNG_ARM_NEON=ON"
+    cmake_args+=" -DPNG_ARM_NEON=on"
   else
-    cmake_args+=" -DPNG_ARM_NEON=OFF"
+    cmake_args+=" -DPNG_ARM_NEON=off"
   fi
   do_cmake_from_build_dir "$src_dir/$lib" "$cmake_args"
   disable_nonessential "$src_dir/$lib"
@@ -1457,6 +1463,7 @@ build_gettext() {
   change_dir "$src_dir"
   download_and_unpack_file "$repo" "$lib" 
   change_dir "$src_dir/$lib/gettext-runtime"
+  touch "no.autoreconf"
   export LIBS="-liconv"
   local cflags="$CFLAGS -Dlibintl_STATIC -D_GNU_SOURCE -std=gnu11"
   export CFLAGS=$cflags
@@ -1495,6 +1502,7 @@ CFLAGS=\"$cflags\" \
 LIBS=\"$LIBS\""
   do_make_and_make_install
   change_dir "$src_dir/$lib/gettext-tools"
+  touch "no.autoreconf"
   config+=" --disable-curses \
 --disable-examples \
 --disable-nls \
@@ -1567,7 +1575,7 @@ build_glib() {
 --wrap-mode=nofallback"
   generic_meson "$meson_options"
   do_ninja_and_ninja_install
-  sed -i'.bak' 's/-lglib-2.0.*$/-lglib-2.0 -lm -liconv -lintl/' "$install_pkgconfig_dir/glib-2.0.pc"
+  add_libs_to_pkg -t="$install_pkgconfig_dir/glib-2.0.pc" -l="-lm -liconv -lintl -lresolv"
   change_dir "$src_dir"
   reset_cflags
   unset C_INCLUDE_PATH
@@ -2085,7 +2093,7 @@ build_librav1e() {
   change_dir "$src_dir"
   do_git_checkout "$repo" "$src_dir/$lib" "$repo_ver"
   change_dir "$src_dir/$lib"
-  cargo_build_and_install "--no-default-features --features=asm,binaries --profile release-no-lto" "--no-default-features --library-type=staticlib --features=asm,binaries"
+  cargo_build_and_install "--no-default-features --features=asm,binaries --profile release" "--no-default-features --library-type=staticlib --features=asm,binaries"
   change_dir "$src_dir"
 }
 # build_librist           # config_options+= --enable-librist             # enable RIST via librist [no]
@@ -2255,8 +2263,8 @@ build_librsvg() {
   generic_meson "$meson_options"
   do_ninja_and_ninja_install
   change_dir "$src_dir"
+  add_libs_to_pkg -t="$install_pkgconfig_dir/librsvg-2.0.pc" -l="-lresolv"
   if [[ $host_arch == "x86_64" ]]; then
-    add_libs_to_pkg -t="$install_pkgconfig_dir/librsvg-2.0.pc" -p="-lresolv"
     # png.o always compiles to arm64 for some reason. remove png.o and thin the library
     if ar t $dependency_install_prefix/lib/librsvg-2.a | grep png.o > /dev/null; then
       ar d $dependency_install_prefix/lib/librsvg-2.a png.o > >(redirect_output) || exit_message 1 "Failed to remove incorrectly compiled png.o from librsvg-2.a"
@@ -2455,12 +2463,12 @@ build_libsrt() {
   truthy "$enable_openssl" && enclib=openssl
   truthy "$enable_gnutls" && enclib=gnutls
   truthy "$enable_mbedtls" && enclib=mbedtls
-  generic_cmake "-DUSE_ENCLIB=$enclib \
--DCMAKE_BUILD_TYPE=Release \
+  generic_cmake "-DCMAKE_BUILD_TYPE=Release \
 -DENABLE_STATIC=ON \
 -DENABLE_SHARED=OFF \
 -DENABLE_APPS=OFF \
 -DUSE_STATIC_LIBSTDCXX=ON \
+-DUSE_ENCLIB=openssl \
 -DCMAKE_POLICY_VERSION_MINIMUM=3.5" "$src_dir/$lib"
   disable_nonessential "$src_dir/$lib"
   do_make_and_make_install
@@ -2568,9 +2576,11 @@ build_libopenvino() {
   if [[ "$host_arch" == "x86_64" ]]; then
     # needs python 3.12
     repo="https://storage.openvinotoolkit.org/repositories/openvino/packages/2024.4/macos/m_openvino_toolkit_macos_12_6_2024.4.0.16579.c3152d32c9c_x86_64.tgz"
+    lib_arch="intel64"
   elif [[ "$host_arch" == "aarch64" || "$host_arch" == "arm64" ]]; then
     # needs python 3.14
     repo="https://storage.openvinotoolkit.org/repositories/openvino/packages/2026.0/macos/openvino_toolkit_macos_12_6_2026.0.0.20965.c6d6a13a886_arm64.tgz"
+    lib_arch="arm64"
   fi
   # parse version from repo url
   local repo_ver=$(echo "$repo" | sed -E 's|.*openvino_toolkit_macos_12_6_([0-9]+\.[0-9]+\.[0-9]+).*|\1|')
@@ -2591,18 +2601,28 @@ build_libopenvino() {
   if [ ! -f "$src_dir/$lib/$touch_name" ]; then
       download_and_unpack_file "$repo" "$lib"
       change_dir "$src_dir/$lib"
-      # 1. Install Main OpenVINO
+      find "$src_dir/$lib/runtime/lib/$lib_arch/Release" -type l -delete
+      find "$src_dir/$lib/runtime/3rdparty/tbb/lib" -type l -delete
+      # rename to remove version number from the library name, ex:
+      # libopenvino_c.2600.dylib -> libopenvino_c.dylib
+      # libopenvino.2600.dylib -> libopenvino.dylib
+      # libopenvino_ir_frontend.2600.dylib -> libopenvino_ir_frontend.dylib etc..
+      find "$src_dir/$lib/runtime/lib/$lib_arch/Release" -type f -name "*.dylib" \
+          -exec sh -c 'for f;do d=${f%/*};b=${f##*/};n=$(printf %s "$b"|sed -E "s/(\.[0-9]+)+\.dylib$/.dylib/");[ "$b" != "$n" ]&&mv -n "$f" "$d/$n";done' _ {} +
+      find "$src_dir/$lib/runtime/3rdparty/tbb/lib" -type f -name "*.dylib" \
+          -exec sh -c 'for f;do d=${f%/*};b=${f##*/};n=$(printf %s "$b"|sed -E "s/(\.[0-9]+)+\.dylib$/.dylib/");[ "$b" != "$n" ]&&mv -n "$f" "$d/$n";done' _ {} +
+      # # 1. Install Main OpenVINO
       install_prebuilt_binary \
           -n="openvino" -v="$repo_ver" \
           -s="$src_dir/$lib" \
           -I="runtime/include" \
-          -L="runtime/lib/intel64/Release" \
-          -B="runtime/bin/intel64/Release" \
+          -L="runtime/lib/$lib_arch/Release" \
+          -B="runtime/bin/$lib_arch/Release" \
           -m="$manifest" \
           -d="OpenVINO Toolkit" || exit_message 1 "could not install $lib_name"
       # 2. Install TBB Dependency
       install_prebuilt_binary \
-          -n="tbb12" -v="$repo_ver" \
+          -n="tbb" -v="$repo_ver" \
           -s="$src_dir/$lib" \
           -I="runtime/3rdparty/tbb/include" \
           -L="runtime/3rdparty/tbb/lib" \
@@ -2619,7 +2639,7 @@ build_libopenvino() {
       sed -i'.bak' -E 's/^([[:space:]]*)BOOLEAN,/\1OV_BOOLEAN,/g' "$dependency_install_prefix/include/openvino/c/ov_common.h"
       fi
   fi
-  sed -i'.bak' 's/^Libs:.*/Libs: -L${libdir} -lopenvino -lopenvino_c -ltbb12 -lwinmm/g' "$install_pkgconfig_dir/openvino.pc"
+  sed -i'.bak' 's/^Libs:.*/Libs: -L${libdir} -lopenvino -lopenvino_c -ltbb/g' "$install_pkgconfig_dir/openvino.pc"
 }
 # build_libtorch          # config_options+= --enable-libtorch            # enable Torch as one DNN backend [no]
 build_libtorch() {
@@ -2635,7 +2655,7 @@ build_libtorch() {
     # needs python 3.14
     repo="https://download.pytorch.org/libtorch/cpu/libtorch-macos-arm64-2.9.1.zip"
   fi
-  local repo_ver=$(echo "$repo" | sed -E "s/.*libtorch-macos-$host_arch-([0-9]+\.[0-9]+\.[0-9]+)\..*/\1/")
+  local repo_ver=$(echo "$repo" | sed -E "s/.*libtorch-macos-$host_arch-([0-9]+\.[0-9]+\.[0-9]+).*/\1/")
   
   local manifest="$work_dir/pkgconfig/${lib}_manifest"
   [[ ! -f "$manifest" ]] && touch "$manifest"
@@ -2658,7 +2678,8 @@ build_libtorch() {
       find "$src_dir/$lib/lib" -type f -name "libgtest*" -exec rm -f {} +
       find "$src_dir/$lib/lib" -type f -name "libbenchmark*" -exec rm -f {} +
       find "$src_dir/$lib/lib" -type f -name "libhwy*" -exec rm -f {} +
-      find "$src_dir/$lib/lib" -type f -name "libomp*" -exec rm -f {} +
+      # find "$src_dir/$lib/lib" -type f -name "libomp*" -exec rm -f {} +
+      find "$src_dir/$lib/lib" -type f -name "libclog*" -exec rm -f {} +
       install_prebuilt_binary \
           -n="$base_lib" -v="$repo_ver" \
           -s="$src_dir/$lib" \
@@ -2670,12 +2691,8 @@ build_libtorch() {
       create_touch_file 0 "$touch_name"
       echo "$src_dir/$lib/$touch_name" >>"$manifest"
   fi
-  local gomp_lib=$(find "$dependency_install_prefix/lib" -type f -name "libomp*.so.*" | head -n 1)
-  if [[ -n "$gomp_lib" ]]; then
-    local gomp_name=$(basename "${gomp_lib}")
-    gomp_name="${gomp_name%%.*}" # remove version suffix
-    ln -sf "$gomp_lib" "$dependency_install_prefix/lib/$gomp_name.so"
-  fi
+  sed -i '.bak' -e ':a' -e 'N' -e '$!ba' -e 's/\n-l/ -l/g' "$install_pkgconfig_dir/$base_lib.pc"
+  sed -i '.bak' -E 's/\.a//g' "$install_pkgconfig_dir/$base_lib.pc"
   sed -i'.bak' -E 's/-lunbox_ /-lunbox_lib /g' "$install_pkgconfig_dir/$base_lib.pc" # unbox_lib becomes unbox_ for some reason
 }
 # build_libtensorflow     # config_options+= --enable-libtensorflow       # enable TensorFlow as a DNN module backend for DNN based filters like sr [no]
@@ -2709,6 +2726,9 @@ build_libtensorflow() {
   if [ ! -f "$src_dir/$lib/$touch_name" ]; then
       download_and_unpack_file "$repo" "$lib"
       unversion_library -t="$src_dir/$lib/lib"
+      find "$src_dir/$lib/lib" -type l -delete
+      find "$src_dir/$lib/lib" -type f -name "*.dylib" \
+          -exec sh -c 'for f;do d=${f%/*};b=${f##*/};n=$(printf %s "$b"|sed -E "s/(\.[0-9]+)+\.dylib$/.dylib/");[ "$b" != "$n" ]&&mv -n "$f" "$d/$n";done' _ {} +
       install_prebuilt_binary \
           -n="$base_lib" -v="$repo_ver" \
           -s="$src_dir/$lib" \
@@ -2788,7 +2808,7 @@ build_libtiff() {
   change_dir "$src_dir"
   download_and_unpack_file "$repo" "$lib"
   change_dir "$src_dir/$lib"
-  generic_configure "--enable-static --disable-shared --disable-docs --disable-tools --disable-tests"
+  generic_configure "--enable-static --disable-shared --disable-docs --disable-tools --disable-tests LIBS='-lSharpYuv'"
   disable_nonessential "$src_dir/$lib"
   do_make_and_make_install
   add_libs_to_pkg -t="$install_pkgconfig_dir/libtiff-4.pc" -l="-ltiff -llzma -ljpeg -lz -ljbig -lwebp -lLerc"
@@ -2835,7 +2855,7 @@ build_libleptonica() {
   do_git_checkout "$repo" "$src_dir/$lib" "$repo_ver"
   change_dir "$src_dir/$lib"
   export CPPFLAGS="$CPPFLAGS -DOPJ_STATIC"
-  generic_configure "--enable-static --disable-shared"
+  generic_configure "--enable-static --disable-shared --disable-programs --disable-tests"
   disable_nonessential "$src_dir/$lib"
   do_make_and_make_install
   reset_cppflags
@@ -3014,6 +3034,7 @@ build_libtesseract() {
   change_dir "$src_dir"
   do_git_checkout "$repo" "$src_dir/$lib" "$repo_ver"
   change_dir "$src_dir/$lib"
+  export LDFLAGS="${LDFLAGS} -Wl,-undefined,dynamic_lookup -lleptonica"
   generic_configure "--disable-openmp \
 --with-archive \
 --disable-graphics \
@@ -3228,11 +3249,15 @@ build_libx264() {
   change_dir "$src_dir/$lib"
   if [[ "$host_arch" == "x86_64" ]]; then
     export AS=nasm
+  else
+    export CC="$CC -target $cflags_target -isysroot $SDKROOT"
+    export AS="$src_dir/$lib/tools/gas-preprocessor.pl -arch aarch64 -- $CC"
   fi
-  generic_configure "--enable-static --disable-shared --disable-cli --disable-asm"
-  sed -i'.bak' -E 's/\$\(AR\)\$@/\$\(AR\) rc \$@/' Makefile
+  generic_configure "--enable-static --disable-shared --disable-cli --disable-opencl"
+  sed -i'.bak' -E 's/\$\(AR\)\$@/\$\(AR\) \$@/' Makefile
   disable_nonessential "$src_dir/$lib"
-  do_make_and_make_install
+  do_make
+  generic_make_install
   change_dir "$src_dir"
   set_toolchain_paths
 }
@@ -3292,6 +3317,8 @@ build_libxavs() {
   change_dir "$src_dir"
   do_git_checkout "$repo" "$src_dir/$lib" "$repo_ver"
   change_dir "$src_dir/$lib"
+  get_config_sub "$src_dir/$lib"
+  get_config_guess "$src_dir/$lib"
   generic_configure "--enable-static \
 --disable-shared \
 --enable-pic \
@@ -3327,6 +3354,8 @@ build_libxavs2() {
   change_dir "$src_dir"
   do_git_checkout "$repo" "$src_dir/$lib" "$repo_ver"
   change_dir "$src_dir/$lib/build/linux"
+  get_config_sub "$src_dir/$lib/build/linux"
+  get_config_guess "$src_dir/$lib/build/linux"
   generic_configure "--disable-cli \
 --enable-static \
 --disable-shared \
@@ -3874,6 +3903,7 @@ build_pocketsphinx() {
   download_and_unpack_file "$repo" "$lib"
   change_dir "$src_dir/$parent/$lib"
   touch "no.autoreconf"
+  get_config_sub "$src_dir/$parent/$lib/Tools/config"
   do_configure "--host=$host_target \
 --prefix=$dependency_install_prefix \
 --libdir=$dependency_install_prefix/lib \
@@ -3916,6 +3946,7 @@ build_pocketsphinx() {
   generic_meson "$meson_options"
   disable_nonessential "$src_dir/$parent/$lib"
   do_ninja_and_ninja_install
+  add_libs_to_pkg -t="$install_pkgconfig_dir/gstreamer-1.0.pc" -l="-lresolv"
   reset_ldflags
   change_dir "$src_dir"
   local lib="pocketsphinx"
@@ -3993,7 +4024,7 @@ build_omp() {
   generic_cmake "$cmake_params"
   disable_nonessential "$src_dir/$lib/openmp"
   do_make_and_make_install
-  [ -f "$dependency_install_prefix/lib/libomp.dylib" ] && rm -f "$dependency_install_prefix/lib/libomp.dylib"
+  # [ -f "$dependency_install_prefix/lib/libomp.dylib" ] && rm -f "$dependency_install_prefix/lib/libomp.dylib"
   change_dir "$src_dir"
 }
 # build_whisper           # config_options+= --enable-whisper             # enable whisper filter [no]
