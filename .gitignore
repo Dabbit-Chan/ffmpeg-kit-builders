@@ -33,3 +33,6 @@ tools/android/build/*
 node_modules/*
 package.json
 package-lock.json
+.python-version
+entities.json
+mempalace.yaml
