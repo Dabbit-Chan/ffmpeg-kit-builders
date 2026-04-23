@@ -23,7 +23,7 @@
 
 FFMPEG_WEAK_SYMBOL FFMPEG_THREAD_LOCAL const char *program_name = "ffplay";
 FFMPEG_WEAK_SYMBOL FFMPEG_THREAD_LOCAL int program_birth_year = 2000;
-extern void (*show_help_default_func)(const char *opt, const char *arg);
+extern void FFMPEG_THREAD_LOCAL (*show_help_default_func)(const char *opt, const char *arg);
 extern void ffplay_show_help_default(const char *opt, const char *arg);
 
 // Global state for audio device management
@@ -197,17 +197,17 @@ struct FFplayContext {
     double max_seen_pos;
 };
 
-// Global API Synchronization to satisfy TSAN strictly on FFI context pointer reads
+#include <pthread.h>
+
+// Global API Synchronization
 static SDL_mutex *ffplay_api_mutex = NULL;
 static SDL_SpinLock ffplay_init_lock = 0;
+static pthread_t ffplay_api_owner = 0;
+static int ffplay_api_recursion_count = 0;
 static FFplayContext *active_ffplay_ctx = NULL;
 
-/* Thread-local flag: non-zero when the calling thread holds ffplay_api_mutex.
- * Used by setjmp recovery paths to conditionally unlock without calling
- * unlock_ffplay_api() when the mutex was never acquired. */
-static _Thread_local int ffplay_api_held = 0;
-
 static void lock_ffplay_api(void) {
+    pthread_t self = pthread_self();
     if (!ffplay_api_mutex) {
         SDL_AtomicLock(&ffplay_init_lock);
         if (!ffplay_api_mutex) {
@@ -215,14 +215,24 @@ static void lock_ffplay_api(void) {
         }
         SDL_AtomicUnlock(&ffplay_init_lock);
     }
+    
+    if (ffplay_api_recursion_count > 0 && pthread_equal(ffplay_api_owner, self)) {
+        ffplay_api_recursion_count++;
+        return;
+    }
+    
     SDL_LockMutex(ffplay_api_mutex);
-    ffplay_api_held = 1;
+    ffplay_api_owner = self;
+    ffplay_api_recursion_count = 1;
 }
 
 static void unlock_ffplay_api(void) {
-    if (ffplay_api_mutex) {
-        ffplay_api_held = 0;
-        SDL_UnlockMutex(ffplay_api_mutex);
+    if (ffplay_api_recursion_count > 0) {
+        ffplay_api_recursion_count--;
+        if (ffplay_api_recursion_count == 0) {
+            ffplay_api_owner = 0;
+            SDL_UnlockMutex(ffplay_api_mutex);
+        }
     }
 }
 
@@ -295,6 +305,23 @@ static int split_args(const char *args, char ***argv_out) {
 }
 
 FFplayContext* ffplay_init(const char* args_string, const FFplayCallbacks *cb) {
+    // Ensure only one session is active at a time
+    if (active_ffplay_ctx) {
+        ffplay_stop(NULL);
+        // Wait for it to clear
+        int timeout = 5000; // 5s
+        while (active_ffplay_ctx && timeout > 0) {
+            SDL_PumpEvents(); // Ensure events are processed
+            SDL_Delay(50);
+            timeout -= 50;
+        }
+        if (active_ffplay_ctx) {
+            av_log(NULL, AV_LOG_WARNING, "[ffplay_lib] Previous session did not close in time, forcing cleanup.\n");
+        } else {
+            av_log(NULL, AV_LOG_INFO,"[ffplay_lib] ffplay_init: previous session cleared\n");
+        }
+    }
+
     FFplayContext *ctx = av_mallocz(sizeof(FFplayContext));
     if (!ctx) return NULL;
 
@@ -329,9 +356,8 @@ FFplayContext* ffplay_init(const char* args_string, const FFplayCallbacks *cb) {
     // iOS/macOS: SDL used as a library — bypass SDLUIKitDelegate/SDLAppDelegate
     // startup requirements (identical to the Android SDL_SetMainReady() call above).
     SDL_SetMainReady();
-    // 'offscreen' provides a CPU-backed framebuffer; pixels are delivered per-frame
     // via the FFplayFrameCallback registered with ffplay_set_frame_callback().
-    SDL_SetHintWithPriority(SDL_HINT_VIDEODRIVER, "offscreen", SDL_HINT_OVERRIDE);
+    SDL_SetHintWithPriority(SDL_HINT_VIDEODRIVER, "dummy", SDL_HINT_OVERRIDE);
 #else
     // Linux: 'offscreen' provides a CPU-backed framebuffer supporting
     // SDL_CreateRenderer + SDL_RenderReadPixels without a display server.
@@ -347,7 +373,7 @@ FFplayContext* ffplay_init(const char* args_string, const FFplayCallbacks *cb) {
     /* Initialise the os_log subsystem now that we have the args context. */
     if (!_ffplay_apple_log)
         _ffplay_apple_log = os_log_create("com.akashskypatel.ffmpegkit", FFPLAY_LOG_TAG);
-    FFPLAY_LOGI("[ffplay_lib] ffplay_init: SDL_VIDEODRIVER='offscreen' SDL_RENDER_DRIVER='software' "
+    FFPLAY_LOGI("[ffplay_lib] ffplay_init: SDL_VIDEODRIVER='dummy' SDL_RENDER_DRIVER='software' "
         "SDL_AUDIODRIVER='%{public}s' args='%{public}.200s'",
         SDL_getenv("SDL_AUDIODRIVER") ? SDL_getenv("SDL_AUDIODRIVER") : "(null)",
         args_string ? args_string : "(null)");
@@ -448,7 +474,7 @@ int ffplay_start(FFplayContext* ctx) {
         av_log(NULL, AV_LOG_ERROR,
                "[ffmpeg-kit] ffplay_start: recovered from internal assertion "
                "failure. Session will be marked as failed.\n");
-        if (ffplay_api_held) unlock_ffplay_api();
+        unlock_ffplay_api();
         ffmpeg_kit_assert_jmp_ptr = NULL;
         return AVERROR_EXIT;
     }
@@ -493,7 +519,9 @@ int ffplay_step(FFplayContext* ctx) {
         av_log(NULL, AV_LOG_ERROR,
                "[ffmpeg-kit] ffplay_step: recovered from internal assertion "
                "failure. Stopping playback.\n");
-        if (ffplay_api_held) unlock_ffplay_api();
+        // Reentrant lock management: simply call unlock to decrement count.
+        // unlock_ffplay_api() handles recursion and state.
+        unlock_ffplay_api();
         goto step_done;
     }
 
@@ -854,12 +882,15 @@ int ffplay_resume(FFplayContext* ctx) {
 int ffplay_stop(FFplayContext* ctx) {
     int ret = -1;
     lock_ffplay_api();
-    if (ctx && active_ffplay_ctx == ctx && ctx->is) {
+    FFplayContext *target = ctx ? ctx : active_ffplay_ctx;
+    if (target && target->is) {
         SDL_Event event;
         event.type = FF_QUIT_EVENT;
-        event.user.data1 = ctx->is; 
+        event.user.data1 = target->is; 
         SDL_PushEvent(&event);
         ret = 0;
+    } else {
+        av_log(NULL, AV_LOG_INFO, "[ffplay_lib] ffplay_stop: nothing to stop (target=%p)\n", target);
     }
     unlock_ffplay_api();
     return ret;

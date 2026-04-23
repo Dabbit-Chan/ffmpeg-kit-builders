@@ -8,6 +8,12 @@ CompileFlags:
     - -I/home/vscode/ffmpeg-kit-builders/prebuilt/src/sdl2/include
     - -I/home/vscode/ffmpeg-kit-builders/desktop/build/_deps/googletest-src/googletest/include
     - -I/home/vscode/ffmpeg-kit-builders/desktop/build/_deps/googletest-src/googlemock/include
+    - -I/Users/akash/Projects/ffmpeg-kit-builders/desktop/src
+    - -I/Users/akash/Projects/ffmpeg-kit-builders/prebuilt/src/ffmpeg
+    - -I/Users/akash/Projects/ffmpeg-kit-builders/prebuilt/src/jsoncpp/include
+    - -I/Users/akash/Projects/ffmpeg-kit-builders/prebuilt/src/sdl2/include
+    - -I/Users/akash/Projects/ffmpeg-kit-builders/desktop/build/_deps/googletest-src/googletest/include
+    - -I/Users/akash/Projects/ffmpeg-kit-builders/desktop/build/_deps/googletest-src/googlemock/include
     - -DDEBUG
     - -D_GNU_SOURCE
     - -D__STDC_CONSTANT_MACROS

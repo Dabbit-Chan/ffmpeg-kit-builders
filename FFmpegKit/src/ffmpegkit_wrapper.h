@@ -20,6 +20,8 @@
 #ifndef FFMPEG_KIT_WRAPPER_H
 #define FFMPEG_KIT_WRAPPER_H
 
+#include "ffmpeg_tls.h"
+#include "ffplay_lib.h"
 #include <stdbool.h>
 #include <stdint.h>
 
@@ -61,6 +63,34 @@ typedef void (*FFplayKitCompleteCallback)(FFplaySessionHandle session,
                                           void *user_data);
 typedef void (*MediaInformationSessionCompleteCallback)(
     MediaInformationSessionHandle session, void *user_data);
+
+/**
+ * Frame-ready callback type for desktop (Linux/Windows) video output.
+ *
+ * Fired inside ffplay_step() on every rendered video frame.
+ * Pixel format: RGBA8888 — bytes [R][G][B][A] on little-endian, compatible
+ * with Flutter's FlutterDesktopPixelBuffer.
+ * The pixel buffer is valid only for the duration of the call — copy it
+ * (e.g. into a pre-allocated FlutterDesktopPixelBuffer) before returning.
+ *
+ * WARNING: The callback is invoked while the internal ffplay API mutex is
+ * held. Do NOT call any ffplay API function (ffplay_pause, ffplay_seek,
+ * ffplay_get_position, etc.) from within the callback — doing so will
+ * deadlock. Perform only lightweight, non-blocking work (e.g. memcpy into a
+ * pre-allocated buffer and signal a separate rendering thread).
+ *
+ * Not used on Android; Android video output goes to the ANativeWindow set via
+ * ffplay_kit_set_android_surface_ptr().
+ *
+ * @param userdata  opaque pointer registered with
+ * ffplay_kit_register_frame_callback()
+ * @param pixels    RGBA8888 pixels, width*4 bytes per row (linesize == width*4)
+ * @param width     frame width in pixels
+ * @param height    frame height in pixels
+ * @param linesize  bytes per row
+ */
+typedef void (*FFplayKitFrameCallback)(void *userdata, const uint8_t *pixels,
+                                       int width, int height, int linesize);
 
 // Enums
 typedef enum {
@@ -206,7 +236,7 @@ ffmpeg_kit_create_session_with_callbacks(const char *command,
  * @return the FFmpeg session handle
  */
 FFMPEG_KIT_C_EXPORT FFmpegSessionHandle
-ffmpeg_kit_create_session_from_argv(int argc, const char** argv);
+ffmpeg_kit_create_session_from_argv(int argc, const char **argv);
 
 /**
  * Creates a new FFmpeg session with the given argument array and callbacks.
@@ -214,18 +244,18 @@ ffmpeg_kit_create_session_from_argv(int argc, const char** argv);
  *
  * @param argc the number of arguments
  * @param argv the argument array
- * @param complete_cb the callback to be called when the FFmpeg session is completed
+ * @param complete_cb the callback to be called when the FFmpeg session is
+ * completed
  * @param log_cb the callback to be called when a log is generated
  * @param stats_cb the callback to be called when statistics are generated
  * @param user_data the user data to be passed to the callbacks
  * @return the FFmpeg session handle
  */
 FFMPEG_KIT_C_EXPORT FFmpegSessionHandle
-ffmpeg_kit_create_session_from_argv_with_callbacks(int argc, const char** argv,
-                                         FFmpegKitCompleteCallback complete_cb,
-                                         FFmpegKitLogCallback log_cb,
-                                         FFmpegKitStatisticsCallback stats_cb,
-                                         void *user_data);
+ffmpeg_kit_create_session_from_argv_with_callbacks(
+    int argc, const char **argv, FFmpegKitCompleteCallback complete_cb,
+    FFmpegKitLogCallback log_cb, FFmpegKitStatisticsCallback stats_cb,
+    void *user_data);
 
 /**
  * Closes and releases a session created by ffmpeg_kit_create_session_from_argv.
@@ -244,7 +274,8 @@ FFMPEG_KIT_C_EXPORT void ffmpeg_kit_debug_print_stack();
  * @param log_cb the callback to be called when a log is generated
  * @param user_data the user data to be passed to the callback
  */
-void FFMPEG_KIT_C_EXPORT ffmpeg_kit_set_log_callback(FFmpegSessionHandle session, FFmpegKitLogCallback log_cb, void *user_data);
+void FFMPEG_KIT_C_EXPORT ffmpeg_kit_set_log_callback(
+    FFmpegSessionHandle session, FFmpegKitLogCallback log_cb, void *user_data);
 
 /**
  * Sets the statistics callback for all FFmpeg sessions.
@@ -252,7 +283,9 @@ void FFMPEG_KIT_C_EXPORT ffmpeg_kit_set_log_callback(FFmpegSessionHandle session
  * @param stats_cb the callback to be called when statistics are generated
  * @param user_data the user data to be passed to the callback
  */
-void FFMPEG_KIT_C_EXPORT ffmpeg_kit_set_statistics_callback(FFmpegSessionHandle session, FFmpegKitStatisticsCallback stats_cb, void *user_data);
+void FFMPEG_KIT_C_EXPORT ffmpeg_kit_set_statistics_callback(
+    FFmpegSessionHandle session, FFmpegKitStatisticsCallback stats_cb,
+    void *user_data);
 
 /**
  * Sets the complete callback for all FFmpeg sessions.
@@ -261,10 +294,13 @@ void FFMPEG_KIT_C_EXPORT ffmpeg_kit_set_statistics_callback(FFmpegSessionHandle 
  * completed
  * @param user_data the user data to be passed to the callback
  */
-void FFMPEG_KIT_C_EXPORT ffmpeg_kit_set_complete_callback(FFmpegSessionHandle session, FFmpegKitCompleteCallback complete_cb, void *user_data);
+void FFMPEG_KIT_C_EXPORT ffmpeg_kit_set_complete_callback(
+    FFmpegSessionHandle session, FFmpegKitCompleteCallback complete_cb,
+    void *user_data);
 
 /**
- * Sets the complete callback, log callback, statistics callback, and user data for all FFmpeg sessions.
+ * Sets the complete callback, log callback, statistics callback, and user data
+ * for all FFmpeg sessions.
  *
  * @param complete_cb the callback to be called when the FFmpeg session is
  * completed
@@ -272,7 +308,10 @@ void FFMPEG_KIT_C_EXPORT ffmpeg_kit_set_complete_callback(FFmpegSessionHandle se
  * @param stats_cb the callback to be called when statistics are generated
  * @param user_data the user data to be passed to the callbacks
  */
-void FFMPEG_KIT_C_EXPORT ffmpeg_kit_set_callbacks(FFmpegSessionHandle session, FFmpegKitCompleteCallback complete_cb, FFmpegKitLogCallback log_cb, FFmpegKitStatisticsCallback stats_cb, void *user_data);
+void FFMPEG_KIT_C_EXPORT ffmpeg_kit_set_callbacks(
+    FFmpegSessionHandle session, FFmpegKitCompleteCallback complete_cb,
+    FFmpegKitLogCallback log_cb, FFmpegKitStatisticsCallback stats_cb,
+    void *user_data);
 
 /**
  * Executes the FFmpeg session.
@@ -359,7 +398,7 @@ ffprobe_kit_create_session_with_callbacks(
  * @return the FFprobe session handle
  */
 FFMPEG_KIT_C_EXPORT FFprobeSessionHandle
-ffprobe_kit_create_session_from_argv(int argc, const char** argv);
+ffprobe_kit_create_session_from_argv(int argc, const char **argv);
 
 /**
  * Creates a new FFprobe session with the given argument array and callbacks.
@@ -367,18 +406,20 @@ ffprobe_kit_create_session_from_argv(int argc, const char** argv);
  *
  * @param argc the number of arguments
  * @param argv the argument array
- * @param complete_cb the callback to be called when the FFprobe session is completed
+ * @param complete_cb the callback to be called when the FFprobe session is
+ * completed
  * @param log_cb the callback to be called when a log is generated
  * @param user_data the user data to be passed to the callbacks
  * @return the FFprobe session handle
  */
 FFMPEG_KIT_C_EXPORT FFprobeSessionHandle
 ffprobe_kit_create_session_from_argv_with_callbacks(
-    int argc, const char** argv, FFprobeKitCompleteCallback complete_cb,
+    int argc, const char **argv, FFprobeKitCompleteCallback complete_cb,
     FFmpegKitLogCallback log_cb, void *user_data);
 
 /**
- * Closes and releases a session created by ffprobe_kit_create_session_from_argv.
+ * Closes and releases a session created by
+ * ffprobe_kit_create_session_from_argv.
  *
  * @param handle the session handle to close
  */
@@ -390,7 +431,8 @@ FFMPEG_KIT_C_EXPORT void ffprobe_kit_close_session(FFprobeSessionHandle handle);
  * @param log_cb the callback to be called when a log is generated
  * @param user_data the user data to be passed to the callback
  */
-void FFMPEG_KIT_C_EXPORT ffprobe_kit_set_log_callback(FFprobeSessionHandle session, FFmpegKitLogCallback log_cb, void *user_data);
+void FFMPEG_KIT_C_EXPORT ffprobe_kit_set_log_callback(
+    FFprobeSessionHandle session, FFmpegKitLogCallback log_cb, void *user_data);
 
 /**
  * Sets the complete callback for all FFprobe sessions.
@@ -399,17 +441,22 @@ void FFMPEG_KIT_C_EXPORT ffprobe_kit_set_log_callback(FFprobeSessionHandle sessi
  * completed
  * @param user_data the user data to be passed to the callback
  */
-void FFMPEG_KIT_C_EXPORT ffprobe_kit_set_complete_callback(FFprobeSessionHandle session, FFprobeKitCompleteCallback complete_cb, void *user_data);
+void FFMPEG_KIT_C_EXPORT ffprobe_kit_set_complete_callback(
+    FFprobeSessionHandle session, FFprobeKitCompleteCallback complete_cb,
+    void *user_data);
 
 /**
- * Sets the complete callback, log callback, and user data for all FFprobe sessions.
+ * Sets the complete callback, log callback, and user data for all FFprobe
+ * sessions.
  *
  * @param complete_cb the callback to be called when the FFprobe session is
  * completed
  * @param log_cb the callback to be called when a log is generated
  * @param user_data the user data to be passed to the callbacks
  */
-void FFMPEG_KIT_C_EXPORT ffprobe_kit_set_callbacks(FFprobeSessionHandle session, FFprobeKitCompleteCallback complete_cb, FFmpegKitLogCallback log_cb, void *user_data);
+void FFMPEG_KIT_C_EXPORT ffprobe_kit_set_callbacks(
+    FFprobeSessionHandle session, FFprobeKitCompleteCallback complete_cb,
+    FFmpegKitLogCallback log_cb, void *user_data);
 
 /**
  * Executes the FFprobe session.
@@ -512,7 +559,7 @@ ffplay_kit_create_session_with_callbacks(const char *command,
  * @return the FFplay session handle
  */
 FFMPEG_KIT_C_EXPORT FFplaySessionHandle
-ffplay_kit_create_session_from_argv(int argc, const char** argv);
+ffplay_kit_create_session_from_argv(int argc, const char **argv);
 
 /**
  * Creates a new FFplay session with the given argument array and callbacks.
@@ -520,16 +567,16 @@ ffplay_kit_create_session_from_argv(int argc, const char** argv);
  *
  * @param argc the number of arguments
  * @param argv the argument array
- * @param complete_cb the callback to be called when the FFplay session is completed
+ * @param complete_cb the callback to be called when the FFplay session is
+ * completed
  * @param log_cb the callback to be called when a log is generated
  * @param user_data the user data to be passed to the callbacks
  * @return the FFplay session handle
  */
 FFMPEG_KIT_C_EXPORT FFplaySessionHandle
-ffplay_kit_create_session_from_argv_with_callbacks(int argc, const char** argv,
-                                         FFplayKitCompleteCallback complete_cb,
-                                         FFmpegKitLogCallback log_cb,
-                                         void *user_data);
+ffplay_kit_create_session_from_argv_with_callbacks(
+    int argc, const char **argv, FFplayKitCompleteCallback complete_cb,
+    FFmpegKitLogCallback log_cb, void *user_data);
 
 /**
  * Closes and releases a session created by ffplay_kit_create_session_from_argv.
@@ -544,7 +591,8 @@ FFMPEG_KIT_C_EXPORT void ffplay_kit_close_session(FFplaySessionHandle handle);
  * @param log_cb the callback to be called when a log is generated
  * @param user_data the user data to be passed to the callback
  */
-void FFMPEG_KIT_C_EXPORT ffplay_kit_set_log_callback(FFplaySessionHandle session, FFmpegKitLogCallback log_cb, void *user_data);
+void FFMPEG_KIT_C_EXPORT ffplay_kit_set_log_callback(
+    FFplaySessionHandle session, FFmpegKitLogCallback log_cb, void *user_data);
 
 /**
  * Sets the complete callback for all FFplay sessions.
@@ -553,17 +601,22 @@ void FFMPEG_KIT_C_EXPORT ffplay_kit_set_log_callback(FFplaySessionHandle session
  * completed
  * @param user_data the user data to be passed to the callback
  */
-void FFMPEG_KIT_C_EXPORT ffplay_kit_set_complete_callback(FFplaySessionHandle session, FFplayKitCompleteCallback complete_cb, void *user_data);
+void FFMPEG_KIT_C_EXPORT ffplay_kit_set_complete_callback(
+    FFplaySessionHandle session, FFplayKitCompleteCallback complete_cb,
+    void *user_data);
 
 /**
- * Sets the complete callback, log callback, and user data for all FFplay sessions.
+ * Sets the complete callback, log callback, and user data for all FFplay
+ * sessions.
  *
  * @param complete_cb the callback to be called when the FFplay session is
  * completed
  * @param log_cb the callback to be called when a log is generated
  * @param user_data the user data to be passed to the callbacks
  */
-void FFMPEG_KIT_C_EXPORT ffplay_kit_set_callbacks(FFplaySessionHandle session, FFplayKitCompleteCallback complete_cb, FFmpegKitLogCallback log_cb, void *user_data);
+void FFMPEG_KIT_C_EXPORT ffplay_kit_set_callbacks(
+    FFplaySessionHandle session, FFplayKitCompleteCallback complete_cb,
+    FFmpegKitLogCallback log_cb, void *user_data);
 
 /**
  * Executes the FFplay session.
@@ -801,7 +854,8 @@ FFMPEG_KIT_C_EXPORT void ffplay_kit_set_volume(double volume);
  * Gets the volume of the current FFplay session.
  *
  * @return volume in [0.0, 1.0], or -1.0 if there is no active session or
- *         the native context is not yet ready. See ffplay_kit_session_get_volume.
+ *         the native context is not yet ready. See
+ * ffplay_kit_session_get_volume.
  */
 FFMPEG_KIT_C_EXPORT double ffplay_kit_get_volume(void);
 
@@ -820,7 +874,8 @@ FFMPEG_KIT_C_EXPORT double ffplay_kit_get_volume(void);
  *
  * @param native_window_ptr ANativeWindow* cast to int64_t, or 0 to clear
  */
-FFMPEG_KIT_C_EXPORT void ffplay_kit_set_android_surface_ptr(int64_t native_window_ptr);
+FFMPEG_KIT_C_EXPORT void
+ffplay_kit_set_android_surface_ptr(int64_t native_window_ptr);
 
 /**
  * Clears the Android ANativeWindow, stopping video output.
@@ -832,46 +887,23 @@ FFMPEG_KIT_C_EXPORT void ffplay_kit_set_android_surface_ptr(int64_t native_windo
 FFMPEG_KIT_C_EXPORT void ffplay_kit_clear_android_surface(void);
 
 /**
- * Frame-ready callback type for desktop (Linux/Windows) video output.
- *
- * Fired inside ffplay_step() on every rendered video frame.
- * Pixel format: RGBA8888 — bytes [R][G][B][A] on little-endian, compatible
- * with Flutter's FlutterDesktopPixelBuffer.
- * The pixel buffer is valid only for the duration of the call — copy it
- * (e.g. into a pre-allocated FlutterDesktopPixelBuffer) before returning.
- *
- * WARNING: The callback is invoked while the internal ffplay API mutex is
- * held. Do NOT call any ffplay API function (ffplay_pause, ffplay_seek,
- * ffplay_get_position, etc.) from within the callback — doing so will
- * deadlock. Perform only lightweight, non-blocking work (e.g. memcpy into a
- * pre-allocated buffer and signal a separate rendering thread).
- *
- * Not used on Android; Android video output goes to the ANativeWindow set via
- * ffplay_kit_set_android_surface_ptr().
- *
- * @param userdata  opaque pointer registered with ffplay_kit_register_frame_callback()
- * @param pixels    RGBA8888 pixels, width*4 bytes per row (linesize == width*4)
- * @param width     frame width in pixels
- * @param height    frame height in pixels
- * @param linesize  bytes per row
- */
-typedef void (*FFplayKitFrameCallback)(void *userdata, const uint8_t *pixels,
-                                       int width, int height, int linesize);
-
-/**
- * Registers a global frame-ready callback for desktop video output (Linux/Windows).
+ * Registers a global frame-ready callback for desktop video output
+ * (Linux/Windows).
  *
  * Must be called before ffplay_kit_session_execute() / ffplay_kit_execute().
  * On Android this is a no-op; video output is delivered to the ANativeWindow.
  *
  * Dart FFI usage:
- *   ffplay_kit_register_frame_callback(Pointer.fromFunction(myCallback), nullptr);
+ *   ffplay_kit_register_frame_callback(Pointer.fromFunction(myCallback),
+ * nullptr);
  *
- * @param callback  frame callback function; NULL clears any previous registration
+ * @param callback  frame callback function; NULL clears any previous
+ * registration
  * @param userdata  opaque pointer forwarded to every callback invocation
  */
-FFMPEG_KIT_C_EXPORT void ffplay_kit_register_frame_callback(
-    FFplayKitFrameCallback callback, void *userdata);
+FFMPEG_KIT_C_EXPORT void
+ffplay_kit_register_frame_callback(FFplayKitFrameCallback callback,
+                                   void *userdata);
 
 /**
  * Clears the global frame callback, stopping desktop pixel delivery.
@@ -879,6 +911,13 @@ FFMPEG_KIT_C_EXPORT void ffplay_kit_register_frame_callback(
  * On Android this is a no-op.
  */
 FFMPEG_KIT_C_EXPORT void ffplay_kit_unregister_frame_callback(void);
+
+/**
+ * Sets the frame callback for desktop video output.
+ * This is a wrapper around ffplay_kit_register_frame_callback.
+ */
+FFMPEG_KIT_C_EXPORT extern void
+ffplay_set_frame_callback(FFplayKitFrameCallback callback, void *userdata);
 
 /**
  * Probes [path] for at least one video stream without decoding.
@@ -932,7 +971,8 @@ ffmpeg_kit_config_log_level_to_string(FFmpegKitLogLevel level);
  * @param name_mappings_json the name mappings JSON
  */
 FFMPEG_KIT_C_EXPORT void ffmpeg_kit_config_set_font_directory(
-    const char *path, const char *name_mappings_json); // Simplified mapping
+    const char *path,
+    const char *name_mappings_json); // Simplified mapping
 
 /**
  * Sets an environment variable for FFmpegKit.
@@ -1078,7 +1118,8 @@ FFMPEG_KIT_C_EXPORT char *ffmpeg_kit_packages_get_registered_protocols(void);
  *
  * @return comma-separated list of bitstream filter names
  */
-FFMPEG_KIT_C_EXPORT char *ffmpeg_kit_packages_get_registered_bitstream_filters(void);
+FFMPEG_KIT_C_EXPORT char *
+ffmpeg_kit_packages_get_registered_bitstream_filters(void);
 
 /**
  * Gets the FFmpeg build configuration.
@@ -1183,26 +1224,34 @@ media_information_create_session_with_callbacks(
  * @param log_cb the callback to be called when a log is generated
  * @param user_data the user data to be passed to the callback
  */
-void FFMPEG_KIT_C_EXPORT media_information_kit_set_log_callback(MediaInformationSessionHandle session, FFmpegKitLogCallback log_cb, void *user_data);
+void FFMPEG_KIT_C_EXPORT media_information_kit_set_log_callback(
+    MediaInformationSessionHandle session, FFmpegKitLogCallback log_cb,
+    void *user_data);
 
 /**
  * Sets the complete callback for all MediaInformation sessions.
  *
- * @param complete_cb the callback to be called when the MediaInformation session is
- * completed
+ * @param complete_cb the callback to be called when the MediaInformation
+ * session is completed
  * @param user_data the user data to be passed to the callback
  */
-void FFMPEG_KIT_C_EXPORT media_information_kit_set_complete_callback(MediaInformationSessionHandle session, MediaInformationSessionCompleteCallback complete_cb, void *user_data);
+void FFMPEG_KIT_C_EXPORT media_information_kit_set_complete_callback(
+    MediaInformationSessionHandle session,
+    MediaInformationSessionCompleteCallback complete_cb, void *user_data);
 
 /**
- * Sets the complete callback, log callback, and user data for all MediaInformation sessions.
+ * Sets the complete callback, log callback, and user data for all
+ * MediaInformation sessions.
  *
- * @param complete_cb the callback to be called when the MediaInformation session is
- * completed
+ * @param complete_cb the callback to be called when the MediaInformation
+ * session is completed
  * @param log_cb the callback to be called when a log is generated
  * @param user_data the user data to be passed to the callbacks
  */
-void FFMPEG_KIT_C_EXPORT media_information_kit_set_callbacks(MediaInformationSessionHandle session, MediaInformationSessionCompleteCallback complete_cb, FFmpegKitLogCallback log_cb, void *user_data);
+void FFMPEG_KIT_C_EXPORT media_information_kit_set_callbacks(
+    MediaInformationSessionHandle session,
+    MediaInformationSessionCompleteCallback complete_cb,
+    FFmpegKitLogCallback log_cb, void *user_data);
 
 /**
  * Executes the MediaInformation session.

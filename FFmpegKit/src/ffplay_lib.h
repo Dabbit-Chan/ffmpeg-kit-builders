@@ -20,6 +20,7 @@
 #ifndef FFPLAY_LIB_H
 #define FFPLAY_LIB_H
 
+#include "ffmpeg_tls.h"
 #include <stdint.h>
 
 #if defined(_WIN32)
@@ -237,7 +238,7 @@ typedef void (*FFplayFrameCallback)(void *userdata, const uint8_t *pixels,
  * @param userdata  forwarded to every callback invocation
  */
 FFMPEG_API void ffplay_set_frame_callback(FFplayFrameCallback callback,
-                                           void *userdata);
+                                           void *userdata) ;
 
 #endif /* __ANDROID__ */
 

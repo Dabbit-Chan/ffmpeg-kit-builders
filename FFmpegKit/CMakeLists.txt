@@ -12,7 +12,7 @@ if(APPLE)
     include("${CMAKE_CURRENT_SOURCE_DIR}/cmake/AppleResourceGen.cmake")
 endif()
 
-# set(CMAKE_MESSAGE_LOG_LEVEL DEBUG)
+set(CMAKE_MESSAGE_LOG_LEVEL DEBUG)
 
 # Enforce MinGW when building for Windows
 if(WIN32 AND NOT MINGW)
@@ -271,6 +271,31 @@ pkg_check_modules(FFMPEG REQUIRED IMPORTED_TARGET
     libavdevice libavfilter libavformat libavcodec libswresample libswscale libavutil jsoncpp sdl2
 )
 
+function(replace_static_with_shared INPUT_LIB OUTPUT_VAR)
+    if(INPUT_LIB MATCHES "\\.a$" OR INPUT_LIB MATCHES "\\.lib$")
+        if(WIN32)
+            string(REPLACE ".a" ".dll" SHARED_PATH "${INPUT_LIB}")
+        elseif(CMAKE_SYSTEM_NAME STREQUAL "Linux" OR CMAKE_SYSTEM_NAME STREQUAL "Android")
+            string(REPLACE ".a" ".so" SHARED_PATH "${INPUT_LIB}")
+        elseif(APPLE)
+            string(REPLACE ".a" ".dylib" SHARED_PATH "${INPUT_LIB}")
+        else()
+            set(${OUTPUT_VAR} "${INPUT_LIB}" PARENT_SCOPE)
+            return()
+        endif()
+        if(EXISTS "${SHARED_PATH}")
+            set(${OUTPUT_VAR} "${SHARED_PATH}" PARENT_SCOPE)
+            message(STATUS "Replaced ${INPUT_LIB} with ${SHARED_PATH}")
+        else()
+            message(STATUS "Shared library not found: ${SHARED_PATH}")
+            set(${OUTPUT_VAR} "${INPUT_LIB}" PARENT_SCOPE)
+        endif()
+    else()
+        message(STATUS "Not a static library: ${INPUT_LIB}")
+        set(${OUTPUT_VAR} "${INPUT_LIB}" PARENT_SCOPE)
+    endif()
+endfunction()
+
 function(replace_shared_with_static INPUT_LIB OUTPUT_VAR)
     if(INPUT_LIB MATCHES "\\.dll\\.a$")
         string(REPLACE ".dll.a" ".a" STATIC_PATH "${INPUT_LIB}")
@@ -369,23 +394,40 @@ endfunction()
 # If static linking is enabled, replace shared libraries with static ones: .so -> .a or .dll -> .a or .dll.a -> .a
 # If dynamic linking is enabled, if MINGW, replace .dll.a files with .dll files, 
 # else keep the original as dynamic linking can link to both shared and static libraries
-function(configure_library_linking LIBRARY_NAME STATIC_LINKING)
+function(configure_static_linking LIBRARY_NAME STATIC_LINKING)
     # Get the interface link libraries
     get_target_property(${LIBRARY_NAME}_LIBS PkgConfig::${LIBRARY_NAME} INTERFACE_LINK_LIBRARIES)
     if(NOT ${LIBRARY_NAME}_LIBS OR ${LIBRARY_NAME}_LIBS MATCHES "-NOTFOUND$")
         set(${LIBRARY_NAME}_LIBS "${${LIBRARY_NAME}_LINK_LIBRARIES}")
     endif()
-    if(CMAKE_SYSTEM_NAME STREQUAL "iOS")
-        set(${LIBRARY_NAME}_LIBS_LIST "${${LIBRARY_NAME}_LIBRARIES}")
-    else()
-        set(${LIBRARY_NAME}_LIBS_LIST "${${LIBRARY_NAME}_LIBS}")
-    endif()
+    message(DEBUG "configure_static_linking(${LIBRARY_NAME}): ${LIBRARY_NAME}_LIBRARY_DIRS = ${${LIBRARY_NAME}_LIBRARY_DIRS}")
     set(FIXED_LIBS "")
-    foreach(LIB_PATH IN LISTS ${LIBRARY_NAME}_LIBS_LIST)
-        message(DEBUG "configure_library_linking(${LIBRARY_NAME}): checking entry '${LIB_PATH}'")
-        if(LIB_PATH MATCHES "-NOTFOUND$" OR LIB_PATH STREQUAL "")
-            message(WARNING "configure_library_linking(${LIBRARY_NAME}): skipping unresolved entry '${LIB_PATH}'")
+    foreach(LIB_PATH IN LISTS ${LIBRARY_NAME}_LIBS)
+        if("${LIB_PATH}" MATCHES "^-framework")
             continue()
+        endif()
+        message(DEBUG "configure_static_linking(${LIBRARY_NAME}): checking entry '${LIB_PATH}'")
+        if(LIB_PATH MATCHES "-NOTFOUND$" OR LIB_PATH STREQUAL "")
+            message(WARNING "configure_static_linking(${LIBRARY_NAME}): skipping unresolved entry '${LIB_PATH}'")
+            continue()
+        else()
+            if(NOT "${LIB_PATH}" MATCHES "\\.a$" AND NOT EXISTS "${LIB_PATH}")
+                message(DEBUG "configure_static_linking(${LIBRARY_NAME}): ${LIB_PATH} file does not exist, searching for it")
+                find_library(${LIB_PATH}_ABSOLUTE_PATH
+                    NAMES ${LIB_PATH}
+                    HINTS ${${LIBRARY_NAME}_LIBRARY_DIRS}
+                    NO_DEFAULT_PATH
+                    NO_CMAKE_FIND_ROOT_PATH
+                )
+                message(DEBUG "configure_static_linking(${LIBRARY_NAME}): ${LIB_PATH}_ABSOLUTE_PATH = ${${LIB_PATH}_ABSOLUTE_PATH}")
+                if(NOT EXISTS "${${LIB_PATH}_ABSOLUTE_PATH}")
+                    message(WARNING "configure_static_linking(${LIBRARY_NAME}): ${${LIB_PATH}_ABSOLUTE_PATH} file does not exist after search")
+                    continue()
+                else()
+                    message(STATUS "configure_static_linking(${LIBRARY_NAME}): replaced '${LIB_PATH}' with '${${LIB_PATH}_ABSOLUTE_PATH}'")
+                    set(LIB_PATH "${${LIB_PATH}_ABSOLUTE_PATH}")
+                endif()
+            endif()
         endif()
         if(STATIC_LINKING)
             replace_shared_with_static("${LIB_PATH}" RESOLVED_LIB)
@@ -404,13 +446,60 @@ function(configure_library_linking LIBRARY_NAME STATIC_LINKING)
     set(BUNDLE_LIBRARIES "${BUNDLE_LIBRARIES}" PARENT_SCOPE)
 endfunction()
 
-configure_library_linking(FFMPEG ON)
+function(configure_shared_linking LIBRARY_NAME SHARED_LINKING)
+    # Get the interface link libraries
+    get_target_property(${LIBRARY_NAME}_LIBS PkgConfig::${LIBRARY_NAME} INTERFACE_LINK_LIBRARIES)
+    if(NOT ${LIBRARY_NAME}_LIBS OR ${LIBRARY_NAME}_LIBS MATCHES "-NOTFOUND$")
+        set(${LIBRARY_NAME}_LIBS "${${LIBRARY_NAME}_LINK_LIBRARIES}")
+    endif()
+    if(NOT ${LIBRARY_NAME}_LIBS_LIST)
+        # check single library path
+        if(EXISTS "${${LIBRARY_NAME}_LIBRARY}")
+            message(STATUS "configure_shared_linking(${LIBRARY_NAME}): ${LIBRARY_NAME} found at ${${LIBRARY_NAME}_LIBRARY}")
+            set(${LIBRARY_NAME}_LIBS_LIST "${${LIBRARY_NAME}_LIBRARY}")
+        elseif(EXISTS "${${LIBRARY_NAME}_LIBS}")
+            message(STATUS "configure_shared_linking(${LIBRARY_NAME}): ${LIBRARY_NAME} found at ${${LIBRARY_NAME}_LIBS}")
+            set(${LIBRARY_NAME}_LIBS_LIST "${${LIBRARY_NAME}_LIBS}")
+        elseif(EXISTS "${${LIBRARY_NAME}_LIBRARIES}")
+            message(STATUS "configure_shared_linking(${LIBRARY_NAME}): ${LIBRARY_NAME} found at ${${LIBRARY_NAME}_LIBRARIES}")
+            set(${LIBRARY_NAME}_LIBS_LIST "${${LIBRARY_NAME}_LIBRARIES}")
+        else()
+            message(WARNING "configure_shared_linking(${LIBRARY_NAME}): ${LIBRARY_NAME}_LIBS_LIST is empty")
+            return()
+        endif()
+    endif()
+    set(FIXED_LIBS "")
+    message(DEBUG "configure_shared_linking(${LIBRARY_NAME}): ${LIBRARY_NAME}_LIBS_LIST = ${${LIBRARY_NAME}_LIBS_LIST}")
+    foreach(LIB_PATH IN LISTS ${LIBRARY_NAME}_LIBS_LIST)
+        message(DEBUG "configure_shared_linking(${LIBRARY_NAME}): checking entry '${LIB_PATH}'")
+        if(LIB_PATH MATCHES "-NOTFOUND$" OR LIB_PATH STREQUAL "")
+            message(WARNING "configure_shared_linking(${LIBRARY_NAME}): skipping unresolved entry '${LIB_PATH}'")
+            continue()
+        endif()
+        if(SHARED_LINKING)
+            replace_static_with_shared("${LIB_PATH}" RESOLVED_LIB)
+        else()
+            if(MINGW)
+                replace_dll_a_with_dll("${LIB_PATH}" RESOLVED_LIB)
+            else()
+                set(RESOLVED_LIB ${LIB_PATH})
+            endif()
+        endif()
+        list(APPEND FIXED_LIBS "${RESOLVED_LIB}")
+    endforeach()
+    set_target_properties(PkgConfig::${LIBRARY_NAME} PROPERTIES INTERFACE_LINK_LIBRARIES "${FIXED_LIBS}")
+    list(APPEND BUNDLE_LIBRARIES ${FIXED_LIBS})
+    list(REMOVE_DUPLICATES BUNDLE_LIBRARIES)
+    set(BUNDLE_LIBRARIES "${BUNDLE_LIBRARIES}" PARENT_SCOPE)
+endfunction()
+
+configure_static_linking(FFMPEG ON)
 
 if(ENABLE_LIBPLACEBO)
     set(_OLD_PKG_CONFIG_USE_STATIC_LIBS ${PKG_CONFIG_USE_STATIC_LIBS})
     set(PKG_CONFIG_USE_STATIC_LIBS OFF)
     pkg_check_modules(LIBPLACEBO REQUIRED IMPORTED_TARGET libplacebo)
-    configure_library_linking(LIBPLACEBO ON)
+    configure_static_linking(LIBPLACEBO ON)
     target_link_libraries(ffmpegkit PRIVATE PkgConfig::LIBPLACEBO)
     target_compile_definitions(ffmpegkit PRIVATE PL_STATIC PLACEBO_STATIC)
     set(PKG_CONFIG_USE_STATIC_LIBS ${_OLD_PKG_CONFIG_USE_STATIC_LIBS})
@@ -421,7 +510,7 @@ if(ENABLE_LIBTENSORFLOW)
     set(_OLD_PKG_CONFIG_USE_STATIC_LIBS ${PKG_CONFIG_USE_STATIC_LIBS})
     set(PKG_CONFIG_USE_STATIC_LIBS OFF)
     pkg_check_modules(LIBTENSORFLOW REQUIRED IMPORTED_TARGET libtensorflow)
-    configure_library_linking(LIBTENSORFLOW OFF)
+    configure_static_linking(LIBTENSORFLOW OFF)
     target_link_libraries(ffmpegkit PRIVATE PkgConfig::LIBTENSORFLOW)
     set(PKG_CONFIG_USE_STATIC_LIBS ${_OLD_PKG_CONFIG_USE_STATIC_LIBS})
 endif()
@@ -430,14 +519,14 @@ if(ENABLE_OPENVINO)
     set(_OLD_PKG_CONFIG_USE_STATIC_LIBS ${PKG_CONFIG_USE_STATIC_LIBS})
     set(PKG_CONFIG_USE_STATIC_LIBS OFF)
     pkg_check_modules(OPENVINO REQUIRED IMPORTED_TARGET openvino)
-    configure_library_linking(OPENVINO OFF)
+    configure_static_linking(OPENVINO OFF)
     target_link_libraries(ffmpegkit PRIVATE PkgConfig::OPENVINO)
     # Try tbb12 first, fallback to tbb
     pkg_check_modules(TBB QUIET IMPORTED_TARGET tbb12)
     if(NOT PkgConfig::TBB)
         pkg_check_modules(TBB REQUIRED IMPORTED_TARGET tbb)
     endif()
-    configure_library_linking(TBB OFF)
+    configure_static_linking(TBB OFF)
     target_link_libraries(ffmpegkit PRIVATE PkgConfig::TBB)
     set(PKG_CONFIG_USE_STATIC_LIBS ${_OLD_PKG_CONFIG_USE_STATIC_LIBS})
 endif()
@@ -447,7 +536,7 @@ if(ENABLE_LIBTORCH)
         set(_OLD_PKG_CONFIG_USE_STATIC_LIBS ${PKG_CONFIG_USE_STATIC_LIBS})
         set(PKG_CONFIG_USE_STATIC_LIBS OFF)
         pkg_check_modules(LIBTORCH REQUIRED IMPORTED_TARGET libtorch)
-        configure_library_linking(LIBTORCH OFF)
+        configure_static_linking(LIBTORCH OFF)
         if(NOT APPLE)
             find_library(PYTHON311_LIB
                 NAMES
@@ -472,6 +561,11 @@ if(ENABLE_LIBTORCH)
             else()
                 message(STATUS "Found Python 3.11 library: ${PYTHON311_LIB}")
             endif()
+        elseif(CMAKE_OSX_ARCHITECTURES STREQUAL "arm64")
+            # need libomp.dylib even if libomp is statically linked
+            pkg_check_modules(LIBOMP REQUIRED IMPORTED_TARGET libomp)
+            configure_shared_linking(LIBOMP ON)
+            target_link_libraries(ffmpegkit PRIVATE PkgConfig::LIBOMP)
         endif()
         if(CMAKE_SYSTEM_NAME MATCHES "Linux")
             find_library(LLVM17_LIB
@@ -656,7 +750,7 @@ elseif(ANDROID)
         "-Wl,--fatal-warnings"
         "-Wl,--allow-multiple-definition"
         "-Wl,--as-needed"
-        "-Wl,--verbose"
+        # "-Wl,--verbose"
     )
 elseif(APPLE)
     # iOS/macOS platform configuration
@@ -670,33 +764,46 @@ elseif(APPLE)
         target_link_libraries(ffmpegkit PRIVATE 
             "-framework ForceFeedback"
             "-framework Carbon"
+            "-framework AppKit"
+            "-framework OpenGL"
+            "-framework DiskArbitration"
+        )
+    elseif(CMAKE_SYSTEM_NAME STREQUAL "iOS")
+        target_link_libraries(ffmpegkit PRIVATE 
+            "-framework OpenGLES"
+            "-framework UIKit"
         )
     endif()
     target_link_libraries(ffmpegkit PRIVATE
+        "-ObjC"
         "-framework AudioToolbox"
         "-framework AVFoundation"
         "-framework CoreAudio"
         "-framework Foundation"
         "-framework GameController"
         "-framework CoreHaptics"
+        "-framework QuartzCore"
+        "-framework CoreGraphics"
+        "-framework CoreMedia"
+        "-framework CoreImage"
+        "-framework CoreMotion"
+        "-framework CoreVideo"
+        "-framework CoreText"
+        "-framework Metal"
+        "-framework Security"
+        "-framework VideoToolbox"
+        "-framework Accelerate"
+        "-framework IOKit"
+        "-lresolv"
     )
 
-    if(CMAKE_SYSTEM_NAME STREQUAL "iOS")
-        target_compile_definitions(ffmpegkit PRIVATE TARGET_OS_IOS)
-        target_link_libraries(ffmpegkit PRIVATE "-framework UIKit")
-    else()
-        # macOS
-        target_compile_definitions(ffmpegkit PRIVATE TARGET_OS_OSX)
-        target_link_libraries(ffmpegkit PRIVATE "-framework AppKit")
-    endif()
     target_link_options(ffmpegkit PRIVATE
         "-v"
         "-ld64"
         "-Wl,-w"
         "-Wl,-dead_strip"
-        "-Wl,-undefined,suppress"
         "-Wl,-flat_namespace"
-        "-Wl,-undefined,dynamic_lookup"
+        # "-Wl,-undefined,dynamic_lookup"
     )
 endif()
 
@@ -779,6 +886,7 @@ if(BUILD_SHARED_LIBS)
                 ${BUNDLE_LIBRARIES}
             )
         elseif(APPLE)
+
             target_link_libraries(ffmpegkit PRIVATE
                 ${FFMPEG_STATIC_LIBS}
                 ${BUNDLE_LIBRARIES}

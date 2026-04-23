@@ -168,7 +168,7 @@ static RegistryMutex &get_registry_mutex() {
 }
 
 // DLL alignment attribute for GCC
-#ifdef __GNUC__
+#if defined(__GNUC__) && defined(_WIN32)
 #define DLL_ALIGN __attribute__((force_align_arg_pointer))
 #else
 #define DLL_ALIGN
@@ -583,6 +583,18 @@ FFmpegSessionHandle DLL_ALIGN ffmpeg_kit_create_session_from_argv_with_callbacks
     }
 }
 
+void DLL_ALIGN ffmpeg_kit_close_session(FFmpegSessionHandle handle) {
+    try {
+        auto ptr = get_ptr<FFmpegSession>(handle);
+        if (ptr) {
+            ptr->cancel();
+        }
+    } catch (const std::exception &e) {
+        std::cerr << "[Exception] in ffmpeg_kit_close_session: " << e.what() << std::endl;
+        PRINT_STACK_TRACE();
+    }
+}
+
 void DLL_ALIGN ffmpeg_kit_debug_print_stack() {
     void* p = nullptr;
     uintptr_t stack_ptr = (uintptr_t)&p;
@@ -779,6 +791,31 @@ FFprobeSessionHandle DLL_ALIGN ffprobe_kit_execute_async(const char *command,
   }
 }
 
+void DLL_ALIGN ffprobe_kit_cancel(void) {
+  try {
+    for (auto& session : *FFmpegKitConfig::getSessions()) {
+      if (session->isFFprobe()) {
+        session->cancel();
+      }
+    } 
+  } catch (const std::exception &e) {
+    std::cerr << "[Exception] in ffprobe_kit_cancel: " << e.what() << std::endl;
+    PRINT_STACK_TRACE();
+  }
+}
+
+void DLL_ALIGN ffprobe_kit_cancel_session(int64_t session_id) {
+  try {
+    auto session = FFmpegKitConfig::getSession(session_id);
+    if (session && session->isFFprobe()) {
+      session->cancel();
+    }
+  } catch (const std::exception &e) {
+    std::cerr << "[Exception] in ffprobe_kit_cancel_session: " << e.what() << std::endl;
+    PRINT_STACK_TRACE();
+  }
+}
+
 FFprobeSessionHandle DLL_ALIGN ffprobe_kit_create_session(const char *command) {
   try {
     if (!command)
@@ -886,6 +923,19 @@ FFprobeSessionHandle DLL_ALIGN ffprobe_kit_create_session_from_argv_with_callbac
         PRINT_STACK_TRACE();
         return nullptr;
     }
+}
+
+void DLL_ALIGN ffprobe_kit_close_session(FFprobeSessionHandle handle) {
+  try {
+    auto ptr = get_ptr<FFprobeSession>(handle);
+    if (ptr) {
+      ptr->cancel();
+    }
+  } catch (const std::exception &e) {
+    std::cerr << "[Exception] in ffprobe_kit_close_session: " << e.what()
+              << std::endl;
+    PRINT_STACK_TRACE();
+  }
 }
 
 void DLL_ALIGN ffprobe_kit_set_log_callback(FFprobeSessionHandle session,

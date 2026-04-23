@@ -1612,9 +1612,12 @@ void ffmpegkit::FFmpegKitConfig::asyncFFprobeExecute(
 void ffmpegkit::FFmpegKitConfig::asyncFFplayExecute(
     const std::shared_ptr<ffmpegkit::FFplaySession> ffplaySession,
     int waitTimeout) {
-
   // Join any previously completed async ffplay thread before launching a new one
   if (asyncFFplayThread != 0) {
+    auto activeSession = getActiveFFplaySession();
+    if (activeSession != nullptr) {
+      activeSession->close();
+    }
     pthread_join(asyncFFplayThread, nullptr);
     asyncFFplayThread = 0;
   }
