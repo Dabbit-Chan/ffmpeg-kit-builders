@@ -36,3 +36,5 @@ package-lock.json
 .python-version
 entities.json
 mempalace.yaml
+.py-init
+QWEN.md
