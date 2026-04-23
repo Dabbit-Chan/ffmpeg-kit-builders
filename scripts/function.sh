@@ -691,6 +691,7 @@ setup_macos_environment() {
     export LD="$(xcrun --sdk "$toolchain_sys" --find ld)"
     export STRIP="$(xcrun --sdk "$toolchain_sys" --find strip)"
     export NM="$(xcrun --sdk "$toolchain_sys" --find nm)"
+    export LIPO="$(xcrun --sdk "$toolchain_sys" --find lipo)"
     
     create_dir "$install_pkgconfig_dir"
     create_dir "$work_dir/pkgconfig"
@@ -3681,6 +3682,18 @@ run_valid_function() {
   reset_allflags
 }
 
+get_gas_preprocessor() {
+  if ismacos || isios || isiossimulator; then
+    if [[ ! -f /usr/local/bin/gas-preprocessor.pl ]]; then
+      {
+      wget -O gas-preprocessor.pl https://raw.githubusercontent.com/FFmpeg/gas-preprocessor/master/gas-preprocessor.pl
+      copy_path "gas-preprocessor.pl" "/usr/local/bin/gas-preprocessor.pl" "-f"
+      chmod +x "/usr/local/bin/gas-preprocessor.pl"
+      } > >(redirect_output) 2>&1 || exit_message 1 "configure_ffmpeg: Failed to download gas-preprocessor.pl"
+    fi
+  fi
+}
+
 # shellcheck disable=SC2120
 configure_ffmpeg() {
 	echo -e "INFO: Configuring ffmpeg" | tee -a "$LOG_FILE"
@@ -3692,6 +3705,14 @@ configure_ffmpeg() {
     git_hard_reset "${ffmpeg_source_dir}" || exit_message 1 "git_hard_reset: could not reset ffmpeg git repository"
     touch "no.autoreconf"
 	fi
+
+  case "$host_arch" in
+    "x86_64") export ARCH=x86_64 ;;
+    "i686") export ARCH=x86 ;;
+    "aarch64") export ARCH=aarch64 ;;
+    "armv7a") export ARCH=arm ;;
+    *) export ARCH=$host_arch ;;
+  esac
 
 	change_dir "$ffmpeg_source_dir" || exit_message 1 "configure_ffmpeg: could not change to $ffmpeg_source_dir"
 	# iswindows && apply_patch "$PATCHDIR"/frei0r_load-shared-libraries-dynamically.diff
@@ -3706,13 +3727,7 @@ configure_ffmpeg() {
   (iswindows || isandroid) && fix_pkgconfig_flags
   # Common compiler flags for Windows    
   if ismacos || isios || isiossimulator; then
-    if [[ ! -f /usr/local/bin/gas-preprocessor.pl ]]; then
-      {
-      wget -O gas-preprocessor.pl https://raw.githubusercontent.com/FFmpeg/gas-preprocessor/master/gas-preprocessor.pl
-      copy_path "gas-preprocessor.pl" "/usr/local/bin/gas-preprocessor.pl" "-f"
-      chmod +x "/usr/local/bin/gas-preprocessor.pl"
-      } > >(redirect_output) 2>&1 || exit_message 1 "configure_ffmpeg: Failed to download gas-preprocessor.pl"
-    fi
+    get_gas_preprocessor
     init_options+=" --as='gas-preprocessor.pl -arch $meson_cpu_family -- $(xcrun --sdk "$toolchain_sys" --find clang)'"
   fi
   if iswindows; then
@@ -3763,6 +3778,7 @@ configure_ffmpeg() {
     init_options+=" --disable-programs"
     init_options+=" --cc=$(xcrun --sdk "$toolchain_sys" --find clang)"
     init_options+=" --cxx=$(xcrun --sdk "$toolchain_sys" --find clang++)"
+    init_options+=" --ld=$(xcrun --sdk "$toolchain_sys" --find clang++)"
     init_options+=" --ar=$(xcrun --sdk "$toolchain_sys" --find ar)"
     init_options+=" --strip=$(xcrun --sdk "$toolchain_sys" --find strip)"
     init_options+=" --nm=$(xcrun --sdk "$toolchain_sys" --find nm)"
@@ -3773,13 +3789,6 @@ configure_ffmpeg() {
   if ! ismacos && ! isios; then
     init_options+=" --extra-ldflags=\" -Wl,--allow-multiple-definition \""
   fi
-  case "$host_arch" in
-    "x86_64") export ARCH=x86_64 ;;
-    "i686") export ARCH=x86 ;;
-    "aarch64") export ARCH=aarch64 ;;
-    "armv7a") export ARCH=arm ;;
-    *) export ARCH=$host_arch ;;
-  esac
   init_options+=" --pkg-config=pkg-config"
 	init_options+=" --pkg-config-flags=--static"
 	init_options+=" --enable-version3"
@@ -3895,11 +3904,13 @@ configure_ffmpeg() {
       config_options+=" --extra-cxxflags=\"-Wno-invalid-specialization\""
     fi
   fi
-  if iswindows || islinux || ismacos; then
+  if iswindows || islinux; then
   truthy "$enable_cuvid" && config_options+=" --enable-cuvid"                         # enable Nvidia CUVID support [autodetect]
   truthy "$enable_ffnvcodec" && config_options+=" --enable-ffnvcodec"                 # enable dynamically linked Nvidia code [autodetect]
   truthy "$enable_nvdec" && config_options+=" --enable-nvdec"                         # enable Nvidia video decoding acceleration (via hwaccel) [autodetect]
   truthy "$enable_nvenc" && config_options+=" --enable-nvenc"                         # enable Nvidia video encoding code [autodetect]
+  fi
+  if iswindows || islinux || ismacos; then
   truthy "$enable_libopenvino" && config_options+=" --enable-libopenvino"             # enable OpenVINO as a DNN module backend for DNN based filters like dnn_processing [no]
   truthy "$enable_libtensorflow" && config_options+=" --enable-libtensorflow"         # enable TensorFlow as a DNN module backend for DNN based filters like sr [no]
   fi
@@ -3949,6 +3960,7 @@ configure_ffmpeg() {
   truthy "$enable_libass" && config_options+=" --enable-libass"                       # enable libass subtitles rendering, needed for subtitles and ass filter [no]
   if ! isandroid && ! isios; then
     truthy "$enable_libbluray" && config_options+=" --enable-libbluray"                 # enable BluRay reading using libbluray [no]
+    truthy "$enable_libbluray" && ismacos && add_extra_libs "-framework DiskArbitration"
     truthy "$enable_libcdio" && config_options+=" --enable-libcdio"                     # enable audio CD grabbing with libcdio [no]
     truthy "$enable_libdvdnav" && config_options+=" --enable-libdvdnav"                 # enable libdvdnav, needed for DVD demuxing [no]
     truthy "$enable_libdvdread" && config_options+=" --enable-libdvdread"               # enable libdvdread, needed for DVD demuxing [no]
@@ -4001,6 +4013,8 @@ configure_ffmpeg() {
   truthy "$enable_librtmp" && config_options+=" --enable-librtmp"                     # enable RTMP[E] support via librtmp [no]
   truthy "$enable_librubberband" && config_options+=" --enable-librubberband"         # enable rubberband needed for rubberband filter [no]
   truthy "$enable_libshaderc" && config_options+=" --enable-libshaderc"               # enable GLSL->SPIRV compilation via libshaderc [no]
+  truthy "$enable_libshaderc" && (ismacos || isios || isiossimulator) \
+  && add_extra_libs "-lglslang -lSPIRV -lSPIRV-Tools -lSPIRV-Tools-opt"
   truthy "$enable_libshine" && config_options+=" --enable-libshine"                   # enable fixed-point MP3 encoding via libshine [no]
   truthy "$enable_libsnappy" && config_options+=" --enable-libsnappy"                 # enable Snappy compression, needed for hap encoding [no]
   truthy "$enable_libsoxr" && config_options+=" --enable-libsoxr"                     # enable Include libsoxr resampling [no]
@@ -4063,7 +4077,7 @@ configure_ffmpeg() {
   truthy "$enable_whisper" && { config_options+=" --enable-whisper" \
   && add_extra_libs "-lwhisper -lggml -lggml-cpu -lggml-base"; }                      # enable whisper filter [no]
   truthy "$enable_whisper" && ! isandroid && ! ismacos && ! isios && add_extra_libs "-lgomp"
-  truthy "$enable_whisper" && { ismacos || isios; } && add_extra_libs "-lomp -lresolv"
+  truthy "$enable_whisper" && { ismacos || isios; } && add_extra_libs "$dependency_install_prefix/lib/libomp.a -lresolv"
 
   # ------------------------------ windows features -------------------------------     
   if iswindows; then
@@ -4213,9 +4227,14 @@ install_ffmpeg() {
 
 	{	
     shopt -s nullglob
-    cp -v -- */*.dylib */*.dll *.exe "${ffmpeg_install_prefix}/bin" > >(redirect_output) 2>&1 || true
-    cp -v -- */*.a */*.lib *.so "${ffmpeg_install_prefix}/lib" > >(redirect_output) 2>&1 || true
-	} >>"$LOG_FILE"
+    find "${ffmpeg_install_prefix}/bin" -type f \
+    -exec cp -fv {} "${ffmpeg_install_prefix}/bin" \; || true
+    find "${ffmpeg_install_prefix}/lib" -type f \( -name "*.a" \
+    -o -name "*.lib" \
+    -o -name "*.so" \
+    -o -name "*.dylib" \
+    -o -name "*.dll" \) -exec cp -fv {} "${ffmpeg_install_prefix}/lib" \; || true
+	} > >(redirect_output) 2>&1
 
 	echo -e "INFO: Done installing ffmpeg" | tee -a "$LOG_FILE"
   chmod -R a+rwx "$work_dir"
@@ -4277,7 +4296,7 @@ install_ffmpeg_pkg() {
     overwrite_file "${ffmpeg_source_dir}"/compat/w32pthreads.h "${ffmpeg_install_prefix}"/include/libavutil/compat/w32pthreads.h
     overwrite_file "${ffmpeg_source_dir}"/compat/stdbit/stdbit.h "${ffmpeg_install_prefix}"/include/stdbit/stdbit.h
     overwrite_file "${ffmpeg_source_dir}"/libavutil/wchar_filename.h "${ffmpeg_install_prefix}"/include/libavutil/wchar_filename.h
-  } >>"$LOG_FILE"
+  } > >(redirect_output) 2>&1
   chmod -R a+rwx "$work_dir"
   echo -e "INFO: Done installing ffmpeg pkg-config" | tee -a "$LOG_FILE"
 }
@@ -4322,13 +4341,13 @@ install_pkg_config_file() {
 	fi
 
 	# UPDATE PATHS
-	sed -i'' -e "s|${ffmpeg_kit_install}|${location_prefix}|g" "$DESTINATION" || return 1
-  sed -i'' -e "s|libdir=${ffmpeg_kit_install}|libdir=\${prefix}/lib|g" "$DESTINATION" || return 1
-  sed -i'' -e "s|includedir=${ffmpeg_kit_install}|includedir=\${prefix}/include|g" "$DESTINATION" || return 1
+	sed -i'.bak' -e "s|${ffmpeg_kit_install}|${location_prefix}|g" "$DESTINATION" || return 1
+  sed -i'.bak' -e "s|libdir=${ffmpeg_kit_install}|libdir=\${prefix}/lib|g" "$DESTINATION" || return 1
+  sed -i'.bak' -e "s|includedir=${ffmpeg_kit_install}|includedir=\${prefix}/include|g" "$DESTINATION" || return 1
 
-	sed -i'' -e "s|${ffmpeg_source_dir}|${location_prefix}|g" "$DESTINATION" || return 1
-  sed -i'' -e "s|libdir=${ffmpeg_source_dir}|libdir=\${prefix}/lib|g" "$DESTINATION" || return 1
-  sed -i'' -e "s|includedir=${ffmpeg_source_dir}|includedir=\${prefix}/include|g" "$DESTINATION" || return 1
+	sed -i'.bak' -e "s|${ffmpeg_source_dir}|${location_prefix}|g" "$DESTINATION" || return 1
+  sed -i'.bak' -e "s|libdir=${ffmpeg_source_dir}|libdir=\${prefix}/lib|g" "$DESTINATION" || return 1
+  sed -i'.bak' -e "s|includedir=${ffmpeg_source_dir}|includedir=\${prefix}/include|g" "$DESTINATION" || return 1
 
   chmod -R a+rwx "$work_dir"
 }
@@ -4336,6 +4355,10 @@ install_pkg_config_file() {
 create_ffmpeg_kit_bundle() {
   if isandroid && truthy "$create_bundle"; then
     create_android_aar
+  elif (isios || isiossimulator) && truthy "$create_bundle"; then
+    create_ios_xcframework
+  elif ismacos && truthy "$create_bundle"; then
+    create_macos_xcframework
   elif [[ -d "${ffmpeg_kit_install}" ]] && truthy "$create_bundle"; then
     echo -e "INFO: Creating bundle" | tee -a "$LOG_FILE"
     local touch_postfix="$host_name"
@@ -4349,18 +4372,18 @@ create_ffmpeg_kit_bundle() {
     
     {
       # COPY HEADERS
-      [[ -d "${ffmpeg_kit_install}/include" ]] && cp -rP "${ffmpeg_kit_install}/include/"* "${ffmpeg_kit_bundle}/include"
-      [[ -d "${dependency_install_prefix}/include/json" ]] && cp -rP "${dependency_install_prefix}/include/json" "${ffmpeg_kit_bundle}/include/json"
+      [[ -d "${ffmpeg_kit_install}/include" ]] && find "${ffmpeg_kit_install}/include" -type f -exec cp -fv {} "${ffmpeg_kit_bundle}/include" \; || true
+      [[ -d "${dependency_install_prefix}/include/json" ]] && find "${dependency_install_prefix}/include/json" -type f -exec cp -v {} "${ffmpeg_kit_bundle}/include/json" \; > >(redirect_output) 2>&1 || true
 
       # COPY LIBS
-      [[ -d "${ffmpeg_kit_install}/lib" ]] && cp -rP "${ffmpeg_kit_install}/lib/"* "${ffmpeg_kit_bundle}/lib"
+      [[ -d "${ffmpeg_kit_install}/lib" ]] && find "${ffmpeg_kit_install}/lib" -type f -exec cp -fv {} "${ffmpeg_kit_bundle}/lib" \; || true
 
       # COPY BINARIES
-      [[ -d "${ffmpeg_kit_install}/bin" ]] && cp -rP "${ffmpeg_kit_install}/bin/"* "${ffmpeg_kit_bundle}/bin"
+      [[ -d "${ffmpeg_kit_install}/bin" ]] && find "${ffmpeg_kit_install}/bin" -type f -exec cp -fv {} "${ffmpeg_kit_bundle}/bin" \; || true
 
       # COPY DEBUG PDB
       [[  -f "$ffmpeg_kit_src_dir/build/libffmpegkit.map" ]] && cp -rP "$ffmpeg_kit_src_dir/build/libffmpegkit.map" "${ffmpeg_kit_bundle}/bin"
-    } >>"$LOG_FILE"
+    } > >(redirect_output) 2>&1
 
     find "${ffmpeg_kit_bundle}/lib/pkgconfig" -type f -name "*.pc" -exec sed -i'.bak' \
     -e "s|prefix=.*|prefix=${ffmpeg_kit_bundle}|g" \
@@ -4884,6 +4907,7 @@ EOF
   if [[ -z "$host_arch" ]] && truthy "$accept_defaults"; then
       echo "Defaulting to 'x86_64'."
       set_x86_64
+      return 0
   fi
 	case "${host_arch,,}" in
 	1|"x86_64"|"x64") set_x86_64
@@ -6175,7 +6199,8 @@ static_link_check() {
             local resolved_libs=""
             local -a stats=(0 0 0)
             if ! _slc_resolve_libs "$target" "$log_file" resolved_libs stats; then
-                local err=$(sed -i'' -e 's|.*libraries/lib|...libraries/lib|' -e 's/^/        | /' "$log_file")
+                local err=$(sed -i'' -e 's|.*libraries/lib|...libraries/lib|' \
+                -e 's/^/        | /' "$log_file")
                 a_failed+=("  [FAIL] $pkg_name (Config Parse Error)\n$err")
                 continue
             fi
@@ -6195,7 +6220,8 @@ static_link_check() {
                 a_success+=("$(printf "  %-8s %-30s %-12d %-12d %-12d" "$bin_size" "$pkg_name" "${stats[0]}" "${stats[1]}" "${stats[2]}")")
             else
                 local reason="${verify_result#fail:}"
-                local err=$(sed -i'' -e 's|.*libraries/lib|...libraries/lib|' -e 's/^/        | /' "$log_file")
+                local err=$(sed -i'' -e 's|.*libraries/lib|...libraries/lib|' \
+                -e 's/^/        | /' "$log_file")
                 a_failed+=("  [FAIL] $pkg_name ($reason)\n        Libraries: $resolved_libs\n$err")
             fi
         done
@@ -6261,15 +6287,15 @@ add_libs_to_pkg() {
             local regex_token=$(echo "$token" | sed -e  's/[][()\.^$?*+{|}]/\\&/g')
             local sed_pattern="${regex_token//#/\\#}"
             if grep "^$field:" "$pc" | grep -E -q "(^|[[:space:]])${sed_pattern}($|[[:space:]])"; then
-                sed -i'' -e -E "s#([[:space:]]|^)${sed_pattern}([[:space:]]|$)# #g" "$pc"
+                sed -i'.bak' -e -E "s#([[:space:]]|^)${sed_pattern}([[:space:]]|$)# #g" "$pc"
             fi
             insertion_buffer="${insertion_buffer} ${token}"
         done
         if [[ -n "$insertion_buffer" ]]; then
             if [[ "$mode" == "prepend" ]]; then
-                sed -i'' -e "s|^$field:|&${insertion_buffer}|" "$pc"
+                sed -i'.bak' -e "s|^$field:|&${insertion_buffer}|" "$pc"
             else
-                sed -i'' -e "s|^$field:.*|&${insertion_buffer}|" "$pc"
+                sed -i'.bak' -e "s|^$field:.*|&${insertion_buffer}|" "$pc"
             fi
         fi
     }
@@ -6577,10 +6603,10 @@ get_changes_from_changelog() {
 }
 
 get_maven_keystore_file() {
-  if [[ -f "$(realpath ~vscode/.config/keystore/maven/maven)" ]]; then
-    echo "$(realpath ~vscode/.config/keystore/maven/maven)"
+  if [[ -f "$(realpath ~/.config/keystore/maven/maven)" ]]; then
+    echo "$(realpath ~/.config/keystore/maven/maven)"
   else
-    exit_message 1 "Keystore file not found. Please create a .env or /home/vscode/.config/keystore/maven/maven file with the following format: \n\
+    exit_message 1 "Keystore file not found. Please create a .env or ~/.config/keystore/maven/maven file with the following format: \n\
     OSSRH_USERNAME=<your-maven-username>\n\
     OSSRH_PASSWORD=<your-maven-password>\n\
     OSSRH_BASE64=<your-maven-username:password-base64>" | tee -a "$LOG_FILE"
@@ -6629,10 +6655,10 @@ get_maven_base64() {
 get_keystore_file() {
   if [[ -f .env ]]; then
     echo ".env"
-  elif [[ -f "$(realpath ~vscode/.config/keystore/github)" ]]; then
-    echo "$(realpath ~vscode/.config/keystore/github)"
+  elif [[ -f "$(realpath ~/.config/keystore/github)" ]]; then
+    echo "$(realpath ~/.config/keystore/github)"
   else
-    exit_message 1 "Keystore file not found. Please create a .env or /home/vscode/.config/keystore/github file with the following format: \n\
+    exit_message 1 "Keystore file not found. Please create a .env or ~/.config/keystore/github file with the following format: \n\
     GH_TOKEN=<your-github-token>\n\
     GH_TOKEN_CLASSIC=<your-github-token-classic>\n\
     GH_OWNER=<your-github-owner>\n\
@@ -6945,63 +6971,4 @@ check_maven_package_status() {
   fi
 
   return 1
-}
-
-create_android_aar() {
-  local arch_pfx="$aar_arch"
-  local bundle_pfx="$(get_bundle_type)"
-  local license_pfx="$(get_bundle_license)"
-  local kit_dir=$(get_ffmpeg_kit_directory)
-  local small_pfx=""
-  local debug_pfx=""
-  if truthy "$do_debug_build"; then
-    debug_pfx="-debug"
-	fi
-  if truthy "$build_small"; then
-    small_pfx="-small"
-  fi
-  local lib_ext=".so"
-  if [[ "$build_ffmpeg_kit_type" == "static" ]]; then
-    lib_ext=".a"
-  fi
-  local jni_libs_dir="${WORKDIR}/$host_platform/jniLibs-${bundle_pfx}${small_pfx}${debug_pfx}-${license_pfx}/jniLibs"
-  if [[ -d "${WORKDIR}/$host_platform/jniLibs-${bundle_pfx}${small_pfx}${debug_pfx}-${license_pfx}" ]]; then
-    rm -rf "${WORKDIR}/$host_platform/jniLibs-${bundle_pfx}${small_pfx}${debug_pfx}-${license_pfx}"
-  fi
-  mkdir -p "${jni_libs_dir}"/{include,lib/pkgconfig,arm64-v8a,armeabi-v7a,x86,x86_64}
-
-  cp -fv "${work_dir}/${kit_dir}/lib/pkgconfig/ffmpegkit.pc" "${jni_libs_dir}/lib/pkgconfig/ffmpegkit.pc" > >(redirect_output)
-  cp -fv "${work_dir}/${kit_dir}/lib/libffmpegkit${lib_ext}" "${jni_libs_dir}/${arch_pfx}/libffmpegkit${lib_ext}" > >(redirect_output)
-
-  FFMPEG_KIT_NAMESPACE="io.github.akashskypatel.ffmpegkit"
-  FFMPEG_KIT_VERSION_CODE="$(date +%Y%m%d)"
-  FFMPEG_KIT_VERSION="$(cat "${BASEDIR}/version")-SNAPSHOT"
-  FFMPEG_KIT_JNI_LIBS_DIR=$(realpath "${jni_libs_dir}")
-  FFMPEG_KIT_OUTPUT_NAME="$(get_bundle_directory)"
-  OSSRH_USERNAME="$(get_maven_username)"
-  OSSRH_PASSWORD="$(get_maven_password)"
-  if [[ "$create_release" == "local" ]]; then
-    GRADLE_COMMAND="publishToMavenLocal"
-  else
-    GRADLE_COMMAND="publishToMavenCentral"
-  fi
-  USER_HOME="/home/vscode"
-  
-  change_dir "${BASEDIR}"
-
-  chmod +x "${BASEDIR}/gradlew"
-
-  { exec "./gradlew" :tools:android:${GRADLE_COMMAND} \
-    --no-daemon --info --warning-mode all --gradle-user-home "${USER_HOME}/.gradle" \
-    -PFFMPEG_KIT_NAMESPACE="${FFMPEG_KIT_NAMESPACE}" \
-    -PANDROID_NDK="${ANDROID_NDK}" \
-    -PANDROID_API_LEVEL="${ANDROID_API_LEVEL}" \
-    -PFFMPEG_KIT_VERSION_CODE="${FFMPEG_KIT_VERSION_CODE}" \
-    -PFFMPEG_KIT_VERSION="${FFMPEG_KIT_VERSION}" \
-    -PFFMPEG_KIT_JNI_LIBS_DIR="${FFMPEG_KIT_JNI_LIBS_DIR}" \
-    -PFFMPEG_KIT_OUTPUT_NAME="${FFMPEG_KIT_OUTPUT_NAME}" \
-    -POSSRH_USERNAME="${OSSRH_USERNAME}" \
-    -PFFMPEG_KIT_ARCHES="$aar_arch" \
-    -POSSRH_PASSWORD="${OSSRH_PASSWORD}" > >(redirect_output); } || { echo "Failed to create AAR for ${FFMPEG_KIT_OUTPUT_NAME}"; exit 1; }
-    echo
 }

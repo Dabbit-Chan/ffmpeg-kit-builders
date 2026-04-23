@@ -85,7 +85,7 @@ def parse_logs_by_line(log_paths):
                     else:
                         continue
                         
-                match_sym = re.search(r"used\s+(\w+)\s+'", line)
+                match_sym = re.search(r"\s(\w+)\s+'", line)
                 if match_sym:
                     line_patches[current_file][line_num].add(match_sym.group(1))
     return line_patches

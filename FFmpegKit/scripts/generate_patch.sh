@@ -5,8 +5,8 @@
 # Usage: ./generate_patch.sh <INPUT_FILE> [FFMPEG_SRC_DIR] [CURRENT_SOURCE_DIR]
 # Example: ./generate_patch.sh ffmpeg.c
 # Output: ./patches/ffmpeg.c.patch
-# FFMPEG_SRC_DIR: Path to the ffmpeg source directory (default: /home/vscode/ffmpeg-kit-builders/prebuilt/src/ffmpeg)
-# CURRENT_SOURCE_DIR: Path to the current source directory (default: /home/vscode/ffmpeg-kit-builders/FFmpegKit/src)
+# FFMPEG_SRC_DIR: Path to the ffmpeg source directory (default: ~/ffmpeg-kit-builders/prebuilt/src/ffmpeg)
+# CURRENT_SOURCE_DIR: Path to the current source directory (default: ~/ffmpeg-kit-builders/FFmpegKit/src)
 ##
 
 set -e

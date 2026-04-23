@@ -30,8 +30,23 @@ for arg in "$@"; do
 			verbose=true
 			set -x
 			;;
+		-e|--exclude=*)
+			# comma separated list of libraries to exclude from bundling
+			ex_libs="${arg#*=}"
+			IFS=',' read -ra EXCLUDE_LIBS <<< "$ex_libs"
+			;;
 	esac
 done
+
+is_excluded() {
+	local lib="$1"
+	for excluded_lib in "${EXCLUDE_LIBS[@]}"; do
+		if [[ "$lib" == "$excluded_lib" ]]; then
+			return 0
+		fi
+	done
+	return 1
+}
 
 rm -f bundle_manifest.txt
 
@@ -105,6 +120,10 @@ process_library_path() {
 			if is_system_path "$lib_path"; then
 				raw_libs_to_keep="$raw_libs_to_keep -l$name"
 			else
+				if is_excluded "$name"; then
+					echo_log "  [EXCLUDED] $filename"
+					return
+				fi
 				real_path=$(readlink -f "$lib_path" 2>/dev/null || echo "$lib_path")
 				echo "  [FOUND SHARED] $filename -> $real_path"
 				echo "$real_path" >>bundle_manifest.txt
@@ -116,6 +135,10 @@ process_library_path() {
 				echo_log "  [DEBUG] $filename is symlink"
 				target=$(readlink -f "$lib_path")
 				if [[ "$target" == *.so || "$target" == *.dll || "$target" == *.dylib ]]; then
+					if is_excluded "$name"; then
+						echo_log "  [EXCLUDED] $filename"
+						return
+					fi
 					echo "  [FOUND SHARED VIA SYMLINK] $filename -> $(basename "$target")"
 					echo "$target" >> bundle_manifest.txt
 					raw_libs_to_keep="$raw_libs_to_keep -l$name"
@@ -142,6 +165,10 @@ process_library_path() {
 				fi
 			done
 			if [ -n "$found_dll" ]; then
+				if is_excluded "$name"; then
+					echo_log "  [EXCLUDED] $filename"
+					return
+				fi
 				real_path=$(readlink -f "$found_dll" 2>/dev/null || echo "$found_dll")
 				echo "  [FOUND SHARED] $(basename "$found_dll") (via $filename)"
 				echo "$real_path" >>bundle_manifest.txt

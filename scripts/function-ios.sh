@@ -26,9 +26,7 @@ configure_ffmpeg_kit() {
 	change_dir "${ffmpeg_kit_src_dir}"
 	make distclean > >(redirect_output) 2>&1
 
-  local cmake_params="-DCMAKE_SYSTEM_NAME=iOS \
--DCMAKE_C_COMPILER=$CC \
--DCMAKE_CXX_COMPILER=$CXX \
+  local cmake_params="-DCMAKE_TOOLCHAIN_FILE=$(get_generic_cmake_toolchain) \
 -DFFMPEG_SRC_DIR=\"$ffmpeg_source_dir\" \
 -DFFMPEG_BUILD_DIR=\"$ffmpeg_install_prefix\" \
 -DCMAKE_INSTALL_PREFIX=\"$ffmpeg_kit_install\" \
@@ -301,4 +299,46 @@ get_generic_cmake_toolchain() {
 				echo "set($key \"${cmake_config[$key]}\")" >> "$toolchain_path"
 		done
 		echo "$toolchain_path"
+}
+
+create_ios_xcframework() {
+  local bundle_pfx="$(get_bundle_type)"
+  local license_pfx="$(get_bundle_license)"
+  local kit_dir=$(get_ffmpeg_kit_directory)
+  local small_pfx=""
+  local debug_pfx=""
+  if truthy "$do_debug_build"; then
+    debug_pfx="-debug"
+  fi
+  if truthy "$build_small"; then
+    small_pfx="-small"
+  fi
+  local lib_ext=".dylib"
+  if [[ "$build_ffmpeg_kit_type" == "static" ]]; then
+    lib_ext=".a"
+  fi
+
+  # Determine platform name for output
+  local platform_name="ios"
+  if isiossimulator; then
+    platform_name="iphonesimulator"
+  fi
+
+  # Create staging directory for this platform-arch
+  local staging_dir="${WORKDIR}/apple/xcframework-staging/${platform_name}-${host_arch}"
+  if [[ -d "${staging_dir}" ]]; then
+    rm -rf "${staging_dir}"
+  fi
+  mkdir -p "${staging_dir}/Headers/json"
+
+  # Copy library and headers
+  {
+    cp -fv "${work_dir}/${kit_dir}/lib/"* "${staging_dir}"
+    cp -fv "${ffmpeg_kit_install}/include/"* "${staging_dir}/Headers"
+    cp -fv "${work_dir}/${kit_dir}/include/"* "${staging_dir}/Headers"
+    cp -fv "${dependency_install_prefix}/include/json/"* "${staging_dir}/Headers/json"
+  } > >(redirect_output) 2>&1
+
+  echo "INFO: Created iOS XCFramework staging for ${platform_name}-${host_arch}"
+  echo "INFO: Staging directory: ${staging_dir}"
 }

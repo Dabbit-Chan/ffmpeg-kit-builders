@@ -186,3 +186,39 @@ EOF
 			echo "$base_filepath"
 	fi
 }
+
+create_macos_xcframework() {
+  local bundle_pfx="$(get_bundle_type)"
+  local license_pfx="$(get_bundle_license)"
+  local kit_dir=$(get_ffmpeg_kit_directory)
+  local small_pfx=""
+  local debug_pfx=""
+  if truthy "$do_debug_build"; then
+    debug_pfx="-debug"
+  fi
+  if truthy "$build_small"; then
+    small_pfx="-small"
+  fi
+  local lib_ext=".dylib"
+  if [[ "$build_ffmpeg_kit_type" == "static" ]]; then
+    lib_ext=".a"
+  fi
+
+  # Create staging directory for this platform-arch
+  local staging_dir="${WORKDIR}/apple/xcframework-staging/macos-${host_arch}"
+  if [[ -d "${staging_dir}" ]]; then
+    rm -rf "${staging_dir}"
+  fi
+  mkdir -p "${staging_dir}/Headers/json"
+
+  # Copy library and headers
+  {
+    find "${work_dir}/${kit_dir}/lib" -exec cp -fv {} "${staging_dir}" \;
+    find "${ffmpeg_kit_install}/include" -exec cp -fv {} "${staging_dir}/Headers" \;
+    find "${work_dir}/${kit_dir}/include" -exec cp -fv {} "${staging_dir}/Headers" \;
+    find "${dependency_install_prefix}/include/json" -exec cp -fv {} "${staging_dir}/Headers/json" \;
+  } > >(redirect_output) 2>&1
+
+  echo "INFO: Created macOS XCFramework staging for macos-${host_arch}"
+  echo "INFO: Staging directory: ${staging_dir}"
+}

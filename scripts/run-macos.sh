@@ -327,7 +327,7 @@ build_lzma() {
 build_sdl2() {
   local lib="sdl2"
   local repo="https://github.com/libsdl-org/SDL"
-  local repo_ver="release-2.32.8"
+  local repo_ver="release-3.4.4"
   change_dir "$src_dir"
   do_git_checkout "$repo" "$src_dir/$lib" "$repo_ver"
   change_dir "$src_dir/$lib/build" 1
@@ -634,6 +634,7 @@ build_libpng() {
   local cmake_args="-DPNG_STATIC=ON \
 -DPNG_TESTS=OFF \
 -DPNG_TOOLS=OFF \
+-DPNG_FRAMEWORK=OFF \
 -DPNG_TARGET_ARCHITECTURE=$host_arch \
 -DPNG_EXECUTABLES=OFF"
   if [[ $host_arch == "arm64" ]]; then
@@ -649,6 +650,7 @@ build_libpng() {
   reset_cppflags
   reset_ldflags
   unset CPATH
+  find "$dependency_install_prefix/lib" -name "libpng*.dylib" -delete
   change_dir "$src_dir"
 }
 # build_libaribb24        # config_options+= --enable-libaribb24          # enable ARIB text and caption decoding via libaribb24 [no]
@@ -687,11 +689,15 @@ build_libass() {
   local repo_ver="0.17.4"
   if [[ "$host_arch" == "x86_64" ]]; then
     export AS=nasm
+  else
+    get_gas_preprocessor
+    export AS="gas-preprocessor.pl -arch $meson_cpu_family -- $(xcrun --sdk "$toolchain_sys" --find clang)"
   fi
   change_dir "$src_dir"
   do_git_checkout "$repo" "$src_dir/$lib" "$repo_ver"
   change_dir "$src_dir/$lib"
-  generic_configure
+  local config="--disable-shared --enable-static --host=$meson_cpu_family-apple-darwin"
+  generic_configure "$config"
   disable_nonessential "$src_dir/$lib"
   do_make_and_make_install
   change_dir "$src_dir"
@@ -707,6 +713,11 @@ build_libbluray() {
   change_dir "$src_dir"
   do_git_checkout "$repo" "$src_dir/$lib" "$repo_ver"
   change_dir "$src_dir/$lib"
+  # dec_init collides with ffmpeg
+  for file in $(find . -type f \( -name "*.h" -o -name "*.c" \) -exec grep -l "dec_init" {} +); do
+    echo "Patching $file" > >(redirect_output)
+    sed -i'.bak' 's/dec_init/libbluray_dec_init/g' "$file" > >(redirect_output) 2>&1 || exit_message 1 "Failed to patch $file"
+  done
   export LIBS="-lfontconfig -lfreetype -lz -llzma"
   export LDFLAGS="$LDFLAGS $LIBS"
   local meson_options="-Denable_examples=false \
@@ -1497,6 +1508,7 @@ Libs: -L\${libdir} -lintl -liconv
 Cflags: -I\${includedir} -Dlibintl_STATIC
 EOF
   change_dir "$src_dir/$lib/libtextstyle"
+  touch "no.autoreconf"
   generic_configure "$config \
 CFLAGS=\"$cflags\" \
 LIBS=\"$LIBS\""
@@ -1694,6 +1706,7 @@ build_liboapv() {
   do_make_and_make_install
   sed -i'.bak' 's|libdir=.*|libdir=\${prefix}/lib/oapv|g' "$install_pkgconfig_dir/oapv.pc"
   sed -i'.bak' 's|includedir=.*|includedir=\${prefix}/include|g' "$install_pkgconfig_dir/oapv.pc"
+  ln -sf "$dependency_install_prefix/lib/oapv/liboapv.a" "$dependency_install_prefix/lib/liboapv.a"
   change_dir "$src_dir"
 }
 # build_libopencv         # config_options+= --enable-libopencv           # enable video filtering via libopencv [no]
@@ -2238,6 +2251,23 @@ build_pango() {
     unset LIBS
     reset_allflags
 }
+build_gdk_pixbuf() {
+  activate_meson
+  local lib="gdk-pixbuf"
+  local repo="https://gitlab.gnome.org/GNOME/gdk-pixbuf"
+  local repo_ver="2.44.6"
+  change_dir "$src_dir"
+  do_git_checkout "$repo" "$src_dir/$lib" "$repo_ver"
+  change_dir "$src_dir/$lib"
+  local meson_options="-Dintrospection=disabled \
+-Dman=false \
+-Dtests=false \
+-Dinstalled_tests=false"
+  generic_meson "$meson_options"
+  do_ninja_and_ninja_install
+  change_dir "$src_dir"
+}
+
 # build_librsvg           # config_options+= --enable-librsvg             # enable SVG rasterization via librsvg [no]
 build_librsvg() {
   # run_valid_function "build_pango"
@@ -2248,6 +2278,8 @@ build_librsvg() {
   change_dir "$src_dir"
   do_git_checkout "$repo" "$src_dir/$lib" "$repo_ver"
   change_dir "$src_dir/$lib"
+  min_ver="-mmacosx-version-min=$MIN_MACOS_VERSION"
+  target_min="$host_arch-apple-macos$MIN_MACOS_VERSION"
   local meson_options="-Ddocs=disabled \
 -Dintrospection=disabled \
 -Dvala=disabled \
@@ -2255,22 +2287,31 @@ build_librsvg() {
 -Dpixbuf-loader=disabled \
 -Dtests=false \
 -Drsvg-convert=disabled \
+--wrap-mode=nofallback \
 -Dtriplet=$rust_target \
--Dc_args=\"-arch $host_arch -I${dependency_install_prefix}/include -isysroot ${SDKROOT} -DGLIB_STATIC_COMPILATION\" \
--Dcpp_args=\"-arch $host_arch -I${dependency_install_prefix}/include -isysroot ${SDKROOT} -DGLIB_STATIC_COMPILATION\" \
--Dc_link_args=\"-arch $host_arch -L${dependency_install_prefix}/lib -lresolv -isysroot ${SDKROOT}\" \
--Dcpp_link_args=\"-arch $host_arch -L${dependency_install_prefix}/lib -lresolv -isysroot ${SDKROOT}\""
+-Dc_args=\"-arch $host_arch -I${dependency_install_prefix}/include -target $target_min $min_ver -isysroot ${SDKROOT} -DGLIB_STATIC_COMPILATION\" \
+-Dcpp_args=\"-arch $host_arch -I${dependency_install_prefix}/include -target $target_min $min_ver -isysroot ${SDKROOT} -DGLIB_STATIC_COMPILATION\" \
+-Dc_link_args=\"-arch $host_arch -L${dependency_install_prefix}/lib -target $target_min $min_ver -lresolv -isysroot ${SDKROOT}\" \
+-Dcpp_link_args=\"-arch $host_arch -L${dependency_install_prefix}/lib -target $target_min $min_ver -lresolv -isysroot ${SDKROOT}\""
   generic_meson "$meson_options"
   do_ninja_and_ninja_install
   change_dir "$src_dir"
   add_libs_to_pkg -t="$install_pkgconfig_dir/librsvg-2.0.pc" -l="-lresolv"
   if [[ $host_arch == "x86_64" ]]; then
     # png.o always compiles to arm64 for some reason. remove png.o and thin the library
-    if ar t $dependency_install_prefix/lib/librsvg-2.a | grep png.o > /dev/null; then
-      ar d $dependency_install_prefix/lib/librsvg-2.a png.o > >(redirect_output) || exit_message 1 "Failed to remove incorrectly compiled png.o from librsvg-2.a"
+    if "$AR" t $dependency_install_prefix/lib/librsvg-2.a | grep png.o > /dev/null; then
+      "$AR" d $dependency_install_prefix/lib/librsvg-2.a png.o > >(redirect_output) || exit_message 1 "Failed to remove incorrectly compiled png.o from librsvg-2.a"
       lipo $dependency_install_prefix/lib/librsvg-2.a -thin x86_64 -output $dependency_install_prefix/lib/librsvg-2.a.thin > >(redirect_output) || exit_message 1 "Failed to thin librsvg-2.a"
       mv -f $dependency_install_prefix/lib/librsvg-2.a.thin $dependency_install_prefix/lib/librsvg-2.a > >(redirect_output) || exit_message 1 "Failed to replace librsvg-2.a with thin version"
     fi
+  fi
+  # gcocoanotificationbackend gets merged into librsvg for some reason and causes duplicate symbol issues
+  mapfile -t OBJ_COUNT <<< "$($AR t $dependency_install_prefix/lib/librsvg-2.a | grep gcocoanotificationbackend.m.o)"
+  if [[ -n "${OBJ_COUNT[0]}" ]]; then
+    for obj in "${OBJ_COUNT[@]}"; do
+      echo "Removing $obj from librsvg-2.a"
+      "$AR" d "$dependency_install_prefix/lib/librsvg-2.a" "$obj" > >(redirect_output) || exit_message 1 "Failed to remove incorrectly compiled $obj from librsvg-2.a"
+    done
   fi
 }
 # build_librtmp           # config_options+= --enable-librtmp             # enable RTMP[E] support via librtmp [no]
@@ -2348,8 +2389,11 @@ build_libshaderc() {
   if [[ -f "$src_dir/$lib/build/libshaderc_util/libshaderc_util.a" ]] ; then
     copy_path "$src_dir/$lib/build/libshaderc_util/libshaderc_util.a" "$dependency_install_prefix/lib/libshaderc_util.a" >>"$LOG_FILE"
   fi
-  sed -i'.bak' "s/Libs: .*/& -lstdc++/" "$install_pkgconfig_dir/shaderc_combined.pc"
-  sed -i'.bak' "s/Libs: .*/& -lstdc++/" "$install_pkgconfig_dir/shaderc_static.pc"
+  sed -i'.bak' "s/Libs: .*/& -lstdc++/g" "$install_pkgconfig_dir/shaderc_combined.pc"
+  sed -i'.bak' "s/Libs: .*/& -lstdc++/g" "$install_pkgconfig_dir/shaderc_static.pc"
+  sed -i'.bak' "s/-lshaderc_shared/-lshaderc -lshaderc_util/g" "$install_pkgconfig_dir/shaderc.pc"
+  add_libs_to_pkg -t="$install_pkgconfig_dir/shaderc.pc" -l="-lglslang -lSPIRV -lSPIRV-Tools -lSPIRV-Tools-opt"
+  find "$dependency_install_prefix/lib" -name 'libshaderc*.dylib' -delete
   change_dir "$src_dir"
 }
 # build_libshine          # config_options+= --enable-libshine            # enable fixed-point MP3 encoding via libshine [no]
@@ -2567,6 +2611,30 @@ build_libsvtav1() {
       echo -e "WARNING: 32bit not supported" >>"$LOG_FILE"
     fi
 }
+# need to build manually because bundled lib with openvino is incompatible with flutter for apple framework for some reason
+build_libtbb() {
+  # run_valid_function "build_openssl" 1
+  # run_valid_function "build_zlib" 1
+  local lib="libtbb"
+  local repo="https://github.com/uxlfoundation/oneTBB"
+  local repo_ver=" v2021.13.0" 
+  change_dir "$src_dir"
+  do_git_checkout "$repo" "$src_dir/$lib" "$repo_ver"
+  change_dir "$src_dir/$lib/build" 1
+  local cmake_params="-DBUILD_SHARED_LIBS=ON \
+-DTBB_TEST=OFF \
+-DTBB_EXAMPLES=OFF"
+  do_cmake_from_build_dir "$src_dir/$lib" "$cmake_params"
+  disable_nonessential "$src_dir/$lib/build"
+  do_make_and_make_install
+  find "$dependency_install_prefix/lib" -type l -name "libtbb.*dylib" -delete
+  for file in $(find "$dependency_install_prefix/lib" -type f -name "libtbb.*dylib"); do
+    if [[ $(basename "$file") != "libtbb.dylib" ]]; then
+      mv -f "$file" "$(dirname "$file")/libtbb.dylib"
+    fi
+  done
+  change_dir "$src_dir"
+}
 # build_libopenvino       # config_options+= --enable-libopenvino         # enable OpenVINO as a DNN module backend for DNN based filters like dnn_processing [no]
 build_libopenvino() {
   local base_lib="libopenvino"
@@ -2602,14 +2670,11 @@ build_libopenvino() {
       download_and_unpack_file "$repo" "$lib"
       change_dir "$src_dir/$lib"
       find "$src_dir/$lib/runtime/lib/$lib_arch/Release" -type l -delete
-      find "$src_dir/$lib/runtime/3rdparty/tbb/lib" -type l -delete
       # rename to remove version number from the library name, ex:
       # libopenvino_c.2600.dylib -> libopenvino_c.dylib
       # libopenvino.2600.dylib -> libopenvino.dylib
       # libopenvino_ir_frontend.2600.dylib -> libopenvino_ir_frontend.dylib etc..
       find "$src_dir/$lib/runtime/lib/$lib_arch/Release" -type f -name "*.dylib" \
-          -exec sh -c 'for f;do d=${f%/*};b=${f##*/};n=$(printf %s "$b"|sed -E "s/(\.[0-9]+)+\.dylib$/.dylib/");[ "$b" != "$n" ]&&mv -n "$f" "$d/$n";done' _ {} +
-      find "$src_dir/$lib/runtime/3rdparty/tbb/lib" -type f -name "*.dylib" \
           -exec sh -c 'for f;do d=${f%/*};b=${f##*/};n=$(printf %s "$b"|sed -E "s/(\.[0-9]+)+\.dylib$/.dylib/");[ "$b" != "$n" ]&&mv -n "$f" "$d/$n";done' _ {} +
       # # 1. Install Main OpenVINO
       install_prebuilt_binary \
@@ -2620,15 +2685,6 @@ build_libopenvino() {
           -B="runtime/bin/$lib_arch/Release" \
           -m="$manifest" \
           -d="OpenVINO Toolkit" || exit_message 1 "could not install $lib_name"
-      # 2. Install TBB Dependency
-      install_prebuilt_binary \
-          -n="tbb" -v="$repo_ver" \
-          -s="$src_dir/$lib" \
-          -I="runtime/3rdparty/tbb/include" \
-          -L="runtime/3rdparty/tbb/lib" \
-          -B="runtime/3rdparty/tbb/bin" \
-          -m="$manifest" \
-          -d="Threading Building Blocks for OpenVINO" || exit_message 1 "could not install $lib_name"
       create_touch_file 0 "$touch_name"
       echo "$src_dir/$lib/$touch_name" >>"$manifest"
       # patch winodws BOOLEAN conflict
@@ -2678,7 +2734,6 @@ build_libtorch() {
       find "$src_dir/$lib/lib" -type f -name "libgtest*" -exec rm -f {} +
       find "$src_dir/$lib/lib" -type f -name "libbenchmark*" -exec rm -f {} +
       find "$src_dir/$lib/lib" -type f -name "libhwy*" -exec rm -f {} +
-      # find "$src_dir/$lib/lib" -type f -name "libomp*" -exec rm -f {} +
       find "$src_dir/$lib/lib" -type f -name "libclog*" -exec rm -f {} +
       install_prebuilt_binary \
           -n="$base_lib" -v="$repo_ver" \
@@ -2694,6 +2749,10 @@ build_libtorch() {
   sed -i '.bak' -e ':a' -e 'N' -e '$!ba' -e 's/\n-l/ -l/g' "$install_pkgconfig_dir/$base_lib.pc"
   sed -i '.bak' -E 's/\.a//g' "$install_pkgconfig_dir/$base_lib.pc"
   sed -i'.bak' -E 's/-lunbox_ /-lunbox_lib /g' "$install_pkgconfig_dir/$base_lib.pc" # unbox_lib becomes unbox_ for some reason
+  if [[ $host_arch == "arm64" ]]; then
+    # libomp needs a .pc file
+    generate_pkg_config -l="-lomp" -o="$install_pkgconfig_dir/libomp.pc" -i="$dependency_install_prefix" -n="libomp"
+  fi
 }
 # build_libtensorflow     # config_options+= --enable-libtensorflow       # enable TensorFlow as a DNN module backend for DNN based filters like sr [no]
 build_libtensorflow() {
@@ -2736,11 +2795,11 @@ build_libtensorflow() {
           -L="lib" \
           -m="$manifest" \
           -d="TensorFlow C Library" || exit_message 1 "could not install $base_lib"
-
       change_dir "$src_dir/$lib"
       create_touch_file 0 "$touch_name"
       echo "$src_dir/$lib/$touch_name" >>"$manifest"
   fi
+  add_libs_to_pkg -t="$install_pkgconfig_dir/$base_lib.pc" -l="-ltensorflow -ltensorflow_framework"
 }
 build_libdeflate() {
   local lib="libdeflate"
@@ -3034,7 +3093,9 @@ build_libtesseract() {
   change_dir "$src_dir"
   do_git_checkout "$repo" "$src_dir/$lib" "$repo_ver"
   change_dir "$src_dir/$lib"
-  export LDFLAGS="${LDFLAGS} -Wl,-undefined,dynamic_lookup -lleptonica"
+  export LDFLAGS="${LDFLAGS} -lleptonica -lz -larchive -ltiff -lpng16 \
+        -ljpeg -lgif -lwebpmux -lwebp -lopenjp2 -ljbig -lLerc \
+        -lsharpyuv -llzma -lzstd -ldeflate"
   generic_configure "--disable-openmp \
 --with-archive \
 --disable-graphics \
@@ -4049,7 +4110,7 @@ build_whisper() {
   disable_nonessential "$src_dir/$lib/build"
   do_make_and_make_install
   while IFS= read -r -d '' file; do
-    add_libs_to_pkg -t="$file" -l="-lwhisper -lggml -lggml-base -lggml-cpu -lggml-blas -lggml-metal -lomp -lpthread"
+    add_libs_to_pkg -t="$file" -l="-lwhisper -lggml -lggml-base -lggml-cpu -lggml-blas -lggml-metal ${dependency_install_prefix}/lib/libomp.a -lpthread"
     sed -i'.bak' 's/-lwhisper/-lwhisper -framework Accelerate -framework Metal -framework MetalKit -framework Foundation /g' "$file"
   done < <(find "$install_pkgconfig_dir" -name "whisper*.pc" -print0)
   change_dir "$src_dir"

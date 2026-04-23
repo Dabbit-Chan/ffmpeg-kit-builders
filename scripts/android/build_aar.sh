@@ -267,13 +267,13 @@ for arg; do
       echo "                Valid architectures: ${VALID_ARCHS[*]}"
       echo "                Valid platform and arch combinations: ${VALID_PLATFORM_ARCHS[*]}"
       echo "  --reset       Reset build state and start from beginning"
-      echo "  --bundles=*   Comma separated (without spaces) list of bundles to build (e.g. --bundles=debug,full,base,audio,video,video_hw)"
+      echo "  --bundle=*    Comma separated (without spaces) list of bundles to build (e.g. --bundle=debug,full,base,audio,video,video_hw)"
       echo "                Valid bundles: ${VALID_TYPES[*]}"
       echo "  --help        Show this help message"
       echo ""
       echo "State file location: ${STATE_FILE}"
       exit 0;;
-    --bundles=*) 
+    --bundle=*) 
       #comma separated list of bundles to build
       parse_bundles "${arg#*=}"
       shift;;
@@ -423,7 +423,7 @@ for key in "${!PLATFORMS[@]}"; do
                   echo "Package ${FFMPEG_KIT_NAMESPACE}-${FFMPEG_KIT_OUTPUT_NAME} version $FFMPEG_KIT_VERSION already exists, skipping..." > >(redirect_output)
                 else
                   { ./gradlew :tools:android:${GRADLE_COMMAND} \
-                  --no-daemon --info --warning-mode all --gradle-user-home /home/vscode/.gradle \
+                  --no-daemon --info --warning-mode all --gradle-user-home ~/.gradle \
                   -PFFMPEG_KIT_NAMESPACE="${FFMPEG_KIT_NAMESPACE}" \
                   -PANDROID_NDK="${ANDROID_NDK}" \
                   -PANDROID_API_LEVEL="${ANDROID_API_LEVEL}" \

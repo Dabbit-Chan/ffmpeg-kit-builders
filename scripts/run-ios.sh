@@ -313,7 +313,7 @@ build_lzma() {
 build_sdl2() {
   local lib="sdl2"
   local repo="https://github.com/libsdl-org/SDL"
-  local repo_ver="release-2.32.8"
+  local repo_ver="release-3.4.4"
   change_dir "$src_dir"
   do_git_checkout "$repo" "$src_dir/$lib" "$repo_ver"
   change_dir "$src_dir/$lib/build" 1
@@ -627,6 +627,7 @@ build_libpng() {
   local cmake_args="-DPNG_STATIC=ON \
 -DPNG_TESTS=OFF \
 -DPNG_TOOLS=OFF \
+-DPNG_FRAMEWORK=OFF \
 -DZLIB_LIBRARY=${dependency_install_prefix}/lib/libz.a \
 -DZLIB_INCLUDE_DIR=${dependency_install_prefix}/include \
 -DPNG_TARGET_ARCHITECTURE=$host_arch"
@@ -676,18 +677,42 @@ build_libaribcaption() {
 build_libass() {
   # run_valid_function "build_libfribidi"
   # run_valid_function "build_libharfbuzz"
+  activate_meson
   local lib="libass"
   local repo="https://github.com/libass/libass"
   local repo_ver="0.17.4"
   if [[ "$host_arch" == "x86_64" ]]; then
     export AS=nasm
+  else
+    get_gas_preprocessor
+    export AS="'gas-preprocessor.pl -arch $meson_cpu_family -- $(xcrun --sdk "$toolchain_sys" --find clang)'"
   fi
   change_dir "$src_dir"
   do_git_checkout "$repo" "$src_dir/$lib" "$repo_ver"
   change_dir "$src_dir/$lib"
-  generic_configure
+  local config="--disable-shared --enable-static"
+  if [[ $host_arch == "arm64" ]]; then
+    config+=" --enable-neon"
+  fi
+  if isiossimulator; then
+    config+=" --host=$meson_cpu_family-apple-ios-simulator"
+  else
+    config+=" --host=$meson_cpu_family-apple-$host_platform"
+  fi
+  # generic_configure "$config"
+  # disable_nonessential "$src_dir/$lib"
+  # do_make_and_make_install
+  local meson_options=" -Dtest=disabled \
+-Dcompare=disabled \
+-Dprofile=disabled \
+-Dfuzz=disabled \
+-Dcheckasm=disabled \
+-Dcoretext=enabled \
+-Dasm=enabled"
+  sed -i'.bak' -e "s/== 'darwin'/ in ['darwin', 'ios', 'ios-simulator']/g" "$src_dir/$lib/meson.build"
+  generic_meson "$meson_options"
   disable_nonessential "$src_dir/$lib"
-  do_make_and_make_install
+  do_ninja_and_ninja_install
   change_dir "$src_dir"
   set_toolchain_paths
 }
@@ -805,6 +830,9 @@ build_libdav1d() {
   change_dir "$src_dir"
   do_git_checkout "$repo" "$src_dir/$lib" "$repo_ver"
   change_dir "$src_dir/$lib"
+  if isiossimulator; then
+  sed -i'.bak' -e "s/'ios'/'ios', 'ios-simulator'/g" "$src_dir/$lib/meson.build"
+  fi
   local meson_options=" -Denable_tools=false -Denable_examples=false -Denable_tests=false"
   generic_meson "$meson_options"
   disable_nonessential "$src_dir/$lib"
@@ -1684,6 +1712,7 @@ build_liboapv() {
   do_make_and_make_install
   sed -i'.bak' 's|libdir=.*|libdir=\${prefix}/lib/oapv|g' "$install_pkgconfig_dir/oapv.pc"
   sed -i'.bak' 's|includedir=.*|includedir=\${prefix}/include|g' "$install_pkgconfig_dir/oapv.pc"
+  ln -sf "$dependency_install_prefix/lib/oapv/liboapv.a" "$dependency_install_prefix/lib/liboapv.a"
   change_dir "$src_dir"
 }
 # build_libopencv         # config_options+= --enable-libopencv           # enable video filtering via libopencv [no]
@@ -2273,8 +2302,9 @@ build_librsvg() {
   generic_meson "$meson_options"
   do_ninja_and_ninja_install
   change_dir "$src_dir"
+  add_libs_to_pkg -t="$install_pkgconfig_dir/librsvg-2.0.pc" -p="-lresolv"
+  sed -i'.bak' 's/-lrsvg-2/-lrsvg-2 -framework CoreFoundation/g' "$install_pkgconfig_dir/librsvg-2.0.pc"
   if [[ $host_arch == "x86_64" ]]; then
-    add_libs_to_pkg -t="$install_pkgconfig_dir/librsvg-2.0.pc" -p="-lresolv"
     # png.o always compiles to arm64 for some reason. remove png.o and thin the library
     if ar t $dependency_install_prefix/lib/librsvg-2.a | grep png.o > /dev/null; then
       ar d $dependency_install_prefix/lib/librsvg-2.a png.o > >(redirect_output) || exit_message 1 "Failed to remove incorrectly compiled png.o from librsvg-2.a"
@@ -2358,8 +2388,11 @@ build_libshaderc() {
   if [[ -f "$src_dir/$lib/build/libshaderc_util/libshaderc_util.a" ]] ; then
     copy_path "$src_dir/$lib/build/libshaderc_util/libshaderc_util.a" "$dependency_install_prefix/lib/libshaderc_util.a" >>"$LOG_FILE"
   fi
-  sed -i'.bak' "s/Libs: .*/& -lstdc++/" "$install_pkgconfig_dir/shaderc_combined.pc"
-  sed -i'.bak' "s/Libs: .*/& -lstdc++/" "$install_pkgconfig_dir/shaderc_static.pc"
+  sed -i'.bak' "s/Libs: .*/& -lstdc++/g" "$install_pkgconfig_dir/shaderc_combined.pc"
+  sed -i'.bak' "s/Libs: .*/& -lstdc++/g" "$install_pkgconfig_dir/shaderc_static.pc"
+  sed -i'.bak' "s/-lshaderc_shared/-lshaderc -lshaderc_util/g" "$install_pkgconfig_dir/shaderc.pc"
+  add_libs_to_pkg -t="$install_pkgconfig_dir/shaderc.pc" -l="-lglslang -lSPIRV -lSPIRV-Tools -lSPIRV-Tools-opt"
+  find "$dependency_install_prefix/lib" -name 'libshaderc*.dylib' -delete
   change_dir "$src_dir"
 }
 # build_libshine          # config_options+= --enable-libshine            # enable fixed-point MP3 encoding via libshine [no]
@@ -2892,7 +2925,9 @@ build_libtesseract() {
   change_dir "$src_dir"
   do_git_checkout "$repo" "$src_dir/$lib" "$repo_ver"
   change_dir "$src_dir/$lib"
-  export LDFLAGS="${LDFLAGS} -Wl,-undefined,dynamic_lookup -lleptonica"
+  export LDFLAGS="${LDFLAGS} -lleptonica -lz -larchive -ltiff -lpng16 \
+        -ljpeg -lgif -lwebpmux -lwebp -lopenjp2 -ljbig -lLerc \
+        -lsharpyuv -llzma -lzstd -ldeflate"
   generic_configure "--disable-openmp \
 --with-archive \
 --disable-graphics \
@@ -3918,7 +3953,7 @@ build_whisper() {
   disable_nonessential "$src_dir/$lib/build"
   do_make_and_make_install
   while IFS= read -r -d '' file; do
-    add_libs_to_pkg -t="$file" -l="-lwhisper -lggml -lggml-base -lggml-cpu -lggml-blas -lggml-metal -lomp -lpthread"
+    add_libs_to_pkg -t="$file" -l="-lwhisper -lggml -lggml-base -lggml-cpu -lggml-blas -lggml-metal ${dependency_install_prefix}/lib/libomp.a -lpthread"
     sed -i'.bak' 's/-lwhisper/-lwhisper -framework Accelerate -framework Metal -framework MetalKit -framework Foundation /g' "$file"
   done < <(find "$install_pkgconfig_dir" -name "whisper*.pc" -print0)
   change_dir "$src_dir"

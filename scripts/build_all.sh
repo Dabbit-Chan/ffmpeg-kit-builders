@@ -41,11 +41,13 @@ deps=""
 bundles=""
 reset_state=false
 VALID_TYPES=("full" "video_hw" "video" "audio" "base" "debug")
-VALID_PLATFORMS=("linux" "windows" "android")
-VALID_PLATFORM_ARCHS=("linux-x86_64" "windows-x86_64" "android-aarch64" "android-armv7a" "android-x86_64")
+VALID_PLATFORMS=("linux" "windows" "android" "ios" "iphonesimulator" "macos")
+VALID_PLATFORM_ARCHS=("linux-x86_64" "windows-x86_64" "android-aarch64" "android-armv7a" "android-x86_64" "ios-aarch64" "iphonesimulator-aarch64" "macos-aarch64" "macos-x86_64")
 VALID_BUILDS=("ffmpeg" "kit" "bundle")
 ANDROID_PLATFORM_ARCHS=()
+APPLE_PLATFORM_ARCHS=()
 build_aars=false
+build_xcframeworks=false
 declare -A PLATFORMS
 build_ffmpeg=false
 build_kit=false
@@ -210,7 +212,7 @@ for arg; do
       echo "                Valid platform-arch combinations:       ${VALID_PLATFORM_ARCHS[*]}"
       echo "  --deps        Build dependencies first"
       echo "  --reset       Reset build state and start from beginning"
-      echo "  --bundles=*   Comma separated (without spaces) list of bundles to build (e.g. --bundles=debug,full,base,audio,video,video_hw)"
+      echo "  --bundle=*    Comma separated (without spaces) list of bundles to build (e.g. --bundle=debug,full,base,audio,video,video_hw)"
       echo "                Valid bundles: ${VALID_TYPES[*]}"
       echo "  --build=*     Comma separated (without spaces) list of builds to build (e.g. --build=ffmpeg,kit,bundle)"
       echo "                Valid builds: ${VALID_BUILDS[*]}"
@@ -221,7 +223,7 @@ for arg; do
       echo ""
       echo "State file location: ${STATE_FILE}"
       exit 0;;
-    --bundles=*)
+    --bundle=*)
       #comma separated list of bundles to build
       parse_bundles "${arg#*=}";;
     --build=*)
@@ -405,9 +407,51 @@ echo "========================================"
 
 rm -f "${STATE_FILE}"
 
+# Build AARs for Android platforms
 android_platforms=$(IFS=,; echo "${ANDROID_PLATFORM_ARCHS[*]}")
 
 if truthy "$build_aars" && truthy "$build_bundle"; then
   echo "Building AARs..."
   sudo -E bash -c "${WORK_DIR}/scripts/build_aar.sh --platform=${android_platforms} --bundles=${bundles}"
+fi
+
+# Build XCFrameworks for Apple platforms
+apple_platforms=""
+for platform in "${!PLATFORMS[@]}"; do
+  case "${platform}" in
+    "ios"|"iphonesimulator"|"macos")
+      IFS=',' read -ra arch_array <<< "${PLATFORMS[$platform]}"
+      for arch in "${arch_array[@]}"; do
+        if [[ -n "${apple_platforms}" ]]; then
+          apple_platforms="${apple_platforms},"
+        fi
+        apple_platforms="${apple_platforms}${platform}-${arch}"
+      done
+      ;;
+    *)
+      ;;
+  esac
+done
+
+if [[ -n "${apple_platforms}" ]] && truthy "$build_xcframeworks" && truthy "$build_bundle"; then
+  echo "========================================"
+  echo "Building XCFrameworks for Apple platforms"
+  echo "========================================"
+  echo "Platforms: ${apple_platforms}"
+  echo "Bundles: ${bundles}"
+  echo "========================================"
+  
+  sudo -E bash -c "${WORK_DIR}/scripts/apple/build_xcframework.sh --platform=${apple_platforms} --bundles=${bundles}"
+  
+  # Generate SPM and CocoaPods files
+  echo "Generating Swift Package Manager and CocoaPods files..."
+  sudo -E bash -c "${WORK_DIR}/scripts/apple/generate_spm_cocoapods.sh --bundles=${bundles}"
+  
+  echo "========================================"
+  echo "XCFramework build complete!"
+  echo "========================================"
+  echo "Output: ${WORK_DIR}/prebuilt/apple/xcframeworks/"
+  echo "SPM: ${WORK_DIR}/Package.swift"
+  echo "CocoaPods: ${WORK_DIR}/FFmpegKit.podspec"
+  echo "========================================"
 fi
