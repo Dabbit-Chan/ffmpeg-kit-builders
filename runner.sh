@@ -81,7 +81,7 @@ Bundle Presets (pre-defined collections of libraries to include in ffmpeg-kit bu
 
 Build Options:
 	--host-platform=|--host=(linux|windows)                       where the compiled program will run
-	--host-arch=|--arch=(i686|x86_64)                             host cpu architecture (32-bit or 64-bit)
+	--host-arch=|--arch=(i686|x86_64|arm64|armv7a|armv8a)          host cpu architecture (32-bit or 64-bit)
 	--ffmpeg-git-checkout-version=[release/8.0]                   if you want to build a particular version of FFmpeg, 
 	                                                              ex: n3.1.1 or a specific git hash
                                                                 WARNING: This will most likely break ffmpeg-kit libraries
