@@ -300,7 +300,9 @@ Shows which bundle first includes each library on Android, Linux, and Windows. `
 > - **Video+**: libx264, libx265, libdavs2, libdvdnav, libdvdread, libxavs, libxavs2, libxvid *(Linux)*, frei0r, libvidstab
 > - **Video+HW+**: v4l2-m2m *(Linux)*
 > - **Video+ (Windows only)**: avisy
-> - **AI**: libopenvino, and libtensorflow only available on Desktop builds (MacOS, Linux, and Windows). libtorch only availa
+> - **AI**: libopenvino, and libtensorflow only available on Desktop builds (MacOS, Linux, and Windows). libtorch only available on Linux and MacOs builds (Windows not supported due ABI mismatch).
+
+
 | Library                                                                                                                                                                                                                                                                                                                                                | Android | Linux | Windows |
 | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------- | ----- | ------- |
 | **System**                                                                                                                                                                                                                                                                                                                                             |         |       |         |
