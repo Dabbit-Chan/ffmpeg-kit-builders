@@ -313,7 +313,7 @@ build_lzma() {
 build_sdl2() {
   local lib="sdl2"
   local repo="https://github.com/libsdl-org/SDL"
-  local repo_ver="release-3.4.4"
+  local repo_ver="release-2.32.8"
   change_dir "$src_dir"
   do_git_checkout "$repo" "$src_dir/$lib" "$repo_ver"
   change_dir "$src_dir/$lib/build" 1
