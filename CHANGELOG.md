@@ -1,5 +1,11 @@
 # FFmpegKit Changelog
 
+## Version 0.10.0
+ 
+- **FFmpeg 8.1 Upgrade**: Upgraded FFmpeg from 8.0 to 8.1 with updated build patches and synchronized source files.
+- **Apple Platform Support**: Added full XCFramework build pipeline for iOS (device), iOS Simulator, and macOS (arm64, x86_64).
+- **FFplay Thread Timeout**: Added timeout handling for FFplay async thread operations.
+ 
 ## Version 0.9.1
 
 - **Android FFplay Video Output**: Implemented full video rendering on Android using SDL `dummy` video driver + `software` render driver. Each decoded frame is read from SDL's in-memory back-buffer via `SDL_RenderReadPixels` and blitted row-by-row to the registered `ANativeWindow` via `ANativeWindow_lock/post`. A `SDL_CreateWindow` interceptor in `ffplay_lib.c` logs dimensions and forwards to SDL without requiring `SDLActivity`. New `ffmpeg_kit_android.c` provides JNI glue that retains the `ANativeWindow` for the playback session.
