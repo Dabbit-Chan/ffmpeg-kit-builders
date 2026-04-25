@@ -88,9 +88,11 @@ typedef void (*MediaInformationSessionCompleteCallback)(
  * @param width     frame width in pixels
  * @param height    frame height in pixels
  * @param linesize  bytes per row
+ * @param format    pixel format string (e.g., "rgba", "bgra", etc.)
  */
 typedef void (*FFplayKitFrameCallback)(void *userdata, const uint8_t *pixels,
-                                       int width, int height, int linesize);
+                                       int width, int height, int linesize,
+                                       const char *format);
 
 // Enums
 typedef enum {

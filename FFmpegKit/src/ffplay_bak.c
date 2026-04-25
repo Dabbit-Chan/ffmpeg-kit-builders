@@ -67,6 +67,9 @@
 static void ffplay_reset_internal_state(void);
 static void ffplay_tls_init_options(void);
 
+extern void ffplay_lib_on_frame(const uint8_t *pixels, int width, int height,
+                                int linesize, const char *pixel_format);
+
 #define MAX_QUEUE_SIZE (15 * 1024 * 1024)
 #define MIN_FRAMES 25
 #define EXTERNAL_CLOCK_MIN_FRAMES 2
@@ -1178,6 +1181,12 @@ static void video_image_display(VideoState *is)
         }
         vp->uploaded = 1;
         vp->flip_v = vp->frame->linesize[0] < 0;
+
+        if (vp->frame->data[0]) {
+          ffplay_lib_on_frame(vp->frame->data[0], vp->frame->width,
+                              vp->frame->height, vp->frame->linesize[0],
+                              av_get_pix_fmt_name(vp->frame->format));
+          }
     }
 
     draw_video_background(is);

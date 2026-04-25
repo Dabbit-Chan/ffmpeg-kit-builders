@@ -1717,18 +1717,12 @@ void DLL_ALIGN ffplay_kit_set_android_surface_ptr(int64_t /*native_window_ptr*/)
 void DLL_ALIGN ffplay_kit_clear_android_surface(void) {}
 #endif /* __ANDROID__ */
 
-/* Desktop frame callback (Linux / Windows) */
-
-#if !defined(__ANDROID__)
-extern "C" void ffplay_set_frame_callback(
-    void (*cb)(void *, const uint8_t *, int, int, int), void *userdata);
-#endif
-
 void DLL_ALIGN ffplay_kit_register_frame_callback(
     FFplayKitFrameCallback callback, void *userdata) {
-#if !defined(__ANDROID__)
+#ifndef __ANDROID__
   ffplay_set_frame_callback(
-      reinterpret_cast<void (*)(void *, const uint8_t *, int, int, int)>(callback),
+      reinterpret_cast<void (*)(void *, const uint8_t *, int, int, int,
+                                const char *)>(callback),
       userdata);
 #else
   (void)callback;
@@ -1737,7 +1731,7 @@ void DLL_ALIGN ffplay_kit_register_frame_callback(
 }
 
 void DLL_ALIGN ffplay_kit_unregister_frame_callback(void) {
-#if !defined(__ANDROID__)
+#ifndef __ANDROID__
   ffplay_set_frame_callback(nullptr, nullptr);
 #endif
 }

@@ -17,7 +17,6 @@
  * along with FFmpegKit.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-
 #ifdef __MINGW32__
 #include "pthread_compat.h"
 #endif
@@ -33,18 +32,18 @@ extern "C" {
 }
 
 #include "ffmpeg_lib.h"
-#include "ffprobe_lib.h"
 #include "ffmpeg_tls.h"
+#include "ffprobe_lib.h"
 
 #include "ArchDetect.hpp"
 #include "FFmpegKitConfig.hpp"
 #include "FFmpegSession.hpp"
+#include "FFplaySession.hpp"
 #include "FFprobeSession.hpp"
 #include "Level.hpp"
 #include "LogRedirectionStrategy.hpp"
 #include "MediaInformationJsonParser.hpp"
 #include "MediaInformationSession.hpp" // Removed duplicate below
-#include "FFplaySession.hpp"
 #include "Packages.hpp"
 #include "SessionState.hpp"
 #include "ffplay_lib.h"
@@ -53,6 +52,7 @@ extern "C" {
 #include <algorithm>
 #include <atomic>
 #include <condition_variable>
+#include <ctime>
 #include <fstream>
 #include <iostream>
 #include <mutex>
@@ -78,7 +78,8 @@ static KitMutex &getSessionMutex() {
 }
 static std::map<long, std::shared_ptr<ffmpegkit::Session>> &
 getSessionHistoryMap() {
-  static auto *instance = new std::map<long, std::shared_ptr<ffmpegkit::Session>>();
+  static auto *instance =
+      new std::map<long, std::shared_ptr<ffmpegkit::Session>>();
   return *instance;
 }
 static std::list<std::shared_ptr<ffmpegkit::Session>> &getSessionHistoryList() {
@@ -263,7 +264,6 @@ public:
     }
   }
 
-
   CallbackType getType() { return _type; }
 
   long getSessionId() { return _sessionId; }
@@ -393,13 +393,17 @@ static void avutil_log_sanitize(char *line) {
 static void logCallbackDataAdd(int level, AVBPrint *data) {
   std::shared_ptr<ffmpegkit::Session> currentSession = tlsSession;
   if (currentSession == nullptr) {
-      currentSession = ffmpegkit::FFmpegKitConfig::getSession(globalSessionId.load());
+    currentSession =
+        ffmpegkit::FFmpegKitConfig::getSession(globalSessionId.load());
   }
 
-  long sessionId = (currentSession != nullptr) ? currentSession->getSessionId() : 0;
+  long sessionId =
+      (currentSession != nullptr) ? currentSession->getSessionId() : 0;
 
   if (currentSession != nullptr) {
-    currentSession->debugLog("[NATIVE LOG] sessionId: %ld level: %d msg: %s", sessionId, level, (data->str ? data->str : "NULL"));
+    currentSession->debugLog("[NATIVE LOG] sessionId: %ld level: %d msg: %s",
+                             sessionId, level,
+                             (data->str ? data->str : "NULL"));
   }
 
   std::unique_lock<KitMutex> lock(getCallbackDataMutex(), std::defer_lock);
@@ -423,10 +427,12 @@ static void statisticsCallbackDataAdd(int frameNumber, float fps, float quality,
                                       double speed) {
   std::shared_ptr<ffmpegkit::Session> currentSession = tlsSession;
   if (currentSession == nullptr) {
-      currentSession = ffmpegkit::FFmpegKitConfig::getSession(globalSessionId.load());
+    currentSession =
+        ffmpegkit::FFmpegKitConfig::getSession(globalSessionId.load());
   }
 
-  long sessionId = (currentSession != nullptr) ? currentSession->getSessionId() : 0;
+  long sessionId =
+      (currentSession != nullptr) ? currentSession->getSessionId() : 0;
 
   std::unique_lock<KitMutex> lock(getCallbackDataMutex(), std::defer_lock);
   CallbackData *callbackData = new CallbackData(
@@ -505,8 +511,8 @@ int cancelRequested(long sessionId) {
   }
 }
 
-FFMPEG_THREAD_LOCAL void (*report_callback)(int, float, float, int64_t, double, double,
-                        double) = NULL;
+FFMPEG_THREAD_LOCAL void (*report_callback)(int, float, float, int64_t, double,
+                                            double, double) = NULL;
 extern void sigterm_handler(int sig);
 
 void set_report_callback(void (*callback)(int, float, float, int64_t, double,
@@ -548,10 +554,12 @@ void ffmpegkit_log_callback_function(void *ptr, int level, const char *format,
                                      va_list vargs) {
   std::shared_ptr<ffmpegkit::Session> currentSession = tlsSession;
   if (currentSession == nullptr) {
-      currentSession = ffmpegkit::FFmpegKitConfig::getSession(globalSessionId.load());
+    currentSession =
+        ffmpegkit::FFmpegKitConfig::getSession(globalSessionId.load());
   }
 
-  long sessionId = (currentSession != nullptr) ? currentSession->getSessionId() : 0;
+  long sessionId =
+      (currentSession != nullptr) ? currentSession->getSessionId() : 0;
 
   AVBPrint fullLine;
   AVBPrint part[4];
@@ -846,7 +854,7 @@ executeFFmpeg(const long sessionId,
     globalSessionId = 0;
     return -1; // ENOMEM or parse error
   }
-  
+
   // 3. Set up logging and callbacks
   av_log_set_level(configuredLogLevel);
   av_log_set_callback(ffmpegkit_log_callback_function);
@@ -945,7 +953,8 @@ int executeFFplay(const long sessionId,
   globalSessionId = sessionId;
 
   if (tlsSession != nullptr) {
-    tlsSession->debugLog("[EXECUTE FFPLAY] sessionId: %ld tls Bound", sessionId);
+    tlsSession->debugLog("[EXECUTE FFPLAY] sessionId: %ld tls Bound",
+                         sessionId);
   }
   registerSessionId(sessionId);
   resetMessagesInTransmit(sessionId);
@@ -959,10 +968,11 @@ int executeFFplay(const long sessionId,
   set_report_callback(ffmpegkit_statistics_callback_function);
 
   bool helpRequested = false;
-  for (const auto& arg : *arguments) {
+  for (const auto &arg : *arguments) {
     if (arg == "-h" || arg == "--help" || arg == "-help" || arg == "?") {
       helpRequested = true;
-      tlsSession->debugLog("[EXECUTE FFPLAY] sessionId: %ld ffplay help requested", sessionId);
+      tlsSession->debugLog(
+          "[EXECUTE FFPLAY] sessionId: %ld ffplay help requested", sessionId);
       break;
     }
   }
@@ -981,10 +991,13 @@ int executeFFplay(const long sessionId,
       removeSession(sessionId);
       tlsSession = nullptr;
       globalSessionId = 0;
-      tlsSession->debugLog("[EXECUTE FFPLAY] sessionId: %ld ffplay help displayed, returning success", sessionId);
+      tlsSession->debugLog("[EXECUTE FFPLAY] sessionId: %ld ffplay help "
+                           "displayed, returning success",
+                           sessionId);
       return 0; // Success - help was displayed
     } else if (tlsSession != nullptr) {
-      tlsSession->debugLog("[EXECUTE FFPLAY] sessionId: %ld ffplay_init FAILED", sessionId);
+      tlsSession->debugLog("[EXECUTE FFPLAY] sessionId: %ld ffplay_init FAILED",
+                           sessionId);
     }
     removeSession(sessionId);
     tlsSession = nullptr;
@@ -993,19 +1006,22 @@ int executeFFplay(const long sessionId,
   }
 
   if (tlsSession != nullptr) {
-    tlsSession->debugLog("[EXECUTE FFPLAY] sessionId: %ld ffplay_init SUCCESS", sessionId);
+    tlsSession->debugLog("[EXECUTE FFPLAY] sessionId: %ld ffplay_init SUCCESS",
+                         sessionId);
   }
 
   // 4. Bind ffplay context to session
   if (session && session->isFFplay()) {
-    std::static_pointer_cast<ffmpegkit::FFplaySession>(session)->setContext(ctx);
+    std::static_pointer_cast<ffmpegkit::FFplaySession>(session)->setContext(
+        ctx);
   }
 
   // 5. RUN
   int returnCode = ffplay_start(ctx);
   if (returnCode == 0) {
     if (tlsSession != nullptr) {
-      tlsSession->debugLog("[EXECUTE FFPLAY] sessionId: %ld ffplay_start SUCCESS", sessionId);
+      tlsSession->debugLog(
+          "[EXECUTE FFPLAY] sessionId: %ld ffplay_start SUCCESS", sessionId);
     }
     int stepCount = 0;
     while (ffplay_step(ctx) == 0) {
@@ -1018,13 +1034,16 @@ int executeFFplay(const long sessionId,
     }
   } else {
     if (tlsSession != nullptr) {
-      tlsSession->debugLog("[EXECUTE FFPLAY] sessionId: %ld ffplay_start FAILED (rc=%d), skipping step loop", sessionId, returnCode);
+      tlsSession->debugLog("[EXECUTE FFPLAY] sessionId: %ld ffplay_start "
+                           "FAILED (rc=%d), skipping step loop",
+                           sessionId, returnCode);
     }
   }
 
   // 6. Unbind session context
   if (session && session->isFFplay()) {
-    std::static_pointer_cast<ffmpegkit::FFplaySession>(session)->setContext(nullptr);
+    std::static_pointer_cast<ffmpegkit::FFplaySession>(session)->setContext(
+        nullptr);
   }
 
   // 7. Remove from session map
@@ -1040,7 +1059,58 @@ int executeFFplay(const long sessionId,
 
 void ffmpegkit::FFmpegKitConfig::joinAsyncFFplayThread() {
   if (asyncFFplayThread != 0) {
-    pthread_join(asyncFFplayThread, nullptr);
+#ifdef _WIN32
+    // Windows: Wait with timeout using WaitForSingleObject
+    // Implementation for Windows would go here
+    WaitForSingleObject((HANDLE)asyncFFplayThread, 5000); // 5 second timeout
+    CloseHandle(asyncFFplayThread);
+#else
+    // POSIX: Use pthread_timedjoin_np if available to avoid indefinite blocking
+    // Fall back to pthread_detach on platforms without timedjoin or on timeout
+    // POSIX: Use pthread_timedjoin_np on Linux, detach on other platforms
+    // to avoid indefinite blocking which causes iOS watchdog kills
+
+#if defined(__linux__) || defined(__ANDROID__) || defined(__GLIBC__)
+    // glibc Linux supports pthread_timedjoin_np
+    struct timespec ts;
+#if defined(_POSIX_MONOTONIC_CLOCK) && (_POSIX_MONOTONIC_CLOCK >= 0)
+    clock_gettime(CLOCK_MONOTONIC, &ts);
+#else
+    clock_gettime(CLOCK_REALTIME, &ts);
+#endif
+    // Add 5 second timeout for thread join
+    // 5 second timeout for thread join
+    ts.tv_sec += 5;
+
+    int rc = 0;
+#if defined(__linux__) || defined(__ANDROID__) || defined(__GLIBC__)
+    // Use pthread_timedjoin_np on platforms that support it (Linux/glibc)
+    rc = pthread_timedjoin_np(asyncFFplayThread, nullptr, &ts);
+    int rc = pthread_timedjoin_np(asyncFFplayThread, nullptr, &ts);
+    if (rc != 0) {
+      std::cout << "Failed to join async FFplay thread (timeout or error: "
+                << rc << "), detaching instead." << std::endl;
+      pthread_detach(asyncFFplayThread);
+    }
+#else
+    // For macOS/BSD platforms, use pthread_tryjoin_np or just detach after
+    // timeout macOS pthread_join has no timeout, so we use a simple approach:
+    // Try non-blocking join first, if that fails, detach
+    rc = pthread_tryjoin_np(asyncFFplayThread, nullptr);
+    if (rc != 0) {
+      // Thread is still running or tryjoin not supported
+      std::cout << "Async FFplay thread still running, detaching." << std::endl;
+      pthread_detach(asyncFFplayThread);
+    }
+    // macOS/BSD and other POSIX: pthread_join has no timeout
+    // To avoid blocking the main thread during app termination,
+    // detach the thread instead of joining
+    std::cout << "Detaching async FFplay thread (platform without timed join)."
+              << std::endl;
+    pthread_detach(asyncFFplayThread);
+#endif
+#endif
+#endif
     asyncFFplayThread = 0;
   }
 }
@@ -1056,9 +1126,9 @@ void *ffmpegKitInitialize() {
   std::call_once(ffmpegKitInitializerFlag, []() {
     std::cout << "Loading ffmpeg-kit." << std::endl;
 
-    // Eagerly initialize all Meyers Singletons to establish a strict 
-    // happens-before edge prior to spawning any background threads. 
-    // This prevents ThreadSanitizer from flagging data races during 
+    // Eagerly initialize all Meyers Singletons to establish a strict
+    // happens-before edge prior to spawning any background threads.
+    // This prevents ThreadSanitizer from flagging data races during
     // the lazy initialization of these static pointers.
     (void)getSessionMutex();
     (void)getSessionHistoryMap();
@@ -1087,7 +1157,7 @@ void *ffmpegKitInitialize() {
         ffmpegkit::LogRedirectionStrategyPrintLogsWhenNoCallbacksDefined;
 
     ffmpegkit::FFmpegKitConfig::enableRedirection();
-    
+
     std::cout << "Loaded ffmpeg-kit-" << ffmpegkit::Packages::getPackageName()
               << "-" << ffmpegkit::ArchDetect::getArch() << "-"
               << (ffmpegkit::Packages::getIsGpl()       ? "gpl"
@@ -1142,9 +1212,36 @@ void ffmpegkit::FFmpegKitConfig::disableRedirection() {
 
   callbackNotify();
 
-  // BEFORE: static pthread_t callbackThread = 0;  <-- BUG: shadows the file-scope variable
+  // BEFORE: static pthread_t callbackThread = 0;  <-- BUG: shadows the
+  // file-scope variable
   if (callbackThread != 0) {
-    pthread_join(callbackThread, NULL);
+#ifdef _WIN32
+    WaitForSingleObject((HANDLE)callbackThread, 5000); // 5 second timeout
+    CloseHandle(callbackThread);
+#else
+    struct timespec ts;
+#if defined(_POSIX_MONOTONIC_CLOCK) && (_POSIX_MONOTONIC_CLOCK >= 0)
+    clock_gettime(CLOCK_MONOTONIC, &ts);
+#else
+    clock_gettime(CLOCK_REALTIME, &ts);
+#endif
+    ts.tv_sec += 5;
+    int rc = 0;
+#if defined(__linux__) || defined(__ANDROID__) || defined(__GLIBC__)
+    rc = pthread_timedjoin_np(callbackThread, NULL, &ts);
+    if (rc != 0) {
+      std::cout << "Failed to join callback thread (timeout or error: " << rc
+                << "), detaching instead." << std::endl;
+      pthread_detach(callbackThread);
+    }
+#else
+    if (rc != 0) {
+      std::cout << "Failed to join callback thread (timeout or error: " << rc
+                << "), detaching instead." << std::endl;
+      pthread_detach(callbackThread);
+    }
+#endif
+#endif
     callbackThread = 0;
   }
 
@@ -1369,19 +1466,23 @@ void ffmpegkit::FFmpegKitConfig::ffmpegExecute(
 
   try {
     int returnCodeValue = executeFFmpeg(ffmpegSession->getSessionId(),
-                                   ffmpegSession->getArguments());
+                                        ffmpegSession->getArguments());
 
     // Wait for all logs/stats to be processed by the callback thread
-    // Wait BEFORE completing so that the final output is ready when complete callbacks fire
-    ffmpegSession->waitForAsynchronousMessagesInTransmit(AbstractSession::DefaultTimeoutForAsynchronousMessagesInTransmit);
+    // Wait BEFORE completing so that the final output is ready when complete
+    // callbacks fire
+    ffmpegSession->waitForAsynchronousMessagesInTransmit(
+        AbstractSession::DefaultTimeoutForAsynchronousMessagesInTransmit);
 
     auto returnCode = std::make_shared<ffmpegkit::ReturnCode>(returnCodeValue);
     ffmpegSession->complete(returnCode);
-    ffmpegSession->debugLog("[EXECUTE] sessionId: %ld complete", ffmpegSession->getSessionId());
+    ffmpegSession->debugLog("[EXECUTE] sessionId: %ld complete",
+                            ffmpegSession->getSessionId());
     tlsSession = nullptr;
   } catch (const std::exception &exception) {
     if (ffmpegSession != nullptr) {
-      ffmpegSession->debugLog("[EXECUTE] sessionId: %ld exception: %s", ffmpegSession->getSessionId(), exception.what());
+      ffmpegSession->debugLog("[EXECUTE] sessionId: %ld exception: %s",
+                              ffmpegSession->getSessionId(), exception.what());
     }
     ffmpegSession->fail(exception.what());
     std::cout << "FFmpeg execute failed: "
@@ -1399,18 +1500,22 @@ void ffmpegkit::FFmpegKitConfig::ffprobeExecute(
 
   try {
     int returnCodeValue = executeFFprobe(ffprobeSession->getSessionId(),
-                                   ffprobeSession->getArguments());
+                                         ffprobeSession->getArguments());
 
     // Wait for all logs/stats to be processed by the callback thread
-    ffprobeSession->waitForAsynchronousMessagesInTransmit(AbstractSession::DefaultTimeoutForAsynchronousMessagesInTransmit);
+    ffprobeSession->waitForAsynchronousMessagesInTransmit(
+        AbstractSession::DefaultTimeoutForAsynchronousMessagesInTransmit);
 
     auto returnCode = std::make_shared<ffmpegkit::ReturnCode>(returnCodeValue);
     ffprobeSession->complete(returnCode);
-    ffprobeSession->debugLog("[EXECUTE PROBE] sessionId: %ld complete", ffprobeSession->getSessionId());
+    ffprobeSession->debugLog("[EXECUTE PROBE] sessionId: %ld complete",
+                             ffprobeSession->getSessionId());
     tlsSession = nullptr;
   } catch (const std::exception &exception) {
     if (ffprobeSession != nullptr) {
-      ffprobeSession->debugLog("[EXECUTE PROBE] sessionId: %ld exception: %s", ffprobeSession->getSessionId(), exception.what());
+      ffprobeSession->debugLog("[EXECUTE PROBE] sessionId: %ld exception: %s",
+                               ffprobeSession->getSessionId(),
+                               exception.what());
     }
     ffprobeSession->fail(exception.what());
     std::cout << "FFprobe execute failed: "
@@ -1422,7 +1527,8 @@ void ffmpegkit::FFmpegKitConfig::ffprobeExecute(
 }
 
 void ffmpegkit::FFmpegKitConfig::ffplayExecute(
-    const std::shared_ptr<ffmpegkit::FFplaySession> ffplaySession, int waitTimeout) {
+    const std::shared_ptr<ffmpegkit::FFplaySession> ffplaySession,
+    int waitTimeout) {
 
   // 1. START THE SESSION
   ffplaySession->startRunning();
@@ -1438,31 +1544,37 @@ void ffmpegkit::FFmpegKitConfig::ffplayExecute(
     // Wait for previous session to fully complete cleanup
     auto prevSession = getSession(previousSessionId);
     if (prevSession) {
-        if (!prevSession->waitFor(waitTimeout)) {
-            std::cout << "FFplay execute failed: Timed out waiting for previous FFplay session " << previousSessionId << " to complete." << std::endl;
-            activeFFplaySessionId.compare_exchange_strong(sessionId, 0);
-            ffplaySession->fail("Timed out waiting for previous session to complete");
-            return;
-        }
+      if (!prevSession->waitFor(waitTimeout)) {
+        std::cout << "FFplay execute failed: Timed out waiting for previous "
+                     "FFplay session "
+                  << previousSessionId << " to complete." << std::endl;
+        activeFFplaySessionId.compare_exchange_strong(sessionId, 0);
+        ffplaySession->fail(
+            "Timed out waiting for previous session to complete");
+        return;
+      }
     }
   }
 
   // 2. RUN
   try {
-    int returnCodeValue = executeFFplay(sessionId, ffplaySession->getArguments());
+    int returnCodeValue =
+        executeFFplay(sessionId, ffplaySession->getArguments());
 
     // RESET ACTIVE SESSION ID IF IT'S STILL US
     activeFFplaySessionId.compare_exchange_strong(sessionId, 0);
 
     // Wait for all logs/stats to be processed by the callback thread
-    ffplaySession->waitForAsynchronousMessagesInTransmit(AbstractSession::DefaultTimeoutForAsynchronousMessagesInTransmit);
+    ffplaySession->waitForAsynchronousMessagesInTransmit(
+        AbstractSession::DefaultTimeoutForAsynchronousMessagesInTransmit);
 
     auto returnCode = std::make_shared<ffmpegkit::ReturnCode>(returnCodeValue);
     ffplaySession->complete(returnCode);
     tlsSession = nullptr;
   } catch (const std::exception &exception) {
     if (ffplaySession != nullptr) {
-      ffplaySession->debugLog("[EXECUTE FFPLAY] sessionId: %ld exception: %s", sessionId, exception.what());
+      ffplaySession->debugLog("[EXECUTE FFPLAY] sessionId: %ld exception: %s",
+                              sessionId, exception.what());
     }
     activeFFplaySessionId.compare_exchange_strong(sessionId, 0);
     ffplaySession->fail(exception.what());
@@ -1482,7 +1594,8 @@ void ffmpegkit::FFmpegKitConfig::getMediaInformationExecute(
         executeFFprobe(mediaInformationSession->getSessionId(),
                        mediaInformationSession->getArguments());
     // Wait for all logs/stats to be processed by the callback thread
-    mediaInformationSession->waitForAsynchronousMessagesInTransmit(AbstractSession::DefaultTimeoutForAsynchronousMessagesInTransmit);
+    mediaInformationSession->waitForAsynchronousMessagesInTransmit(
+        AbstractSession::DefaultTimeoutForAsynchronousMessagesInTransmit);
 
     auto returnCode = std::make_shared<ffmpegkit::ReturnCode>(returnCodeValue);
     mediaInformationSession->complete(returnCode);
@@ -1492,24 +1605,32 @@ void ffmpegkit::FFmpegKitConfig::getMediaInformationExecute(
       std::string ffprobeJsonOutput;
       std::for_each(allLogs->cbegin(), allLogs->cend(),
                     [&](std::shared_ptr<ffmpegkit::Log> log) {
-                      if (log->getLevel() == LevelAVLogStdErr || log->getLevel() == LevelAVLogInfo) {
+                      if (log->getLevel() == LevelAVLogStdErr ||
+                          log->getLevel() == LevelAVLogInfo) {
                         ffprobeJsonOutput.append(log->getMessage());
                       }
                     });
-      
-      mediaInformationSession->debugLog("[GET MEDIA INFO] sessionId: %ld JSON length: %d", mediaInformationSession->getSessionId(), (int)ffprobeJsonOutput.length());
-      
+
+      mediaInformationSession->debugLog(
+          "[GET MEDIA INFO] sessionId: %ld JSON length: %d",
+          mediaInformationSession->getSessionId(),
+          (int)ffprobeJsonOutput.length());
+
       auto mediaInformation =
           ffmpegkit::MediaInformationJsonParser::fromWithError(
               ffprobeJsonOutput.c_str());
       mediaInformationSession->setMediaInformation(mediaInformation);
-      
+
       if (mediaInformation != nullptr) {
-          mediaInformationSession->debugLog("[GET MEDIA INFO] sessionId: %ld parsing SUCCESS", mediaInformationSession->getSessionId());
+        mediaInformationSession->debugLog(
+            "[GET MEDIA INFO] sessionId: %ld parsing SUCCESS",
+            mediaInformationSession->getSessionId());
       }
     }
   } catch (const std::exception &exception) {
-    mediaInformationSession->debugLog("[GET MEDIA INFO] sessionId: %ld exception: %s", mediaInformationSession->getSessionId(), exception.what());
+    mediaInformationSession->debugLog(
+        "[GET MEDIA INFO] sessionId: %ld exception: %s",
+        mediaInformationSession->getSessionId(), exception.what());
     mediaInformationSession->fail(exception.what());
     std::cout << "Get media information execute failed: "
               << ffmpegkit::FFmpegKitConfig::argumentsToString(
@@ -1518,179 +1639,228 @@ void ffmpegkit::FFmpegKitConfig::getMediaInformationExecute(
   }
 }
 
-
 struct AsyncFFmpegArgs {
-    std::shared_ptr<ffmpegkit::FFmpegSession> session;
+  std::shared_ptr<ffmpegkit::FFmpegSession> session;
 };
 
 struct AsyncFFprobeArgs {
-    std::shared_ptr<ffmpegkit::FFprobeSession> session;
+  std::shared_ptr<ffmpegkit::FFprobeSession> session;
 };
 
 struct AsyncFFplayArgs {
-    std::shared_ptr<ffmpegkit::FFplaySession> session;
-    int waitTimeout;
+  std::shared_ptr<ffmpegkit::FFplaySession> session;
+  int waitTimeout;
 };
 
 struct AsyncMediaInfoArgs {
-    std::shared_ptr<ffmpegkit::MediaInformationSession> session;
-    int waitTimeout;
+  std::shared_ptr<ffmpegkit::MediaInformationSession> session;
+  int waitTimeout;
 };
 
 void ffmpegkit::FFmpegKitConfig::asyncFFmpegExecute(
     const std::shared_ptr<ffmpegkit::FFmpegSession> ffmpegSession) {
 
-  auto* args = new AsyncFFmpegArgs{ffmpegSession};
+  auto *args = new AsyncFFmpegArgs{ffmpegSession};
   pthread_t thread;
-  pthread_create(&thread, nullptr, [](void* arg) -> void* {
-    auto* a = static_cast<AsyncFFmpegArgs*>(arg);
-    auto session = std::move(a->session);
-    delete a;
+  pthread_create(
+      &thread, nullptr,
+      [](void *arg) -> void * {
+        auto *a = static_cast<AsyncFFmpegArgs *>(arg);
+        auto session = std::move(a->session);
+        delete a;
 
-    ffmpegkit::FFmpegKitConfig::ffmpegExecute(session);
+        ffmpegkit::FFmpegKitConfig::ffmpegExecute(session);
 
-    auto completeCallback = session->getCompleteCallback();
-    if (completeCallback != nullptr) {
-      try {
-        completeCallback(session);
-      } catch (const std::exception &e) {
-        std::cout << "Exception in session complete callback: " << e.what() << std::endl;
-      }
-    }
-    {
-      std::lock_guard<KitMutex> lock(getGlobalCallbacksMutex());
-      auto globalCallback = ffmpegkit::FFmpegKitConfig::getFFmpegSessionCompleteCallback();
-      if (globalCallback != nullptr) {
-        try {
-          globalCallback(session);
-        } catch (const std::exception &e) {
-          std::cout << "Exception in global complete callback: " << e.what() << std::endl;
+        auto completeCallback = session->getCompleteCallback();
+        if (completeCallback != nullptr) {
+          try {
+            completeCallback(session);
+          } catch (const std::exception &e) {
+            std::cout << "Exception in session complete callback: " << e.what()
+                      << std::endl;
+          }
         }
-      }
-    }
-    return nullptr;
-  }, args);
+        {
+          std::lock_guard<KitMutex> lock(getGlobalCallbacksMutex());
+          auto globalCallback =
+              ffmpegkit::FFmpegKitConfig::getFFmpegSessionCompleteCallback();
+          if (globalCallback != nullptr) {
+            try {
+              globalCallback(session);
+            } catch (const std::exception &e) {
+              std::cout << "Exception in global complete callback: " << e.what()
+                        << std::endl;
+            }
+          }
+        }
+        return nullptr;
+      },
+      args);
   pthread_detach(thread);
 }
 
 void ffmpegkit::FFmpegKitConfig::asyncFFprobeExecute(
     const std::shared_ptr<ffmpegkit::FFprobeSession> ffprobeSession) {
 
-  auto* args = new AsyncFFprobeArgs{ffprobeSession};
+  auto *args = new AsyncFFprobeArgs{ffprobeSession};
   pthread_t thread;
-  pthread_create(&thread, nullptr, [](void* arg) -> void* {
-    auto* a = static_cast<AsyncFFprobeArgs*>(arg);
-    auto session = std::move(a->session);
-    delete a;
+  pthread_create(
+      &thread, nullptr,
+      [](void *arg) -> void * {
+        auto *a = static_cast<AsyncFFprobeArgs *>(arg);
+        auto session = std::move(a->session);
+        delete a;
 
-    ffmpegkit::FFmpegKitConfig::ffprobeExecute(session);
+        ffmpegkit::FFmpegKitConfig::ffprobeExecute(session);
 
-    auto completeCallback = session->getCompleteCallback();
-    if (completeCallback != nullptr) {
-      try {
-        completeCallback(session);
-      } catch (const std::exception &e) {
-        std::cout << "Exception in session complete callback: " << e.what() << std::endl;
-      }
-    }
-    {
-      std::lock_guard<KitMutex> lock(getGlobalCallbacksMutex());
-      auto globalCallback = ffmpegkit::FFmpegKitConfig::getFFprobeSessionCompleteCallback();
-      if (globalCallback != nullptr) {
-        try {
-          globalCallback(session);
-        } catch (const std::exception &e) {
-          std::cout << "Exception in global complete callback: " << e.what() << std::endl;
+        auto completeCallback = session->getCompleteCallback();
+        if (completeCallback != nullptr) {
+          try {
+            completeCallback(session);
+          } catch (const std::exception &e) {
+            std::cout << "Exception in session complete callback: " << e.what()
+                      << std::endl;
+          }
         }
-      }
-    }
-    return nullptr;
-  }, args);
+        {
+          std::lock_guard<KitMutex> lock(getGlobalCallbacksMutex());
+          auto globalCallback =
+              ffmpegkit::FFmpegKitConfig::getFFprobeSessionCompleteCallback();
+          if (globalCallback != nullptr) {
+            try {
+              globalCallback(session);
+            } catch (const std::exception &e) {
+              std::cout << "Exception in global complete callback: " << e.what()
+                        << std::endl;
+            }
+          }
+        }
+        return nullptr;
+      },
+      args);
   pthread_detach(thread);
 }
 
 void ffmpegkit::FFmpegKitConfig::asyncFFplayExecute(
     const std::shared_ptr<ffmpegkit::FFplaySession> ffplaySession,
     int waitTimeout) {
-  // Join any previously completed async ffplay thread before launching a new one
+  // Join any previously completed async ffplay thread before launching a new
+  // one
   if (asyncFFplayThread != 0) {
     auto activeSession = getActiveFFplaySession();
     if (activeSession != nullptr) {
       activeSession->close();
     }
     pthread_join(asyncFFplayThread, nullptr);
+#ifdef _WIN32
+    WaitForSingleObject((HANDLE)asyncFFplayThread, 5000); // 5 second timeout
+    CloseHandle(asyncFFplayThread);
+#else
+#if defined(__linux__) || defined(__ANDROID__) || defined(__GLIBC__)
+    struct timespec ts;
+#if defined(_POSIX_MONOTONIC_CLOCK) && (_POSIX_MONOTONIC_CLOCK >= 0)
+    clock_gettime(CLOCK_MONOTONIC, &ts);
+#else
+    clock_gettime(CLOCK_REALTIME, &ts);
+#endif
+    ts.tv_sec += 5;
+    int rc = pthread_timedjoin_np(asyncFFplayThread, nullptr, &ts);
+    if (rc != 0) {
+      std::cout << "Failed to join async FFplay thread (timeout or error: "
+                << rc << "), detaching instead." << std::endl;
+      pthread_detach(asyncFFplayThread);
+    }
+#else
+    // macOS/BSD: use detach to avoid blocking
+    pthread_detach(asyncFFplayThread);
+#endif
+#endif
     asyncFFplayThread = 0;
   }
 
-  auto* args = new AsyncFFplayArgs{ffplaySession, waitTimeout};
-  pthread_create(&asyncFFplayThread, nullptr, [](void* arg) -> void* {
-    auto* a = static_cast<AsyncFFplayArgs*>(arg);
-    auto session = std::move(a->session);
-    int timeout = a->waitTimeout;
-    delete a;
+  auto *args = new AsyncFFplayArgs{ffplaySession, waitTimeout};
+  pthread_create(
+      &asyncFFplayThread, nullptr,
+      [](void *arg) -> void * {
+        auto *a = static_cast<AsyncFFplayArgs *>(arg);
+        auto session = std::move(a->session);
+        int timeout = a->waitTimeout;
+        delete a;
 
-    ffmpegkit::FFmpegKitConfig::ffplayExecute(session, timeout);
+        ffmpegkit::FFmpegKitConfig::ffplayExecute(session, timeout);
 
-    auto completeCallback = session->getCompleteCallback();
-    if (completeCallback != nullptr) {
-      try {
-        completeCallback(session);
-      } catch (const std::exception &e) {
-        std::cout << "Exception in session complete callback: " << e.what() << std::endl;
-      }
-    }
-    {
-      std::lock_guard<KitMutex> lock(getGlobalCallbacksMutex());
-      auto globalCallback = ffmpegkit::FFmpegKitConfig::getFFplaySessionCompleteCallback();
-      if (globalCallback != nullptr) {
-        try {
-          globalCallback(session);
-        } catch (const std::exception &e) {
-          std::cout << "Exception in global complete callback: " << e.what() << std::endl;
+        auto completeCallback = session->getCompleteCallback();
+        if (completeCallback != nullptr) {
+          try {
+            completeCallback(session);
+          } catch (const std::exception &e) {
+            std::cout << "Exception in session complete callback: " << e.what()
+                      << std::endl;
+          }
         }
-      }
-    }
-    return nullptr;
-  }, args);
+        {
+          std::lock_guard<KitMutex> lock(getGlobalCallbacksMutex());
+          auto globalCallback =
+              ffmpegkit::FFmpegKitConfig::getFFplaySessionCompleteCallback();
+          if (globalCallback != nullptr) {
+            try {
+              globalCallback(session);
+            } catch (const std::exception &e) {
+              std::cout << "Exception in global complete callback: " << e.what()
+                        << std::endl;
+            }
+          }
+        }
+        return nullptr;
+      },
+      args);
   // Do NOT detach: keep asyncFFplayThread joinable so we can wait for it at
   // program exit (in ~FFmpegKitConfig) and avoid ASAN/TLS teardown crashes.
 }
 
 void ffmpegkit::FFmpegKitConfig::asyncGetMediaInformationExecute(
-    const std::shared_ptr<ffmpegkit::MediaInformationSession> mediaInformationSession,
+    const std::shared_ptr<ffmpegkit::MediaInformationSession>
+        mediaInformationSession,
     const int waitTimeout) {
 
-  auto* args = new AsyncMediaInfoArgs{mediaInformationSession, waitTimeout};
+  auto *args = new AsyncMediaInfoArgs{mediaInformationSession, waitTimeout};
   pthread_t thread;
-  pthread_create(&thread, nullptr, [](void* arg) -> void* {
-    auto* a = static_cast<AsyncMediaInfoArgs*>(arg);
-    auto session = std::move(a->session);
-    int timeout = a->waitTimeout;
-    delete a;
+  pthread_create(
+      &thread, nullptr,
+      [](void *arg) -> void * {
+        auto *a = static_cast<AsyncMediaInfoArgs *>(arg);
+        auto session = std::move(a->session);
+        int timeout = a->waitTimeout;
+        delete a;
 
-    ffmpegkit::FFmpegKitConfig::getMediaInformationExecute(session, timeout);
+        ffmpegkit::FFmpegKitConfig::getMediaInformationExecute(session,
+                                                               timeout);
 
-    auto completeCallback = session->getCompleteCallback();
-    if (completeCallback != nullptr) {
-      try {
-        completeCallback(session);
-      } catch (const std::exception &e) {
-        std::cout << "Exception in session complete callback: " << e.what() << std::endl;
-      }
-    }
-    {
-      std::lock_guard<KitMutex> lock(getGlobalCallbacksMutex());
-      auto globalCallback = ffmpegkit::FFmpegKitConfig::getMediaInformationSessionCompleteCallback();
-      if (globalCallback != nullptr) {
-        try {
-          globalCallback(session);
-        } catch (const std::exception &e) {
-          std::cout << "Exception in global complete callback: " << e.what() << std::endl;
+        auto completeCallback = session->getCompleteCallback();
+        if (completeCallback != nullptr) {
+          try {
+            completeCallback(session);
+          } catch (const std::exception &e) {
+            std::cout << "Exception in session complete callback: " << e.what()
+                      << std::endl;
+          }
         }
-      }
-    }
-    return nullptr;
-  }, args);
+        {
+          std::lock_guard<KitMutex> lock(getGlobalCallbacksMutex());
+          auto globalCallback = ffmpegkit::FFmpegKitConfig::
+              getMediaInformationSessionCompleteCallback();
+          if (globalCallback != nullptr) {
+            try {
+              globalCallback(session);
+            } catch (const std::exception &e) {
+              std::cout << "Exception in global complete callback: " << e.what()
+                        << std::endl;
+            }
+          }
+        }
+        return nullptr;
+      },
+      args);
   pthread_detach(thread);
 }
 
@@ -1847,8 +2017,8 @@ ffmpegkit::FFmpegKitConfig::getLastFFmpegSession() {
     return nullptr;
   }
 
-  for (auto rit = getSessionHistoryList().rbegin(); rit != getSessionHistoryList().rend();
-       ++rit) {
+  for (auto rit = getSessionHistoryList().rbegin();
+       rit != getSessionHistoryList().rend(); ++rit) {
     auto session = *rit;
     if (session->isFFmpeg()) {
       return std::dynamic_pointer_cast<ffmpegkit::FFmpegSession>(session);
@@ -1868,8 +2038,8 @@ ffmpegkit::FFmpegKitConfig::getLastFFprobeSession() {
     return nullptr;
   }
 
-  for (auto rit = getSessionHistoryList().rbegin(); rit != getSessionHistoryList().rend();
-       ++rit) {
+  for (auto rit = getSessionHistoryList().rbegin();
+       rit != getSessionHistoryList().rend(); ++rit) {
     auto session = *rit;
     if (session->isFFprobe()) {
       return std::dynamic_pointer_cast<ffmpegkit::FFprobeSession>(session);
@@ -1889,8 +2059,8 @@ ffmpegkit::FFmpegKitConfig::getLastFFplaySession() {
     return nullptr;
   }
 
-  for (auto rit = getSessionHistoryList().rbegin(); rit != getSessionHistoryList().rend();
-       ++rit) {
+  for (auto rit = getSessionHistoryList().rbegin();
+       rit != getSessionHistoryList().rend(); ++rit) {
     auto session = *rit;
     if (session->isFFplay()) {
       return std::dynamic_pointer_cast<ffmpegkit::FFplaySession>(session);
@@ -1910,11 +2080,12 @@ ffmpegkit::FFmpegKitConfig::getLastMediaInformationSession() {
     return nullptr;
   }
 
-  for (auto rit = getSessionHistoryList().rbegin(); rit != getSessionHistoryList().rend();
-       ++rit) {
+  for (auto rit = getSessionHistoryList().rbegin();
+       rit != getSessionHistoryList().rend(); ++rit) {
     auto session = *rit;
     if (session->isMediaInformation()) {
-      return std::dynamic_pointer_cast<ffmpegkit::MediaInformationSession>(session);
+      return std::dynamic_pointer_cast<ffmpegkit::MediaInformationSession>(
+          session);
     }
   }
 
@@ -1927,8 +2098,8 @@ ffmpegkit::FFmpegKitConfig::getLastCompletedSession() {
 
   lock.lock();
 
-  for (auto rit = getSessionHistoryList().rbegin(); rit != getSessionHistoryList().rend();
-       ++rit) {
+  for (auto rit = getSessionHistoryList().rbegin();
+       rit != getSessionHistoryList().rend(); ++rit) {
     auto session = *rit;
     if (session->getState() == SessionStateCompleted) {
       return session;
@@ -1970,8 +2141,8 @@ ffmpegkit::FFmpegKitConfig::getFFmpegSessions() {
 
   lock.lock();
 
-  for (auto it = getSessionHistoryList().begin(); it != getSessionHistoryList().end();
-       ++it) {
+  for (auto it = getSessionHistoryList().begin();
+       it != getSessionHistoryList().end(); ++it) {
     auto session = *it;
     if (session->isFFmpeg()) {
       ffmpegSessions->push_back(
@@ -1993,8 +2164,8 @@ ffmpegkit::FFmpegKitConfig::getFFprobeSessions() {
 
   lock.lock();
 
-  for (auto it = getSessionHistoryList().begin(); it != getSessionHistoryList().end();
-       ++it) {
+  for (auto it = getSessionHistoryList().begin();
+       it != getSessionHistoryList().end(); ++it) {
     if ((*it)->isFFprobe()) {
       result->push_back(
           std::static_pointer_cast<ffmpegkit::FFprobeSession>(*it));
@@ -2009,14 +2180,13 @@ ffmpegkit::FFmpegKitConfig::getFFprobeSessions() {
 std::shared_ptr<std::list<std::shared_ptr<ffmpegkit::FFplaySession>>>
 ffmpegkit::FFmpegKitConfig::getFFplaySessions() {
   std::unique_lock<KitMutex> lock(getSessionMutex(), std::defer_lock);
-  std::shared_ptr<std::list<std::shared_ptr<ffmpegkit::FFplaySession>>>
-      result = std::make_shared<
-          std::list<std::shared_ptr<ffmpegkit::FFplaySession>>>();
+  std::shared_ptr<std::list<std::shared_ptr<ffmpegkit::FFplaySession>>> result =
+      std::make_shared<std::list<std::shared_ptr<ffmpegkit::FFplaySession>>>();
 
   lock.lock();
 
-  for (auto it = getSessionHistoryList().begin(); it != getSessionHistoryList().end();
-       ++it) {
+  for (auto it = getSessionHistoryList().begin();
+       it != getSessionHistoryList().end(); ++it) {
     if ((*it)->isFFplay()) {
       result->push_back(
           std::static_pointer_cast<ffmpegkit::FFplaySession>(*it));
@@ -2045,8 +2215,8 @@ ffmpegkit::FFmpegKitConfig::getMediaInformationSessions() {
 
   lock.lock();
 
-  for (auto it = getSessionHistoryList().begin(); it != getSessionHistoryList().end();
-       ++it) {
+  for (auto it = getSessionHistoryList().begin();
+       it != getSessionHistoryList().end(); ++it) {
     auto session = *it;
     if (session->isMediaInformation()) {
       mediaInformationSessions->push_back(
@@ -2068,8 +2238,8 @@ ffmpegkit::FFmpegKitConfig::getSessionsByState(const SessionState state) {
 
   lock.lock();
 
-  for (auto it = getSessionHistoryList().begin(); it != getSessionHistoryList().end();
-       ++it) {
+  for (auto it = getSessionHistoryList().begin();
+       it != getSessionHistoryList().end(); ++it) {
     auto session = *it;
     if (session->getState() == state) {
       sessions->push_back(session);
@@ -2184,18 +2354,20 @@ std::string ffmpegkit::FFmpegKitConfig::argumentsToString(
   return string;
 }
 
-void ffmpegkit::FFmpegKitConfig::setAudioOutputDevice(const std::string &deviceName) {
-    ffplay_set_audio_output_device(deviceName.empty() ? nullptr : deviceName.c_str());
+void ffmpegkit::FFmpegKitConfig::setAudioOutputDevice(
+    const std::string &deviceName) {
+  ffplay_set_audio_output_device(deviceName.empty() ? nullptr
+                                                    : deviceName.c_str());
 }
 
 std::string ffmpegkit::FFmpegKitConfig::listAudioOutputDevices() {
-    char* devices = ffplay_list_audio_devices();
-    std::string result = "";
-    if (devices) {
-        result = std::string(devices);
-        av_free(devices);
-    }
-    return result;
+  char *devices = ffplay_list_audio_devices();
+  std::string result = "";
+  if (devices) {
+    result = std::string(devices);
+    av_free(devices);
+  }
+  return result;
 }
 
 ffmpegkit::FFmpegKitConfig::~FFmpegKitConfig() {
@@ -2205,6 +2377,31 @@ ffmpegkit::FFmpegKitConfig::~FFmpegKitConfig() {
     pthread_join(asyncFFplayThread, nullptr);
     asyncFFplayThread = 0;
   }
+
+#ifdef _WIN32
+  WaitForSingleObject((HANDLE)asyncFFplayThread, 5000); // 5 second timeout
+  CloseHandle(asyncFFplayThread);
+#else
+#if defined(__linux__) || defined(__ANDROID__) || defined(__GLIBC__)
+  struct timespec ts;
+#if defined(_POSIX_MONOTONIC_CLOCK) && (_POSIX_MONOTONIC_CLOCK >= 0)
+  clock_gettime(CLOCK_MONOTONIC, &ts);
+#else
+  clock_gettime(CLOCK_REALTIME, &ts);
+#endif
+  ts.tv_sec += 5;
+  int rc = pthread_timedjoin_np(asyncFFplayThread, nullptr, &ts);
+  if (rc != 0) {
+    std::cout << "Failed to join async FFplay thread (timeout or error: " << rc
+              << "), detaching instead." << std::endl;
+    pthread_detach(asyncFFplayThread);
+  }
+#else
+  // macOS/BSD: use detach to avoid blocking during shutdown
+  pthread_detach(asyncFFplayThread);
+#endif
+#endif
+  asyncFFplayThread = 0;
 
   // 1. Stop background redirection thread first to prevent races on sessions
   disableRedirection();
@@ -2231,5 +2428,5 @@ ffmpegkit::FFmpegKitConfig::~FFmpegKitConfig() {
 
 // At the very end of FFmpegKitConfig.cpp
 namespace ffmpegkit {
-    static FFmpegKitConfig globalCleanupGuard;
+static FFmpegKitConfig globalCleanupGuard;
 }

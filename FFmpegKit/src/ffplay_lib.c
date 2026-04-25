@@ -134,7 +134,7 @@ static SDL_Window *ffplay_kit_SDL_CreateWindow(
 
 /* Global frame callback for non-Android video output (Linux, Windows, macOS, iOS).
  * Set by ffplay_set_frame_callback() before ffplay_init().
- * Called inside ffplay_step() with RGBA8888 pixel data after each video frame. */
+ * Called inside ffplay_step() with SDL_PIXELFORMAT_ABGR8888 pixel data after each video frame. */
 static FFplayFrameCallback g_frame_callback = NULL;
 static void *g_frame_callback_userdata = NULL;
 
@@ -175,7 +175,8 @@ static SDL_Window *ffplay_kit_SDL_CreateWindow(
 #define SDL_ShowWindow(w) ((void)(w))
 #define SDL_RenderPresent(r) ((void)(r))
 #endif
-
+// At the top of ffplay_lib.c, before ffplay.c is included, declare the real symbol:
+extern DECLSPEC void SDLCALL SDL_RenderPresent_real(SDL_Renderer *renderer);
 // Include the patched ffplay.c to access internal structures and static functions.
 #include "ffplay.c"
 
@@ -236,6 +237,16 @@ static void unlock_ffplay_api(void) {
     }
 }
 
+void ffplay_lib_on_frame(const uint8_t *pixels, int width, int height,
+                         int linesize, const char *pixel_format) {
+  if (g_frame_callback) {
+    g_frame_callback(g_frame_callback_userdata, pixels, width, height,
+                     linesize, pixel_format);
+  } else {
+    av_log(NULL, AV_LOG_WARNING, "[ffplay_lib] ffplay_lib_on_frame called but no callback set\n");
+  }
+}
+
 #ifndef __ANDROID__
 void ffplay_set_frame_callback(FFplayFrameCallback callback, void *userdata) {
     /* Hold the API mutex so that when this returns with callback==NULL,
@@ -245,6 +256,10 @@ void ffplay_set_frame_callback(FFplayFrameCallback callback, void *userdata) {
     g_frame_callback = callback;
     g_frame_callback_userdata = userdata;
     unlock_ffplay_api();
+}
+#else
+void ffplay_set_frame_callback(FFplayFrameCallback callback, void *userdata) {
+    av_log(NULL, AV_LOG_WARNING, "[ffplay_lib] ffplay_set_frame_callback not supported on Android\n");
 }
 #endif /* __ANDROID__ */
 
@@ -778,37 +793,6 @@ int ffplay_step(FFplayContext* ctx) {
         }
     }
     if (blit_window) ANativeWindow_release(blit_window);
-
-#else /* !__ANDROID__ — Linux / Windows / macOS / iOS: fire pixel callback */
-
-    /* Hold the API mutex for the entire check-and-call block.
-     * ffplay_set_frame_callback() holds the same mutex, so once it returns
-     * with callback==NULL, no call is in-flight and the plugin can safely
-     * free the TextureState that is passed as userdata. */
-    lock_ffplay_api();
-    if (ctx->is && ctx->is->video_st && ctx->is->window && ctx->is->renderer
-            && g_frame_callback) {
-        int rw = 0, rh = 0;
-        SDL_GetWindowSize(ctx->is->window, &rw, &rh);
-        if (rw > 0 && rh > 0) {
-            int pitch = rw * 4;
-            size_t needed = (size_t)rh * pitch;
-            if (needed > g_pixel_buf_size) {
-                av_free(g_pixel_buf);
-                g_pixel_buf = av_malloc(needed);
-                g_pixel_buf_size = g_pixel_buf ? needed : 0;
-            }
-            if (g_pixel_buf) {
-                if (SDL_RenderReadPixels(ctx->is->renderer, NULL,
-                        SDL_PIXELFORMAT_ABGR8888, g_pixel_buf, pitch) == 0) {
-                    g_frame_callback(g_frame_callback_userdata,
-                        (const uint8_t *)g_pixel_buf, rw, rh, pitch);
-                }
-            }
-        }
-    }
-    unlock_ffplay_api();
-
 #endif /* __ANDROID__ */
 
     step_ret = ctx->quit;

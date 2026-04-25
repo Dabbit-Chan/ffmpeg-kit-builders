@@ -20,6 +20,7 @@
 #ifndef FFPLAY_LIB_H
 #define FFPLAY_LIB_H
 
+#include "SDL_stdinc.h"
 #include "ffmpeg_tls.h"
 #include <stdint.h>
 
@@ -229,7 +230,8 @@ FFMPEG_API void ffplay_set_android_window(ANativeWindow *window);
  * @param linesize  bytes per row
  */
 typedef void (*FFplayFrameCallback)(void *userdata, const uint8_t *pixels,
-                                    int width, int height, int linesize);
+                                    int width, int height, int linesize,
+                                    const char *pixel_format);
 
 /**
  * Registers a frame-ready callback for desktop video output. Call before ffplay_init().
@@ -239,6 +241,20 @@ typedef void (*FFplayFrameCallback)(void *userdata, const uint8_t *pixels,
  */
 FFMPEG_API void ffplay_set_frame_callback(FFplayFrameCallback callback,
                                            void *userdata) ;
+
+
+/**
+ * Internal helper to invoke the global frame callback (if set).
+ * Called from ffplay_step() after each video frame is decoded.
+ *
+ * @param pixels    RGBA8888 rows, tightly packed
+ * @param width     frame width in pixels
+ * @param height    frame height in pixels
+ * @param linesize  bytes per row
+ * @param pixel_format  pixel format string (e.g., "rgba")
+ */
+FFMPEG_API void ffplay_lib_on_frame(const uint8_t *pixels, int width, int height,
+                         int linesize, const char *pixel_format);
 
 #endif /* __ANDROID__ */
 
