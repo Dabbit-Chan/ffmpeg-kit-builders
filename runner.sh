@@ -573,7 +573,7 @@ while [ $# -gt 0 ]; do
     ff_flags_raw+=("$1")
     # Store extracted value
     VALUE="${1#--ff-}"
-    ff_flags_values+=("$VALUE")
+    ff_flags_values+=("--$VALUE")
     shift
     ;;
 	--)

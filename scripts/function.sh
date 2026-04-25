@@ -4098,12 +4098,6 @@ configure_ffmpeg() {
     truthy "$enable_videotoolbox" && config_options+=" --enable-videotoolbox"           # enable VideoToolbox code [autodetect]
   fi
 
-  # add any additional ff prefixed flags 
-  if [[ -n $ff_flags_values ]]; then
-    ff_flags=$(concat_array "$ff_flags_values" " ")
-    config_options+=" $ff_flags"
-  fi
-
 	if truthy "$build_gpl"; then
 		config_options+=" --enable-gpl"
   fi
