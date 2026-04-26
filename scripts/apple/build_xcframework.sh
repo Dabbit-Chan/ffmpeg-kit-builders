@@ -5,6 +5,9 @@
 # Create XCFramework bundles for iOS, iOS Simulator, and macOS
 # This script mirrors the Android AAR publishing pipeline for Apple platforms
 
+# save start time
+START_TIME=$(date +%s)
+
 set -e
 
 # Update sudo timestamp to avoid interruption later
@@ -51,7 +54,8 @@ VALID_TYPES=("debug" "full" "base" "audio" "video" "video_hw")
 VALID_PLATFORMS=("ios" "macos")
 VALID_PLATFORM_ARCHS=("ios-aarch64" "iphonesimulator-aarch64" "macos-aarch64" "macos-x86_64")
 VALID_LICENSES=("lgpl" "gpl")
-SMALL_FLAGS=("")
+VALID_SMALL_FLAGS=("small" "")
+SMALL_FLAGS=("small" "")
 build_type="Release"
 reset_state=false
 publish_spm=false
@@ -63,6 +67,9 @@ apple_id=""
 app_specific_password=""
 skip_notarization=false
 declare -A PLATFORM_ARCHS
+create_framework=true
+create_bundle=true
+create_release=true
 
 # Add a single platform-arch entry to PLATFORMS, skipping duplicates
 _add_platform_arch() {
@@ -811,25 +818,46 @@ for arg; do
     --remote)
       REMOTE_RELEASE=true
       shift;;
+    --create-framework)
+      create_bundle=false
+      create_release=false
+      create_framework=true
+      shift;;
+    --create-bundle)
+      create_release=false
+      create_framework=false
+      create_bundle=true
+      shift;;
+    --create-release)
+      create_framework=false
+      create_bundle=false
+      create_release=true
+      shift;;
     --help)
       echo "Usage: $0 [--platform=ios-aarch64,iphonesimulator-aarch64,macos-aarch64,macos-x86_64] [--bundle=base,audio,video,video_hw,full,debug] [--license=gpl,lgpl] [--reset] [--help]"
       echo ""
       echo "Options:"
-      echo "  --platform=*  Comma separated (without spaces) list of platforms or platform-arch pairs."
-      echo "                A plain platform name expands to all valid archs for that platform."
-      echo "                  e.g. --platform=ios              → ios-aarch64,iphonesimulator-aarch64"
-      echo "                  e.g. --platform=ios,macos-x86_64 → ios (all archs) + macos-x86_64"
-      echo "                Valid platforms (expands to all archs): ${VALID_PLATFORMS[*]}"
-      echo "                Valid platform-arch combinations:       ${VALID_PLATFORM_ARCHS[*]}"
-      echo "                Note: iphonesimulator is automatically added when ios is specified"
-      echo "  --bundle=*    Comma separated (without spaces) list of bundles to build"
-      echo "                Valid bundles: ${VALID_TYPES[*]}"
-      echo "  --license=*   Comma separated (without spaces) list of licenses to build"
-      echo "                Valid licenses: ${VALID_LICENSES[*]}"
-      echo "  --small       Build with small flags (reduces binary size). Not passing this flag will skip small builds."
-      echo "  --both        Build both small and full versions"
-      echo "  --reset       Reset build state and start from beginning"
-      echo "  --help        Show this help message"
+      echo "  --platform=*        Comma separated (without spaces) list of platforms or platform-arch pairs."
+      echo "                      A plain platform name expands to all valid archs for that platform."
+      echo "                        e.g. --platform=ios              → ios-aarch64,iphonesimulator-aarch64"
+      echo "                        e.g. --platform=ios,macos-x86_64 → ios (all archs) + macos-x86_64"
+      echo "                      Valid platforms (expands to all archs): ${VALID_PLATFORMS[*]}"
+      echo "                      Valid platform-arch combinations:       ${VALID_PLATFORM_ARCHS[*]}"
+      echo "                      Note: iphonesimulator is automatically added when ios is specified"
+      echo "  --bundle=*          Comma separated (without spaces) list of bundles to build"
+      echo "                      Valid bundles: ${VALID_TYPES[*]}"
+      echo "  --license=*         Comma separated (without spaces) list of licenses to build"
+      echo "                      Valid licenses: ${VALID_LICENSES[*]}"
+      echo "  --small             Build with small flags (reduces binary size). Not passing this flag will skip small builds."
+      echo "  --both              Build both small and full versions"
+      echo "  --reset             Reset build state and start from beginning"
+      echo "  --remote            Publish release asset to remote repository"
+      echo "                      Note: Not including one of below flags will create all of artifacts: framework, bundle, and release"
+      echo "                      Do not specify if you want to create all artifacts."
+      echo "  --create-framework  Create framework from built libraries, excludes creating bundle and release"
+      echo "  --create-bundle     Create bundle from built libraries, excludes creating framework and release"
+      echo "  --create-release    Create release from built libraries, excludes creating bundle and framework"
+      echo "  --help              Show this help message"
       echo ""
       echo "State file location: ${STATE_FILE}"
       exit 0;;
@@ -847,6 +875,10 @@ fi
 
 if [[ ${#BUNDLE_ARRAY[@]} -eq 0 ]]; then
   parse_bundles ""
+fi
+
+if [[ ${#LICENSE_ARRAY[@]} -eq 0 ]]; then
+  parse_licenses ""
 fi
 
 # Reset state if requested
@@ -872,7 +904,12 @@ echo "========================================"
 echo "Version: ${FFMPEG_KIT_VERSION}"
 echo "Bundles: ${bundles}"
 echo "Platforms: ${!PLATFORM_ARCHS[*]}"
+echo "Small flags: ${SMALL_FLAGS[*]}"
+echo "Licenses: ${LICENSE_ARRAY[*]}"
 echo "Output: ${BASEDIR}/prebuilt/apple/xcframeworks/"
+echo "Create framework artifact: ${create_framework}"
+echo "Create bundle artifact: ${create_bundle}"
+echo "Create release artifact: ${create_release}"
 echo "========================================"
 echo ""
 
@@ -883,19 +920,84 @@ mkdir -p "${xcframework_output_dir}"
 # Define all build steps - create per-platform XCFrameworks
 declare -a BUILD_STEPS
 
-for platform in "${!PLATFORM_ARCHS[@]}"; do
-  for bundle in "${BUNDLE_ARRAY[@]}"; do
-    for license in "${LICENSE_ARRAY[@]}"; do
-      for small in "${SMALL_FLAGS[@]}"; do
-        output_name="$(get_output_name "${bundle}" "${license}" "${small}" "${platform}")"
+create_framework_artifact() {
+  platform="$1"
+  bundle="$2"
+  license="$3"
+  small="$4"
 
-        # Create build step command with platform parameter
-        build_step="create_xcframework '${bundle}' '${license}' '${small}' '${output_name}' '${xcframework_output_dir}' '${platform}'"
+  output_name="$(get_output_name "${bundle}" "${license}" "${small}" "${platform}")"
+  build_step="create_xcframework '${bundle}' '${license}' '${small}' '${output_name}' '${xcframework_output_dir}' '${platform}'"
+  BUILD_STEPS+=("${build_step}")
+}
+
+create_bundle_artifact() {
+  platform="$1"
+  bundle="$2"
+  license="$3"
+  small="$4"
+
+  output_name="$(get_output_name "${bundle}" "${license}" "${small}" "${platform}")"
+  xcframework_path="${xcframework_output_dir}/${output_name}.xcframework"
+  if [[ -d "${xcframework_path}" ]]; then
+    # Create a zip archive
+    release_asset="${xcframework_output_dir}/${output_name}.xcframework.zip"
+    echo "Creating release asset: ${release_asset}"
+    build_step="cd ${xcframework_output_dir} && zip -r -q ${release_asset} ${output_name}.xcframework && chmod 777 ${release_asset} && cd ${BASEDIR}"
+    BUILD_STEPS+=("${build_step}")
+  else
+    echo "WARNING: XCFramework not found: ${xcframework_path}"
+  fi
+}
+
+create_release_artifact() {
+  platform="$1"
+  bundle="$2"
+  license="$3"
+  small="$4"
+
+  output_name="$(get_output_name "${bundle}" "${license}" "${small}" "${platform}")"
+  xcframework_path="${xcframework_output_dir}/${output_name}.xcframework"
+  if [[ -d "${xcframework_path}" ]]; then
+    release_asset="${xcframework_output_dir}/${output_name}.xcframework.zip"
+    if [[ -f "${release_asset}" ]]; then
+      echo "Publishing release asset: ${release_asset}"
+      if [[ "${REMOTE_RELEASE}" == "true" ]]; then
+        build_step="create_github_release '${release_asset}'"
         BUILD_STEPS+=("${build_step}")
+      else
+        echo "Remote release mode disabled, skipping GitHub release"
+      fi
+    fi
+  else
+    echo "WARNING: XCFramework not found: ${xcframework_path}"
+  fi
+}
+
+if [[ $create_framework == "true" ]]; then
+  for platform in "${!PLATFORM_ARCHS[@]}"; do
+    for bundle in "${BUNDLE_ARRAY[@]}"; do
+      for license in "${LICENSE_ARRAY[@]}"; do
+        for small in "${SMALL_FLAGS[@]}"; do
+          # skip small flag or lgpl flag for 'debug'
+          if [[ "${bundle}" == "debug" && ("${small}" == "small" || "${license}" == "lgpl") ]]; then
+            continue
+          fi
+          output_name="$(get_output_name "${bundle}" "${license}" "${small}" "${platform}")"
+          xcframework_path="${xcframework_output_dir}/${output_name}.xcframework"
+          release_asset="${xcframework_output_dir}/${output_name}.xcframework.zip"
+          create_framework_artifact "$platform" "$bundle" "$license" "$small"
+          create_bundle_artifact "$platform" "$bundle" "$license" "$small"
+          create_release_artifact "$platform" "$bundle" "$license" "$small"
+          if [[ -f "$release_asset" ]]; then
+            echo "Cleaning up: ${xcframework_path}"
+            rm -rf "${xcframework_path}"
+          fi
+        done
       done
     done
-  done
 done
+fi
 
 # Calculate progress
 total_steps=${#BUILD_STEPS[@]}
@@ -922,47 +1024,19 @@ for step in "${BUILD_STEPS[@]}"; do
   echo ""
 done
 
-# Publish to GitHub Releases
-echo "========================================"
-echo "Publishing XCFrameworks to GitHub Releases"
-echo "========================================"
-
-for platform in "${!PLATFORM_ARCHS[@]}"; do
-  for bundle in "${BUNDLE_ARRAY[@]}"; do
-    for license in "${LICENSE_ARRAY[@]}"; do
-      for small in "${SMALL_FLAGS[@]}"; do
-        output_name="$(get_output_name "${bundle}" "${license}" "${small}" "${platform}")"
-        xcframework_path="${xcframework_output_dir}/${output_name}.xcframework"
-
-        if [[ -d "${xcframework_path}" ]]; then
-          # Create a zip archive
-          release_asset="${xcframework_output_dir}/${output_name}.xcframework.zip"
-
-          echo "Creating release asset: ${release_asset}"
-          cd "${xcframework_output_dir}"
-          zip -r -q "${release_asset}" "${output_name}.xcframework"
-          chmod 777 "${release_asset}"
-          cd "${BASEDIR}"
-
-          if [[ -f "${release_asset}" ]]; then
-            echo "Publishing release asset: ${release_asset}"
-            if [[ "${REMOTE_RELEASE}" == "true" ]]; then
-              create_github_release "${release_asset}"
-            else
-              echo "Remote release mode disabled, skipping GitHub release"
-            fi
-          fi
-        else
-          echo "WARNING: XCFramework not found: ${xcframework_path}"
-        fi
-      done
-    done
-  done
-done
+# save end time
+END_TIME=$(date +%s)
+ELAPSED_TIME=$((END_TIME - START_TIME))
+# elapsed time in h:m:s
+ELAPSED_H=$((ELAPSED_TIME / 3600))
+ELAPSED_M=$(((ELAPSED_TIME % 3600) / 60))
+ELAPSED_S=$((ELAPSED_TIME % 60))
+ELAPSED_TIME_HMS="${ELAPSED_H}h:${ELAPSED_M}m:${ELAPSED_S}s"
 
 echo ""
 echo "========================================"
 echo "All XCFramework builds completed successfully!"
+echo "Elapsed time: ${ELAPSED_TIME_HMS}"
 echo "========================================"
 echo "Output directory: ${xcframework_output_dir}"
 echo "========================================"

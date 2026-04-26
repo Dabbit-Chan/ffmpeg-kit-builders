@@ -1,7 +1,10 @@
 #!/usr/bin/env bash
-set -e
-
 # shellcheck disable=SC2317,SC2129,SC1091,SC2120,SC2035,SC2016,SC2310,SC2155,SC2154,SC2034
+
+# save start time
+START_TIME=$(date +%s)
+
+set -e
 
 # Update sudo timestamp to avoid interruption later
 echo "Requesting administrative privileges..."
@@ -400,9 +403,19 @@ for step in "${BUILD_STEPS[@]}"; do
   execute_build "${step}" "${current_step}/${total_steps}"
 done
 
+# save end time
+END_TIME=$(date +%s)
+ELAPSED_TIME=$((END_TIME - START_TIME))
+# elapsed time in h:m:s
+ELAPSED_H=$((ELAPSED_TIME / 3600))
+ELAPSED_M=$(((ELAPSED_TIME % 3600) / 60))
+ELAPSED_S=$((ELAPSED_TIME % 60))
+ELAPSED_TIME_HMS="${ELAPSED_H}h:${ELAPSED_M}m:${ELAPSED_S}s"
+
 echo ""
 echo "========================================"
 echo "All builds completed successfully!"
+echo "Elapsed time: ${ELAPSED_TIME_HMS}"
 echo "========================================"
 
 rm -f "${STATE_FILE}"

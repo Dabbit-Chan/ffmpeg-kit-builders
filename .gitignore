@@ -39,3 +39,4 @@ mempalace.yaml
 .py-init
 QWEN.md
 .ffmpeg-kit-build-xcframework-state
+.DS_Store
