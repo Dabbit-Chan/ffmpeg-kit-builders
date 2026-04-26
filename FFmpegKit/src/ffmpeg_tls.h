@@ -1,7 +1,9 @@
 #ifndef FFMPEG_TLS_H
 #define FFMPEG_TLS_H
 
-#if defined(__GNUC__) || defined(__clang__)
+#if defined(_MSC_VER) || defined(__MINGW32__) || defined(__MINGW64__)
+    #define FFMPEG_WEAK_SYMBOL __declspec(selectany)
+#elif defined(__GNUC__) || defined(__clang__)
     #define FFMPEG_WEAK_SYMBOL __attribute__((weak))
 #else
     #define FFMPEG_WEAK_SYMBOL

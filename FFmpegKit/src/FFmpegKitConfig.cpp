@@ -1086,7 +1086,6 @@ void ffmpegkit::FFmpegKitConfig::joinAsyncFFplayThread() {
 #if defined(__linux__) || defined(__ANDROID__) || defined(__GLIBC__)
     // Use pthread_timedjoin_np on platforms that support it (Linux/glibc)
     rc = pthread_timedjoin_np(asyncFFplayThread, nullptr, &ts);
-    int rc = pthread_timedjoin_np(asyncFFplayThread, nullptr, &ts);
     if (rc != 0) {
       std::cout << "Failed to join async FFplay thread (timeout or error: "
                 << rc << "), detaching instead." << std::endl;

@@ -203,12 +203,10 @@ struct FFplayContext {
 // Global API Synchronization
 static SDL_mutex *ffplay_api_mutex = NULL;
 static SDL_SpinLock ffplay_init_lock = 0;
-static pthread_t ffplay_api_owner = 0;
-static int ffplay_api_recursion_count = 0;
 static FFplayContext *active_ffplay_ctx = NULL;
 
 static void lock_ffplay_api(void) {
-    pthread_t self = pthread_self();
+    // Double-checked locking for initialization
     if (!ffplay_api_mutex) {
         SDL_AtomicLock(&ffplay_init_lock);
         if (!ffplay_api_mutex) {
@@ -217,23 +215,13 @@ static void lock_ffplay_api(void) {
         SDL_AtomicUnlock(&ffplay_init_lock);
     }
     
-    if (ffplay_api_recursion_count > 0 && pthread_equal(ffplay_api_owner, self)) {
-        ffplay_api_recursion_count++;
-        return;
-    }
-    
+    // SDL Mutexes are recursive; simply lock.
     SDL_LockMutex(ffplay_api_mutex);
-    ffplay_api_owner = self;
-    ffplay_api_recursion_count = 1;
 }
 
 static void unlock_ffplay_api(void) {
-    if (ffplay_api_recursion_count > 0) {
-        ffplay_api_recursion_count--;
-        if (ffplay_api_recursion_count == 0) {
-            ffplay_api_owner = 0;
-            SDL_UnlockMutex(ffplay_api_mutex);
-        }
+    if (ffplay_api_mutex) {
+        SDL_UnlockMutex(ffplay_api_mutex);
     }
 }
 

@@ -3986,6 +3986,7 @@ configure_ffmpeg() {
   truthy "$enable_libklvanc" && config_options+=" --enable-libklvanc"                 # enable Kernel Labs VANC processing [no]
   truthy "$enable_libkvazaar" && config_options+=" --enable-libkvazaar"               # enable HEVC encoding via libkvazaar [no]
   truthy "$enable_liblc3" && config_options+=" --enable-liblc3"                       # enable LC3 de/encoding via liblc3 [no]
+  truthy "$enable_liblc3" && add_extra_libs "-llc3"                                   # enable LC3 de/encoding via liblc3 [no]
   truthy "$enable_liblensfun" && config_options+=" --enable-liblensfun"               # enable lensfun lens correction [no]
   truthy "$enable_libmodplug" && config_options+=" --enable-libmodplug"               # enable ModPlug via libmodplug [no]
   truthy "$enable_libmp3lame" && config_options+=" --enable-libmp3lame"               # enable MP3 encoding via libmp3lame [no]
@@ -5562,51 +5563,6 @@ disable_nonessential() {
     disable_makefile "$subdir/Makefile"
     disable_meson "$subdir/meson.build"
   done < <(find "$src_dir" -type d "${find_args[@]}" -print0)
-}
-
-disable_windows_rsrc() {
-  local src_dir="${1:-"$(pwd)"}"
-  if iswindows; then
-    echo "INFO: Patching build files in $src_dir to remove Windows resource objects..." >>"$LOG_FILE"
-
-    # --- Pass 1: Autotools/Make (Handles build/version.o and similar) ---
-    find "$src_dir" \( -name "Makefile" -o -name "Makefile.in" -o -name "Makefile.am" -o -name "*.make" \) -exec sh -c '
-      for file do
-        if grep -qE "(\.res(\.lo)?|w32res\.lo|version(info|-metadata)\.(lo|res|o)|version\.rc\.(lo|res|o))" "$file"; then
-          echo "  PATCHING MAKE: $file" >>"$LOG_FILE"
-          sed -i'.bak' -e -E "/=/ { 
-            w /tmp/sed_before
-            s|[^ ]*/version(info|-metadata|info\.rc|info\.res)?\.(lo|res|o)\b||g
-            s|[^ ]*/version\.rc\.(lo|res|o)\b||g
-            s|[^ ]*\.res(\.lo)?\b||g
-            w /tmp/sed_after
-          }" "$file"
-          diff /tmp/sed_before /tmp/sed_after | grep "^<" | sed -e "s/^</    REMOVED: /" >>"$LOG_FILE"
-        fi
-      done
-    ' sh {} +
-
-    # --- Pass 2: CMake (Surgical Path & Rule Removal) ---
-    find "$src_dir" \( -name "*.make" -o -name "*.cmake" -o -name "*.rsp" \) -exec sh -c '
-      for file do
-        if grep -qE "version\.rc\.res" "$file"; then
-          echo "  PATCHING CMAKE: $file" >>"$LOG_FILE"
-          sed -i'' -e -E "s/\"[^\"]*version\.rc\.res\"//g; s/[^ ]*version\.rc\.res//g" "$file"
-        fi
-      done
-    ' sh {} +
-
-    # --- Pass 3: Meson (Multi-line Block Commenting) ---
-    find "$src_dir" -name "meson.build" -exec sh -c '
-      for file do
-        if grep -q "windows.compile_resources" "$file"; then
-          echo "  PATCHING MESON: $file" >>"$LOG_FILE"
-          sed -i'' -e "/windows\.compile_resources(/,/)/ s/^/# /" "$file"
-          sed -i'' -e -E "/(libplacebo_rc|demos_rc|ft2_res|version_res)\s*=\s*configure_file/,/)/ s/^/# /" "$file"
-        fi
-      done
-    ' sh {} +
-  fi
 }
 
 disable_makefile() {

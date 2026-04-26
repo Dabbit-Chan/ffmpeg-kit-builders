@@ -12,7 +12,7 @@ if(APPLE)
     include("${CMAKE_CURRENT_SOURCE_DIR}/cmake/AppleResourceGen.cmake")
 endif()
 
-# set(CMAKE_MESSAGE_LOG_LEVEL DEBUG)
+set(CMAKE_MESSAGE_LOG_LEVEL DEBUG)
 
 # Enforce MinGW when building for Windows
 if(WIN32 AND NOT MINGW)
@@ -522,9 +522,15 @@ if(ENABLE_OPENVINO)
     configure_static_linking(OPENVINO OFF)
     target_link_libraries(ffmpegkit PRIVATE PkgConfig::OPENVINO)
     # Try tbb12 first, fallback to tbb
-    pkg_check_modules(TBB QUIET IMPORTED_TARGET tbb12)
-    if(NOT PkgConfig::TBB)
-        pkg_check_modules(TBB REQUIRED IMPORTED_TARGET tbb)
+    set(_tbb_candidates tbb12 tbb libtbb libtbb12)
+    foreach(_pkg ${_tbb_candidates})
+        pkg_check_modules(TBB QUIET IMPORTED_TARGET ${_pkg})
+        if(TBB_FOUND)
+            break()
+        endif()
+    endforeach()
+    if(NOT TBB_FOUND OR NOT TARGET PkgConfig::TBB)
+        message(FATAL_ERROR "OpenVINO requires TBB but none of the following were found: ${_tbb_candidates}")
     endif()
     configure_static_linking(TBB OFF)
     target_link_libraries(ffmpegkit PRIVATE PkgConfig::TBB)
@@ -664,6 +670,7 @@ if(WIN32)
         )
 
         target_link_options(ffmpegkit PRIVATE 
+            "-v"
             "-static-libgcc" 
             "-static-libstdc++" 
             # "-nodefaultlibs"
@@ -956,7 +963,7 @@ if(BUILD_SHARED_LIBS)
     endif()
 
     # set(CMAKE_MESSAGE_LOG_LEVEL VERBOSE)
-    # message(STATUS "BUNDLE_LIBRARIES: ${BUNDLE_LIBRARIES}")
+    message(DEBUG "BUNDLE_LIBRARIES: ${BUNDLE_LIBRARIES}")
     # set(CMAKE_MESSAGE_LOG_LEVEL DEBUG)
     
     # Bundling Manifest (Requires shared-library.sh)
