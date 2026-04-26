@@ -217,9 +217,9 @@ fix_pkgconfig_flags() {
 	done
 
 	while IFS= read -r -d '' file; do
-		if grep -q "whole-archive" "$file" 2>/dev/null || \
-		grep -q "no-whole-archive" "$file" 2>/dev/null || \
-		grep -oE '/[^[:space:]]*/lib[a-zA-Z0-9_+.-]+\.a' "$file" 2>/dev/null; then
+		if grep -q "whole-archive" "$file" >/dev/null || \
+		grep -q "no-whole-archive" "$file" >/dev/null || \
+		grep -oE '/[^[:space:]]*/lib[a-zA-Z0-9_+.-]+\.a' "$file" >/dev/null; then
 			sed -i'.bak' -E 's/-Wl,(--whole-archive|--no-whole-archive)//g; s|[[:space:]]*/[^[:space:]]*/lib([a-zA-Z0-9_+.-]+)\.a| -l\1|g' "$file"
 		fi
 	done < <(find "$ffmpeg_install_prefix/lib/pkgconfig" -name "*.pc" -print0)
