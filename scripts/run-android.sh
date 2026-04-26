@@ -502,6 +502,18 @@ build_bzlib() {
   disable_nonessential "$src_dir/$lib"
   generic_make_install "CFLAGS=\"${CFLAGS}\""
   change_dir "$src_dir"
+    cat > "$install_pkgconfig_dir/bzip2.pc" <<EOF
+prefix=$dependency_install_prefix
+exec_prefix=\${prefix}
+libdir=\${exec_prefix}/lib
+includedir=\${prefix}/include
+
+Name: bzip2
+Description: bzip2 compression library
+Version: 1.0.8
+Libs: -L\${libdir} -lbz2
+Cflags: -I\${includedir}
+EOF
 }
 # build_lzma              # config_options+= --disable-lzma               # disable lzma [autodetect]
 build_lzma() {

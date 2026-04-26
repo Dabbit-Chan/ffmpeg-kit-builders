@@ -268,7 +268,7 @@ set(ENV{PKG_CONFIG_PATH} "${FFMPEG_BUILD_DIR}/lib/pkgconfig:$ENV{PKG_CONFIG_PATH
 set(PKG_CONFIG_USE_STATIC_LIBS ON)
 
 pkg_check_modules(FFMPEG REQUIRED IMPORTED_TARGET 
-    libavdevice libavfilter libavformat libavcodec libswresample libswscale libavutil jsoncpp sdl2
+    libavdevice libavfilter libavformat libavcodec libswresample libswscale libavutil jsoncpp sdl2 iconv bzip2 liblzma zlib
 )
 
 function(replace_static_with_shared INPUT_LIB OUTPUT_VAR)
