@@ -59,6 +59,114 @@ extern "C" {
 #include <signal.h>
 #include <thread> // 2. Standard library headers at the end
 
+#if (defined(__ANDROID__) && __ANDROID_API__ < 28) || defined(__APPLE__)
+#include <pthread.h>
+#include <errno.h>
+#include <time.h>
+#include <cstdlib>
+
+extern "C" {
+struct timedjoin_args {
+    pthread_t       td;
+    void            **res;
+    pthread_mutex_t mtx;
+    pthread_cond_t  cond;
+    int             joined;
+    int             detached;
+    int             join_rc;
+};
+
+static void *waiter_routine(void *ap) {
+    auto *args = static_cast<struct timedjoin_args *>(ap);
+    void *result = nullptr;
+    
+    // Perform the actual join
+    int rc = pthread_join(args->td, &result);
+
+    pthread_mutex_lock(&args->mtx);
+    args->join_rc = rc;
+    if (rc == 0 && args->res) {
+        *args->res = result;
+    }
+    args->joined = 1;
+    pthread_cond_signal(&args->cond);
+    int detached = args->detached;
+    pthread_mutex_unlock(&args->mtx);
+
+    if (detached) {
+        pthread_mutex_destroy(&args->mtx);
+        pthread_cond_destroy(&args->cond);
+        free(args);
+    }
+    return nullptr;
+}
+
+/**
+ * Fallback implementation of pthread_timedjoin_np.
+ * WARNING: If this returns ETIMEDOUT, the target thread 'td' is effectively 
+ * no longer joinable by the caller because an internal waiter thread now 
+ * owns the join. Attempting to join 'td' again results in Undefined Behavior.
+ */
+int pthread_timedjoin_np(pthread_t td, void **res, const struct timespec *ts) {
+    auto *args = static_cast<struct timedjoin_args *>(calloc(1, sizeof(*args)));
+    if (!args) return ENOMEM;
+
+    args->td = td;
+    args->res = res;
+
+    int ret;
+    if ((ret = pthread_mutex_init(&args->mtx, nullptr)) != 0) goto free_args;
+    if ((ret = pthread_cond_init(&args->cond, nullptr)) != 0) goto destroy_mtx;
+
+    pthread_t waiter_thread;
+    if ((ret = pthread_create(&waiter_thread, nullptr, waiter_routine, args)) != 0) {
+        goto destroy_cond;
+    }
+
+    pthread_mutex_lock(&args->mtx);
+    while (!args->joined) {
+        ret = pthread_cond_timedwait(&args->cond, &args->mtx, ts);
+        
+        if (ret == ETIMEDOUT) break;
+        if (ret == 0 || ret == EINTR) continue; // Spurious wakeup or signal
+        
+        // Unexpected system error (EINVAL, etc.) - break to avoid infinite loop
+        break;
+    }
+
+    int actual_join_rc = 0;
+    if (!args->joined) {
+        // TIMEOUT PATH: Hand off cleanup responsibility to the waiter thread
+        args->detached = 1;
+        pthread_mutex_unlock(&args->mtx);
+        pthread_detach(waiter_thread);
+        return ETIMEDOUT;
+    }
+    
+    // SUCCESS PATH: Copy the result BEFORE unlocking for strict memory visibility
+    actual_join_rc = args->join_rc;
+    pthread_mutex_unlock(&args->mtx);
+    
+    // Join the waiter (it's guaranteed to be finishing now)
+    pthread_join(waiter_thread, nullptr);
+    
+    pthread_cond_destroy(&args->cond);
+    pthread_mutex_destroy(&args->mtx);
+    free(args);
+    
+    return actual_join_rc;
+
+destroy_cond:
+    pthread_cond_destroy(&args->cond);
+destroy_mtx:
+    pthread_mutex_destroy(&args->mtx);
+free_args:
+    free(args);
+    return ret;
+}
+}
+#endif
+
 extern "C" {
 void set_report_callback(void (*callback)(int, float, float, int64_t, double,
                                           double, double));
@@ -1067,32 +1175,10 @@ void ffmpegkit::FFmpegKitConfig::joinAsyncFFplayThread() {
     WaitForSingleObject((HANDLE)asyncFFplayThread, 5000);
     CloseHandle((HANDLE)asyncFFplayThread);
 #else
-    int rc = -1;
-
-#if defined(__ANDROID__)
-    #if __ANDROID_API__ >= 28
-        // Android 9.0+ supports timed join
-        struct timespec ts;
-        clock_gettime(CLOCK_REALTIME, &ts);
-        ts.tv_sec += 5;
-        rc = pthread_timedjoin_np(asyncFFplayThread, nullptr, &ts);
-    #else
-        // Android < 28: tryjoin is often missing/unreliable in headers.
-        // Direct detach is the safest way to avoid blocking.
-        rc = -1; 
-    #endif
-
-#elif defined(__GLIBC__) || defined(__linux__)
-    // Standard Linux/GLIBC
     struct timespec ts;
     clock_gettime(CLOCK_REALTIME, &ts);
     ts.tv_sec += 5;
-    rc = pthread_timedjoin_np(asyncFFplayThread, nullptr, &ts);
-
-#elif defined(__APPLE__)
-    // macOS/iOS
-    rc = pthread_tryjoin_np(asyncFFplayThread, nullptr);
-#endif
+    int rc = pthread_timedjoin_np(asyncFFplayThread, nullptr, &ts);
     if (rc != 0) {
       // If tryjoin failed (thread still running) or isn't supported,
       // we must detach to prevent leaks and avoid blocking.
@@ -1208,32 +1294,11 @@ void ffmpegkit::FFmpegKitConfig::disableRedirection() {
     WaitForSingleObject((HANDLE)callbackThread, 5000);
     CloseHandle((HANDLE)callbackThread);
 #else
-    int rc = -1;
-
-#if defined(__ANDROID__)
-    #if __ANDROID_API__ >= 28
-        // Android 9.0+ supports timed join
-        struct timespec ts;
-        clock_gettime(CLOCK_REALTIME, &ts);
-        ts.tv_sec += 5;
-        rc = pthread_timedjoin_np(callbackThread, nullptr, &ts);
-    #else
-        // Android < 28: tryjoin is often missing/unreliable in headers.
-        // Direct detach is the safest way to avoid blocking.
-        rc = -1; 
-    #endif
-
-#elif defined(__GLIBC__) || defined(__linux__)
     // Standard Linux/GLIBC
     struct timespec ts;
     clock_gettime(CLOCK_REALTIME, &ts);
     ts.tv_sec += 5;
-    rc = pthread_timedjoin_np(callbackThread, nullptr, &ts);
-
-#elif defined(__APPLE__)
-    // macOS/iOS
-    rc = pthread_tryjoin_np(callbackThread, nullptr);
-#endif
+    int rc = pthread_timedjoin_np(callbackThread, nullptr, &ts);
     if (rc != 0) {
       // If tryjoin failed (thread still running) or isn't supported,
       // we must detach to prevent leaks and avoid blocking.
@@ -1756,32 +1821,11 @@ void ffmpegkit::FFmpegKitConfig::asyncFFplayExecute(
     WaitForSingleObject((HANDLE)asyncFFplayThread, 5000);
     CloseHandle((HANDLE)asyncFFplayThread);
 #else
-    int rc = -1;
-
-#if defined(__ANDROID__)
-    #if __ANDROID_API__ >= 28
-        // Android 9.0+ supports timed join
-        struct timespec ts;
-        clock_gettime(CLOCK_REALTIME, &ts);
-        ts.tv_sec += 5;
-        rc = pthread_timedjoin_np(asyncFFplayThread, nullptr, &ts);
-    #else
-        // Android < 28: tryjoin is often missing/unreliable in headers.
-        // Direct detach is the safest way to avoid blocking.
-        rc = -1; 
-    #endif
-
-#elif defined(__GLIBC__) || defined(__linux__)
     // Standard Linux/GLIBC
     struct timespec ts;
     clock_gettime(CLOCK_REALTIME, &ts);
     ts.tv_sec += 5;
-    rc = pthread_timedjoin_np(asyncFFplayThread, nullptr, &ts);
-
-#elif defined(__APPLE__)
-    // macOS/iOS
-    rc = pthread_tryjoin_np(asyncFFplayThread, nullptr);
-#endif
+    int rc = pthread_timedjoin_np(asyncFFplayThread, nullptr, &ts);
     if (rc != 0) {
       // If tryjoin failed (thread still running) or isn't supported,
       // we must detach to prevent leaks and avoid blocking.
@@ -2398,32 +2442,10 @@ ffmpegkit::FFmpegKitConfig::~FFmpegKitConfig() {
     WaitForSingleObject((HANDLE)asyncFFplayThread, 5000);
     CloseHandle((HANDLE)asyncFFplayThread);
 #else
-    int rc = -1;
-
-#if defined(__ANDROID__)
-    #if __ANDROID_API__ >= 28
-        // Android 9.0+ supports timed join
-        struct timespec ts;
-        clock_gettime(CLOCK_REALTIME, &ts);
-        ts.tv_sec += 5;
-        rc = pthread_timedjoin_np(asyncFFplayThread, nullptr, &ts);
-    #else
-        // Android < 28: tryjoin is often missing/unreliable in headers.
-        // Direct detach is the safest way to avoid blocking.
-        rc = -1; 
-    #endif
-
-#elif defined(__GLIBC__) || defined(__linux__)
-    // Standard Linux/GLIBC
     struct timespec ts;
     clock_gettime(CLOCK_REALTIME, &ts);
     ts.tv_sec += 5;
-    rc = pthread_timedjoin_np(asyncFFplayThread, nullptr, &ts);
-
-#elif defined(__APPLE__)
-    // macOS/iOS
-    rc = pthread_tryjoin_np(asyncFFplayThread, nullptr);
-#endif
+    int rc = pthread_timedjoin_np(asyncFFplayThread, nullptr, &ts);
     if (rc != 0) {
       // If tryjoin failed (thread still running) or isn't supported,
       // we must detach to prevent leaks and avoid blocking.
