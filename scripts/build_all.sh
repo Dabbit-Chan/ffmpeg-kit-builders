@@ -58,7 +58,6 @@ VALID_BUILDS=("ffmpeg" "kit" "bundle")
 ANDROID_PLATFORM_ARCHS=()
 APPLE_PLATFORM_ARCHS=()
 build_aars=false
-build_xcframeworks=false
 declare -A PLATFORMS
 build_ffmpeg=false
 build_kit=false
@@ -302,7 +301,7 @@ execute_build() {
 
   echo "[BUILD] Starting: ${cmd_string}" | tee -a "${LOG_FILE}"
 
-  if (sudo -E bash -c "${cmd_string}") > >(redirect_output) 2>&1; then
+  if eval "${cmd_string}" > >(redirect_output) 2>&1; then
     mark_completed "${cmd_string}"
     echo "[DONE] Completed: ${cmd_string}" | tee -a "${LOG_FILE}"
     return 0
@@ -415,51 +414,55 @@ echo "========================================" | tee -a "${LOG_FILE}"
 
 rm -rf "${STATE_DIR}"
 
-# Build AARs for Android platforms
-android_platforms=$(IFS=,; echo "${ANDROID_PLATFORM_ARCHS[*]}")
-
-if truthy "$build_aars" && truthy "$build_bundle"; then
-  echo "Building AARs..." | tee -a "${LOG_FILE}"
-  sudo -E bash -c "${WORK_DIR}/scripts/android/build_aar.sh --platform=${android_platforms} --bundles=${bundles}"
-fi
-
 # Build XCFrameworks for Apple platforms
-apple_platforms=""
+declare -a android_platforms
+android_platforms=()
+android_platforms_str=""
 for platform in "${!PLATFORMS[@]}"; do
   case "${platform}" in
-    "ios"|"iphonesimulator"|"macos")
-      IFS=',' read -ra arch_array <<< "${PLATFORMS[$platform]}"
-      for arch in "${arch_array[@]}"; do
-        if [[ -n "${apple_platforms}" ]]; then
-          apple_platforms="${apple_platforms},"
-        fi
-        apple_platforms="${apple_platforms}${platform}-${arch}"
-      done
+    "android")
+      android_platforms+=("${platform}")
       ;;
     *)
       ;;
   esac
 done
 
-if [[ -n "${apple_platforms}" ]] && truthy "$build_xcframeworks" && truthy "$build_bundle"; then
+if [[ ${#android_platforms[@]} -gt 0 ]]; then
+  android_platforms_str=$(IFS=,; echo "${android_platforms[*]}")
+fi
+
+if [[ ${#android_platforms[@]} -gt 0 ]]; && truthy "$build_bundle"; then
+  echo "Building AARs..." | tee -a "${LOG_FILE}"
+  sudo -E bash -c "${WORK_DIR}/scripts/android/build_aar.sh --platform=${android_platforms} --bundles=${bundles} --reset"
+fi
+
+# Build XCFrameworks for Apple platforms
+declare -a apple_platforms
+apple_platforms=()
+apple_platforms_str=""
+for platform in "${!PLATFORMS[@]}"; do
+  case "${platform}" in
+    "ios"|"macos")
+      apple_platforms+=("${platform}")
+      ;;
+    *)
+      ;;
+  esac
+done
+
+if [[ ${#apple_platforms[@]} -gt 0 ]]; then
+  apple_platforms_str=$(IFS=,; echo "${apple_platforms[*]}")
+fi
+
+if [[ -n "${apple_platforms_str}" ]] && truthy "$build_bundle"; then
   echo "========================================" | tee -a "${LOG_FILE}"
   echo "Building XCFrameworks for Apple platforms" | tee -a "${LOG_FILE}"
   echo "========================================" | tee -a "${LOG_FILE}"
-  echo "Platforms: ${apple_platforms}" | tee -a "${LOG_FILE}"
+  echo "Platforms: ${apple_platforms_str}" | tee -a "${LOG_FILE}"
   echo "Bundles: ${bundles}" | tee -a "${LOG_FILE}"
   echo "========================================" | tee -a "${LOG_FILE}"
   
-  sudo -E bash -c "${WORK_DIR}/scripts/apple/build_xcframework.sh --platform=${apple_platforms} --bundles=${bundles}"
-  
-  # Generate SPM and CocoaPods files
-  echo "Generating Swift Package Manager and CocoaPods files..." | tee -a "${LOG_FILE}"
-  sudo -E bash -c "${WORK_DIR}/scripts/apple/generate_spm_cocoapods.sh --bundles=${bundles}"
-  
-  echo "========================================" | tee -a "${LOG_FILE}"
-  echo "XCFramework build complete!" | tee -a "${LOG_FILE}"
-  echo "========================================" | tee -a "${LOG_FILE}"
-  echo "Output: ${WORK_DIR}/prebuilt/apple/xcframeworks/" | tee -a "${LOG_FILE}"
-  echo "SPM: ${WORK_DIR}/Package.swift" | tee -a "${LOG_FILE}"
-  echo "CocoaPods: ${WORK_DIR}/FFmpegKit.podspec" | tee -a "${LOG_FILE}"
-  echo "========================================" | tee -a "${LOG_FILE}"
+  sudo -E bash -c "${WORK_DIR}/scripts/apple/build_xcframework.sh --platform=${apple_platforms_str} --bundles=${bundles} --reset"
 fi
+
