@@ -1,8 +1,11 @@
 #!/usr/bin/env bash
 
-# shellcheck disable=SC2317,SC2129,SC1091,SC2120,SC2035,SC2016,SC2310,SC2155,SC2154,SC2034
+# shellcheck disable=SC2317,SC2129,SC1091,SC2120,SC2035,SC2016,SC2310,SC2155,SC2154,SC2034,SC2012
 
 # Build AARs for Android
+
+# save start time
+START_TIME=$(date +%s)
 
 # Update sudo timestamp to avoid interruption later
 echo "Requesting administrative privileges..."
@@ -16,7 +19,7 @@ STATE_DIR="${STATE_DIR:-${BASEDIR}/.ffmpeg-kit-build-aar-state}"
 STATE_FILE="${STATE_DIR}/build_aar.state"
 LOCK_FILE="${STATE_DIR}/build_aar.lock"
 
-source $BASEDIR/scripts/function.sh
+source "${BASEDIR}/scripts/function.sh"
 
 [[ -f "$LOG_FILE" ]] && rm -f "$LOG_FILE"
 [[ -f "$LOG_FILE" ]] && chmod -R a+rwx "$LOG_FILE" || true;
@@ -55,6 +58,10 @@ LICENSE_FLAGS=(" " "gpl")
 SMALL_FLAGS=(" " "small")
 declare -A PLATFORMS
 local_build=false
+# Define all build steps
+declare -a BUILD_STEPS
+create_aar=true
+create_release=true
 
 parse_arch() {
     case "$1" in
@@ -146,23 +153,23 @@ mark_completed() {
 execute_build() {
   local cmd_string="$1"
   if is_completed "${cmd_string}"; then
-    echo "[SKIP] Already completed: ${cmd_string}"
+    echo "[SKIP] Already completed: ${cmd_string}" | tee -a "${LOG_FILE}"
     return 0
   fi
   
-  echo "[BUILD] Starting: ${cmd_string}"
+  echo "[BUILD] Starting: ${cmd_string}" | tee -a "${LOG_FILE}"
   
-  if sudo -E bash -c "${cmd_string}"; then
+  if (sudo -E bash -c "${cmd_string}") > >(redirect_output) 2>&1; then
     mark_completed "${cmd_string}"
-    echo "[DONE] Completed: ${cmd_string}"
+    echo "[DONE] Completed: ${cmd_string}" | tee -a "${LOG_FILE}"
     return 0
   else
     local exit_code=$?
-    echo "[FAIL] Failed: ${cmd_string} (exit code: ${exit_code})"
-    echo ""
-    echo "Build failed. You can:"
-    echo "  1. Fix the issue and re-run this script to resume from this step"
-    echo "  2. Use --reset to start from the beginning"
+    echo "[FAIL] Failed: ${cmd_string} (exit code: ${exit_code})" | tee -a "${LOG_FILE}"
+    echo "" | tee -a "${LOG_FILE}"
+    echo "Build failed. You can:" | tee -a "${LOG_FILE}"
+    echo "  1. Fix the issue and re-run this script to resume from this step" | tee -a "${LOG_FILE}"
+    echo "  2. Use --reset to start from the beginning" | tee -a "${LOG_FILE}"
     exit ${exit_code}
   fi
 }
@@ -262,18 +269,32 @@ for arg; do
     --local)
       local_build=true
       shift;;
+    --create-aar)
+      create_aar=true
+      create_release=false
+      shift;;
+    --create-release)
+      create_release=true
+      create_aar=false
+      shift;;
     --help)
       echo "Usage: $0 [--platform=linux-x86_64|windows-x86_64|android-aarch64|android-armv7a|android-x86_64] [--reset] [--bundles=*) ] [--help]"
       echo ""
       echo "Options:"
-      echo "  --platform=*  Comma separated (without spaces) list of platforms and architectures (e.g. --platform=linux-x86_64,windows-x86_64,android-aarch64,android-armv7a,android-x86_64)"
-      echo "                Valid platforms: ${VALID_PLATFORMS[*]}"
-      echo "                Valid architectures: ${VALID_ARCHS[*]}"
-      echo "                Valid platform and arch combinations: ${VALID_PLATFORM_ARCHS[*]}"
-      echo "  --reset       Reset build state and start from beginning"
-      echo "  --bundle=*    Comma separated (without spaces) list of bundles to build (e.g. --bundle=debug,full,base,audio,video,video_hw)"
-      echo "                Valid bundles: ${VALID_TYPES[*]}"
-      echo "  --help        Show this help message"
+      echo "  --platform=*      Comma separated (without spaces) list of platforms and architectures (e.g. --platform=linux-x86_64,windows-x86_64,android-aarch64,android-armv7a,android-x86_64)"
+      echo "                    Valid platforms: ${VALID_PLATFORMS[*]}"
+      echo "                    Valid architectures: ${VALID_ARCHS[*]}"
+      echo "                    Valid platform and arch combinations: ${VALID_PLATFORM_ARCHS[*]}"
+      echo "  --reset           Reset build state and start from beginning"
+      echo "  --bundle=*        Comma separated (without spaces) list of bundles to build (e.g. --bundle=debug,full,base,audio,video,video_hw)"
+      echo "                    Valid bundles: ${VALID_TYPES[*]}"
+      echo "                    Note: Not including one of below flags will create all of artifacts: AAR, and release"
+      echo "                    Do not specify if you want to create all artifacts."
+      echo "  --create-aar      Create AAR file. Will not create release."
+      echo "  --create-release  Create release. Will not create AAR. Requires aar release asset to be present."
+      echo "  --local           Create local release."
+      echo "  --snapshot        Create snapshot version."
+      echo "  --help            Show this help message"
       echo ""
       echo "State file location: ${STATE_FILE}"
       exit 0;;
@@ -346,6 +367,41 @@ if [[ ! -f gradlew ]]; then
 fi
 chmod +x gradlew
 
+create_aar_artifact() {
+  FFMPEG_KIT_JNI_LIBS_DIR="$1"
+  FFMPEG_KIT_OUTPUT_NAME="$2"
+  FFMPEG_KIT_NAMESPACE="io.github.akashskypatel.ffmpegkit"
+  ANDROID_NDK="${latest_ndk}"
+  FFMPEG_KIT_VERSION_CODE="$(date +%Y%m%d)"
+  build_step="./gradlew :tools:android:${GRADLE_COMMAND} \
+  --no-daemon --info --warning-mode all --gradle-user-home ~/.gradle \
+  -PFFMPEG_KIT_NAMESPACE=\"${FFMPEG_KIT_NAMESPACE}\" \
+  -PANDROID_NDK=\"${ANDROID_NDK}\" \
+  -PANDROID_API_LEVEL=\"${ANDROID_API_LEVEL}\" \
+  -PFFMPEG_KIT_VERSION_CODE=\"${FFMPEG_KIT_VERSION_CODE}\" \
+  -PFFMPEG_KIT_VERSION=\"${FFMPEG_KIT_VERSION}\" \
+  -PFFMPEG_KIT_JNI_LIBS_DIR=\"${FFMPEG_KIT_JNI_LIBS_DIR}\" \
+  -PFFMPEG_KIT_OUTPUT_NAME=\"${FFMPEG_KIT_OUTPUT_NAME}\" \
+  -POSSRH_USERNAME=\"${OSSRH_USERNAME}\" \
+  -POSSRH_PASSWORD=\"${OSSRH_PASSWORD}\""
+  if [[ "$local_build" == "true" ]]; then
+    BUILD_STEPS+=("$build_step")
+  elif check_maven_package_status "${FFMPEG_KIT_OUTPUT_NAME}" "$FFMPEG_KIT_VERSION" > >(redirect_output) 2>&1; then
+    echo "Package ${FFMPEG_KIT_OUTPUT_NAME} version ${FFMPEG_KIT_VERSION} already exists in Maven Central, skipping build"
+  else
+    BUILD_STEPS+=("$build_step")
+  fi
+}
+
+create_release_artifact() {
+  release_asset="$1"
+  if [[ -f "${release_asset}" && "$local_build" == "false" ]]; then
+    echo "Publishing release asset ${release_asset} ..."
+    build_step="create_github_release \"${release_asset}\""
+    BUILD_STEPS+=("$build_step")
+  fi
+}
+
 for key in "${!PLATFORMS[@]}"; do
   platform=${key}
   # comma separated list of architectures
@@ -354,7 +410,6 @@ for key in "${!PLATFORMS[@]}"; do
       for license in "${LICENSE_FLAGS[@]}"; do
           for small in "${SMALL_FLAGS[@]}"; do
               jni_libs_dir="$(create_jni_libs_dir -b="${bundle}" -l="${license}" -s="${small}")"
-              BUILD_STEPS=()
               license_flag=""
               if [[ "${license}" == "gpl" ]]; then
                   license_flag="--gpl"
@@ -371,31 +426,22 @@ for key in "${!PLATFORMS[@]}"; do
                   # copy to jniLibs
                   if [[ -d "${ffmpeg_kit_include_dir}" ]]; then
                     echo "Copying include directory to jniLibs" > >(redirect_output)
-                    cp -r "${ffmpeg_kit_include_dir}" "${jni_libs_dir}" > >(redirect_output)
+                    build_step="cp -r \"${ffmpeg_kit_include_dir}\" \"${jni_libs_dir}\""
+                    BUILD_STEPS+=("$build_step")
                   fi
                   if [[ -d "${ffmpeg_kit_dir}/lib" ]]; then
                     echo "Copying lib directory to jniLibs" > >(redirect_output)
-                    find "${ffmpeg_kit_dir}/lib" \( -name "*.so*" -o -name "*.a*" \) -exec cp -fv {} "${jni_libs_dir}/${abi_arch}" \; > >(redirect_output)
+                    build_step="find \"${ffmpeg_kit_dir}/lib\" \( -name \"*.so*\" -o -name \"*.a*\" \) -exec cp -fv {} \"${jni_libs_dir}/${abi_arch}\" \;"
+                    BUILD_STEPS+=("$build_step")
                   fi
                   if [[ -d "${ffmpeg_kit_dir}/lib/pkgconfig" ]]; then
                     echo "Copying pkgconfig directory to jniLibs" > >(redirect_output)
-                    cp -r "${ffmpeg_kit_dir}/lib/pkgconfig" "${jni_libs_dir}/lib" > >(redirect_output)
+                    build_step="cp -r \"${ffmpeg_kit_dir}/lib/pkgconfig\" \"${jni_libs_dir}/lib\""
+                    BUILD_STEPS+=("$build_step")
                   fi
-                  chmod -R a+rwx "${jni_libs_dir}"
+                  build_step="chmod -R a+rwx \"${jni_libs_dir}\""
+                  BUILD_STEPS+=("$build_step")
               done
-              # assemble aar from prebuilt ffmpeg-kit
-              # path to prebuilt ffmpeg-kit: ${BASEDIR}/prebuilt/android-${arch}/ffmpeg-kit-${bundle}-${arch}-shared-${small}-${license}
-              # path to prebuilt ffmpeg-kit include: ${BASEDIR}/prebuilt/android-${arch}/ffmpeg-kit-${bundle}-${arch}-shared-${small}-${license}/include
-              # gradle variables:
-              # FFMPEG_KIT_NAMESPACE: io.github.akashskypatel.ffmpegkit
-              FFMPEG_KIT_NAMESPACE="io.github.akashskypatel.ffmpegkit"
-              # ANDROID_NDK: ${latest_ndk}
-              ANDROID_NDK="${latest_ndk}"
-              # ANDROID_API_LEVEL: ${ANDROID_API_LEVEL}
-              ANDROID_API_LEVEL="${ANDROID_API_LEVEL}"
-              # FFMPEG_KIT_VERSION_CODE: current date as int like 20260305
-              FFMPEG_KIT_VERSION_CODE="$(date +%Y%m%d)"
-              # FFMPEG_KIT_JNI_LIBS_DIR: ${jni_libs_dir}/jniLibs
               FFMPEG_KIT_JNI_LIBS_DIR=$(realpath "${jni_libs_dir}")
               if [[ ! -d "${FFMPEG_KIT_JNI_LIBS_DIR}" ]]; then
                 echo "DEBUG: Failed to resolve jniLibs directory"
@@ -418,40 +464,66 @@ for key in "${!PLATFORMS[@]}"; do
                   bundle_pfx="base"
                   debug_pfx="-debug"
               fi
-              # FFMPEG_KIT_OUTPUT_NAME: bundle-${bundle}-${arch}-shared-${small}-${license}
               FFMPEG_KIT_OUTPUT_NAME="bundle-${bundle_pfx}-shared${debug_pfx}${small_pfx}${license_pfx}"
               package_name="${FFMPEG_KIT_NAMESPACE}.${FFMPEG_KIT_OUTPUT_NAME}"
               echo "${FFMPEG_KIT_JNI_LIBS_DIR}" > >(redirect_output)
               if find "${FFMPEG_KIT_JNI_LIBS_DIR}" -type f \( -name "*.so" -o -name "*.a" \) | read -r; then
-                if check_maven_package_status "${FFMPEG_KIT_OUTPUT_NAME}" "$FFMPEG_KIT_VERSION"; then
-                  echo "Package ${FFMPEG_KIT_NAMESPACE}-${FFMPEG_KIT_OUTPUT_NAME} version $FFMPEG_KIT_VERSION already exists, skipping..." > >(redirect_output)
-                else
-                  { ./gradlew :tools:android:${GRADLE_COMMAND} \
-                  --no-daemon --info --warning-mode all --gradle-user-home ~/.gradle \
-                  -PFFMPEG_KIT_NAMESPACE="${FFMPEG_KIT_NAMESPACE}" \
-                  -PANDROID_NDK="${ANDROID_NDK}" \
-                  -PANDROID_API_LEVEL="${ANDROID_API_LEVEL}" \
-                  -PFFMPEG_KIT_VERSION_CODE="${FFMPEG_KIT_VERSION_CODE}" \
-                  -PFFMPEG_KIT_VERSION="${FFMPEG_KIT_VERSION}" \
-                  -PFFMPEG_KIT_JNI_LIBS_DIR="${FFMPEG_KIT_JNI_LIBS_DIR}" \
-                  -PFFMPEG_KIT_OUTPUT_NAME="${FFMPEG_KIT_OUTPUT_NAME}" \
-                  -POSSRH_USERNAME="${OSSRH_USERNAME}" \
-                  -POSSRH_PASSWORD="${OSSRH_PASSWORD}" > >(redirect_output); }  || { echo "Failed to publish AAR for ${FFMPEG_KIT_OUTPUT_NAME}"; exit 1; }
-                fi
-                release_asset=$(realpath "${BASEDIR}/tools/android/build/outputs/aar/${FFMPEG_KIT_OUTPUT_NAME}-${assemble_type,,}.aar")
-                if [[ -f "${release_asset}" && "$local_build" == "false" ]]; then
-                  echo "Publishing release asset ${release_asset} ..."
-                  create_github_release "${release_asset}"
-                fi
+                [[ "${create_aar}" == "true" ]] && create_aar_artifact "${FFMPEG_KIT_JNI_LIBS_DIR}" "${FFMPEG_KIT_OUTPUT_NAME}"
+                [[ "${create_release}" == "true" ]] && release_asset=$(realpath "${BASEDIR}/tools/android/build/outputs/aar/${FFMPEG_KIT_OUTPUT_NAME}-${assemble_type,,}.aar") && create_release_artifact "${release_asset}"
               fi
           done
       done
   done
 done
 
-echo ""
-echo "========================================"
-echo "All builds completed successfully!"
-echo "========================================"
+# Calculate progress — count only steps in the current BUILD_STEPS list
+# that are already recorded in the state file (accurate for resumed runs)
+total_steps=${#BUILD_STEPS[@]}
+completed_steps=0
+for _step in "${BUILD_STEPS[@]}"; do
+  is_completed "${_step}" && (( completed_steps++ )) || true
+done
 
-rm -f "${STATE_FILE}"
+echo "========================================" | tee -a "${LOG_FILE}"
+echo "FFmpeg Kit AAR Build - State Management" | tee -a "${LOG_FILE}"
+echo "========================================" | tee -a "${LOG_FILE}"
+echo "Platform: ${PLATFORMS[*]}" | tee -a "${LOG_FILE}"
+echo "Bundles: ${BUNDLE_ARRAY[*]}" | tee -a "${LOG_FILE}"
+echo "Licenses: ${LICENSE_FLAGS[*]}" | tee -a "${LOG_FILE}"
+echo "Small: ${SMALL_FLAGS[*]}" | tee -a "${LOG_FILE}"
+echo "Total steps: ${total_steps}" | tee -a "${LOG_FILE}"
+echo "Completed steps: ${completed_steps}" | tee -a "${LOG_FILE}"
+echo "Remaining steps: $((total_steps - completed_steps))" | tee -a "${LOG_FILE}"
+echo "State file: ${STATE_FILE}" | tee -a "${LOG_FILE}"
+echo "========================================" | tee -a "${LOG_FILE}"
+echo "" | tee -a "${LOG_FILE}"
+
+# Execute all build steps
+current_step=0
+for step in "${BUILD_STEPS[@]}"; do
+  current_step=$((current_step + 1))
+  echo "" | tee -a "${LOG_FILE}"
+  echo "========================================" | tee -a "${LOG_FILE}"
+  echo "Step ${current_step}/${total_steps}" | tee -a "${LOG_FILE}"
+  echo "========================================" | tee -a "${LOG_FILE}"
+  [[ -z "${step}" ]] && continue
+  echo "Executing ${step}" | tee -a "${LOG_FILE}"
+  execute_build "${step}" "${current_step}/${total_steps}"
+done
+
+# save end time
+END_TIME=$(date +%s)
+ELAPSED_TIME=$((END_TIME - START_TIME))
+# elapsed time in h:m:s
+ELAPSED_H=$((ELAPSED_TIME / 3600))
+ELAPSED_M=$(((ELAPSED_TIME % 3600) / 60))
+ELAPSED_S=$((ELAPSED_TIME % 60))
+ELAPSED_TIME_HMS="${ELAPSED_H}h:${ELAPSED_M}m:${ELAPSED_S}s"
+
+echo "" | tee -a "${LOG_FILE}"
+echo "========================================" | tee -a "${LOG_FILE}"
+echo "All builds completed successfully!" | tee -a "${LOG_FILE}"
+echo "Elapsed time: ${ELAPSED_TIME_HMS}" | tee -a "${LOG_FILE}"
+echo "========================================" | tee -a "${LOG_FILE}"
+
+rm -rf "${STATE_DIR}"

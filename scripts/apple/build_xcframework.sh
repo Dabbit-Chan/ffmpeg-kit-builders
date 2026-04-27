@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-# shellcheck disable=SC2317,SC2129,SC1091,SC2120,SC2035,SC2016,SC2310,SC2155,SC2154,SC2034
+# shellcheck disable=SC2317,SC2129,SC1091,SC2120,SC2035,SC2016,SC2310,SC2155,SC2154,SC2034,SC2329
 
 # Create XCFramework bundles for iOS, iOS Simulator, and macOS
 # This script mirrors the Android AAR publishing pipeline for Apple platforms
@@ -200,23 +200,23 @@ mark_completed() {
 execute_build() {
   local cmd_string="$1"
   if is_completed "${cmd_string}"; then
-    echo "[SKIP] Already completed: ${cmd_string}"
+    echo "[SKIP] Already completed: ${cmd_string}" | tee -a "${LOG_FILE}"
     return 0
   fi
 
-  echo "[BUILD] Starting: ${cmd_string}"
+  echo "[BUILD] Starting: ${cmd_string}" | tee -a "${LOG_FILE}"
 
-  if eval "${cmd_string}"; then
+  if (sudo -E bash -c "${cmd_string}") > >(redirect_output) 2>&1; then
     mark_completed "${cmd_string}"
-    echo "[DONE] Completed: ${cmd_string}"
+    echo "[DONE] Completed: ${cmd_string}" | tee -a "${LOG_FILE}"
     return 0
   else
     local exit_code=$?
-    echo "[FAIL] Failed: ${cmd_string} (exit code: ${exit_code})"
-    echo ""
-    echo "Build failed. You can:"
-    echo "  1. Fix the issue and re-run this script to resume from this step"
-    echo "  2. Use --reset to start from the beginning"
+    echo "[FAIL] Failed: ${cmd_string} (exit code: ${exit_code})" | tee -a "${LOG_FILE}"
+    echo "" | tee -a "${LOG_FILE}"
+    echo "Build failed. You can:" | tee -a "${LOG_FILE}"
+    echo "  1. Fix the issue and re-run this script to resume from this step" | tee -a "${LOG_FILE}"
+    echo "  2. Use --reset to start from the beginning" | tee -a "${LOG_FILE}"
     exit ${exit_code}
   fi
 }
@@ -898,20 +898,20 @@ FFMPEG_KIT_VERSION="$(cat "${BASEDIR}/version")"
 GITHUB_USERNAME="$(get_github_owner)"
 GITHUB_REPO="$(get_github_repo)"
 
-echo "========================================"
-echo "XCFramework Build Pipeline"
-echo "========================================"
-echo "Version: ${FFMPEG_KIT_VERSION}"
-echo "Bundles: ${bundles}"
-echo "Platforms: ${!PLATFORM_ARCHS[*]}"
-echo "Small flags: ${SMALL_FLAGS[*]}"
-echo "Licenses: ${LICENSE_ARRAY[*]}"
-echo "Output: ${BASEDIR}/prebuilt/apple/xcframeworks/"
-echo "Create framework artifact: ${create_framework}"
-echo "Create bundle artifact: ${create_bundle}"
-echo "Create release artifact: ${create_release}"
-echo "========================================"
-echo ""
+echo "========================================" | tee -a "${LOG_FILE}"
+echo "XCFramework Build Pipeline" | tee -a "${LOG_FILE}"
+echo "========================================" | tee -a "${LOG_FILE}"
+echo "Version: ${FFMPEG_KIT_VERSION}" | tee -a "${LOG_FILE}"
+echo "Bundles: ${bundles}" | tee -a "${LOG_FILE}"
+echo "Platforms: ${!PLATFORM_ARCHS[*]}" | tee -a "${LOG_FILE}"
+echo "Small flags: ${SMALL_FLAGS[*]}" | tee -a "${LOG_FILE}"
+echo "Licenses: ${LICENSE_ARRAY[*]}" | tee -a "${LOG_FILE}"
+echo "Output: ${BASEDIR}/prebuilt/apple/xcframeworks/" | tee -a "${LOG_FILE}"
+echo "Create framework artifact: ${create_framework}" | tee -a "${LOG_FILE}"
+echo "Create bundle artifact: ${create_bundle}" | tee -a "${LOG_FILE}"
+echo "Create release artifact: ${create_release}" | tee -a "${LOG_FILE}"
+echo "========================================" | tee -a "${LOG_FILE}"
+echo "" | tee -a "${LOG_FILE}"
 
 # Create output directory
 xcframework_output_dir="${BASEDIR}/prebuilt/apple/xcframeworks"
@@ -988,22 +988,22 @@ for _step in "${BUILD_STEPS[@]}"; do
   is_completed "${_step}" && (( completed_steps++ )) || true
 done
 
-echo "Total steps: ${total_steps}"
-echo "Completed steps: ${completed_steps}"
-echo "Remaining steps: $((total_steps - completed_steps))"
-echo ""
+echo "Total steps: ${total_steps}" | tee -a "${LOG_FILE}"
+echo "Completed steps: ${completed_steps}" | tee -a "${LOG_FILE}"
+echo "Remaining steps: $((total_steps - completed_steps))" | tee -a "${LOG_FILE}"
+echo "" | tee -a "${LOG_FILE}"
 
 # Execute all build steps
 current_step=0
 for step in "${BUILD_STEPS[@]}"; do
   current_step=$((current_step + 1))
-  echo "========================================"
-  echo "Step ${current_step}/${total_steps}"
-  echo "========================================"
+  echo "========================================" | tee -a "${LOG_FILE}"
+  echo "Step ${current_step}/${total_steps}" | tee -a "${LOG_FILE}"
+  echo "========================================" | tee -a "${LOG_FILE}"
   
   execute_build "${step}"
   
-  echo ""
+  echo "" | tee -a "${LOG_FILE}"
 done
 
 # save end time
@@ -1015,12 +1015,12 @@ ELAPSED_M=$(((ELAPSED_TIME % 3600) / 60))
 ELAPSED_S=$((ELAPSED_TIME % 60))
 ELAPSED_TIME_HMS="${ELAPSED_H}h:${ELAPSED_M}m:${ELAPSED_S}s"
 
-echo ""
-echo "========================================"
-echo "All XCFramework builds completed successfully!"
-echo "Elapsed time: ${ELAPSED_TIME_HMS}"
-echo "========================================"
-echo "Output directory: ${xcframework_output_dir}"
-echo "========================================"
+echo "" | tee -a "${LOG_FILE}"
+echo "========================================" | tee -a "${LOG_FILE}"
+echo "All XCFramework builds completed successfully!" | tee -a "${LOG_FILE}"
+echo "Elapsed time: ${ELAPSED_TIME_HMS}" | tee -a "${LOG_FILE}"
+echo "========================================" | tee -a "${LOG_FILE}"
+echo "Output directory: ${xcframework_output_dir}" | tee -a "${LOG_FILE}"
+echo "========================================" | tee -a "${LOG_FILE}"
 
-rm -f "${STATE_FILE}"
+rm -rf "${STATE_FILE}"

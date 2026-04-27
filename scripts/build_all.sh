@@ -10,11 +10,19 @@ set -e
 echo "Requesting administrative privileges..."
 sudo -v
 
+export BASEDIR="${BASEDIR:-${PWD}}"
+export LOG_FILE="${BASEDIR}/build.log"
+
 # State management configuration
 WORK_DIR="${WORK_DIR:-${PWD}}"
 STATE_DIR="${STATE_DIR:-${WORK_DIR}/.ffmpeg-kit-build-state}"
 STATE_FILE="${STATE_DIR}/build_all.state"
 LOCK_FILE="${STATE_DIR}/build_all.lock"
+
+source "${BASEDIR}/scripts/function.sh"
+
+[[ -f "$LOG_FILE" ]] && rm -f "$LOG_FILE"
+[[ -f "$LOG_FILE" ]] && chmod -R a+rwx "$LOG_FILE" || true;
 
 # Initialize state directory
 mkdir -p "${STATE_DIR}"
@@ -285,23 +293,23 @@ execute_build() {
   local cmd_string="$1"
   local step_label="${2:-}"
   if is_completed "${cmd_string}"; then
-    echo "[SKIP] Already completed: ${cmd_string}"
+    echo "[SKIP] Already completed: ${cmd_string}" | tee -a "${LOG_FILE}"
     return 0
   fi
 
-  echo "[BUILD] Starting: ${cmd_string}"
+  echo "[BUILD] Starting: ${cmd_string}" | tee -a "${LOG_FILE}"
 
-  if sudo -E bash -c "${cmd_string}"; then
+  if (sudo -E bash -c "${cmd_string}") > >(redirect_output) 2>&1; then
     mark_completed "${cmd_string}"
-    echo "[DONE] Completed: ${cmd_string}"
+    echo "[DONE] Completed: ${cmd_string}" | tee -a "${LOG_FILE}"
     return 0
   else
     local exit_code=$?
-    echo "[FAIL] Step ${step_label} failed: ${cmd_string} (exit code: ${exit_code})"
-    echo ""
-    echo "Build failed. You can:"
-    echo "  1. Fix the issue and re-run this script to resume from this step"
-    echo "  2. Use --reset to start from the beginning"
+    echo "[FAIL] Step ${step_label} failed: ${cmd_string} (exit code: ${exit_code})" | tee -a "${LOG_FILE}"
+    echo "" | tee -a "${LOG_FILE}"
+    echo "Build failed. You can:" | tee -a "${LOG_FILE}"
+    echo "  1. Fix the issue and re-run this script to resume from this step" | tee -a "${LOG_FILE}"
+    echo "  2. Use --reset to start from the beginning" | tee -a "${LOG_FILE}"
     exit ${exit_code}
   fi
 }
@@ -376,30 +384,30 @@ for _step in "${BUILD_STEPS[@]}"; do
   is_completed "${_step}" && (( completed_steps++ )) || true
 done
 
-echo "========================================"
-echo "FFmpeg Kit Build All - State Management"
-echo "========================================"
-echo "Platform: ${p_args}"
-echo "Bundles: ${bundles}"
-echo "Builds: ${builds}"
-echo "Dependencies: ${deps:-no}"
-echo "Total steps: ${total_steps}"
-echo "Completed steps: ${completed_steps}"
-echo "Remaining steps: $((total_steps - completed_steps))"
-echo "State file: ${STATE_FILE}"
-echo "========================================"
-echo ""
+echo "========================================" | tee -a "${LOG_FILE}"
+echo "FFmpeg Kit Build All - State Management" | tee -a "${LOG_FILE}"
+echo "========================================" | tee -a "${LOG_FILE}"
+echo "Platform: ${p_args}" | tee -a "${LOG_FILE}"
+echo "Bundles: ${bundles}" | tee -a "${LOG_FILE}"
+echo "Builds: ${builds}" | tee -a "${LOG_FILE}"
+echo "Dependencies: ${deps:-no}" | tee -a "${LOG_FILE}"
+echo "Total steps: ${total_steps}" | tee -a "${LOG_FILE}"
+echo "Completed steps: ${completed_steps}" | tee -a "${LOG_FILE}"
+echo "Remaining steps: $((total_steps - completed_steps))" | tee -a "${LOG_FILE}"
+echo "State file: ${STATE_FILE}" | tee -a "${LOG_FILE}"
+echo "========================================" | tee -a "${LOG_FILE}"
+echo "" | tee -a "${LOG_FILE}"
 
 # Execute all build steps
 current_step=0
 for step in "${BUILD_STEPS[@]}"; do
   current_step=$((current_step + 1))
-  echo ""
-  echo "========================================"
-  echo "Step ${current_step}/${total_steps}"
-  echo "========================================"
+  echo "" | tee -a "${LOG_FILE}"
+  echo "========================================" | tee -a "${LOG_FILE}"
+  echo "Step ${current_step}/${total_steps}" | tee -a "${LOG_FILE}"
+  echo "========================================" | tee -a "${LOG_FILE}"
   [[ -z "${step}" ]] && continue
-  echo "Executing ${step}"
+  echo "Executing ${step}" | tee -a "${LOG_FILE}"
   execute_build "${step}" "${current_step}/${total_steps}"
 done
 
@@ -412,19 +420,19 @@ ELAPSED_M=$(((ELAPSED_TIME % 3600) / 60))
 ELAPSED_S=$((ELAPSED_TIME % 60))
 ELAPSED_TIME_HMS="${ELAPSED_H}h:${ELAPSED_M}m:${ELAPSED_S}s"
 
-echo ""
-echo "========================================"
-echo "All builds completed successfully!"
-echo "Elapsed time: ${ELAPSED_TIME_HMS}"
-echo "========================================"
+echo "" | tee -a "${LOG_FILE}"
+echo "========================================" | tee -a "${LOG_FILE}"
+echo "All builds completed successfully!" | tee -a "${LOG_FILE}"
+echo "Elapsed time: ${ELAPSED_TIME_HMS}" | tee -a "${LOG_FILE}"
+echo "========================================" | tee -a "${LOG_FILE}"
 
-rm -f "${STATE_FILE}"
+rm -rf "${STATE_DIR}"
 
 # Build AARs for Android platforms
 android_platforms=$(IFS=,; echo "${ANDROID_PLATFORM_ARCHS[*]}")
 
 if truthy "$build_aars" && truthy "$build_bundle"; then
-  echo "Building AARs..."
+  echo "Building AARs..." | tee -a "${LOG_FILE}"
   sudo -E bash -c "${WORK_DIR}/scripts/android/build_aar.sh --platform=${android_platforms} --bundles=${bundles}"
 fi
 
@@ -447,24 +455,24 @@ for platform in "${!PLATFORMS[@]}"; do
 done
 
 if [[ -n "${apple_platforms}" ]] && truthy "$build_xcframeworks" && truthy "$build_bundle"; then
-  echo "========================================"
-  echo "Building XCFrameworks for Apple platforms"
-  echo "========================================"
-  echo "Platforms: ${apple_platforms}"
-  echo "Bundles: ${bundles}"
-  echo "========================================"
+  echo "========================================" | tee -a "${LOG_FILE}"
+  echo "Building XCFrameworks for Apple platforms" | tee -a "${LOG_FILE}"
+  echo "========================================" | tee -a "${LOG_FILE}"
+  echo "Platforms: ${apple_platforms}" | tee -a "${LOG_FILE}"
+  echo "Bundles: ${bundles}" | tee -a "${LOG_FILE}"
+  echo "========================================" | tee -a "${LOG_FILE}"
   
   sudo -E bash -c "${WORK_DIR}/scripts/apple/build_xcframework.sh --platform=${apple_platforms} --bundles=${bundles}"
   
   # Generate SPM and CocoaPods files
-  echo "Generating Swift Package Manager and CocoaPods files..."
+  echo "Generating Swift Package Manager and CocoaPods files..." | tee -a "${LOG_FILE}"
   sudo -E bash -c "${WORK_DIR}/scripts/apple/generate_spm_cocoapods.sh --bundles=${bundles}"
   
-  echo "========================================"
-  echo "XCFramework build complete!"
-  echo "========================================"
-  echo "Output: ${WORK_DIR}/prebuilt/apple/xcframeworks/"
-  echo "SPM: ${WORK_DIR}/Package.swift"
-  echo "CocoaPods: ${WORK_DIR}/FFmpegKit.podspec"
-  echo "========================================"
+  echo "========================================" | tee -a "${LOG_FILE}"
+  echo "XCFramework build complete!" | tee -a "${LOG_FILE}"
+  echo "========================================" | tee -a "${LOG_FILE}"
+  echo "Output: ${WORK_DIR}/prebuilt/apple/xcframeworks/" | tee -a "${LOG_FILE}"
+  echo "SPM: ${WORK_DIR}/Package.swift" | tee -a "${LOG_FILE}"
+  echo "CocoaPods: ${WORK_DIR}/FFmpegKit.podspec" | tee -a "${LOG_FILE}"
+  echo "========================================" | tee -a "${LOG_FILE}"
 fi
