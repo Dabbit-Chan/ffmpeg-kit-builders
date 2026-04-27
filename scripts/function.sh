@@ -3719,6 +3719,7 @@ configure_ffmpeg() {
   local postpend_configure_opts=""
 	local init_options=""
   local extra_libs=""
+  init_options+=" --disable-autodetect"
   function add_extra_libs() {
       # local libs="-Wl,--start-group $1 -Wl,--end-group"
       local libs=" $1"
@@ -3766,6 +3767,7 @@ configure_ffmpeg() {
       disable_library "libxeve"
     fi
   elif islinux; then
+    init_options+=" --enable-pthreads"
     add_extra_libs "-lpthread -lrt -lm -ldl -lstdc++"
   elif ismacos; then
     if [[ "$host_arch" != "arm64" ]]; then
@@ -3806,7 +3808,6 @@ configure_ffmpeg() {
   fi
 
   if iswindows; then
-    init_options+=" --disable-autodetect"
     init_options+=" --extra-cflags=\" -DWIN32_LEAN_AND_MEAN \""
 	  init_options+=" --extra-cflags=\" -DWIN32_ANSI_API \""
 	  init_options+=" --extra-cflags=\" -DHAVE_WCHAR_FILENAME_H=0 \""
