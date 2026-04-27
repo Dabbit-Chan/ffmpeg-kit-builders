@@ -2153,13 +2153,16 @@ build_libopencv() {
 -DCMAKE_INSTALL_INCLUDEDIR=include \
 -DCMAKE_EXE_LINKER_FLAGS=\"-L${dependency_install_prefix}/lib -lsharpyuv -ljbig -llzma -ldeflate -lzstd -ljpeg\" \
 -DHAVE_DSHOW=0"
+  if [[ $host_arch != "x86_64" ]]; then
+    cmake_params+=" -DWITH_CAROTENE=ON"
+  fi
   do_cmake_from_build_dir "$src_dir/$lib" "$cmake_params"
   disable_nonessential "$src_dir/$lib/build"
   do_make_and_make_install
   copy_path "$src_dir/$lib/build/unix-install/opencv4.pc" "$install_pkgconfig_dir/opencv.pc" -f
   copy_path "$src_dir/$lib/build/unix-install/opencv4.pc" "$install_pkgconfig_dir/opencv4.pc" -f
-  add_libs_to_pkg -t="$install_pkgconfig_dir/opencv.pc" -p="-lopencv_imgproc -lopencv_core -lkleidicv_hal -lkleidicv_thread -lkleidicv -ltegra_hal -lz -lm -llog"
-  add_libs_to_pkg -t="$install_pkgconfig_dir/opencv4.pc" -p="-lopencv_imgproc -lopencv_core -lkleidicv_hal -lkleidicv_thread -lkleidicv -ltegra_hal -lz -lm -llog"
+  add_libs_to_pkg -t="$install_pkgconfig_dir/opencv.pc" -p="-lopencv_imgproc -lopencv_core -lkleidicv_hal -lkleidicv_thread -lkleidicv -ltegra_hal -lcarotene_objs -lz -lm -llog"
+  add_libs_to_pkg -t="$install_pkgconfig_dir/opencv4.pc" -p="-lopencv_imgproc -lopencv_core -lkleidicv_hal -lkleidicv_thread -lkleidicv -ltegra_hal -lcarotene_objs -lz -lm -llog"
   find "$install_pkgconfig_dir" -name "opencv*.pc" -exec sed -i -E \
   -e 's/(^|[[:space:]])-ldl([[:space:]]|$)/ /g' \
   -e 's/(^|[[:space:]])-lpthread([[:space:]]|$)/ /g' \
