@@ -711,6 +711,12 @@ elseif(CMAKE_SYSTEM_NAME MATCHES "Linux")
         "-Wl,--warn-common"
         "-Wl,--no-warn-mismatch"
     )
+    target_link_libraries(ffmpegkit PRIVATE 
+        ${ALSA_LIBRARIES}
+        -lpthread
+        -lm
+        -ldl
+    )
     pkg_check_modules(ALSA REQUIRED alsa)
     target_include_directories(ffmpegkit PRIVATE ${ALSA_INCLUDE_DIRS})
 
