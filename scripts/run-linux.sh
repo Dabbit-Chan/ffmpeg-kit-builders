@@ -1044,6 +1044,7 @@ build_libcaca() {
   disable_nonessential "$src_dir/$lib" "src"
   do_make_and_make_install
   change_dir "$src_dir"
+  add_libs_to_pkg -t="$install_pkgconfig_dir/caca.pc" -l="-lX11"
   reset_ldflags
 }
 # build_libcdio           # config_options+= --enable-libcdio             # enable audio CD grabbing with libcdio [no]

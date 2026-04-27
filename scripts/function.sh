@@ -3968,6 +3968,8 @@ configure_ffmpeg() {
   fi
   truthy "$enable_libbs2b" && config_options+=" --enable-libbs2b"                     # enable bs2b DSP library [no]
   truthy "$enable_libcaca" && config_options+=" --enable-libcaca"                     # enable textual display using libcaca [no]
+  islinux && truthy "$enable_libcaca" && add_extra_libs "-lX11" \
+  && config_options+=" --extra-ldflags=-lX11"
   # libcelt depercated - use libopus instead
   truthy "$enable_libcelt" && config_options+=" --enable-libopus"                     # enable CELT decoding via libcelt [no]
   truthy "$enable_libcodec2" && config_options+=" --enable-libcodec2"                 # enable codec2 en/decoding using libcodec2 [no]
