@@ -335,7 +335,7 @@ for platform in "${!PLATFORMS[@]}"; do
       fi
       remote=""
       no_bundle=""
-      if [[ "${platform}" == "android" ]]; then
+      if [[ "${platform}" == "android" || "${platform}" == "ios" || "${platform}" == "macos" || "${platform}" == "iphonesimulator" ]]; then
         build_aars=true
         remote="--release=local"
         clean=""
