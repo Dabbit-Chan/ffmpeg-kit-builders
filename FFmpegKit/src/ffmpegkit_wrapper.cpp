@@ -27,6 +27,7 @@ extern "C" {
 }
 
 #include "ffmpegkit_wrapper.h"
+#include "ffplay_lib.h"
 #include "AbstractSession.hpp"
 #include "Chapter.hpp"
 #include "FFmpegKit.hpp"

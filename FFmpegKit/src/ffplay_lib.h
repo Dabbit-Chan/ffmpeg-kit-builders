@@ -20,7 +20,6 @@
 #ifndef FFPLAY_LIB_H
 #define FFPLAY_LIB_H
 
-#include "SDL_stdinc.h"
 #include "ffmpeg_tls.h"
 #include <stdint.h>
 

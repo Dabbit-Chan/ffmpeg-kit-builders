@@ -20,6 +20,7 @@
 #include "ffplay_lib.h"
 #include "ffmpeg_kit_assert_override.h"
 #include <SDL.h>
+#include <SDL_stdinc.h>
 
 FFMPEG_WEAK_SYMBOL FFMPEG_THREAD_LOCAL const char *program_name = "ffplay";
 FFMPEG_WEAK_SYMBOL FFMPEG_THREAD_LOCAL int program_birth_year = 2000;

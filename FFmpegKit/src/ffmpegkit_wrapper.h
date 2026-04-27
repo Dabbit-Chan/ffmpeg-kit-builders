@@ -21,7 +21,6 @@
 #define FFMPEG_KIT_WRAPPER_H
 
 #include "ffmpeg_tls.h"
-#include "ffplay_lib.h"
 #include <stdbool.h>
 #include <stdint.h>
 
