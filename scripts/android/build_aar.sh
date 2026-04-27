@@ -54,6 +54,7 @@ VALID_PLATFORM_ARCHS=("android-aarch64" "android-armv7a" "android-x86_64")
 LICENSE_FLAGS=(" " "gpl")
 SMALL_FLAGS=(" " "small")
 declare -A PLATFORMS
+local_build=false
 
 parse_arch() {
     case "$1" in
@@ -258,6 +259,9 @@ for arg; do
     --reset)
       reset_state=true
       shift;;
+    --local)
+      local_build=true
+      shift;;
     --help)
       echo "Usage: $0 [--platform=linux-x86_64|windows-x86_64|android-aarch64|android-armv7a|android-x86_64] [--reset] [--bundles=*) ] [--help]"
       echo ""
@@ -321,8 +325,8 @@ GRADLE_COMMAND="publishToMavenCentral"
 USER_HOME="/home/vscode"
 GRADLE_USER_HOME="${USER_HOME}/.gradle"
 
-if [[ ! -f "${GRADLE_USER_HOME}/gradle.properties" && ! -f "${USER_HOME}/.gnupg/secring.gpg" ]]; then
-  GRADLE_COMMAND="publishReleasePublicationToMavenLocal"
+if [[ ! -f "${GRADLE_USER_HOME}/gradle.properties" && ! -f "${USER_HOME}/.gnupg/secring.gpg" ]] || [[ "$local_build" == "true" ]]; then
+  GRADLE_COMMAND="publishToMavenLocal"
 fi
 
 # FFMPEG_KIT_VERSION: from version file
@@ -435,7 +439,7 @@ for key in "${!PLATFORMS[@]}"; do
                   -POSSRH_PASSWORD="${OSSRH_PASSWORD}" > >(redirect_output); }  || { echo "Failed to publish AAR for ${FFMPEG_KIT_OUTPUT_NAME}"; exit 1; }
                 fi
                 release_asset=$(realpath "${BASEDIR}/tools/android/build/outputs/aar/${FFMPEG_KIT_OUTPUT_NAME}-${assemble_type,,}.aar")
-                if [[ -f "${release_asset}" ]]; then
+                if [[ -f "${release_asset}" && "$local_build" == "false" ]]; then
                   echo "Publishing release asset ${release_asset} ..."
                   create_github_release "${release_asset}"
                 fi

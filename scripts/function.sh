@@ -6552,11 +6552,30 @@ get_changes_from_changelog() {
   echo "$changes" | sed -e '/./,$!d' -e :a -e '/^\n*$/{$d;N;ba' -e '}'
 }
 
-get_maven_keystore_file() {
-  if [[ -f "$(realpath ~/.config/keystore/maven/maven)" ]]; then
-    echo "$(realpath ~/.config/keystore/maven/maven)"
+get_keystore(){
+  # Ensure the script is running with sudo
+  if [ -z "$SUDO_USER" ]; then
+    ORIGINAL_USER=$(whoami)
+    ORIGINAL_HOME=$(getent passwd "$ORIGINAL_USER" | cut -d: -f6)
   else
-    exit_message 1 "Keystore file not found. Please create a .env or ~/.config/keystore/maven/maven file with the following format: \n\
+    ORIGINAL_USER="$SUDO_USER"
+    ORIGINAL_HOME=$(getent passwd "$SUDO_USER" | cut -d: -f6)
+  fi
+
+  if [[ -d "$ORIGINAL_HOME/.config/keystore" ]]; then
+    echo "$ORIGINAL_HOME/.config/keystore"
+  elif [[ -d "$(realpath ~/.config/keystore)" ]]; then
+    echo "$(realpath ~/.config/keystore)"
+  else
+    exit_message 1 "Keystore directory not found" | tee -a "$LOG_FILE"
+  fi
+}
+
+get_maven_keystore_file() {
+  if [[ -f "$(realpath "$(get_keystore)"/maven/maven)" ]]; then
+    echo "$(realpath "$(get_keystore)"/maven/maven)"
+  else
+    exit_message 1 "Keystore file not found. Please create a .env or $(get_keystore)/maven/maven file with the following format: \n\
     OSSRH_USERNAME=<your-maven-username>\n\
     OSSRH_PASSWORD=<your-maven-password>\n\
     OSSRH_BASE64=<your-maven-username:password-base64>" | tee -a "$LOG_FILE"
@@ -6605,10 +6624,10 @@ get_maven_base64() {
 get_keystore_file() {
   if [[ -f .env ]]; then
     echo ".env"
-  elif [[ -f "$(realpath ~/.config/keystore/github)" ]]; then
-    echo "$(realpath ~/.config/keystore/github)"
+  elif [[ -f "$(realpath "$(get_keystore)"/github)" ]]; then
+    echo "$(realpath "$(get_keystore)"/github)"
   else
-    exit_message 1 "Keystore file not found. Please create a .env or ~/.config/keystore/github file with the following format: \n\
+    exit_message 1 "Keystore file not found. Please create a .env or $(get_keystore)/github file with the following format: \n\
     GH_TOKEN=<your-github-token>\n\
     GH_TOKEN_CLASSIC=<your-github-token-classic>\n\
     GH_OWNER=<your-github-owner>\n\

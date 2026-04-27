@@ -425,7 +425,7 @@ android_platforms=$(IFS=,; echo "${ANDROID_PLATFORM_ARCHS[*]}")
 
 if truthy "$build_aars" && truthy "$build_bundle"; then
   echo "Building AARs..."
-  sudo -E bash -c "${WORK_DIR}/scripts/build_aar.sh --platform=${android_platforms} --bundles=${bundles}"
+  sudo -E bash -c "${WORK_DIR}/scripts/android/build_aar.sh --platform=${android_platforms} --bundles=${bundles}"
 fi
 
 # Build XCFrameworks for Apple platforms
