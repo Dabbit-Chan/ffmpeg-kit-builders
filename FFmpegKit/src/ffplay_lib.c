@@ -82,6 +82,12 @@ static void ffplay_kit_SDL_CloseAudioDevice(SDL_AudioDeviceID dev) {
 static void lock_ffplay_api(void);
 static void unlock_ffplay_api(void);
 
+/* Global frame callback for non-Android video output (Linux, Windows, macOS, iOS).
+ * Set by ffplay_set_frame_callback() before ffplay_init().
+ * Called inside ffplay_step() with SDL_PIXELFORMAT_ABGR8888 pixel data after each video frame. */
+static FFplayFrameCallback g_frame_callback = NULL;
+static void *g_frame_callback_userdata = NULL;
+
 #ifdef __ANDROID__
 #include <android/native_window.h>
 #include <android/log.h>
@@ -130,15 +136,7 @@ static SDL_Window *ffplay_kit_SDL_CreateWindow(
 }
 #define SDL_CreateWindow ffplay_kit_SDL_CreateWindow
 
-#else /* !__ANDROID__ — Linux / Windows / macOS / iOS */
-
-/* Global frame callback for non-Android video output (Linux, Windows, macOS, iOS).
- * Set by ffplay_set_frame_callback() before ffplay_init().
- * Called inside ffplay_step() with SDL_PIXELFORMAT_ABGR8888 pixel data after each video frame. */
-static FFplayFrameCallback g_frame_callback = NULL;
-static void *g_frame_callback_userdata = NULL;
-
-#ifdef __APPLE__
+#elif defined(__APPLE__)
 #include <TargetConditionals.h>
 #include <os/log.h>
 
@@ -167,7 +165,6 @@ static SDL_Window *ffplay_kit_SDL_CreateWindow(
 #define SDL_CreateWindow ffplay_kit_SDL_CreateWindow
 
 #endif /* __APPLE__ */
-#endif /* __ANDROID__ */
 
 // Keep the SDL window hidden and suppress SDL_RenderPresent: pixels are read via
 // SDL_RenderReadPixels from the software back-buffer, so no X11/present needed.
@@ -227,15 +224,43 @@ static void unlock_ffplay_api(void) {
 
 void ffplay_lib_on_frame(const uint8_t *pixels, int width, int height,
                          int linesize, const char *pixel_format) {
-  if (g_frame_callback) {
-    g_frame_callback(g_frame_callback_userdata, pixels, width, height,
-                     linesize, pixel_format);
-  } else {
-    av_log(NULL, AV_LOG_WARNING, "[ffplay_lib] ffplay_lib_on_frame called but no callback set\n");
-  }
+  if (!pixels || width <= 0 || height <= 0) return;
+#ifdef __ANDROID__
+    lock_ffplay_api();
+    ANativeWindow *blit_window = g_android_native_window;
+    if (blit_window) ANativeWindow_acquire(blit_window);
+    unlock_ffplay_api();
+
+    if (blit_window) {
+        ANativeWindow_setBuffersGeometry(blit_window, width, height,
+                                         WINDOW_FORMAT_RGBA_8888);
+        ANativeWindow_Buffer anb;
+        if (ANativeWindow_lock(blit_window, &anb, NULL) == 0) {
+            const uint8_t *src = pixels;
+            uint8_t *dst = (uint8_t *)anb.bits;
+            int dst_stride = anb.stride * 4;
+            int src_stride = linesize;
+            for (int row = 0; row < height; row++) {
+                memcpy(dst, src, width * 4);
+                src += src_stride;
+                dst += dst_stride;
+            }
+            ANativeWindow_unlockAndPost(blit_window);
+            if (ctx->callbacks.on_frame_displayed)
+                ctx->callbacks.on_frame_displayed(
+                    ctx->callbacks.userdata, NULL, width, height, 0);
+        } else {
+            FFPLAY_LOGE("ANativeWindow_lock failed");
+        }
+        ANativeWindow_release(blit_window);
+    }
+#endif
+
+    if (g_frame_callback)
+        g_frame_callback(g_frame_callback_userdata,
+                         pixels, width, height, linesize, pixel_format);
 }
 
-#ifndef __ANDROID__
 void ffplay_set_frame_callback(FFplayFrameCallback callback, void *userdata) {
     /* Hold the API mutex so that when this returns with callback==NULL,
      * ffplay_step is guaranteed to have finished any in-flight call.
@@ -245,11 +270,6 @@ void ffplay_set_frame_callback(FFplayFrameCallback callback, void *userdata) {
     g_frame_callback_userdata = userdata;
     unlock_ffplay_api();
 }
-#else
-void ffplay_set_frame_callback(FFplayFrameCallback callback, void *userdata) {
-    av_log(NULL, AV_LOG_WARNING, "[ffplay_lib] ffplay_set_frame_callback not supported on Android\n");
-}
-#endif /* __ANDROID__ */
 
 /* Splits a command-line string into argc/argv. Caller frees with av_free(). */
 static int split_args(const char *args, char ***argv_out) {
@@ -725,63 +745,6 @@ int ffplay_step(FFplayContext* ctx) {
     if (ctx->is && ctx->is->show_mode != SHOW_MODE_NONE && (!ctx->is->paused || ctx->is->force_refresh)) {
          video_refresh(ctx->is, &remaining_time);
     }
-
-#ifdef __ANDROID__ /* ---- Android: blit to ANativeWindow ---- */
-    /* Snapshot the current ANativeWindow under the API mutex and acquire a
-     * temporary reference so the caller cannot free the window mid-blit.
-     * ffplay_set_android_window() holds the same mutex when updating the
-     * global, so once we release the mutex with a non-NULL snapshot the
-     * window is guaranteed to remain valid until we call ANativeWindow_release. */
-    lock_ffplay_api();
-    ANativeWindow *blit_window = g_android_native_window;
-    if (blit_window) ANativeWindow_acquire(blit_window);
-    unlock_ffplay_api();
-
-    if (blit_window && ctx->is && ctx->is->video_st &&
-            ctx->is->window && ctx->is->renderer) {
-        int rw = 0, rh = 0;
-        SDL_GetWindowSize(ctx->is->window, &rw, &rh);
-        if (rw > 0 && rh > 0) {
-            int pitch = rw * 4;
-            size_t needed = (size_t)rh * pitch;
-            if (needed > g_pixel_buf_size) {
-                av_free(g_pixel_buf);
-                g_pixel_buf = av_malloc(needed);
-                g_pixel_buf_size = g_pixel_buf ? needed : 0;
-            }
-            if (g_pixel_buf) {
-                /* ABGR8888 bytes [R][G][B][A] on little-endian == WINDOW_FORMAT_RGBA_8888. */
-                if (SDL_RenderReadPixels(ctx->is->renderer, NULL,
-                        SDL_PIXELFORMAT_ABGR8888, g_pixel_buf, pitch) == 0) {
-                    ANativeWindow_setBuffersGeometry(
-                        blit_window, rw, rh,
-                        WINDOW_FORMAT_RGBA_8888);
-                    ANativeWindow_Buffer anb;
-                    if (ANativeWindow_lock(blit_window, &anb, NULL) == 0) {
-                        const uint8_t *src = (const uint8_t *)g_pixel_buf;
-                        uint8_t *dst = (uint8_t *)anb.bits;
-                        int dst_stride = anb.stride * 4;
-                        for (int row = 0; row < rh; row++) {
-                            memcpy(dst, src, pitch);
-                            src += pitch;
-                            dst += dst_stride;
-                        }
-                        ANativeWindow_unlockAndPost(blit_window);
-
-                        if (ctx->callbacks.on_frame_displayed)
-                            ctx->callbacks.on_frame_displayed(
-                                ctx->callbacks.userdata, NULL, rw, rh, 0);
-                    } else {
-                        FFPLAY_LOGE("ANativeWindow_lock failed");
-                    }
-                } else {
-                    FFPLAY_LOGE("SDL_RenderReadPixels failed: %s", SDL_GetError());
-                }
-            }
-        }
-    }
-    if (blit_window) ANativeWindow_release(blit_window);
-#endif /* __ANDROID__ */
 
     step_ret = ctx->quit;
 

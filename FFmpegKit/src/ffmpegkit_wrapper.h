@@ -915,13 +915,6 @@ ffplay_kit_register_frame_callback(FFplayKitFrameCallback callback,
 FFMPEG_KIT_C_EXPORT void ffplay_kit_unregister_frame_callback(void);
 
 /**
- * Sets the frame callback for desktop video output.
- * This is a wrapper around ffplay_kit_register_frame_callback.
- */
-FFMPEG_KIT_C_EXPORT extern void
-ffplay_set_frame_callback(FFplayKitFrameCallback callback, void *userdata);
-
-/**
  * Probes [path] for at least one video stream without decoding.
  * Uses avformat_open_input + avformat_find_stream_info. Thread-safe.
  *

@@ -206,6 +206,7 @@ FFMPEG_API int ffplay_has_video_stream(const char *path);
 #ifdef __ANDROID__
 #include <android/native_window.h>
 
+
 /**
  * Sets the ANativeWindow for video output.
  * The function acquires its own ANativeWindow reference (ANativeWindow_acquire),
@@ -216,7 +217,7 @@ FFMPEG_API int ffplay_has_video_stream(const char *path);
  */
 FFMPEG_API void ffplay_set_android_window(ANativeWindow *window);
 
-#else /* !__ANDROID__ — Linux / Windows / macOS */
+#endif /* __ANDROID__ */
 
 /**
  * Frame-ready callback for desktop video output. Fired inside ffplay_step().
@@ -256,7 +257,6 @@ FFMPEG_API void ffplay_set_frame_callback(FFplayFrameCallback callback,
 FFMPEG_API void ffplay_lib_on_frame(const uint8_t *pixels, int width, int height,
                          int linesize, const char *pixel_format);
 
-#endif /* __ANDROID__ */
 
 #ifdef __cplusplus
 }

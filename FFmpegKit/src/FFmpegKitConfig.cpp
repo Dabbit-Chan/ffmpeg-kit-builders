@@ -1058,60 +1058,50 @@ int executeFFplay(const long sessionId,
 }
 
 void ffmpegkit::FFmpegKitConfig::joinAsyncFFplayThread() {
-  if (asyncFFplayThread != 0) {
+    if (asyncFFplayThread == 0) {
+        return;
+    }
+
 #ifdef _WIN32
-    // Windows: Wait with timeout using WaitForSingleObject
-    // Implementation for Windows would go here
-    WaitForSingleObject((HANDLE)asyncFFplayThread, 5000); // 5 second timeout
-    CloseHandle(asyncFFplayThread);
+    // Windows implementation
+    WaitForSingleObject((HANDLE)asyncFFplayThread, 5000);
+    CloseHandle((HANDLE)asyncFFplayThread);
 #else
-    // POSIX: Use pthread_timedjoin_np if available to avoid indefinite blocking
-    // Fall back to pthread_detach on platforms without timedjoin or on timeout
-    // POSIX: Use pthread_timedjoin_np on Linux, detach on other platforms
-    // to avoid indefinite blocking which causes iOS watchdog kills
+    int rc = -1;
 
-#if defined(__linux__) || defined(__ANDROID__) || defined(__GLIBC__)
-    // glibc Linux supports pthread_timedjoin_np
+#if defined(__ANDROID__)
+    #if __ANDROID_API__ >= 28
+        // Android 9.0+ supports timed join
+        struct timespec ts;
+        clock_gettime(CLOCK_REALTIME, &ts);
+        ts.tv_sec += 5;
+        rc = pthread_timedjoin_np(asyncFFplayThread, nullptr, &ts);
+    #else
+        // Android < 28: tryjoin is often missing/unreliable in headers.
+        // Direct detach is the safest way to avoid blocking.
+        rc = -1; 
+    #endif
+
+#elif defined(__GLIBC__) || defined(__linux__)
+    // Standard Linux/GLIBC
     struct timespec ts;
-#if defined(_POSIX_MONOTONIC_CLOCK) && (_POSIX_MONOTONIC_CLOCK >= 0)
-    clock_gettime(CLOCK_MONOTONIC, &ts);
-#else
     clock_gettime(CLOCK_REALTIME, &ts);
-#endif
-    // Add 5 second timeout for thread join
-    // 5 second timeout for thread join
     ts.tv_sec += 5;
-
-    int rc = 0;
-#if defined(__linux__) || defined(__ANDROID__) || defined(__GLIBC__)
-    // Use pthread_timedjoin_np on platforms that support it (Linux/glibc)
     rc = pthread_timedjoin_np(asyncFFplayThread, nullptr, &ts);
+
+#elif defined(__APPLE__)
+    // macOS/iOS
+    rc = pthread_tryjoin_np(asyncFFplayThread, nullptr);
+#endif
     if (rc != 0) {
+      // If tryjoin failed (thread still running) or isn't supported,
+      // we must detach to prevent leaks and avoid blocking.
       std::cout << "Failed to join async FFplay thread (timeout or error: "
                 << rc << "), detaching instead." << std::endl;
       pthread_detach(asyncFFplayThread);
     }
-#else
-    // For macOS/BSD platforms, use pthread_tryjoin_np or just detach after
-    // timeout macOS pthread_join has no timeout, so we use a simple approach:
-    // Try non-blocking join first, if that fails, detach
-    rc = pthread_tryjoin_np(asyncFFplayThread, nullptr);
-    if (rc != 0) {
-      // Thread is still running or tryjoin not supported
-      std::cout << "Async FFplay thread still running, detaching." << std::endl;
-      pthread_detach(asyncFFplayThread);
-    }
-    // macOS/BSD and other POSIX: pthread_join has no timeout
-    // To avoid blocking the main thread during app termination,
-    // detach the thread instead of joining
-    std::cout << "Detaching async FFplay thread (platform without timed join)."
-              << std::endl;
-    pthread_detach(asyncFFplayThread);
-#endif
-#endif
 #endif
     asyncFFplayThread = 0;
-  }
 }
 
 void ffmpegkit::FFmpegKitConfig::detachAsyncFFplayThread() {
@@ -1211,35 +1201,46 @@ void ffmpegkit::FFmpegKitConfig::disableRedirection() {
 
   callbackNotify();
 
-  // BEFORE: static pthread_t callbackThread = 0;  <-- BUG: shadows the
   // file-scope variable
   if (callbackThread != 0) {
 #ifdef _WIN32
-    WaitForSingleObject((HANDLE)callbackThread, 5000); // 5 second timeout
-    CloseHandle(callbackThread);
+    // Windows implementation
+    WaitForSingleObject((HANDLE)callbackThread, 5000);
+    CloseHandle((HANDLE)callbackThread);
 #else
+    int rc = -1;
+
+#if defined(__ANDROID__)
+    #if __ANDROID_API__ >= 28
+        // Android 9.0+ supports timed join
+        struct timespec ts;
+        clock_gettime(CLOCK_REALTIME, &ts);
+        ts.tv_sec += 5;
+        rc = pthread_timedjoin_np(callbackThread, nullptr, &ts);
+    #else
+        // Android < 28: tryjoin is often missing/unreliable in headers.
+        // Direct detach is the safest way to avoid blocking.
+        rc = -1; 
+    #endif
+
+#elif defined(__GLIBC__) || defined(__linux__)
+    // Standard Linux/GLIBC
     struct timespec ts;
-#if defined(_POSIX_MONOTONIC_CLOCK) && (_POSIX_MONOTONIC_CLOCK >= 0)
-    clock_gettime(CLOCK_MONOTONIC, &ts);
-#else
     clock_gettime(CLOCK_REALTIME, &ts);
-#endif
     ts.tv_sec += 5;
-    int rc = 0;
-#if defined(__linux__) || defined(__ANDROID__) || defined(__GLIBC__)
-    rc = pthread_timedjoin_np(callbackThread, NULL, &ts);
-    if (rc != 0) {
-      std::cout << "Failed to join callback thread (timeout or error: " << rc
-                << "), detaching instead." << std::endl;
-      pthread_detach(callbackThread);
-    }
-#else
-    if (rc != 0) {
-      std::cout << "Failed to join callback thread (timeout or error: " << rc
-                << "), detaching instead." << std::endl;
-      pthread_detach(callbackThread);
-    }
+    rc = pthread_timedjoin_np(callbackThread, nullptr, &ts);
+
+#elif defined(__APPLE__)
+    // macOS/iOS
+    rc = pthread_tryjoin_np(callbackThread, nullptr);
 #endif
+    if (rc != 0) {
+      // If tryjoin failed (thread still running) or isn't supported,
+      // we must detach to prevent leaks and avoid blocking.
+      std::cout << "Failed to join callback thread (timeout or error: "
+                << rc << "), detaching instead." << std::endl;
+      pthread_detach(callbackThread);
+    }
 #endif
     callbackThread = 0;
   }
@@ -1750,29 +1751,44 @@ void ffmpegkit::FFmpegKitConfig::asyncFFplayExecute(
     if (activeSession != nullptr) {
       activeSession->close();
     }
-    pthread_join(asyncFFplayThread, nullptr);
 #ifdef _WIN32
-    WaitForSingleObject((HANDLE)asyncFFplayThread, 5000); // 5 second timeout
-    CloseHandle(asyncFFplayThread);
+    // Windows implementation
+    WaitForSingleObject((HANDLE)asyncFFplayThread, 5000);
+    CloseHandle((HANDLE)asyncFFplayThread);
 #else
-#if defined(__linux__) || defined(__ANDROID__) || defined(__GLIBC__)
+    int rc = -1;
+
+#if defined(__ANDROID__)
+    #if __ANDROID_API__ >= 28
+        // Android 9.0+ supports timed join
+        struct timespec ts;
+        clock_gettime(CLOCK_REALTIME, &ts);
+        ts.tv_sec += 5;
+        rc = pthread_timedjoin_np(asyncFFplayThread, nullptr, &ts);
+    #else
+        // Android < 28: tryjoin is often missing/unreliable in headers.
+        // Direct detach is the safest way to avoid blocking.
+        rc = -1; 
+    #endif
+
+#elif defined(__GLIBC__) || defined(__linux__)
+    // Standard Linux/GLIBC
     struct timespec ts;
-#if defined(_POSIX_MONOTONIC_CLOCK) && (_POSIX_MONOTONIC_CLOCK >= 0)
-    clock_gettime(CLOCK_MONOTONIC, &ts);
-#else
     clock_gettime(CLOCK_REALTIME, &ts);
-#endif
     ts.tv_sec += 5;
-    int rc = pthread_timedjoin_np(asyncFFplayThread, nullptr, &ts);
+    rc = pthread_timedjoin_np(asyncFFplayThread, nullptr, &ts);
+
+#elif defined(__APPLE__)
+    // macOS/iOS
+    rc = pthread_tryjoin_np(asyncFFplayThread, nullptr);
+#endif
     if (rc != 0) {
+      // If tryjoin failed (thread still running) or isn't supported,
+      // we must detach to prevent leaks and avoid blocking.
       std::cout << "Failed to join async FFplay thread (timeout or error: "
                 << rc << "), detaching instead." << std::endl;
       pthread_detach(asyncFFplayThread);
     }
-#else
-    // macOS/BSD: use detach to avoid blocking
-    pthread_detach(asyncFFplayThread);
-#endif
 #endif
     asyncFFplayThread = 0;
   }
@@ -2373,34 +2389,51 @@ ffmpegkit::FFmpegKitConfig::~FFmpegKitConfig() {
   // 0. Join async ffplay thread so its TLS destructors run before ASAN/LLVM
   //    tears down during program exit (prevents __nptl_deallocate_tsd crash).
   if (asyncFFplayThread != 0) {
-    pthread_join(asyncFFplayThread, nullptr);
+    auto activeSession = getActiveFFplaySession();
+    if (activeSession != nullptr) {
+      activeSession->close();
+    }
+#ifdef _WIN32
+    // Windows implementation
+    WaitForSingleObject((HANDLE)asyncFFplayThread, 5000);
+    CloseHandle((HANDLE)asyncFFplayThread);
+#else
+    int rc = -1;
+
+#if defined(__ANDROID__)
+    #if __ANDROID_API__ >= 28
+        // Android 9.0+ supports timed join
+        struct timespec ts;
+        clock_gettime(CLOCK_REALTIME, &ts);
+        ts.tv_sec += 5;
+        rc = pthread_timedjoin_np(asyncFFplayThread, nullptr, &ts);
+    #else
+        // Android < 28: tryjoin is often missing/unreliable in headers.
+        // Direct detach is the safest way to avoid blocking.
+        rc = -1; 
+    #endif
+
+#elif defined(__GLIBC__) || defined(__linux__)
+    // Standard Linux/GLIBC
+    struct timespec ts;
+    clock_gettime(CLOCK_REALTIME, &ts);
+    ts.tv_sec += 5;
+    rc = pthread_timedjoin_np(asyncFFplayThread, nullptr, &ts);
+
+#elif defined(__APPLE__)
+    // macOS/iOS
+    rc = pthread_tryjoin_np(asyncFFplayThread, nullptr);
+#endif
+    if (rc != 0) {
+      // If tryjoin failed (thread still running) or isn't supported,
+      // we must detach to prevent leaks and avoid blocking.
+      std::cout << "Failed to join async FFplay thread (timeout or error: "
+                << rc << "), detaching instead." << std::endl;
+      pthread_detach(asyncFFplayThread);
+    }
+#endif
     asyncFFplayThread = 0;
   }
-
-#ifdef _WIN32
-  WaitForSingleObject((HANDLE)asyncFFplayThread, 5000); // 5 second timeout
-  CloseHandle(asyncFFplayThread);
-#else
-#if defined(__linux__) || defined(__ANDROID__) || defined(__GLIBC__)
-  struct timespec ts;
-#if defined(_POSIX_MONOTONIC_CLOCK) && (_POSIX_MONOTONIC_CLOCK >= 0)
-  clock_gettime(CLOCK_MONOTONIC, &ts);
-#else
-  clock_gettime(CLOCK_REALTIME, &ts);
-#endif
-  ts.tv_sec += 5;
-  int rc = pthread_timedjoin_np(asyncFFplayThread, nullptr, &ts);
-  if (rc != 0) {
-    std::cout << "Failed to join async FFplay thread (timeout or error: " << rc
-              << "), detaching instead." << std::endl;
-    pthread_detach(asyncFFplayThread);
-  }
-#else
-  // macOS/BSD: use detach to avoid blocking during shutdown
-  pthread_detach(asyncFFplayThread);
-#endif
-#endif
-  asyncFFplayThread = 0;
 
   // 1. Stop background redirection thread first to prevent races on sessions
   disableRedirection();

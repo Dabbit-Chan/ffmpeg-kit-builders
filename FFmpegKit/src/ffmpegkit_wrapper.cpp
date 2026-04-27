@@ -1719,21 +1719,14 @@ void DLL_ALIGN ffplay_kit_clear_android_surface(void) {}
 
 void DLL_ALIGN ffplay_kit_register_frame_callback(
     FFplayKitFrameCallback callback, void *userdata) {
-#ifndef __ANDROID__
   ffplay_set_frame_callback(
       reinterpret_cast<void (*)(void *, const uint8_t *, int, int, int,
                                 const char *)>(callback),
       userdata);
-#else
-  (void)callback;
-  (void)userdata;
-#endif
 }
 
 void DLL_ALIGN ffplay_kit_unregister_frame_callback(void) {
-#ifndef __ANDROID__
   ffplay_set_frame_callback(nullptr, nullptr);
-#endif
 }
 
 /* Config */
