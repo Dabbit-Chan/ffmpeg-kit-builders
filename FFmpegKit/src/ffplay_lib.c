@@ -226,6 +226,8 @@ void ffplay_lib_on_frame(const uint8_t *pixels, int width, int height,
                          int linesize, const char *pixel_format) {
   if (!pixels || width <= 0 || height <= 0) return;
 #ifdef __ANDROID__
+    FFplayContext *ctx = active_ffplay_ctx;
+    if (!ctx) return;
     lock_ffplay_api();
     ANativeWindow *blit_window = g_android_native_window;
     if (blit_window) ANativeWindow_acquire(blit_window);
