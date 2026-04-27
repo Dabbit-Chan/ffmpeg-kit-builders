@@ -66,6 +66,7 @@ extern "C" {
 #include <cstdlib>
 
 extern "C" {
+
 struct timedjoin_args {
     pthread_t       td;
     void            **res;
@@ -108,7 +109,7 @@ static void *waiter_routine(void *ap) {
  * owns the join. Attempting to join 'td' again results in Undefined Behavior.
  */
 int pthread_timedjoin_np(pthread_t td, void **res, const struct timespec *ts) {
-    auto *args = static_cast<struct timedjoin_args *>(calloc(1, sizeof(*args)));
+    auto *args = static_cast<struct timedjoin_args *>(calloc(1, sizeof(struct timedjoin_args)));
     if (!args) return ENOMEM;
 
     args->td = td;
@@ -134,7 +135,7 @@ int pthread_timedjoin_np(pthread_t td, void **res, const struct timespec *ts) {
         break;
     }
 
-    int actual_join_rc = 0;
+    int actual_join_rc;  // FIX #2: Declare WITHOUT initialization to allow goto jumps
     if (!args->joined) {
         // TIMEOUT PATH: Hand off cleanup responsibility to the waiter thread
         args->detached = 1;
@@ -144,7 +145,7 @@ int pthread_timedjoin_np(pthread_t td, void **res, const struct timespec *ts) {
     }
     
     // SUCCESS PATH: Copy the result BEFORE unlocking for strict memory visibility
-    actual_join_rc = args->join_rc;
+    actual_join_rc = args->join_rc;  // Assign here, after the goto targets
     pthread_mutex_unlock(&args->mtx);
     
     // Join the waiter (it's guaranteed to be finishing now)
@@ -164,7 +165,8 @@ free_args:
     free(args);
     return ret;
 }
-}
+
+} // extern "C"
 #endif
 
 extern "C" {
