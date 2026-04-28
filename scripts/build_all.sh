@@ -432,7 +432,7 @@ if [[ ${#android_platforms[@]} -gt 0 ]]; then
   android_platforms_str=$(IFS=,; echo "${android_platforms[*]}")
 fi
 
-if [[ ${#android_platforms[@]} -gt 0 ]]; && truthy "$build_bundle"; then
+if [[ ${#android_platforms[@]} -gt 0 ]] && truthy "$build_bundle"; then
   echo "Building AARs..." | tee -a "${LOG_FILE}"
   sudo -E bash -c "${WORK_DIR}/scripts/android/build_aar.sh --platform=${android_platforms} --bundles=${bundles} --reset"
 fi
