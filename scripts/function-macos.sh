@@ -216,7 +216,6 @@ create_macos_xcframework() {
     find "${work_dir}/${kit_dir}/lib" -exec cp -fv {} "${staging_dir}" \;
     find "${ffmpeg_kit_install}/include" -exec cp -fv {} "${staging_dir}/Headers" \;
     find "${work_dir}/${kit_dir}/include" -exec cp -fv {} "${staging_dir}/Headers" \;
-    find "${dependency_install_prefix}/include/json" -exec cp -fv {} "${staging_dir}/Headers/json" \;
   } > >(redirect_output) 2>&1
 
   echo "INFO: Created macOS XCFramework staging for macos-${host_arch}"

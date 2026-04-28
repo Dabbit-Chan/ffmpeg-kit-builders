@@ -12,7 +12,7 @@ if(APPLE)
     include("${CMAKE_CURRENT_SOURCE_DIR}/cmake/AppleResourceGen.cmake")
 endif()
 
-set(CMAKE_MESSAGE_LOG_LEVEL DEBUG)
+# set(CMAKE_MESSAGE_LOG_LEVEL DEBUG)
 
 # Enforce MinGW when building for Windows
 if(WIN32 AND NOT MINGW)
@@ -942,6 +942,7 @@ if(BUILD_SHARED_LIBS)
         ffmpeg*;
         ffprobe*;
         ffplay*;
+        session*;
         media_information*;
         stream_information*;
         chapter*;

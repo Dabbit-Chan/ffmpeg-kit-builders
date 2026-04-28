@@ -4370,14 +4370,13 @@ create_ffmpeg_kit_bundle() {
     
     {
       # COPY HEADERS
-      [[ -d "${ffmpeg_kit_install}/include" ]] && find "${ffmpeg_kit_install}/include" -type f -exec cp -fv {} "${ffmpeg_kit_bundle}/include" \; || true
-      [[ -d "${dependency_install_prefix}/include/json" ]] && find "${dependency_install_prefix}/include/json" -type f -exec cp -v {} "${ffmpeg_kit_bundle}/include/json" \; > >(redirect_output) 2>&1 || true
-
+      [[ -d "${ffmpeg_kit_install}/include" ]] && cp -rfv "${ffmpeg_kit_install}/include" "${ffmpeg_kit_bundle}/" > >(redirect_output) 2>&1 || true
+      [[ -d "${ffmpeg_install_prefix}/include" ]] && cp -rfv "${ffmpeg_install_prefix}/include" "${ffmpeg_kit_bundle}/" > >(redirect_output) 2>&1 || true
       # COPY LIBS
-      [[ -d "${ffmpeg_kit_install}/lib" ]] && find "${ffmpeg_kit_install}/lib" -type f -exec cp -fv {} "${ffmpeg_kit_bundle}/lib" \; || true
+      [[ -d "${ffmpeg_kit_install}/lib" ]] && find "${ffmpeg_kit_install}/lib" -type f -exec cp -rfv {} "${ffmpeg_kit_bundle}/lib" \; > >(redirect_output) 2>&1 || true
 
       # COPY BINARIES
-      [[ -d "${ffmpeg_kit_install}/bin" ]] && find "${ffmpeg_kit_install}/bin" -type f -exec cp -fv {} "${ffmpeg_kit_bundle}/bin" \; || true
+      [[ -d "${ffmpeg_kit_install}/bin" ]] && find "${ffmpeg_kit_install}/bin" -type f -exec cp -rfv {} "${ffmpeg_kit_bundle}/bin" \; > >(redirect_output) 2>&1 || true
 
       # COPY DEBUG PDB
       [[  -f "$ffmpeg_kit_src_dir/build/libffmpegkit.map" ]] && cp -rP "$ffmpeg_kit_src_dir/build/libffmpegkit.map" "${ffmpeg_kit_bundle}/bin"

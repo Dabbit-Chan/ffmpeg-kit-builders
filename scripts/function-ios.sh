@@ -336,7 +336,6 @@ create_ios_xcframework() {
     cp -fv "${work_dir}/${kit_dir}/lib/"* "${staging_dir}"
     cp -fv "${ffmpeg_kit_install}/include/"* "${staging_dir}/Headers"
     cp -fv "${work_dir}/${kit_dir}/include/"* "${staging_dir}/Headers"
-    cp -fv "${dependency_install_prefix}/include/json/"* "${staging_dir}/Headers/json"
   } > >(redirect_output) 2>&1
 
   echo "INFO: Created iOS XCFramework staging for ${platform_name}-${host_arch}"
