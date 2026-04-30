@@ -261,7 +261,13 @@ for arg; do
       echo "                Valid builds: ${VALID_BUILDS[*]}"
       echo "  --clean=*     Comma separated (without spaces) list of components to clean (e.g. --clean=ffmpeg,kit,bundle)"
       echo "                Valid components: all OR ${VALID_BUILDS[*]}"
+      echo "  --license=*   Comma separated (without spaces) list of licenses to build"
+      echo "                Valid licenses: ${VALID_LICENSES[*]}"
+      echo "  --remote      Publish release asset to remote repository"
       echo "  --local       Build locally instead of using remote releases"
+      echo "  --small       Build with small flags (reduces binary size)."
+      echo "  --not-small   Build without small flag."
+      echo "  --both        Build both small and full versions (default)"
       echo "  --help        Show this help message"
       echo ""
       echo "State file location: ${STATE_FILE}"
@@ -276,6 +282,18 @@ for arg; do
       #comma separated list of components to clean
       clean_type="${arg#*=}"
       no_clean=false;;
+    --small)
+      SMALL_FLAGS=("small")
+      shift;;
+    --not-small)
+      SMALL_FLAGS=("")
+      shift;;
+    --both)
+      SMALL_FLAGS=("small" "")
+      shift;;
+    --remote)
+      REMOTE_RELEASE=true
+      shift;;
     --local)
       REMOTE_RELEASE=false
       shift;;
