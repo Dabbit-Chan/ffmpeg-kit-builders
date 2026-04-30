@@ -55,6 +55,9 @@ VALID_TYPES=("full" "video_hw" "video" "audio" "base" "debug")
 VALID_PLATFORMS=("linux" "windows" "android" "ios" "iphonesimulator" "macos")
 VALID_PLATFORM_ARCHS=("linux-x86_64" "windows-x86_64" "android-aarch64" "android-armv7a" "android-x86_64" "ios-aarch64" "iphonesimulator-aarch64" "macos-aarch64" "macos-x86_64")
 VALID_BUILDS=("ffmpeg" "kit" "bundle")
+VALID_LICENSES=("lgpl" "gpl")
+VALID_SMALL_FLAGS=("small" "")
+SMALL_FLAGS=("small" "")
 ANDROID_PLATFORM_ARCHS=()
 APPLE_PLATFORM_ARCHS=()
 build_aars=false
@@ -63,7 +66,7 @@ build_ffmpeg=false
 build_kit=false
 build_bundle=false
 no_clean=true
-release_local=false
+REMOTE_RELEASE=false
 build_commands=""
 
 # Check if value is truthy
@@ -161,6 +164,31 @@ parse_bundles() {
   done
 }
 
+parse_licenses() {
+  licenses="${1}"
+  # Ensure licenses is populated if empty
+  if [[ -z "${licenses}" ]]; then
+    licenses=$(IFS=,; echo "${VALID_LICENSES[*]}")
+  fi
+  
+  IFS=',' read -ra LICENSE_ARRAY <<< "${licenses}"
+  for l in "${LICENSE_ARRAY[@]}"; do
+    # Skip empty elements resulting from trailing/double commas
+    [[ -z "$l" ]] && continue
+    
+    # Validate against whitelist
+    local valid=false
+    for valid_l in "${VALID_LICENSES[@]}"; do
+      [[ "$l" == "$valid_l" ]] && valid=true && break
+    done
+    if [[ "$valid" == false ]]; then
+      echo "Error: Invalid license: ${l}"
+      echo "Use --help for usage information"
+      exit 1
+    fi
+  done
+}
+
 parse_builds() {
   local b_arr="${1}"
   # Ensure builds is populated if empty
@@ -209,6 +237,9 @@ for arg; do
      # output format: platform ex: linux or android
      p_args="${arg#*=}"
      parse_platforms "${p_args}";;
+    --license=*)
+      parse_licenses "${arg#*=}"
+      shift;;
     --deps)
       deps="--deps";;
     --reset)
@@ -231,7 +262,13 @@ for arg; do
       echo "                Valid builds: ${VALID_BUILDS[*]}"
       echo "  --clean=*     Comma separated (without spaces) list of components to clean (e.g. --clean=ffmpeg,kit,bundle)"
       echo "                Valid components: all OR ${VALID_BUILDS[*]}"
+      echo "  --license=*   Comma separated (without spaces) list of licenses to build"
+      echo "                Valid licenses: ${VALID_LICENSES[*]}"
+      echo "  --remote      Publish release asset to remote repository"
       echo "  --local       Build locally instead of using remote releases"
+      echo "  --small       Build with small flags (reduces binary size)."
+      echo "  --not-small   Build without small flag."
+      echo "  --both        Build both small and full versions (default)"
       echo "  --help        Show this help message"
       echo ""
       echo "State file location: ${STATE_FILE}"
@@ -246,8 +283,21 @@ for arg; do
       #comma separated list of components to clean
       clean_type="${arg#*=}"
       no_clean=false;;
+    --small)
+      SMALL_FLAGS=("small")
+      shift;;
+    --not-small)
+      SMALL_FLAGS=("")
+      shift;;
+    --both)
+      SMALL_FLAGS=("small" "")
+      shift;;
+    --remote)
+      REMOTE_RELEASE=true
+      shift;;
     --local)
-      release_local=true;;
+      REMOTE_RELEASE=false
+      shift;;
     *)  
       echo "Invalid argument: ${arg}"
       echo "Use --help for usage information"
@@ -266,6 +316,10 @@ fi
 
 if [[ ${#BUILD_ARRAY[@]} -eq 0 ]]; then
   parse_builds ""
+fi
+
+if [[ ${#LICENSE_ARRAY[@]} -eq 0 ]]; then
+  parse_licenses ""
 fi
 
 # Reset state if requested
@@ -327,37 +381,45 @@ for platform in "${!PLATFORMS[@]}"; do
       ANDROID_PLATFORM_ARCHS+=("android-${arch}")
     fi
     for bundle in "${BUNDLE_ARRAY[@]}"; do
-      if truthy "${no_clean}"; then
-        clean=""
-      else
-        clean="--clean=${clean_type}"
-      fi
-      remote=""
-      no_bundle=""
-      if [[ "${platform}" == "android" || "${platform}" == "ios" || "${platform}" == "macos" || "${platform}" == "iphonesimulator" ]]; then
-        build_aars=true
-        remote="--release=local"
-        clean=""
-        no_bundle="--no-bundle"
-      else
-        if [[ "${release_local}" == true ]]; then
-          remote="--release=local"
-        else
-          remote="--release=remote"
-        fi
-      fi
-      if falsey "${build_bundle}"; then
-        no_bundle="--no-bundle"
-      fi
-      if [[ "${bundle}" == "debug" ]]; then
-        BUILD_STEPS+=("./runner.sh --host=${platform} --arch=${arch} -y ${deps} --base-bundle --build-debug $build_commands $no_bundle $clean $remote --skip --gpl -f --ff-disable-programs")
-        BUILD_STEPS+=("./runner.sh --host=${platform} --arch=${arch} -y ${deps} --base-bundle --build-debug $build_commands $no_bundle $clean $remote --skip -f --ff-disable-programs")
-      else
-        BUILD_STEPS+=("./runner.sh --host=${platform} --arch=${arch} -y ${deps} --${bundle//_/-}-bundle $build_commands $no_bundle $clean $remote --skip --gpl -f --ff-disable-programs")
-        BUILD_STEPS+=("./runner.sh --host=${platform} --arch=${arch} -y ${deps} --${bundle//_/-}-bundle $build_commands $no_bundle $clean $remote --skip -f --ff-disable-programs")
-        BUILD_STEPS+=("./runner.sh --host=${platform} --arch=${arch} -y ${deps} --${bundle//_/-}-bundle $build_commands $no_bundle $clean $remote --skip --gpl -f --small --ff-disable-programs")
-        BUILD_STEPS+=("./runner.sh --host=${platform} --arch=${arch} -y ${deps} --${bundle//_/-}-bundle $build_commands $no_bundle $clean $remote --skip -f --small --ff-disable-programs")
-      fi
+      for license in "${LICENSE_ARRAY[@]}"; do
+        for small in "${SMALL_FLAGS[@]}"; do
+          if [[ $small == "small" ]]; then
+            build_commands="--small"
+          else
+            build_commands=""
+          fi
+          if [[ $license == "gpl" ]]; then
+            build_commands="${build_commands} --gpl"
+          fi
+          if truthy "${no_clean}"; then
+            clean=""
+          else
+            clean="--clean=${clean_type}"
+          fi
+          remote=""
+          no_bundle=""
+          if [[ "${platform}" == "android" || "${platform}" == "ios" || "${platform}" == "macos" || "${platform}" == "iphonesimulator" ]]; then
+            build_aars=true
+            remote="--release=local"
+            clean=""
+            no_bundle="--no-bundle"
+          else
+            if [[ "${REMOTE_RELEASE}" == true ]]; then
+              remote="--release=local"
+            else
+              remote="--release=remote"
+            fi
+          fi
+          if falsey "${build_bundle}"; then
+            no_bundle="--no-bundle"
+          fi
+          if [[ "${bundle}" == "debug" ]]; then
+            BUILD_STEPS+=("./runner.sh --host=${platform} --arch=${arch} -y ${deps} --base-bundle --build-debug $build_commands $no_bundle $clean $remote --skip -f --ff-disable-programs")
+          else
+            BUILD_STEPS+=("./runner.sh --host=${platform} --arch=${arch} -y ${deps} --${bundle//_/-}-bundle $build_commands $no_bundle $clean $remote --skip -f --ff-disable-programs")
+          fi
+        done
+      done
     done
   done
 done

@@ -812,11 +812,17 @@ for arg; do
     --small)
       SMALL_FLAGS=("small")
       shift;;
+    --not-small)
+      SMALL_FLAGS=("")
+      shift;;
     --both)
       SMALL_FLAGS=("small" "")
       shift;;
     --remote)
       REMOTE_RELEASE=true
+      shift;;
+    --local)
+      REMOTE_RELEASE=false
       shift;;
     --create-framework)
       create_bundle=false
@@ -848,10 +854,12 @@ for arg; do
       echo "                      Valid bundles: ${VALID_TYPES[*]}"
       echo "  --license=*         Comma separated (without spaces) list of licenses to build"
       echo "                      Valid licenses: ${VALID_LICENSES[*]}"
-      echo "  --small             Build with small flags (reduces binary size). Not passing this flag will skip small builds."
-      echo "  --both              Build both small and full versions"
+      echo "  --small             Build with small flags (reduces binary size)."
+      echo "  --not-small         Build without small flag."
+      echo "  --both              Build both small and full versions (default)"
       echo "  --reset             Reset build state and start from beginning"
       echo "  --remote            Publish release asset to remote repository"
+      echo "  --local             Build locally instead of using remote releases"
       echo "                      Note: Not including one of below flags will create all of artifacts: framework, bundle, and release"
       echo "                      Do not specify if you want to create all artifacts."
       echo "  --create-framework  Create framework from built libraries, excludes creating bundle and release"
@@ -970,7 +978,7 @@ for platform in "${!PLATFORM_ARCHS[@]}"; do
         if [[ "${bundle}" == "debug" && ("${small}" == "small" || "${license}" == "lgpl") ]]; then
           continue
         fi
-        export host_platform=platform
+        export host_platform="$platform"
         output_name="$(get_output_name "${bundle}" "${license}" "${small}" "${platform}")"
         xcframework_path="${xcframework_output_dir}/${output_name}.xcframework"
         release_asset="${xcframework_output_dir}/${output_name}.xcframework.zip"
