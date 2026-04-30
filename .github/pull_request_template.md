@@ -28,3 +28,7 @@ Describe how these changes were verified. Include platform, architecture, and an
 | Android  | x86_64      | ☐ |
 | Linux    | x86_64      | ☐ |
 | Windows  | x86_64      | ☐ |
+| iOS      | arm64       | ☐ |
+| iOS-Simulator | arm64 | ☐ |
+| macOS    | arm64       | ☐ |
+| macOS    | x86_64      | ☐ |
