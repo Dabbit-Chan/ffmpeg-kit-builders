@@ -430,8 +430,8 @@ create_aar_artifact() {
   -PFFMPEG_KIT_VERSION=\"${FFMPEG_KIT_VERSION}\" \
   -PFFMPEG_KIT_JNI_LIBS_DIR=\"${FFMPEG_KIT_JNI_LIBS_DIR}\" \
   -PFFMPEG_KIT_OUTPUT_NAME=\"${FFMPEG_KIT_OUTPUT_NAME}\" \
-  -POSSRH_USERNAME=\"${OSSRH_USERNAME}\" \
-  -POSSRH_PASSWORD=\"${OSSRH_PASSWORD}\""
+  -PmavenCentralUsername=\"${OSSRH_USERNAME}\" \
+  -PmavenCentralPassword=\"${OSSRH_PASSWORD}\""
   if [[ "$local_build" == "true" ]]; then
     BUILD_STEPS+=("$build_step")
   elif check_maven_package_status "${FFMPEG_KIT_OUTPUT_NAME}" "$FFMPEG_KIT_VERSION" > >(redirect_output) 2>&1; then
