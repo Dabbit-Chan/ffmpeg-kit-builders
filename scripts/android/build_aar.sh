@@ -54,8 +54,10 @@ reset_state=false
 VALID_TYPES=("debug" "full" "base" "audio" "video" "video_hw")
 VALID_ARCHS=("x86_64" "aarch64" "armv7a")
 VALID_PLATFORM_ARCHS=("android-aarch64" "android-armv7a" "android-x86_64")
-LICENSE_FLAGS=(" " "gpl")
+LICENSE_ARRAY=(" " "gpl")
 SMALL_FLAGS=(" " "small")
+VALID_LICENSES=("lgpl" "gpl")
+VALID_SMALL_FLAGS=("small" "")
 declare -A PLATFORMS
 local_build=false
 # Define all build steps
@@ -133,6 +135,31 @@ parse_bundles() {
     done
     if [[ "$valid" == false ]]; then
       echo "Error: Invalid bundle type: ${b}"
+      echo "Use --help for usage information"
+      exit 1
+    fi
+  done
+}
+
+parse_licenses() {
+  licenses="${1}"
+  # Ensure licenses is populated if empty
+  if [[ -z "${licenses}" ]]; then
+    licenses=$(IFS=,; echo "${VALID_LICENSES[*]}")
+  fi
+  
+  IFS=',' read -ra LICENSE_ARRAY <<< "${licenses}"
+  for l in "${LICENSE_ARRAY[@]}"; do
+    # Skip empty elements resulting from trailing/double commas
+    [[ -z "$l" ]] && continue
+    
+    # Validate against whitelist
+    local valid=false
+    for valid_l in "${VALID_LICENSES[@]}"; do
+      [[ "$l" == "$valid_l" ]] && valid=true && break
+    done
+    if [[ "$valid" == false ]]; then
+      echo "Error: Invalid license: ${l}"
       echo "Use --help for usage information"
       exit 1
     fi
@@ -263,11 +290,17 @@ for arg; do
      p_args="${arg#*=}"
      parse_platforms "${p_args}"
      shift;;
+    --license=*)
+      parse_licenses "${arg#*=}"
+      shift;;
     --reset)
       reset_state=true
       shift;;
     --local)
       local_build=true
+      shift;;
+    --remote)
+      local_build=false
       shift;;
     --create-aar)
       create_aar=true
@@ -290,9 +323,15 @@ for arg; do
       echo "                    Valid bundles: ${VALID_TYPES[*]}"
       echo "                    Note: Not including one of below flags will create all of artifacts: AAR, and release"
       echo "                    Do not specify if you want to create all artifacts."
+      echo "  --license=*       Comma separated (without spaces) list of licenses to build"
+      echo "                    Valid licenses: ${VALID_LICENSES[*]}"
       echo "  --create-aar      Create AAR file. Will not create release."
       echo "  --create-release  Create release. Will not create AAR. Requires aar release asset to be present."
+      echo "  --small           Build with small flags (reduces binary size)."
+      echo "  --not-small       Build without small flag."
+      echo "  --both            Build both small and full versions (default)"
       echo "  --local           Create local release."
+      echo "  --remote          Publish release to remote repository."
       echo "  --snapshot        Create snapshot version."
       echo "  --help            Show this help message"
       echo ""
@@ -301,6 +340,15 @@ for arg; do
     --bundle=*) 
       #comma separated list of bundles to build
       parse_bundles "${arg#*=}"
+      shift;;
+    --small)
+      SMALL_FLAGS=("small")
+      shift;;
+    --not-small)
+      SMALL_FLAGS=("")
+      shift;;
+    --both)
+      SMALL_FLAGS=("small" "")
       shift;;
     --snapshot)
       SNAPSHOT=true
@@ -407,7 +455,7 @@ for key in "${!PLATFORMS[@]}"; do
   # comma separated list of architectures
   IFS=',' read -ra arch_array <<< "${PLATFORMS[$key]}"
   for bundle in "${BUNDLE_ARRAY[@]}"; do
-      for license in "${LICENSE_FLAGS[@]}"; do
+      for license in "${LICENSE_ARRAY[@]}"; do
           for small in "${SMALL_FLAGS[@]}"; do
               jni_libs_dir="$(create_jni_libs_dir -b="${bundle}" -l="${license}" -s="${small}")"
               license_flag=""
@@ -489,7 +537,7 @@ echo "FFmpeg Kit AAR Build - State Management" | tee -a "${LOG_FILE}"
 echo "========================================" | tee -a "${LOG_FILE}"
 echo "Platform: ${PLATFORMS[*]}" | tee -a "${LOG_FILE}"
 echo "Bundles: ${BUNDLE_ARRAY[*]}" | tee -a "${LOG_FILE}"
-echo "Licenses: ${LICENSE_FLAGS[*]}" | tee -a "${LOG_FILE}"
+echo "Licenses: ${LICENSE_ARRAY[*]}" | tee -a "${LOG_FILE}"
 echo "Small: ${SMALL_FLAGS[*]}" | tee -a "${LOG_FILE}"
 echo "Total steps: ${total_steps}" | tee -a "${LOG_FILE}"
 echo "Completed steps: ${completed_steps}" | tee -a "${LOG_FILE}"
