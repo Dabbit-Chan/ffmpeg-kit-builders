@@ -961,12 +961,10 @@ create_release_artifact() {
 
   output_name="$(get_output_name "${bundle}" "${license}" "${small}" "${platform}")"
   xcframework_path="${xcframework_output_dir}/${output_name}.xcframework"
-  if [[ -d "${xcframework_path}" ]]; then
-    release_asset="${xcframework_output_dir}/${output_name}.xcframework.zip"
-    if [[ "${REMOTE_RELEASE}" == "true" ]]; then
-      build_step="create_github_release '${release_asset}' && rm -rf '${xcframework_path}'"
-      BUILD_STEPS+=("${build_step}")
-    fi
+  release_asset="${xcframework_output_dir}/${output_name}.xcframework.zip"
+  if [[ "${REMOTE_RELEASE}" == "true" ]]; then
+    build_step="create_github_release '${release_asset}' && rm -rf '${xcframework_path}'"
+    BUILD_STEPS+=("${build_step}")
   fi
 }
 
@@ -975,16 +973,16 @@ for platform in "${!PLATFORM_ARCHS[@]}"; do
     for license in "${LICENSE_ARRAY[@]}"; do
       for small in "${SMALL_FLAGS[@]}"; do
         # skip small flag or lgpl flag for 'debug'
-        if [[ "${bundle}" == "debug" && ("${small}" == "small" || "${license}" == "lgpl") ]]; then
+        if [[ "${bundle}" == "debug" && ("${small}" == "small") ]]; then
           continue
         fi
         export host_platform="$platform"
         output_name="$(get_output_name "${bundle}" "${license}" "${small}" "${platform}")"
         xcframework_path="${xcframework_output_dir}/${output_name}.xcframework"
         release_asset="${xcframework_output_dir}/${output_name}.xcframework.zip"
-        [[ $create_framework == "true" ]] && create_framework_artifact "$platform" "$bundle" "$license" "$small"
-        [[ $create_bundle == "true" ]] && create_bundle_artifact "$platform" "$bundle" "$license" "$small"
-        [[ $create_release == "true" ]] && create_release_artifact "$platform" "$bundle" "$license" "$small"
+        [[ $create_framework == "true" ]] && create_framework_artifact "$platform" "$bundle" "$license" "$small" || true
+        [[ $create_bundle == "true" ]] && create_bundle_artifact "$platform" "$bundle" "$license" "$small" || true
+        [[ $create_release == "true" ]] && create_release_artifact "$platform" "$bundle" "$license" "$small" || true
       done
     done
   done
