@@ -4,7 +4,7 @@
  
 - **FFmpeg 8.1 Upgrade**: Upgraded FFmpeg from 8.0 to 8.1 with updated build patches and synchronized source files.
 - **Apple Platform Support**: Added full XCFramework build pipeline for iOS (device), iOS Simulator, and macOS (arm64, x86_64).
-- **FFplay Thread Timeout**: Added timeout handling for FFplay async thread operations.
+- **FFplay Video Playback**: Transitioned to direct video playback on frame callback instead of using SDL.
  
 ## Version 0.9.1
 
