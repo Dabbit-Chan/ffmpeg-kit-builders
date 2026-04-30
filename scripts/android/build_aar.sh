@@ -443,11 +443,8 @@ create_aar_artifact() {
 
 create_release_artifact() {
   release_asset="$1"
-  if [[ -f "${release_asset}" && "$local_build" == "false" ]]; then
-    echo "Publishing release asset ${release_asset} ..."
-    build_step="create_github_release \"${release_asset}\""
-    BUILD_STEPS+=("$build_step")
-  fi
+  build_step="create_github_release \"${release_asset}\""
+  BUILD_STEPS+=("$build_step")
 }
 
 for key in "${!PLATFORMS[@]}"; do
@@ -467,6 +464,7 @@ for key in "${!PLATFORMS[@]}"; do
                   small_flag="--small"
               fi
               for arch in "${arch_array[@]}"; do
+                if [[ "${create_aar}" == "true" ]]; then
                   # execute_build "${step}"
                   ffmpeg_kit_dir="$(get_ffmpeg_kit_dir -b="${bundle}" -l="${license}" -s="${small}" -a="${arch}")"
                   ffmpeg_kit_include_dir="${ffmpeg_kit_dir}/include"
@@ -489,6 +487,7 @@ for key in "${!PLATFORMS[@]}"; do
                   fi
                   build_step="chmod -R a+rwx \"${jni_libs_dir}\""
                   BUILD_STEPS+=("$build_step")
+                fi
               done
               FFMPEG_KIT_JNI_LIBS_DIR=$(realpath "${jni_libs_dir}")
               if [[ ! -d "${FFMPEG_KIT_JNI_LIBS_DIR}" ]]; then
@@ -516,8 +515,8 @@ for key in "${!PLATFORMS[@]}"; do
               package_name="${FFMPEG_KIT_NAMESPACE}.${FFMPEG_KIT_OUTPUT_NAME}"
               echo "${FFMPEG_KIT_JNI_LIBS_DIR}" > >(redirect_output)
               if find "${FFMPEG_KIT_JNI_LIBS_DIR}" -type f \( -name "*.so" -o -name "*.a" \) | read -r; then
-                [[ "${create_aar}" == "true" ]] && create_aar_artifact "${FFMPEG_KIT_JNI_LIBS_DIR}" "${FFMPEG_KIT_OUTPUT_NAME}"
-                [[ "${create_release}" == "true" ]] && release_asset=$(realpath "${BASEDIR}/tools/android/build/outputs/aar/${FFMPEG_KIT_OUTPUT_NAME}-${assemble_type,,}.aar") && create_release_artifact "${release_asset}"
+                [[ "${create_aar}" == "true" ]] && create_aar_artifact "${FFMPEG_KIT_JNI_LIBS_DIR}" "${FFMPEG_KIT_OUTPUT_NAME}" || true
+                [[ "${create_release}" == "true" ]] && release_asset=$(realpath "${BASEDIR}/tools/android/build/outputs/aar/${FFMPEG_KIT_OUTPUT_NAME}-${assemble_type,,}.aar") && create_release_artifact "${release_asset}" || true
               fi
           done
       done
