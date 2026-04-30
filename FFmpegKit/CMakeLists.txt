@@ -421,7 +421,7 @@ function(configure_static_linking LIBRARY_NAME STATIC_LINKING)
                 )
                 message(DEBUG "configure_static_linking(${LIBRARY_NAME}): ${LIB_PATH}_ABSOLUTE_PATH = ${${LIB_PATH}_ABSOLUTE_PATH}")
                 if(NOT EXISTS "${${LIB_PATH}_ABSOLUTE_PATH}")
-                    message(WARNING "configure_static_linking(${LIBRARY_NAME}): ${${LIB_PATH}_ABSOLUTE_PATH} file does not exist after search")
+                    message(DEBUG "configure_static_linking(${LIBRARY_NAME}): ${${LIB_PATH}_ABSOLUTE_PATH} file does not exist after search")
                     continue()
                 else()
                     message(STATUS "configure_static_linking(${LIBRARY_NAME}): replaced '${LIB_PATH}' with '${${LIB_PATH}_ABSOLUTE_PATH}'")
@@ -711,17 +711,19 @@ elseif(CMAKE_SYSTEM_NAME MATCHES "Linux")
         "-Wl,--warn-common"
         "-Wl,--no-warn-mismatch"
     )
-    target_link_libraries(ffmpegkit PRIVATE 
-        ${ALSA_LIBRARIES}
-        -lpthread
-        -lm
-        -ldl
-    )
-    pkg_check_modules(ALSA REQUIRED alsa)
-    target_include_directories(ffmpegkit PRIVATE ${ALSA_INCLUDE_DIRS})
-
-    target_link_libraries(ffmpegkit PRIVATE alsa)
-
+    pkg_check_modules(ALSA QUIET alsa)
+    if(ALSA_FOUND)
+        target_link_libraries(ffmpegkit PRIVATE 
+            ${ALSA_LIBRARIES}
+            -lpthread
+            -lm
+            -ldl
+        )
+        target_include_directories(ffmpegkit PRIVATE ${ALSA_INCLUDE_DIRS})
+    else()
+        message(FATAL_ERROR "ALSA not found. Please install libasound-dev")
+    endif()
+    
     # Allow libffmpegkit.so to find sibling libs (e.g. libpulsecommon) in the
     # same directory it is installed into (Flutter bundle's lib/ folder)
     set_target_properties(ffmpegkit PROPERTIES
