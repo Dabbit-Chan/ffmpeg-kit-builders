@@ -720,6 +720,8 @@ elseif(CMAKE_SYSTEM_NAME MATCHES "Linux")
     pkg_check_modules(ALSA REQUIRED alsa)
     target_include_directories(ffmpegkit PRIVATE ${ALSA_INCLUDE_DIRS})
 
+    target_link_libraries(ffmpegkit PRIVATE alsa)
+
     # Allow libffmpegkit.so to find sibling libs (e.g. libpulsecommon) in the
     # same directory it is installed into (Flutter bundle's lib/ folder)
     set_target_properties(ffmpegkit PROPERTIES
