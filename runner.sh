@@ -15,6 +15,8 @@ source "${SCRIPTDIR}/function.sh"
 
 require_sudo
 
+check_missing_packages # do this first since it's annoying to go through prompts then be rejected
+
 [[ -f "$LOG_FILE" ]] && rm -f "$LOG_FILE"
 
 echo -e "INFO: Build options: ${RUN_ARGS[*]}\n" 1>>"$LOG_FILE" 2>&1
@@ -79,7 +81,7 @@ Bundle Presets (pre-defined collections of libraries to include in ffmpeg-kit bu
 
 Build Options:
 	--host-platform=|--host=(linux|windows)                       where the compiled program will run
-	--host-arch=|--arch=(i686|x86_64)                             host cpu architecture (32-bit or 64-bit)
+	--host-arch=|--arch=(i686|x86_64|arm64|armv7a|armv8a)          host cpu architecture (32-bit or 64-bit)
 	--ffmpeg-git-checkout-version=[release/8.0]                   if you want to build a particular version of FFmpeg, 
 	                                                              ex: n3.1.1 or a specific git hash
                                                                 WARNING: This will most likely break ffmpeg-kit libraries
@@ -458,7 +460,7 @@ while [ $# -gt 0 ]; do
     pick_gpu_type "rocm"
     shift
     ;;
-  --enable-hardware)
+  --enable-hardware|--enable-hw)
     export enable_hardware=y
     shift
     ;;
@@ -571,7 +573,7 @@ while [ $# -gt 0 ]; do
     ff_flags_raw+=("$1")
     # Store extracted value
     VALUE="${1#--ff-}"
-    ff_flags_values+=("$VALUE")
+    ff_flags_values+=("--$VALUE")
     shift
     ;;
 	--)
@@ -600,7 +602,7 @@ if [[ "$*" == *"--resume"* ]]; then
   fi
   if [[ -f "$RUN_STATE_FILE" ]]; then
     LINE=$(head -n 1 "$RUN_STATE_FILE")
-    STEP=$(sed -n '2{p;q;}' "$RUN_STATE_FILE")
+    STEP=$(sed -i'' -n '2{p;q;}' "$RUN_STATE_FILE")
     read -r -a args <<< "$LINE"
     idx_run=-1
     idx_build_only=-1
@@ -635,11 +637,11 @@ else
 fi
 
 if ! truthy "$accept_defaults"; then
-  pick_host_platform $host_platform
-  pick_host_arch $host_arch
+  pick_host_platform "$host_platform"
+  pick_host_arch "$host_arch"
 else
-  pick_host_platform ${host_platform:-linux}
-  pick_host_arch ${host_arch:-x86_64}
+  pick_host_platform "${host_platform:-linux}"
+  pick_host_arch "${host_arch:-x86_64}"
 fi
 
 truthy "$enable_clean_builds" && { clean_ffmpeg_builds; exit 0; }
@@ -648,16 +650,7 @@ if ! truthy "$build_dependencies"; then
 truthy "$build_gpl" && truthy "$build_nonfree" && echo -e "ERROR: --enable-gpl is not compatible with --enable-nonfree. Remove one and run again" | tee -a "$LOG_FILE"
 fi
 
-check_missing_packages # do this first since it's annoying to go through prompts then be rejected
 intro                  # remember to always run the intro, since it adjust pwd
-
-if [ -z "$(get_cpu_count)" ]; then
-	cpu_count=$(sysctl -n hw.ncpu | tr -d '\n') # OS X cpu count
-	if [ -z "$(get_cpu_count)" ]; then
-		echo -e "warning, unable to determine cpu count, defaulting to 1" | tee -a "$LOG_FILE"
-		cpu_count=y # else default to just 1, instead of blank, which means infinite
-	fi
-fi
 
 set_box_memory_size_bytes
 if [[ $box_memory_size_bytes -lt 600000000 ]]; then
@@ -673,9 +666,15 @@ else
 	gcc_cpu_count=y # compatible low RAM...
 fi
 
-source "${SCRIPTDIR}/function-$host_platform.sh"
-source "${SCRIPTDIR}/run-$host_platform.sh"
-source "${SCRIPTDIR}/deps-$host_platform.sh"
+if [[ $host_platform == "iphonesimulator" ]]; then
+	source_platform="ios"
+else
+	source_platform="$host_platform"
+fi
+
+source "${SCRIPTDIR}/function-$source_platform.sh"
+source "${SCRIPTDIR}/run-$source_platform.sh"
+source "${SCRIPTDIR}/deps-$source_platform.sh"
 
 # Setup config variables
 

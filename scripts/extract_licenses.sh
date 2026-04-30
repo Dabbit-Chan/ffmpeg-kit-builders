@@ -101,7 +101,7 @@ while read -r file; do
     done
     [ $skip -eq 1 ] && continue
     
-    rel_path="${file#$SOURCE_BASE/}"
+    rel_path="${file#"$SOURCE_BASE"/}"
     append_license "$file" "$rel_path"
 done < <(find "$SOURCE_BASE" -maxdepth 2 -type f \( "${FIND_ARGS[@]}" \) 2>/dev/null)
 
@@ -110,7 +110,7 @@ if [ "$license_count" -lt 1 ]; then
     echo "No standard licenses found. Searching for SPDX identifiers..."
     while read -r file; do
         if grep -q "SPDX-License-Identifier" "$file"; then
-            rel_path="${file#$SOURCE_BASE/}"
+            rel_path="${file#"$SOURCE_BASE"/}"
             append_license "$file" "spdx_header_from_${rel_path}"
         fi
     done < <(find "$SOURCE_BASE" -maxdepth 1 -type f \( -name "*.c" -o -name "*.h" -o -name "*.md" -o -name "*.S" -o -name "*.sh" -o -name "*.py" \) 2>/dev/null)
@@ -121,7 +121,7 @@ if [ "$license_count" -lt 1 ]; then
     echo "Checking README for copyright/license info..."
     while read -r readme; do
         if grep -qiE "copyright|license" "$readme"; then
-            rel_path="${readme#$SOURCE_BASE/}"
+            rel_path="${readme#"$SOURCE_BASE"/}"
             append_license "$readme" "$rel_path"
         fi
     done < <(find "$SOURCE_BASE" -maxdepth 1 -iname "README*" 2>/dev/null)

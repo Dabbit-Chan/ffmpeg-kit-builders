@@ -21,6 +21,7 @@
 #include "ffmpeg.h"
 #include "ffmpeg_sched.h"
 #include "ffmpeg_kit_assert_override.h"
+#include "cmdutils.h"
 #include "libavutil/mem.h"
 #include <string.h>
 #ifdef _WIN32
@@ -30,6 +31,11 @@
 #include <pthread.h>
 #include <unistd.h>
 #endif
+
+FFMPEG_WEAK_SYMBOL FFMPEG_THREAD_LOCAL const char *program_name = "ffmpeg";
+FFMPEG_WEAK_SYMBOL FFMPEG_THREAD_LOCAL int program_birth_year = 2000;
+void FFMPEG_THREAD_LOCAL (*show_help_default_func)(const char *opt, const char *arg);
+extern void ffmpeg_show_help_default(const char *opt, const char *arg);
 
 // Forward declare the auto-generated TLS initializer
 extern void ffmpeg_tls_init_options(void);
@@ -170,6 +176,7 @@ int ffmpeg_run(FFmpegContext *ctx) {
   avformat_network_init();
 
   ffmpeg_tls_init_options();
+  show_help_default_func = ffmpeg_show_help_default;
 
   ctx->ret = ffmpeg_run_internal(ctx->argc, ctx->argv);
   ctx->files_parsed = (ctx->ret >= 0);

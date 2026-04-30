@@ -32,8 +32,23 @@ for arg in "$@"; do
 			verbose=true
 			set -x
 			;;
+		-e|--exclude=*)
+			# comma separated list of libraries to exclude from bundling
+			ex_libs="${arg#*=}"
+			IFS=',' read -ra EXCLUDE_LIBS <<< "$ex_libs"
+			;;
 	esac
 done
+
+is_excluded() {
+	local lib="$1"
+	for excluded_lib in "${EXCLUDE_LIBS[@]}"; do
+		if [[ "$lib" == "$excluded_lib" ]]; then
+			return 0
+		fi
+	done
+	return 1
+}
 
 echo "Generating monolithic static library: $OUTPUT_LIB"
 rm -f lib.mri bundle_manifest.txt libs.txt
@@ -72,6 +87,7 @@ is_system_path() {
 	local p="$1"
 	# Skip standard Linux system library directories
 	if [[ "$p" == "/usr/lib"* ]] ||
+		[[ "$p" == "/opt/homebrew/lib"* ]] ||
 		[[ "$p" == "/lib"* ]] ||
 		[[ "$p" == "/lib64"* ]] ||
 		[[ "$p" == "/usr/lib64"* ]] ||
@@ -122,6 +138,10 @@ process_library_path() {
 		done
 
 		if [ -n "$found_dll" ]; then
+			if is_excluded "$name"; then
+				echo_log "  [EXCLUDED] $filename"
+				return
+			fi
 			echo "  [FOUND SHARED] $(basename "$found_dll")"
 			echo "$(readlink -f "$found_dll" 2>/dev/null || echo "$found_dll")" >>bundle_manifest.txt
 			raw_libs_to_keep="$raw_libs_to_keep -l$name"
@@ -137,6 +157,10 @@ process_library_path() {
 				echo_log "  [SKIPPING SYMLINK] $filename -> $target (Static target)"
 				return
 			fi
+		fi
+		if is_excluded "$name"; then
+			echo_log "  [EXCLUDED] $filename"
+			return
 		fi
 		echo "  [FOUND SHARED] $filename"
 		echo "$(readlink -f "$lib_path" 2>/dev/null || echo "$lib_path")" >>bundle_manifest.txt
@@ -191,5 +215,5 @@ rm -f lib.mri
 
 clean_libs=$(echo "$raw_libs_to_keep" | awk '{for (i=1;i<=NF;i++) if (!seen[$i]++) printf("%s%s", $i, OFS)}' | sed 's/ *$//')
 if test -f ffmpegkit.pc; then
-	sed -i "s|FFMPEG_KIT_EXT_LIBS|$clean_libs|g" ffmpegkit.pc
+  perl -i -pe "s|FFMPEG_KIT_EXT_LIBS|\Q$clean_libs\E|g" ffmpegkit.pc
 fi

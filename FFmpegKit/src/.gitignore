@@ -83,3 +83,4 @@ libs.txt
 compat/va_copy.h
 compat/stdbit.h
 compat/w32dlfcn.h
+compat/android/*

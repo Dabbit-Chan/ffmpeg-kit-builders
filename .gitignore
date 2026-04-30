@@ -28,3 +28,15 @@ build/*
 local.properties
 tools/android/build/*
 .reviews/*
+.qwen/*
+.claude/*
+node_modules/*
+package.json
+package-lock.json
+.python-version
+entities.json
+mempalace.yaml
+.py-init
+QWEN.md
+.ffmpeg-kit-build-xcframework-state
+.DS_Store

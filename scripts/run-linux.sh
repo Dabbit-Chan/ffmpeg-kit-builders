@@ -543,8 +543,10 @@ build_vulkan_static() {
   local repo="https://github.com/BtbN/Vulkan-Shim-Loader"
   change_dir "$src_dir"
   do_git_checkout "$repo" "$src_dir/$lib"
-  change_dir "$src_dir/$lib"
-  # run_valid_function "build_vulkan" "-DCMAKE_BUILD_TYPE=Release -DVULKAN_SHIM_IMPERSONATE=ON"
+  change_dir "$src_dir/$lib/build" 1
+  do_cmake_from_build_dir "$src_dir/$lib" "-DCMAKE_BUILD_TYPE=Release -DVULKAN_SHIM_IMPERSONATE=ON"
+  disable_nonessential "$src_dir/$lib"
+  do_make_and_make_install
   change_dir "$src_dir"
 }
 # build_avisynth          # config_options+= --enable-avisynth            # enable reading of AviSynth script files [no]
@@ -576,6 +578,18 @@ build_bzlib() {
   disable_nonessential "$src_dir/$lib"
   generic_make_install "CFLAGS=\"${CFLAGS}\""
   change_dir "$src_dir"
+  cat > "$install_pkgconfig_dir/bzip2.pc" <<EOF
+prefix=$dependency_install_prefix
+exec_prefix=\${prefix}
+libdir=\${exec_prefix}/lib
+includedir=\${prefix}/include
+
+Name: bzip2
+Description: bzip2 compression library
+Version: 1.0.8
+Libs: -L\${libdir} -lbz2
+Cflags: -I\${includedir}
+EOF
 }
 # build_lzma              # config_options+= --disable-lzma               # disable lzma [autodetect]
 build_lzma() {
@@ -1030,6 +1044,7 @@ build_libcaca() {
   disable_nonessential "$src_dir/$lib" "src"
   do_make_and_make_install
   change_dir "$src_dir"
+  add_libs_to_pkg -t="$install_pkgconfig_dir/caca.pc" -l="-lX11"
   reset_ldflags
 }
 # build_libcdio           # config_options+= --enable-libcdio             # enable audio CD grabbing with libcdio [no]
@@ -3072,7 +3087,7 @@ build_libtiff() {
   generic_configure "--enable-static --disable-shared --disable-docs --disable-tools --disable-tests"
   disable_nonessential "$src_dir/$lib"
   do_make_and_make_install
-  sed -i.bak "s/-ltiff.*$/-ltiff -llzma -ljpeg -lz/" "$install_pkgconfig_dir/libtiff-4.pc" # static deps
+  add_libs_to_pkg -t="$install_pkgconfig_dir/libtiff-4.pc" -l="-ltiff -llzma -ljpeg -lz -ljbig -lwebp -lLerc"
   change_dir "$src_dir"
 }
 build_libjpeg_turbo() {
@@ -3451,6 +3466,7 @@ build_libvpx() {
   change_dir "$src_dir/$lib"
   export AS=nasm
   do_configure "--target=$host_arch-linux-gcc \
+--prefix=$dependency_install_prefix \
 --enable-ssse3 \
 --enable-static \
 --disable-shared \
@@ -3807,7 +3823,7 @@ build_libzvbi() {
   local ORIG_ACLOCAL_PATH=$ACLOCAL_PATH
   export ACLOCAL_PATH="$dependency_install_prefix/share/aclocal"
   export PATH="$dependency_install_prefix/bin:$PATH"
-  do_autogen
+  do_autogen "--build-w$bits_target"
   change_dir "$src_dir/$lib"
   touch "no.autoreconf"
   generic_configure "--enable-static \

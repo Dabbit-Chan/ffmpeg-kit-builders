@@ -20,9 +20,12 @@
 #include "ffplay_lib.h"
 #include "ffmpeg_kit_assert_override.h"
 #include <SDL.h>
+#include <SDL_stdinc.h>
 
-const char program_name[] = "ffplay";
-const int program_birth_year = 2003;
+FFMPEG_WEAK_SYMBOL FFMPEG_THREAD_LOCAL const char *program_name = "ffplay";
+FFMPEG_WEAK_SYMBOL FFMPEG_THREAD_LOCAL int program_birth_year = 2000;
+extern void FFMPEG_THREAD_LOCAL (*show_help_default_func)(const char *opt, const char *arg);
+extern void ffplay_show_help_default(const char *opt, const char *arg);
 
 // Global state for audio device management
 static char *requested_audio_device = NULL;
@@ -80,6 +83,12 @@ static void ffplay_kit_SDL_CloseAudioDevice(SDL_AudioDeviceID dev) {
 static void lock_ffplay_api(void);
 static void unlock_ffplay_api(void);
 
+/* Global frame callback for non-Android video output (Linux, Windows, macOS, iOS).
+ * Set by ffplay_set_frame_callback() before ffplay_init().
+ * Called inside ffplay_step() with SDL_PIXELFORMAT_ABGR8888 pixel data after each video frame. */
+static FFplayFrameCallback g_frame_callback = NULL;
+static void *g_frame_callback_userdata = NULL;
+
 #ifdef __ANDROID__
 #include <android/native_window.h>
 #include <android/log.h>
@@ -128,15 +137,35 @@ static SDL_Window *ffplay_kit_SDL_CreateWindow(
 }
 #define SDL_CreateWindow ffplay_kit_SDL_CreateWindow
 
-#else /* !__ANDROID__ — Linux / Windows */
+#elif defined(__APPLE__)
+#include <TargetConditionals.h>
+#include <os/log.h>
 
-/* Global frame callback for desktop video output.
- * Set by ffplay_set_frame_callback() before ffplay_init().
- * Called inside ffplay_step() with RGBA8888 pixel data after each video frame. */
-static FFplayFrameCallback g_frame_callback = NULL;
-static void *g_frame_callback_userdata = NULL;
+#define FFPLAY_LOG_TAG "FFplayLib"
+/* os_log handle; created lazily in ffplay_init().  Falls back to OS_LOG_DEFAULT until then. */
+static os_log_t _ffplay_apple_log = NULL;
+#define FFPLAY_LOGI(fmt, ...) os_log_info(_ffplay_apple_log ? _ffplay_apple_log : OS_LOG_DEFAULT, fmt, ##__VA_ARGS__)
+#define FFPLAY_LOGD(fmt, ...) os_log_debug(_ffplay_apple_log ? _ffplay_apple_log : OS_LOG_DEFAULT, fmt, ##__VA_ARGS__)
+#define FFPLAY_LOGE(fmt, ...) os_log_error(_ffplay_apple_log ? _ffplay_apple_log : OS_LOG_DEFAULT, fmt, ##__VA_ARGS__)
 
-#endif /* __ANDROID__ */
+/* SDL_SetMainReady() is declared in SDL_main.h, but including that header
+ * redirects `main` to `SDL_main` which breaks library-mode compilation.
+ * Declare it directly instead. */
+extern void SDL_SetMainReady(void);
+
+/* SDL_CreateWindow interceptor — logs dimensions before forwarding to SDL. */
+static SDL_Window *ffplay_kit_SDL_CreateWindow(
+        const char *title, int x, int y, int w, int h, Uint32 flags)
+{
+    FFPLAY_LOGI("[ffplay_lib] SDL_CreateWindow: %dx%d title=%{public}s flags=0x%x",
+        w, h, title ? title : "(null)", (unsigned)flags);
+    SDL_Window *win = SDL_CreateWindow(title, x, y, w, h, flags);
+    FFPLAY_LOGI("[ffplay_lib] SDL_CreateWindow => win=%p err='%{public}s'", win, SDL_GetError());
+    return win;
+}
+#define SDL_CreateWindow ffplay_kit_SDL_CreateWindow
+
+#endif /* __APPLE__ */
 
 // Keep the SDL window hidden and suppress SDL_RenderPresent: pixels are read via
 // SDL_RenderReadPixels from the software back-buffer, so no X11/present needed.
@@ -144,7 +173,8 @@ static void *g_frame_callback_userdata = NULL;
 #define SDL_ShowWindow(w) ((void)(w))
 #define SDL_RenderPresent(r) ((void)(r))
 #endif
-
+// At the top of ffplay_lib.c, before ffplay.c is included, declare the real symbol:
+extern DECLSPEC void SDLCALL SDL_RenderPresent_real(SDL_Renderer *renderer);
 // Include the patched ffplay.c to access internal structures and static functions.
 #include "ffplay.c"
 
@@ -166,17 +196,15 @@ struct FFplayContext {
     double max_seen_pos;
 };
 
-// Global API Synchronization to satisfy TSAN strictly on FFI context pointer reads
+#include <pthread.h>
+
+// Global API Synchronization
 static SDL_mutex *ffplay_api_mutex = NULL;
 static SDL_SpinLock ffplay_init_lock = 0;
 static FFplayContext *active_ffplay_ctx = NULL;
 
-/* Thread-local flag: non-zero when the calling thread holds ffplay_api_mutex.
- * Used by setjmp recovery paths to conditionally unlock without calling
- * unlock_ffplay_api() when the mutex was never acquired. */
-static _Thread_local int ffplay_api_held = 0;
-
 static void lock_ffplay_api(void) {
+    // Double-checked locking for initialization
     if (!ffplay_api_mutex) {
         SDL_AtomicLock(&ffplay_init_lock);
         if (!ffplay_api_mutex) {
@@ -184,18 +212,59 @@ static void lock_ffplay_api(void) {
         }
         SDL_AtomicUnlock(&ffplay_init_lock);
     }
+    
+    // SDL Mutexes are recursive; simply lock.
     SDL_LockMutex(ffplay_api_mutex);
-    ffplay_api_held = 1;
 }
 
 static void unlock_ffplay_api(void) {
     if (ffplay_api_mutex) {
-        ffplay_api_held = 0;
         SDL_UnlockMutex(ffplay_api_mutex);
     }
 }
 
-#ifndef __ANDROID__
+void ffplay_lib_on_frame(const uint8_t *pixels, int width, int height,
+                         int linesize, const char *pixel_format) {
+  if (!pixels || width <= 0 || height <= 0) return;
+#ifdef __ANDROID__
+    FFplayContext *ctx = active_ffplay_ctx;
+    if (!ctx) return;
+    lock_ffplay_api();
+    ANativeWindow *blit_window = g_android_native_window;
+    if (blit_window) ANativeWindow_acquire(blit_window);
+    unlock_ffplay_api();
+
+    if (blit_window) {
+        ANativeWindow_setBuffersGeometry(blit_window, width, height,
+                                         WINDOW_FORMAT_RGBA_8888);
+        ANativeWindow_Buffer anb;
+        if (ANativeWindow_lock(blit_window, &anb, NULL) == 0) {
+            const uint8_t *src = pixels;
+            uint8_t *dst = (uint8_t *)anb.bits;
+            int dst_stride = anb.stride * 4;
+            int src_stride = linesize;
+            for (int row = 0; row < height; row++) {
+                memcpy(dst, src, width * 4);
+                src += src_stride;
+                dst += dst_stride;
+            }
+            ANativeWindow_unlockAndPost(blit_window);
+            if (ctx->callbacks.on_frame_displayed)
+                ctx->callbacks.on_frame_displayed(
+                    ctx->callbacks.userdata, NULL, width, height, 0);
+        } else {
+            FFPLAY_LOGE("ANativeWindow_lock failed");
+        }
+        ANativeWindow_release(blit_window);
+    }
+#endif
+    lock_ffplay_api();
+    if (g_frame_callback)
+      g_frame_callback(g_frame_callback_userdata, pixels, width, height,
+                       linesize, pixel_format);
+    unlock_ffplay_api();
+}
+
 void ffplay_set_frame_callback(FFplayFrameCallback callback, void *userdata) {
     /* Hold the API mutex so that when this returns with callback==NULL,
      * ffplay_step is guaranteed to have finished any in-flight call.
@@ -205,7 +274,6 @@ void ffplay_set_frame_callback(FFplayFrameCallback callback, void *userdata) {
     g_frame_callback_userdata = userdata;
     unlock_ffplay_api();
 }
-#endif /* __ANDROID__ */
 
 /* Splits a command-line string into argc/argv. Caller frees with av_free(). */
 static int split_args(const char *args, char ***argv_out) {
@@ -264,6 +332,23 @@ static int split_args(const char *args, char ***argv_out) {
 }
 
 FFplayContext* ffplay_init(const char* args_string, const FFplayCallbacks *cb) {
+    // Ensure only one session is active at a time
+    if (active_ffplay_ctx) {
+        ffplay_stop(NULL);
+        // Wait for it to clear
+        int timeout = 5000; // 5s
+        while (active_ffplay_ctx && timeout > 0) {
+            SDL_PumpEvents(); // Ensure events are processed
+            SDL_Delay(50);
+            timeout -= 50;
+        }
+        if (active_ffplay_ctx) {
+            av_log(NULL, AV_LOG_WARNING, "[ffplay_lib] Previous session did not close in time, forcing cleanup.\n");
+        } else {
+            av_log(NULL, AV_LOG_INFO,"[ffplay_lib] ffplay_init: previous session cleared\n");
+        }
+    }
+
     FFplayContext *ctx = av_mallocz(sizeof(FFplayContext));
     if (!ctx) return NULL;
 
@@ -291,20 +376,37 @@ FFplayContext* ffplay_init(const char* args_string, const FFplayCallbacks *cb) {
 #else /* !__ANDROID__ */
     // Use SDL_SetHintWithPriority (not SDL_setenv) so the hint lands in SDL's
     // own table, which is reliable across CRT instances on Windows.
-#ifdef _WIN32
+#if defined(_WIN32)
     // Windows: 'dummy' driver provides an in-memory surface without a visible window.
     SDL_SetHintWithPriority(SDL_HINT_VIDEODRIVER, "dummy", SDL_HINT_OVERRIDE);
+#elif defined(__APPLE__)
+    // iOS/macOS: SDL used as a library — bypass SDLUIKitDelegate/SDLAppDelegate
+    // startup requirements (identical to the Android SDL_SetMainReady() call above).
+    SDL_SetMainReady();
+    // via the FFplayFrameCallback registered with ffplay_set_frame_callback().
+    SDL_SetHintWithPriority(SDL_HINT_VIDEODRIVER, "dummy", SDL_HINT_OVERRIDE);
+#elif defined(__LINUX__)
+    SDL_SetHintWithPriority(SDL_HINT_VIDEODRIVER, "dummy", SDL_HINT_OVERRIDE);
+    SDL_SetHintWithPriority(SDL_HINT_RENDER_DRIVER, "dummy", SDL_HINT_OVERRIDE);
 #else
-    // Linux: 'offscreen' provides a CPU-backed framebuffer supporting
-    // SDL_CreateRenderer + SDL_RenderReadPixels without a display server.
-    // Works in headed and headless environments (CI, WSL, servers).
-    // ('dummy' lacks a framebuffer and crashes SDL_CreateRenderer.)
-    SDL_SetHintWithPriority(SDL_HINT_VIDEODRIVER, "offscreen", SDL_HINT_OVERRIDE);
-#endif
     SDL_SetHintWithPriority(SDL_HINT_RENDER_DRIVER, "software", SDL_HINT_OVERRIDE);
-    // Force dummy audio driver unless the caller has overridden SDL_AUDIODRIVER.
+#endif
+#if defined(__APPLE__)
+    // iOS/macOS: CoreAudio provides real audio output via the system audio stack.
+    if (!SDL_getenv("SDL_AUDIODRIVER"))
+        SDL_setenv("SDL_AUDIODRIVER", "coreaudio", 0);
+    /* Initialise the os_log subsystem now that we have the args context. */
+    if (!_ffplay_apple_log)
+        _ffplay_apple_log = os_log_create("com.akashskypatel.ffmpegkit", FFPLAY_LOG_TAG);
+    FFPLAY_LOGI("[ffplay_lib] ffplay_init: SDL_VIDEODRIVER='dummy' SDL_RENDER_DRIVER='software' "
+        "SDL_AUDIODRIVER='%{public}s' args='%{public}.200s'",
+        SDL_getenv("SDL_AUDIODRIVER") ? SDL_getenv("SDL_AUDIODRIVER") : "(null)",
+        args_string ? args_string : "(null)");
+#else
+    // Linux/Windows: use dummy audio unless the caller has set SDL_AUDIODRIVER.
     if (!SDL_getenv("SDL_AUDIODRIVER"))
         SDL_setenv("SDL_AUDIODRIVER", "dummy", 0);
+#endif
 #endif /* !__ANDROID__ */
         
     // Reset global state in ffplay.c
@@ -313,6 +415,7 @@ FFplayContext* ffplay_init(const char* args_string, const FFplayCallbacks *cb) {
     avformat_network_init();
 
     ffplay_tls_init_options();
+    show_help_default_func = ffplay_show_help_default;
 
     ctx->argc = split_args(args_string, &ctx->argv);
     if (ctx->argc < 0) {
@@ -396,7 +499,7 @@ int ffplay_start(FFplayContext* ctx) {
         av_log(NULL, AV_LOG_ERROR,
                "[ffmpeg-kit] ffplay_start: recovered from internal assertion "
                "failure. Session will be marked as failed.\n");
-        if (ffplay_api_held) unlock_ffplay_api();
+        unlock_ffplay_api();
         ffmpeg_kit_assert_jmp_ptr = NULL;
         return AVERROR_EXIT;
     }
@@ -441,7 +544,9 @@ int ffplay_step(FFplayContext* ctx) {
         av_log(NULL, AV_LOG_ERROR,
                "[ffmpeg-kit] ffplay_step: recovered from internal assertion "
                "failure. Stopping playback.\n");
-        if (ffplay_api_held) unlock_ffplay_api();
+        // Reentrant lock management: simply call unlock to decrement count.
+        // unlock_ffplay_api() handles recursion and state.
+        unlock_ffplay_api();
         goto step_done;
     }
 
@@ -642,95 +747,6 @@ int ffplay_step(FFplayContext* ctx) {
     if (ctx->is && ctx->is->show_mode != SHOW_MODE_NONE && (!ctx->is->paused || ctx->is->force_refresh)) {
          video_refresh(ctx->is, &remaining_time);
     }
-
-#ifdef __ANDROID__ /* ---- Android: blit to ANativeWindow ---- */
-    /* Snapshot the current ANativeWindow under the API mutex and acquire a
-     * temporary reference so the caller cannot free the window mid-blit.
-     * ffplay_set_android_window() holds the same mutex when updating the
-     * global, so once we release the mutex with a non-NULL snapshot the
-     * window is guaranteed to remain valid until we call ANativeWindow_release. */
-    lock_ffplay_api();
-    ANativeWindow *blit_window = g_android_native_window;
-    if (blit_window) ANativeWindow_acquire(blit_window);
-    unlock_ffplay_api();
-
-    if (blit_window && ctx->is && ctx->is->video_st &&
-            ctx->is->window && ctx->is->renderer) {
-        int rw = 0, rh = 0;
-        SDL_GetWindowSize(ctx->is->window, &rw, &rh);
-        if (rw > 0 && rh > 0) {
-            int pitch = rw * 4;
-            size_t needed = (size_t)rh * pitch;
-            if (needed > g_pixel_buf_size) {
-                av_free(g_pixel_buf);
-                g_pixel_buf = av_malloc(needed);
-                g_pixel_buf_size = g_pixel_buf ? needed : 0;
-            }
-            if (g_pixel_buf) {
-                /* ABGR8888 bytes [R][G][B][A] on little-endian == WINDOW_FORMAT_RGBA_8888. */
-                if (SDL_RenderReadPixels(ctx->is->renderer, NULL,
-                        SDL_PIXELFORMAT_ABGR8888, g_pixel_buf, pitch) == 0) {
-                    ANativeWindow_setBuffersGeometry(
-                        blit_window, rw, rh,
-                        WINDOW_FORMAT_RGBA_8888);
-                    ANativeWindow_Buffer anb;
-                    if (ANativeWindow_lock(blit_window, &anb, NULL) == 0) {
-                        const uint8_t *src = (const uint8_t *)g_pixel_buf;
-                        uint8_t *dst = (uint8_t *)anb.bits;
-                        int dst_stride = anb.stride * 4;
-                        for (int row = 0; row < rh; row++) {
-                            memcpy(dst, src, pitch);
-                            src += pitch;
-                            dst += dst_stride;
-                        }
-                        ANativeWindow_unlockAndPost(blit_window);
-
-                        if (ctx->callbacks.on_frame_displayed)
-                            ctx->callbacks.on_frame_displayed(
-                                ctx->callbacks.userdata, NULL, rw, rh, 0);
-                    } else {
-                        FFPLAY_LOGE("ANativeWindow_lock failed");
-                    }
-                } else {
-                    FFPLAY_LOGE("SDL_RenderReadPixels failed: %s", SDL_GetError());
-                }
-            }
-        }
-    }
-    if (blit_window) ANativeWindow_release(blit_window);
-
-#else /* !__ANDROID__ — Linux / Windows: fire pixel callback */
-
-    /* Hold the API mutex for the entire check-and-call block.
-     * ffplay_set_frame_callback() holds the same mutex, so once it returns
-     * with callback==NULL, no call is in-flight and the plugin can safely
-     * free the TextureState that is passed as userdata. */
-    lock_ffplay_api();
-    if (ctx->is && ctx->is->video_st && ctx->is->window && ctx->is->renderer
-            && g_frame_callback) {
-        int rw = 0, rh = 0;
-        SDL_GetWindowSize(ctx->is->window, &rw, &rh);
-        if (rw > 0 && rh > 0) {
-            int pitch = rw * 4;
-            size_t needed = (size_t)rh * pitch;
-            if (needed > g_pixel_buf_size) {
-                av_free(g_pixel_buf);
-                g_pixel_buf = av_malloc(needed);
-                g_pixel_buf_size = g_pixel_buf ? needed : 0;
-            }
-            if (g_pixel_buf) {
-                if (SDL_RenderReadPixels(ctx->is->renderer, NULL,
-                        SDL_PIXELFORMAT_ABGR8888, g_pixel_buf, pitch) == 0) {
-                    g_frame_callback(g_frame_callback_userdata,
-                        (const uint8_t *)g_pixel_buf, rw, rh, pitch);
-                }
-            }
-        }
-    }
-    unlock_ffplay_api();
-
-#endif /* __ANDROID__ */
-
     step_ret = ctx->quit;
 
 step_done:
@@ -802,12 +818,15 @@ int ffplay_resume(FFplayContext* ctx) {
 int ffplay_stop(FFplayContext* ctx) {
     int ret = -1;
     lock_ffplay_api();
-    if (ctx && active_ffplay_ctx == ctx && ctx->is) {
+    FFplayContext *target = ctx ? ctx : active_ffplay_ctx;
+    if (target && target->is) {
         SDL_Event event;
         event.type = FF_QUIT_EVENT;
-        event.user.data1 = ctx->is; 
+        event.user.data1 = target->is; 
         SDL_PushEvent(&event);
         ret = 0;
+    } else {
+        av_log(NULL, AV_LOG_INFO, "[ffplay_lib] ffplay_stop: nothing to stop (target=%p)\n", target);
     }
     unlock_ffplay_api();
     return ret;
@@ -989,7 +1008,7 @@ void ffplay_free(FFplayContext* ctx) {
     
     // Force full SDL shutdown in case multiple inits increased refcount
     while (SDL_WasInit(0)) {
-        SDL_Quit();
+      SDL_Quit();
     }
 
     // Cleanup globals

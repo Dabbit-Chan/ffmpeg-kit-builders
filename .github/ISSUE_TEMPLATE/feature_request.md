@@ -21,6 +21,8 @@ Any alternative solutions or workarounds you have considered.
 - [ ] Android
 - [ ] Linux
 - [ ] Windows
+- [ ] iOS
+- [ ] macOS
 
 **Additional context**
 Add any other context or screenshots about the feature request here.

@@ -1,23 +1,22 @@
 diff --git a/src/ffmpeg_sched.c b/src/ffmpeg_sched.c
-index 3180367..9b6cac6 100755
+index 517ff1e..41ee9f6 100755
 --- a/src/ffmpeg_sched.c
 +++ b/src/ffmpeg_sched.c
-@@ -2520,7 +2520,7 @@ static int task_cleanup(Scheduler *sch, SchedulerNode node)
+@@ -2660,7 +2660,7 @@ static int task_cleanup(Scheduler *sch, SchedulerNode node)
      case SCH_NODE_TYPE_DEC:         return dec_done   (sch, node.idx);
      case SCH_NODE_TYPE_ENC:         return enc_done   (sch, node.idx);
      case SCH_NODE_TYPE_FILTER_IN:   return filter_done(sch, node.idx);
--    default: av_assert0(0);
-+    default: av_assert0(0); return AVERROR_BUG;
+-    default: av_unreachable("Invalid node type?");
++    default: av_unreachable("Invalid node type?"); return AVERROR_BUG;
      }
  }
  
-@@ -2565,10 +2565,21 @@ static int task_stop(Scheduler *sch, SchTask *task)
+@@ -2708,8 +2708,20 @@ static int task_stop(Scheduler *sch, SchTask *task)
          return task_cleanup(sch, task->node);
  
      ret = pthread_join(task->thread, &thread_ret);
 -    av_assert0(ret == 0);
  
--    task->thread_running = 0;
 +#ifdef _WIN32
 +    if (ret == ESRCH) {
 +        av_log(NULL, AV_LOG_WARNING,
@@ -29,9 +28,8 @@ index 3180367..9b6cac6 100755
 +        return 0;
 +    }
 +#endif
- 
++
 +    av_assert0(ret == 0);
-+    task->thread_running = 0;
-     return (intptr_t)thread_ret;
- }
+     task->thread_running = 0;
  
+     return (intptr_t)thread_ret;

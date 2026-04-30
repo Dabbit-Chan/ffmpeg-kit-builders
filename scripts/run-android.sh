@@ -467,8 +467,10 @@ build_vulkan_static() {
   local repo="https://github.com/BtbN/Vulkan-Shim-Loader"
   change_dir "$src_dir"
   do_git_checkout "$repo" "$src_dir/$lib"
-  change_dir "$src_dir/$lib"
-  # run_valid_function "build_vulkan" "-DCMAKE_BUILD_TYPE=Release -DVULKAN_SHIM_IMPERSONATE=ON"
+  change_dir "$src_dir/$lib/build" 1
+  do_cmake_from_build_dir "$src_dir/$lib" "-DCMAKE_BUILD_TYPE=Release -DVULKAN_SHIM_IMPERSONATE=ON"
+  disable_nonessential "$src_dir/$lib"
+  do_make_and_make_install
   change_dir "$src_dir"
 }
 # build_avisynth          # config_options+= --enable-avisynth            # enable reading of AviSynth script files [no]
@@ -500,6 +502,18 @@ build_bzlib() {
   disable_nonessential "$src_dir/$lib"
   generic_make_install "CFLAGS=\"${CFLAGS}\""
   change_dir "$src_dir"
+    cat > "$install_pkgconfig_dir/bzip2.pc" <<EOF
+prefix=$dependency_install_prefix
+exec_prefix=\${prefix}
+libdir=\${exec_prefix}/lib
+includedir=\${prefix}/include
+
+Name: bzip2
+Description: bzip2 compression library
+Version: 1.0.8
+Libs: -L\${libdir} -lbz2
+Cflags: -I\${includedir}
+EOF
 }
 # build_lzma              # config_options+= --disable-lzma               # disable lzma [autodetect]
 build_lzma() {
@@ -2139,13 +2153,16 @@ build_libopencv() {
 -DCMAKE_INSTALL_INCLUDEDIR=include \
 -DCMAKE_EXE_LINKER_FLAGS=\"-L${dependency_install_prefix}/lib -lsharpyuv -ljbig -llzma -ldeflate -lzstd -ljpeg\" \
 -DHAVE_DSHOW=0"
+  if [[ $host_arch != "x86_64" ]]; then
+    cmake_params+=" -DWITH_CAROTENE=ON"
+  fi
   do_cmake_from_build_dir "$src_dir/$lib" "$cmake_params"
   disable_nonessential "$src_dir/$lib/build"
   do_make_and_make_install
   copy_path "$src_dir/$lib/build/unix-install/opencv4.pc" "$install_pkgconfig_dir/opencv.pc" -f
   copy_path "$src_dir/$lib/build/unix-install/opencv4.pc" "$install_pkgconfig_dir/opencv4.pc" -f
-  add_libs_to_pkg -t="$install_pkgconfig_dir/opencv.pc" -p="-lopencv_imgproc -lopencv_core -lkleidicv_hal -lkleidicv_thread -lkleidicv -ltegra_hal -lz -lm -llog"
-  add_libs_to_pkg -t="$install_pkgconfig_dir/opencv4.pc" -p="-lopencv_imgproc -lopencv_core -lkleidicv_hal -lkleidicv_thread -lkleidicv -ltegra_hal -lz -lm -llog"
+  add_libs_to_pkg -t="$install_pkgconfig_dir/opencv.pc" -p="-lopencv_imgproc -lopencv_core -lkleidicv_hal -lkleidicv_thread -lkleidicv -ltegra_hal -lcarotene_objs -lz -lm -llog"
+  add_libs_to_pkg -t="$install_pkgconfig_dir/opencv4.pc" -p="-lopencv_imgproc -lopencv_core -lkleidicv_hal -lkleidicv_thread -lkleidicv -ltegra_hal -lcarotene_objs -lz -lm -llog"
   find "$install_pkgconfig_dir" -name "opencv*.pc" -exec sed -i -E \
   -e 's/(^|[[:space:]])-ldl([[:space:]]|$)/ /g' \
   -e 's/(^|[[:space:]])-lpthread([[:space:]]|$)/ /g' \
@@ -2930,7 +2947,7 @@ build_cpuinfo() {
 -DCPUINFO_BUILD_MOCK_TESTS=OFF \
 -DCPUINFO_BUILD_BENCHMARKS=OFF \
 -DCPUINFO_BUILD_TOOLS=OFF \
--DCPUINFO_TARGET_PROCESSOR="${cmake_host_arch}" \
+-DCPUINFO_TARGET_PROCESSOR=\"${cmake_host_arch}\" \
 -DBUILD_SHARED_LIBS=OFF"
 #   change_dir "$src_dir/$lib/deps/googletest/build" 1
 #   do_cmake_from_build_dir "$src_dir/$lib/deps/googletest" "-DCMAKE_BUILD_TYPE=Release \
@@ -4010,7 +4027,7 @@ build_libzvbi() {
     mv "$dependency_install_prefix/bin/xz" "$dependency_install_prefix/bin/xz.bak"
     ln -s /usr/bin/xz "$dependency_install_prefix/bin/xz"
   fi
-  do_autogen
+  do_autogen "--build-w$bits_target"
   change_dir "$src_dir/$lib"
   touch "no.autoreconf"
   generic_configure "--enable-static \

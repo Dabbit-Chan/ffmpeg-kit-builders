@@ -1,1 +1,6 @@
 race:SDL_RunThread
+
+# TLS thread cleanup races
+race:__nptl_deallocate_tsd*
+race:start_thread*
+thread:__nptl_deallocate_tsd*

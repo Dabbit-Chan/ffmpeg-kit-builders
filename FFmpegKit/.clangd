@@ -2,12 +2,22 @@
 CompileFlags:
   CompilationDatabase: "desktop"
   Add:
-    - -I/home/vscode/ffmpeg-kit-builders/desktop/src
+    - -I/home/vscode/ffmpeg-kit-builders/FFmpegKit/src
     - -I/home/vscode/ffmpeg-kit-builders/prebuilt/src/ffmpeg
     - -I/home/vscode/ffmpeg-kit-builders/prebuilt/src/jsoncpp/include
     - -I/home/vscode/ffmpeg-kit-builders/prebuilt/src/sdl2/include
-    - -I/home/vscode/ffmpeg-kit-builders/desktop/build/_deps/googletest-src/googletest/include
-    - -I/home/vscode/ffmpeg-kit-builders/desktop/build/_deps/googletest-src/googlemock/include
+    - -I/home/vscode/ffmpeg-kit-builders/FFmpegKit/build/_deps/googletest-src/googletest/include
+    - -I/home/vscode/ffmpeg-kit-builders/FFmpegKit/build/_deps/googletest-src/googlemock/include
+    - -I/Users/akash/Projects/ffmpeg-kit-builders/FFmpegKit/src
+    - -I/Users/akash/Projects/ffmpeg-kit-builders/prebuilt/src/ffmpeg
+    - -I/Users/akash/Projects/ffmpeg-kit-builders/prebuilt/src/jsoncpp/include
+    - -I/Users/akash/Projects/ffmpeg-kit-builders/prebuilt/src/sdl2/include
+    - -I/Users/akash/Projects/ffmpeg-kit-builders/FFmpegKit/build/_deps/googletest-src/googletest/include
+    - -I/Users/akash/Projects/ffmpeg-kit-builders/FFmpegKit/build/_deps/googletest-src/googlemock/include
+    - -I/Users/akash/Projects/ffmpeg-kit-builders/prebuilt/macos-aarch64/libraries/include
+    - -I/Users/akash/Projects/ffmpeg-kit-builders/prebuilt/macos-x86_64/libraries/include
+    - -I/Users/akash/Projects/ffmpeg-kit-builders/prebuilt/ios-aarch64/libraries/include
+    - -I/Users/akash/Projects/ffmpeg-kit-builders/prebuilt/iphonesimulator-aarch64/libraries/include
     - -DDEBUG
     - -D_GNU_SOURCE
     - -D__STDC_CONSTANT_MACROS

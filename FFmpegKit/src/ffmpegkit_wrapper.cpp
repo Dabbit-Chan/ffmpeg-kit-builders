@@ -27,6 +27,7 @@ extern "C" {
 }
 
 #include "ffmpegkit_wrapper.h"
+#include "ffplay_lib.h"
 #include "AbstractSession.hpp"
 #include "Chapter.hpp"
 #include "FFmpegKit.hpp"
@@ -168,7 +169,7 @@ static RegistryMutex &get_registry_mutex() {
 }
 
 // DLL alignment attribute for GCC
-#ifdef __GNUC__
+#if defined(__GNUC__) && defined(_WIN32)
 #define DLL_ALIGN __attribute__((force_align_arg_pointer))
 #else
 #define DLL_ALIGN
@@ -322,6 +323,9 @@ void DLL_ALIGN ffmpeg_kit_handle_release(void *handle) {
     // indefinitely.  The detached thread will run its TLS destructors when it
     // eventually exits on its own.
     if (session->isFFplay()) {
+      if (session != nullptr) {
+        static_cast<ffmpegkit::FFplaySession*>(session.get())->close();
+      }
       if (timed_out) {
         std::cerr << "[Warning] ffmpeg_kit_handle_release: detaching stuck FFplay thread\n";
         ffmpegkit::FFmpegKitConfig::detachAsyncFFplayThread();
@@ -583,6 +587,18 @@ FFmpegSessionHandle DLL_ALIGN ffmpeg_kit_create_session_from_argv_with_callbacks
     }
 }
 
+void DLL_ALIGN ffmpeg_kit_close_session(FFmpegSessionHandle handle) {
+    try {
+        auto ptr = get_ptr<FFmpegSession>(handle);
+        if (ptr) {
+            ptr->cancel();
+        }
+    } catch (const std::exception &e) {
+        std::cerr << "[Exception] in ffmpeg_kit_close_session: " << e.what() << std::endl;
+        PRINT_STACK_TRACE();
+    }
+}
+
 void DLL_ALIGN ffmpeg_kit_debug_print_stack() {
     void* p = nullptr;
     uintptr_t stack_ptr = (uintptr_t)&p;
@@ -779,6 +795,31 @@ FFprobeSessionHandle DLL_ALIGN ffprobe_kit_execute_async(const char *command,
   }
 }
 
+void DLL_ALIGN ffprobe_kit_cancel(void) {
+  try {
+    for (auto& session : *FFmpegKitConfig::getSessions()) {
+      if (session->isFFprobe()) {
+        session->cancel();
+      }
+    } 
+  } catch (const std::exception &e) {
+    std::cerr << "[Exception] in ffprobe_kit_cancel: " << e.what() << std::endl;
+    PRINT_STACK_TRACE();
+  }
+}
+
+void DLL_ALIGN ffprobe_kit_cancel_session(int64_t session_id) {
+  try {
+    auto session = FFmpegKitConfig::getSession(session_id);
+    if (session && session->isFFprobe()) {
+      session->cancel();
+    }
+  } catch (const std::exception &e) {
+    std::cerr << "[Exception] in ffprobe_kit_cancel_session: " << e.what() << std::endl;
+    PRINT_STACK_TRACE();
+  }
+}
+
 FFprobeSessionHandle DLL_ALIGN ffprobe_kit_create_session(const char *command) {
   try {
     if (!command)
@@ -886,6 +927,19 @@ FFprobeSessionHandle DLL_ALIGN ffprobe_kit_create_session_from_argv_with_callbac
         PRINT_STACK_TRACE();
         return nullptr;
     }
+}
+
+void DLL_ALIGN ffprobe_kit_close_session(FFprobeSessionHandle handle) {
+  try {
+    auto ptr = get_ptr<FFprobeSession>(handle);
+    if (ptr) {
+      ptr->cancel();
+    }
+  } catch (const std::exception &e) {
+    std::cerr << "[Exception] in ffprobe_kit_close_session: " << e.what()
+              << std::endl;
+    PRINT_STACK_TRACE();
+  }
 }
 
 void DLL_ALIGN ffprobe_kit_set_log_callback(FFprobeSessionHandle session,
@@ -1667,29 +1721,16 @@ void DLL_ALIGN ffplay_kit_set_android_surface_ptr(int64_t /*native_window_ptr*/)
 void DLL_ALIGN ffplay_kit_clear_android_surface(void) {}
 #endif /* __ANDROID__ */
 
-/* Desktop frame callback (Linux / Windows) */
-
-#if !defined(__ANDROID__)
-extern "C" void ffplay_set_frame_callback(
-    void (*cb)(void *, const uint8_t *, int, int, int), void *userdata);
-#endif
-
 void DLL_ALIGN ffplay_kit_register_frame_callback(
     FFplayKitFrameCallback callback, void *userdata) {
-#if !defined(__ANDROID__)
   ffplay_set_frame_callback(
-      reinterpret_cast<void (*)(void *, const uint8_t *, int, int, int)>(callback),
+      reinterpret_cast<void (*)(void *, const uint8_t *, int, int, int,
+                                const char *)>(callback),
       userdata);
-#else
-  (void)callback;
-  (void)userdata;
-#endif
 }
 
 void DLL_ALIGN ffplay_kit_unregister_frame_callback(void) {
-#if !defined(__ANDROID__)
   ffplay_set_frame_callback(nullptr, nullptr);
-#endif
 }
 
 /* Config */

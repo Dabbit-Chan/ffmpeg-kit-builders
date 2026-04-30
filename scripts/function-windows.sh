@@ -208,13 +208,21 @@ fix_pkgconfig_flags() {
 
 	echo "INFO: Scanning .pc files in $PKG_CONFIG_LIBDIR..."
 
-	find "${dependency_install_prefix}/lib" -name "*.dll.a" | while read dll_a; do
+	find "${dependency_install_prefix}/lib" -name "*.dll.a" | while read -r dll_a; do
 		static_a="${dll_a%.dll.a}.a"
 		if [ -f "$static_a" ]; then
 			echo "Removing $dll_a (found static alternative: $static_a)" > >(redirect_output)
 			rm "$dll_a"
 		fi
 	done
+
+	while IFS= read -r -d '' file; do
+		if grep -q "whole-archive" "$file" >/dev/null || \
+		grep -q "no-whole-archive" "$file" >/dev/null || \
+		grep -oE '/[^[:space:]]*/lib[a-zA-Z0-9_+.-]+\.a' "$file" >/dev/null; then
+			sed -i'.bak' -E 's/-Wl,(--whole-archive|--no-whole-archive)//g; s|[[:space:]]*/[^[:space:]]*/lib([a-zA-Z0-9_+.-]+)\.a| -l\1|g' "$file"
+		fi
+	done < <(find "$ffmpeg_install_prefix/lib/pkgconfig" -name "*.pc" -print0)
 
 	for pc_file in "$PKG_CONFIG_LIBDIR"/*.pc; do
 			sed -i "s|-l/|/|g" "$pc_file"
@@ -223,7 +231,7 @@ fix_pkgconfig_flags() {
 			sed -i "s|-lgcc||g" "$pc_file"
 			sed -i 's|\b-lwinpthread\b|-lpthreadwin32|g' "$pc_file"
 			sed -i 's|\b-lpthread\b|-lpthreadwin32|g' "$pc_file"
-			sed -i "s|-latomic|"$(realpath $("$CXX" -print-file-name=libatomic.a))"|g" "$pc_file"
+			sed -i "s|-latomic|$(realpath "$("$CXX" -print-file-name=libatomic.a)")|g" "$pc_file"
 			sed -i "s|/usr/local/mingw-w64/[^ ]*libstdc++[^ ]*|${stdcpp_path}|g" "$pc_file"
 			sed -i 's|/usr/local/mingw-w64/[^ ]*libstdc++\.a||g' "$pc_file"
 			sed -i "s|/usr/local/mingw-w64/[^ ]*libgcc[^ ]*|${stdgcc_path}|g" "$pc_file"
@@ -403,13 +411,58 @@ EOF
 	fi
 }
 
-ffmpeg_windows_patches() {
+ffmpeg_patches() {
 	if iswindows; then
-		echo "INFO: Patching ffmpeg for qindows Mingw quirks..." >>"$LOG_FILE"
+		echo "INFO: Patching ffmpeg for windows Mingw quirks..." >>"$LOG_FILE"
 		sed -i 's/#define HAVE_SCHED_GETAFFINITY 1/#define HAVE_SCHED_GETAFFINITY 0/g' "$ffmpeg_source_dir/config.h"
 		if [[ -f "$ffmpeg_source_dir/libavfilter/dnn/dnn_backend_tf.c" ]]; then
 			sed -i 's/ctx->options.async/ctx->async/g' "$ffmpeg_source_dir/libavfilter/dnn/dnn_backend_tf.c"
 		fi
-		echo "INFO: Done patching ffmpeg for qindows Mingw quirks." >>"$LOG_FILE"
+		echo "INFO: Done patching ffmpeg for windows Mingw quirks." >>"$LOG_FILE"
 	fi
+}
+
+disable_windows_rsrc() {
+  local src_dir="${1:-"$(pwd)"}"
+  if iswindows; then
+    echo "INFO: Patching build files in $src_dir to remove Windows resource objects..." >>"$LOG_FILE"
+
+    # --- Pass 1: Autotools/Make (Handles build/version.o and similar) ---
+    find "$src_dir" \( -name "Makefile" -o -name "Makefile.in" -o -name "Makefile.am" -o -name "*.make" \) -exec sh -c '
+      for file do
+        if grep -qE "(\.res(\.lo)?|w32res\.lo|version(info|-metadata)\.(lo|res|o)|version\.rc\.(lo|res|o))" "$file"; then
+          echo "  PATCHING MAKE: $file" >>"$LOG_FILE"
+          sed -i'.bak' -e -E "/=/ { 
+            w /tmp/sed_before
+            s|[^ ]*/version(info|-metadata|info\.rc|info\.res)?\.(lo|res|o)\b||g
+            s|[^ ]*/version\.rc\.(lo|res|o)\b||g
+            s|[^ ]*\.res(\.lo)?\b||g
+            w /tmp/sed_after
+          }" "$file"
+          diff /tmp/sed_before /tmp/sed_after | grep "^<" | sed -e "s/^</    REMOVED: /" >>"$LOG_FILE"
+        fi
+      done
+    ' sh {} +
+
+    # --- Pass 2: CMake (Surgical Path & Rule Removal) ---
+    find "$src_dir" \( -name "*.make" -o -name "*.cmake" -o -name "*.rsp" \) -exec sh -c '
+      for file do
+        if grep -qE "version\.rc\.res" "$file"; then
+          echo "  PATCHING CMAKE: $file" >>"$LOG_FILE"
+          sed -i'' -e -E "s/\"[^\"]*version\.rc\.res\"//g; s/[^ ]*version\.rc\.res//g" "$file"
+        fi
+      done
+    ' sh {} +
+
+    # --- Pass 3: Meson (Multi-line Block Commenting) ---
+    find "$src_dir" -name "meson.build" -exec sh -c '
+      for file do
+        if grep -q "windows.compile_resources" "$file"; then
+          echo "  PATCHING MESON: $file" >>"$LOG_FILE"
+          sed -i -e "/windows\.compile_resources(/,/)/ s/^/# /" "$file"
+          sed -i -e -E "/(libplacebo_rc|demos_rc|ft2_res|version_res)\s*=\s*configure_file/,/)/ s/^/# /" "$file"
+        fi
+      done
+    ' sh {} +
+  fi
 }

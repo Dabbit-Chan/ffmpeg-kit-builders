@@ -20,6 +20,7 @@
 #ifndef FFPLAY_LIB_H
 #define FFPLAY_LIB_H
 
+#include "ffmpeg_tls.h"
 #include <stdint.h>
 
 #if defined(_WIN32)
@@ -204,6 +205,7 @@ FFMPEG_API int ffplay_has_video_stream(const char *path);
 #ifdef __ANDROID__
 #include <android/native_window.h>
 
+
 /**
  * Sets the ANativeWindow for video output.
  * The function acquires its own ANativeWindow reference (ANativeWindow_acquire),
@@ -214,7 +216,7 @@ FFMPEG_API int ffplay_has_video_stream(const char *path);
  */
 FFMPEG_API void ffplay_set_android_window(ANativeWindow *window);
 
-#else /* !__ANDROID__ — Linux / Windows / macOS */
+#endif /* __ANDROID__ */
 
 /**
  * Frame-ready callback for desktop video output. Fired inside ffplay_step().
@@ -228,7 +230,8 @@ FFMPEG_API void ffplay_set_android_window(ANativeWindow *window);
  * @param linesize  bytes per row
  */
 typedef void (*FFplayFrameCallback)(void *userdata, const uint8_t *pixels,
-                                    int width, int height, int linesize);
+                                    int width, int height, int linesize,
+                                    const char *pixel_format);
 
 /**
  * Registers a frame-ready callback for desktop video output. Call before ffplay_init().
@@ -237,9 +240,22 @@ typedef void (*FFplayFrameCallback)(void *userdata, const uint8_t *pixels,
  * @param userdata  forwarded to every callback invocation
  */
 FFMPEG_API void ffplay_set_frame_callback(FFplayFrameCallback callback,
-                                           void *userdata);
+                                           void *userdata) ;
 
-#endif /* __ANDROID__ */
+
+/**
+ * Internal helper to invoke the global frame callback (if set).
+ * Called from ffplay_step() after each video frame is decoded.
+ *
+ * @param pixels    RGBA8888 rows, tightly packed
+ * @param width     frame width in pixels
+ * @param height    frame height in pixels
+ * @param linesize  bytes per row
+ * @param pixel_format  pixel format string (e.g., "rgba")
+ */
+FFMPEG_API void ffplay_lib_on_frame(const uint8_t *pixels, int width, int height,
+                         int linesize, const char *pixel_format);
+
 
 #ifdef __cplusplus
 }

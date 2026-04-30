@@ -1,8 +1,8 @@
 diff --git a/src/ffmpeg.h b/src/ffmpeg.h
-index 53f71bc..c6a5f90 100644
+index b4d3a2c..de68a44 100755
 --- a/src/ffmpeg.h
 +++ b/src/ffmpeg.h
-@@ -746,7 +746,8 @@ extern int auto_conversion_filters;
+@@ -790,7 +790,8 @@ extern int auto_conversion_filters;
  
  extern const AVIOInterruptCB int_cb;
  

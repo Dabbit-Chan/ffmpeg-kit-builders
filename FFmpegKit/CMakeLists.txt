@@ -8,6 +8,12 @@
 
 cmake_minimum_required(VERSION 3.16)
 
+if(APPLE)
+    include("${CMAKE_CURRENT_SOURCE_DIR}/cmake/AppleResourceGen.cmake")
+endif()
+
+# set(CMAKE_MESSAGE_LOG_LEVEL DEBUG)
+
 # Enforce MinGW when building for Windows
 if(WIN32 AND NOT MINGW)
     message(FATAL_ERROR "Windows builds require MinGW. Use MinGW-w64 toolchain for cross-compilation. MSVC is currently not supported.")
@@ -116,7 +122,10 @@ file(COPY "${FFMPEG_SRC_DIR}/compat/va_copy.h" DESTINATION "${CMAKE_CURRENT_SOUR
 if(WIN32)
     file(COPY "${FFMPEG_SRC_DIR}/compat/w32dlfcn.h" DESTINATION "${CMAKE_CURRENT_SOURCE_DIR}/src/compat/")
 endif()
-
+# copy android compat files to src
+if(ANDROID)
+    file(COPY "${FFMPEG_SRC_DIR}/compat/android" DESTINATION "${CMAKE_CURRENT_SOURCE_DIR}/src/compat")
+endif()
 # =============================================================================
 # 3. PATCH APPLICATION: Automated Source Transformation
 # =============================================================================
@@ -127,26 +136,27 @@ endif()
 # ==============================================================================
 if(IS_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/patches")
     message(STATUS "Checking for patches in 'patches' directory...")
-    find_program(PATCH_EXECUTABLE patch REQUIRED)
+    find_program(PATCH_EXECUTABLE NAMES gpatch patch REQUIRED)
+    message(STATUS "Using patch executable: ${PATCH_EXECUTABLE}")
     file(GLOB PATCH_FILES "${CMAKE_CURRENT_SOURCE_DIR}/patches/*.patch")
-    
+
     foreach(PATCH_FILE ${PATCH_FILES})
         get_filename_component(PATCH_NAME ${PATCH_FILE} NAME)
         message(STATUS "Processing patch: ${PATCH_NAME}")
-        
-        # Check if applied (Reverse dry-run)
+
         execute_process(
-            COMMAND ${PATCH_EXECUTABLE} -p1 -R --dry-run -s
+            COMMAND ${PATCH_EXECUTABLE} -p1 -R -C -s
             INPUT_FILE ${PATCH_FILE}
             WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
             RESULT_VARIABLE PATCH_APPLIED_EXIT_CODE
             OUTPUT_QUIET ERROR_QUIET
         )
-        
+
         if(PATCH_APPLIED_EXIT_CODE EQUAL 0)
             message(STATUS "  - Already applied.")
         else()
             # Apply Patch
+            # -N: skip hunks that are already applied (forward-apply guard).
             execute_process(
                 COMMAND ${PATCH_EXECUTABLE} -p1 -N
                 INPUT_FILE ${PATCH_FILE}
@@ -193,7 +203,16 @@ if(NOT FFMPEG_KIT_BUNDLE_TYPE)
 endif()
 
 # Find all sources
-file(GLOB_RECURSE KIT_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/src/*.c" "${CMAKE_CURRENT_SOURCE_DIR}/src/*.cpp")
+file(GLOB_RECURSE KIT_SOURCES
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/*.c"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/*.cpp"
+)
+# Objective-C platform glue (iOS/macOS only)
+if(APPLE)
+    file(GLOB_RECURSE KIT_OBJC_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/src/*.m")
+    list(APPEND KIT_SOURCES ${KIT_OBJC_SOURCES})
+    enable_language(OBJC)
+endif()
 file(GLOB_RECURSE KIT_HEADERS "${CMAKE_CURRENT_SOURCE_DIR}/src/*.h")
 
 # Exclude ffplay.c and ffprobe.c as they are included in ffplay_lib.c and ffprobe_lib.c respectively
@@ -203,6 +222,17 @@ list(REMOVE_ITEM KIT_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/src/ffprobe.c")
 # exclude _bak and _orig files
 list(FILTER KIT_SOURCES EXCLUDE REGEX ".*_(bak|orig)\\.(c|cpp)$")
 list(FILTER KIT_HEADERS EXCLUDE REGEX ".*_(bak|orig)\\.h$")
+
+# =============================================================================
+# 4.1 RESOURCE FILE COMPILATION: Apple Platform Resource Embedding
+# =============================================================================
+# - Build bin2c host tool from FFmpeg source
+# - Generate C source files from graph.css and graph.html
+# - Add generated resources to KIT_SOURCES for compilation
+# ==============================================================================
+if(APPLE)
+    generate_apple_resource_files()
+endif()
 
 # print KIT_SOURCES and KIT_HEADERS
 # message(STATUS "KIT_SOURCES: ${KIT_SOURCES}")
@@ -238,8 +268,33 @@ set(ENV{PKG_CONFIG_PATH} "${FFMPEG_BUILD_DIR}/lib/pkgconfig:$ENV{PKG_CONFIG_PATH
 set(PKG_CONFIG_USE_STATIC_LIBS ON)
 
 pkg_check_modules(FFMPEG REQUIRED IMPORTED_TARGET 
-    libavdevice libavfilter libavformat libavcodec libswresample libswscale libavutil jsoncpp sdl2
+    libavdevice libavfilter libavformat libavcodec libswresample libswscale libavutil jsoncpp sdl2 iconv bzip2 liblzma zlib
 )
+
+function(replace_static_with_shared INPUT_LIB OUTPUT_VAR)
+    if(INPUT_LIB MATCHES "\\.a$" OR INPUT_LIB MATCHES "\\.lib$")
+        if(WIN32)
+            string(REPLACE ".a" ".dll" SHARED_PATH "${INPUT_LIB}")
+        elseif(CMAKE_SYSTEM_NAME STREQUAL "Linux" OR CMAKE_SYSTEM_NAME STREQUAL "Android")
+            string(REPLACE ".a" ".so" SHARED_PATH "${INPUT_LIB}")
+        elseif(APPLE)
+            string(REPLACE ".a" ".dylib" SHARED_PATH "${INPUT_LIB}")
+        else()
+            set(${OUTPUT_VAR} "${INPUT_LIB}" PARENT_SCOPE)
+            return()
+        endif()
+        if(EXISTS "${SHARED_PATH}")
+            set(${OUTPUT_VAR} "${SHARED_PATH}" PARENT_SCOPE)
+            message(STATUS "Replaced ${INPUT_LIB} with ${SHARED_PATH}")
+        else()
+            message(STATUS "Shared library not found: ${SHARED_PATH}")
+            set(${OUTPUT_VAR} "${INPUT_LIB}" PARENT_SCOPE)
+        endif()
+    else()
+        message(STATUS "Not a static library: ${INPUT_LIB}")
+        set(${OUTPUT_VAR} "${INPUT_LIB}" PARENT_SCOPE)
+    endif()
+endfunction()
 
 function(replace_shared_with_static INPUT_LIB OUTPUT_VAR)
     if(INPUT_LIB MATCHES "\\.dll\\.a$")
@@ -272,6 +327,19 @@ function(replace_shared_with_static INPUT_LIB OUTPUT_VAR)
             set(${OUTPUT_VAR} "${INPUT_LIB}" PARENT_SCOPE)
         else()
             string(REPLACE ".so" ".a" STATIC_PATH "${INPUT_LIB}")
+            if(EXISTS "${STATIC_PATH}")
+                set(${OUTPUT_VAR} "${STATIC_PATH}" PARENT_SCOPE)
+                message(STATUS "Replaced ${INPUT_LIB} with ${STATIC_PATH}")
+            else()
+                set(${OUTPUT_VAR} "${INPUT_LIB}" PARENT_SCOPE)
+            endif()
+        endif()
+    elseif(INPUT_LIB MATCHES "\\.dylib$")
+        # Skip system libraries for macOS builds
+        if(INPUT_LIB MATCHES "^/(lib|lib64|usr/lib|usr/lib64|/opt/homebrew)/")
+            set(${OUTPUT_VAR} "${INPUT_LIB}" PARENT_SCOPE)
+        else()
+            string(REPLACE ".dylib" ".a" STATIC_PATH "${INPUT_LIB}")
             if(EXISTS "${STATIC_PATH}")
                 set(${OUTPUT_VAR} "${STATIC_PATH}" PARENT_SCOPE)
                 message(STATUS "Replaced ${INPUT_LIB} with ${STATIC_PATH}")
@@ -326,12 +394,41 @@ endfunction()
 # If static linking is enabled, replace shared libraries with static ones: .so -> .a or .dll -> .a or .dll.a -> .a
 # If dynamic linking is enabled, if MINGW, replace .dll.a files with .dll files, 
 # else keep the original as dynamic linking can link to both shared and static libraries
-function(configure_library_linking LIBRARY_NAME STATIC_LINKING)
+function(configure_static_linking LIBRARY_NAME STATIC_LINKING)
     # Get the interface link libraries
     get_target_property(${LIBRARY_NAME}_LIBS PkgConfig::${LIBRARY_NAME} INTERFACE_LINK_LIBRARIES)
-
+    if(NOT ${LIBRARY_NAME}_LIBS OR ${LIBRARY_NAME}_LIBS MATCHES "-NOTFOUND$")
+        set(${LIBRARY_NAME}_LIBS "${${LIBRARY_NAME}_LINK_LIBRARIES}")
+    endif()
+    message(DEBUG "configure_static_linking(${LIBRARY_NAME}): ${LIBRARY_NAME}_LIBRARY_DIRS = ${${LIBRARY_NAME}_LIBRARY_DIRS}")
     set(FIXED_LIBS "")
     foreach(LIB_PATH IN LISTS ${LIBRARY_NAME}_LIBS)
+        if("${LIB_PATH}" MATCHES "^-framework")
+            continue()
+        endif()
+        message(DEBUG "configure_static_linking(${LIBRARY_NAME}): checking entry '${LIB_PATH}'")
+        if(LIB_PATH MATCHES "-NOTFOUND$" OR LIB_PATH STREQUAL "")
+            message(WARNING "configure_static_linking(${LIBRARY_NAME}): skipping unresolved entry '${LIB_PATH}'")
+            continue()
+        else()
+            if(NOT "${LIB_PATH}" MATCHES "\\.a$" AND NOT EXISTS "${LIB_PATH}")
+                message(DEBUG "configure_static_linking(${LIBRARY_NAME}): ${LIB_PATH} file does not exist, searching for it")
+                find_library(${LIB_PATH}_ABSOLUTE_PATH
+                    NAMES ${LIB_PATH}
+                    HINTS ${${LIBRARY_NAME}_LIBRARY_DIRS}
+                    NO_DEFAULT_PATH
+                    NO_CMAKE_FIND_ROOT_PATH
+                )
+                message(DEBUG "configure_static_linking(${LIBRARY_NAME}): ${LIB_PATH}_ABSOLUTE_PATH = ${${LIB_PATH}_ABSOLUTE_PATH}")
+                if(NOT EXISTS "${${LIB_PATH}_ABSOLUTE_PATH}")
+                    message(DEBUG "configure_static_linking(${LIBRARY_NAME}): ${${LIB_PATH}_ABSOLUTE_PATH} file does not exist after search")
+                    continue()
+                else()
+                    message(STATUS "configure_static_linking(${LIBRARY_NAME}): replaced '${LIB_PATH}' with '${${LIB_PATH}_ABSOLUTE_PATH}'")
+                    set(LIB_PATH "${${LIB_PATH}_ABSOLUTE_PATH}")
+                endif()
+            endif()
+        endif()
         if(STATIC_LINKING)
             replace_shared_with_static("${LIB_PATH}" RESOLVED_LIB)
         else()
@@ -345,16 +442,64 @@ function(configure_library_linking LIBRARY_NAME STATIC_LINKING)
     endforeach()
     set_target_properties(PkgConfig::${LIBRARY_NAME} PROPERTIES INTERFACE_LINK_LIBRARIES "${FIXED_LIBS}")
     list(APPEND BUNDLE_LIBRARIES ${FIXED_LIBS})
+    list(REMOVE_DUPLICATES BUNDLE_LIBRARIES)
     set(BUNDLE_LIBRARIES "${BUNDLE_LIBRARIES}" PARENT_SCOPE)
 endfunction()
 
-configure_library_linking(FFMPEG ON)
+function(configure_shared_linking LIBRARY_NAME SHARED_LINKING)
+    # Get the interface link libraries
+    get_target_property(${LIBRARY_NAME}_LIBS PkgConfig::${LIBRARY_NAME} INTERFACE_LINK_LIBRARIES)
+    if(NOT ${LIBRARY_NAME}_LIBS OR ${LIBRARY_NAME}_LIBS MATCHES "-NOTFOUND$")
+        set(${LIBRARY_NAME}_LIBS "${${LIBRARY_NAME}_LINK_LIBRARIES}")
+    endif()
+    if(NOT ${LIBRARY_NAME}_LIBS_LIST)
+        # check single library path
+        if(EXISTS "${${LIBRARY_NAME}_LIBRARY}")
+            message(STATUS "configure_shared_linking(${LIBRARY_NAME}): ${LIBRARY_NAME} found at ${${LIBRARY_NAME}_LIBRARY}")
+            set(${LIBRARY_NAME}_LIBS_LIST "${${LIBRARY_NAME}_LIBRARY}")
+        elseif(EXISTS "${${LIBRARY_NAME}_LIBS}")
+            message(STATUS "configure_shared_linking(${LIBRARY_NAME}): ${LIBRARY_NAME} found at ${${LIBRARY_NAME}_LIBS}")
+            set(${LIBRARY_NAME}_LIBS_LIST "${${LIBRARY_NAME}_LIBS}")
+        elseif(EXISTS "${${LIBRARY_NAME}_LIBRARIES}")
+            message(STATUS "configure_shared_linking(${LIBRARY_NAME}): ${LIBRARY_NAME} found at ${${LIBRARY_NAME}_LIBRARIES}")
+            set(${LIBRARY_NAME}_LIBS_LIST "${${LIBRARY_NAME}_LIBRARIES}")
+        else()
+            message(WARNING "configure_shared_linking(${LIBRARY_NAME}): ${LIBRARY_NAME}_LIBS_LIST is empty")
+            return()
+        endif()
+    endif()
+    set(FIXED_LIBS "")
+    message(DEBUG "configure_shared_linking(${LIBRARY_NAME}): ${LIBRARY_NAME}_LIBS_LIST = ${${LIBRARY_NAME}_LIBS_LIST}")
+    foreach(LIB_PATH IN LISTS ${LIBRARY_NAME}_LIBS_LIST)
+        message(DEBUG "configure_shared_linking(${LIBRARY_NAME}): checking entry '${LIB_PATH}'")
+        if(LIB_PATH MATCHES "-NOTFOUND$" OR LIB_PATH STREQUAL "")
+            message(WARNING "configure_shared_linking(${LIBRARY_NAME}): skipping unresolved entry '${LIB_PATH}'")
+            continue()
+        endif()
+        if(SHARED_LINKING)
+            replace_static_with_shared("${LIB_PATH}" RESOLVED_LIB)
+        else()
+            if(MINGW)
+                replace_dll_a_with_dll("${LIB_PATH}" RESOLVED_LIB)
+            else()
+                set(RESOLVED_LIB ${LIB_PATH})
+            endif()
+        endif()
+        list(APPEND FIXED_LIBS "${RESOLVED_LIB}")
+    endforeach()
+    set_target_properties(PkgConfig::${LIBRARY_NAME} PROPERTIES INTERFACE_LINK_LIBRARIES "${FIXED_LIBS}")
+    list(APPEND BUNDLE_LIBRARIES ${FIXED_LIBS})
+    list(REMOVE_DUPLICATES BUNDLE_LIBRARIES)
+    set(BUNDLE_LIBRARIES "${BUNDLE_LIBRARIES}" PARENT_SCOPE)
+endfunction()
+
+configure_static_linking(FFMPEG ON)
 
 if(ENABLE_LIBPLACEBO)
     set(_OLD_PKG_CONFIG_USE_STATIC_LIBS ${PKG_CONFIG_USE_STATIC_LIBS})
     set(PKG_CONFIG_USE_STATIC_LIBS OFF)
     pkg_check_modules(LIBPLACEBO REQUIRED IMPORTED_TARGET libplacebo)
-    configure_library_linking(LIBPLACEBO ON)
+    configure_static_linking(LIBPLACEBO ON)
     target_link_libraries(ffmpegkit PRIVATE PkgConfig::LIBPLACEBO)
     target_compile_definitions(ffmpegkit PRIVATE PL_STATIC PLACEBO_STATIC)
     set(PKG_CONFIG_USE_STATIC_LIBS ${_OLD_PKG_CONFIG_USE_STATIC_LIBS})
@@ -365,7 +510,7 @@ if(ENABLE_LIBTENSORFLOW)
     set(_OLD_PKG_CONFIG_USE_STATIC_LIBS ${PKG_CONFIG_USE_STATIC_LIBS})
     set(PKG_CONFIG_USE_STATIC_LIBS OFF)
     pkg_check_modules(LIBTENSORFLOW REQUIRED IMPORTED_TARGET libtensorflow)
-    configure_library_linking(LIBTENSORFLOW OFF)
+    configure_static_linking(LIBTENSORFLOW OFF)
     target_link_libraries(ffmpegkit PRIVATE PkgConfig::LIBTENSORFLOW)
     set(PKG_CONFIG_USE_STATIC_LIBS ${_OLD_PKG_CONFIG_USE_STATIC_LIBS})
 endif()
@@ -374,15 +519,21 @@ if(ENABLE_OPENVINO)
     set(_OLD_PKG_CONFIG_USE_STATIC_LIBS ${PKG_CONFIG_USE_STATIC_LIBS})
     set(PKG_CONFIG_USE_STATIC_LIBS OFF)
     pkg_check_modules(OPENVINO REQUIRED IMPORTED_TARGET openvino)
-    configure_library_linking(OPENVINO OFF)
+    configure_static_linking(OPENVINO OFF)
     target_link_libraries(ffmpegkit PRIVATE PkgConfig::OPENVINO)
     # Try tbb12 first, fallback to tbb
-    pkg_check_modules(TBB12 QUIET IMPORTED_TARGET tbb12)
-    if(NOT TBB12_FOUND)
-        pkg_check_modules(TBB12 REQUIRED IMPORTED_TARGET tbb)
+    set(_tbb_candidates tbb12 tbb libtbb libtbb12)
+    foreach(_pkg ${_tbb_candidates})
+        pkg_check_modules(TBB QUIET IMPORTED_TARGET ${_pkg})
+        if(TBB_FOUND)
+            break()
+        endif()
+    endforeach()
+    if(NOT TBB_FOUND OR NOT TARGET PkgConfig::TBB)
+        message(FATAL_ERROR "OpenVINO requires TBB but none of the following were found: ${_tbb_candidates}")
     endif()
-    configure_library_linking(TBB12 OFF)
-    target_link_libraries(ffmpegkit PRIVATE PkgConfig::TBB12)
+    configure_static_linking(TBB OFF)
+    target_link_libraries(ffmpegkit PRIVATE PkgConfig::TBB)
     set(PKG_CONFIG_USE_STATIC_LIBS ${_OLD_PKG_CONFIG_USE_STATIC_LIBS})
 endif()
 
@@ -391,54 +542,62 @@ if(ENABLE_LIBTORCH)
         set(_OLD_PKG_CONFIG_USE_STATIC_LIBS ${PKG_CONFIG_USE_STATIC_LIBS})
         set(PKG_CONFIG_USE_STATIC_LIBS OFF)
         pkg_check_modules(LIBTORCH REQUIRED IMPORTED_TARGET libtorch)
-        configure_library_linking(LIBTORCH OFF)
-        find_library(PYTHON311_LIB
-            NAMES
-                python3.11
-            PATHS
-                /usr/lib64
-                /usr/lib
-                /usr/local/lib64
-                /usr/local/lib
-            NO_DEFAULT_PATH
-        )
-        if(NOT PYTHON311_LIB)
-            if(EXISTS "/usr/lib64/libpython3.11.so.1.0")
-                set(PYTHON311_LIB "/usr/lib64/libpython3.11.so.1.0")
-            elseif(EXISTS "/usr/lib/libpython3.11.so.1.0")
-                set(PYTHON311_LIB "/usr/lib/libpython3.11.so.1.0")
+        configure_static_linking(LIBTORCH OFF)
+        if(NOT APPLE)
+            find_library(PYTHON311_LIB
+                NAMES
+                    python3.11
+                PATHS
+                    /usr/lib64
+                    /usr/lib
+                    /usr/local/lib64
+                    /usr/local/lib
+                    /opt/homebrew/lib
+                NO_DEFAULT_PATH
+            )
+            if(NOT PYTHON311_LIB)
+                if(EXISTS "/usr/lib64/libpython3.11.so.1.0")
+                    set(PYTHON311_LIB "/usr/lib64/libpython3.11.so.1.0")
+                elseif(EXISTS "/usr/lib/libpython3.11.so.1.0")
+                    set(PYTHON311_LIB "/usr/lib/libpython3.11.so.1.0")
+                endif()
             endif()
+            if(NOT PYTHON311_LIB)
+                message(FATAL_ERROR "Could not find libpython3.11 in /usr/lib64 or /usr/lib")
+            else()
+                message(STATUS "Found Python 3.11 library: ${PYTHON311_LIB}")
+            endif()
+        elseif(CMAKE_OSX_ARCHITECTURES STREQUAL "arm64")
+            # need libomp.dylib even if libomp is statically linked
+            pkg_check_modules(LIBOMP REQUIRED IMPORTED_TARGET libomp)
+            configure_shared_linking(LIBOMP ON)
+            target_link_libraries(ffmpegkit PRIVATE PkgConfig::LIBOMP)
         endif()
-        if(NOT PYTHON311_LIB)
-            message(FATAL_ERROR "Could not find libpython3.11 in /usr/lib64 or /usr/lib")
-        else()
-            message(STATUS "Found Python 3.11 library: ${PYTHON311_LIB}")
-        endif()
-        # Link system LLVM before libtorch so the dynamic linker loads it first.
-        # libtensorflow_framework (a libtorch dep) bundles its own LLVM and exports
-        # those symbols globally. If system libLLVM-17 loads after it, LLVM vtables
-        # get crossed and cause a segfault when Mesa later loads swrast_dri.so.
-        find_library(LLVM17_LIB
-            NAMES LLVM-17 LLVM libLLVM-17
-            PATHS /usr/lib64/llvm17/lib /usr/lib64 /usr/lib
-            NO_DEFAULT_PATH
-        )
-        if(LLVM17_LIB)
-            message(STATUS "Found system LLVM-17: ${LLVM17_LIB} (linked before libtorch to prevent symbol conflicts)")
-            target_link_libraries(ffmpegkit PRIVATE ${LLVM17_LIB})
-            get_filename_component(LLVM17_LIB_DIR "${LLVM17_LIB}" DIRECTORY)
-        else()
-            message(WARNING "System LLVM-17 not found. LLVM symbol conflicts with libtensorflow may cause crashes.")
+        if(CMAKE_SYSTEM_NAME MATCHES "Linux")
+            find_library(LLVM17_LIB
+                NAMES LLVM-17 LLVM libLLVM-17
+                PATHS /usr/lib64/llvm17/lib /usr/lib64 /usr/lib
+                NO_DEFAULT_PATH
+            )
+            if(LLVM17_LIB)
+                message(STATUS "Found system LLVM-17: ${LLVM17_LIB} (linked before libtorch to prevent symbol conflicts)")
+                target_link_libraries(ffmpegkit PRIVATE ${LLVM17_LIB})
+                get_filename_component(LLVM17_LIB_DIR "${LLVM17_LIB}" DIRECTORY)
+            else()
+                message(WARNING "System LLVM-17 not found. LLVM symbol conflicts with libtensorflow may cause crashes.")
+            endif()
         endif()
 
         target_link_libraries(ffmpegkit PRIVATE
             PkgConfig::LIBTORCH
             ${PYTHON311_LIB}
         )
-        target_link_options(ffmpegkit PRIVATE
-            "-Wl,-rpath,/usr/lib64"
-            $<$<BOOL:${LLVM17_LIB_DIR}>:-Wl,-rpath,${LLVM17_LIB_DIR}>
-        )
+        if(CMAKE_SYSTEM_NAME MATCHES "Linux")
+            target_link_options(ffmpegkit PRIVATE
+                "-Wl,-rpath,/usr/lib64"
+                $<$<BOOL:${LLVM17_LIB_DIR}>:-Wl,-rpath,${LLVM17_LIB_DIR}>
+            )
+        endif()
         set(PKG_CONFIG_USE_STATIC_LIBS ${_OLD_PKG_CONFIG_USE_STATIC_LIBS})
     endif()
 endif()
@@ -511,6 +670,7 @@ if(WIN32)
         )
 
         target_link_options(ffmpegkit PRIVATE 
+            "-v"
             "-static-libgcc" 
             "-static-libstdc++" 
             # "-nodefaultlibs"
@@ -551,9 +711,19 @@ elseif(CMAKE_SYSTEM_NAME MATCHES "Linux")
         "-Wl,--warn-common"
         "-Wl,--no-warn-mismatch"
     )
-
-    target_link_libraries(ffmpegkit PRIVATE alsa)
-
+    pkg_check_modules(ALSA QUIET alsa)
+    if(ALSA_FOUND)
+        target_link_libraries(ffmpegkit PRIVATE 
+            ${ALSA_LIBRARIES}
+            -lpthread
+            -lm
+            -ldl
+        )
+        target_include_directories(ffmpegkit PRIVATE ${ALSA_INCLUDE_DIRS})
+    else()
+        message(FATAL_ERROR "ALSA not found. Please install libasound-dev")
+    endif()
+    
     # Allow libffmpegkit.so to find sibling libs (e.g. libpulsecommon) in the
     # same directory it is installed into (Flutter bundle's lib/ folder)
     set_target_properties(ffmpegkit PROPERTIES
@@ -562,8 +732,8 @@ elseif(CMAKE_SYSTEM_NAME MATCHES "Linux")
     )
 elseif(ANDROID)
     # Define Android-specific macros for source code compatibility
-    target_compile_definitions(ffmpegkit PRIVATE 
-        TARGET_OS_ANDROID 
+    target_compile_definitions(ffmpegkit PRIVATE
+        TARGET_OS_ANDROID
         __ANDROID_API__=${ANDROID_NATIVE_API_LEVEL}
         _FORTIFY_SOURCE=2
     )
@@ -571,19 +741,19 @@ elseif(ANDROID)
     # Link essential Android system libraries
     # 'log' is required for av_log redirection to logcat
     # 'android' and 'jnigraphics' provide native window and bitmap support
-    target_link_libraries(ffmpegkit PRIVATE 
-        log 
-        android 
-        jnigraphics 
-        m 
-        z 
-        atomic 
+    target_link_libraries(ffmpegkit PRIVATE
+        log
+        android
+        jnigraphics
+        m
+        z
+        atomic
         dl
     )
 
     # Android-specific hardening and visibility
-    target_compile_options(ffmpegkit PRIVATE 
-        -fstack-protector-strong 
+    target_compile_options(ffmpegkit PRIVATE
+        -fstack-protector-strong
         -fvisibility=default
         -fPIC
     )
@@ -597,7 +767,61 @@ elseif(ANDROID)
         "-Wl,--fatal-warnings"
         "-Wl,--allow-multiple-definition"
         "-Wl,--as-needed"
-        "-Wl,--verbose"
+        # "-Wl,--verbose"
+    )
+elseif(APPLE)
+    # iOS/macOS platform configuration
+    target_compile_definitions(ffmpegkit PRIVATE TARGET_OS_APPLE _FORTIFY_SOURCE=2)
+
+    target_compile_options(ffmpegkit PRIVATE
+        -fstack-protector-strong
+        -fvisibility=default
+    )
+    if(CMAKE_SYSTEM_NAME STREQUAL "Darwin")
+        target_link_libraries(ffmpegkit PRIVATE 
+            "-framework ForceFeedback"
+            "-framework Carbon"
+            "-framework AppKit"
+            "-framework OpenGL"
+            "-framework DiskArbitration"
+        )
+    elseif(CMAKE_SYSTEM_NAME STREQUAL "iOS")
+        target_link_libraries(ffmpegkit PRIVATE 
+            "-framework OpenGLES"
+            "-framework UIKit"
+        )
+    endif()
+    target_link_libraries(ffmpegkit PRIVATE
+        "-ObjC"
+        "-framework AudioToolbox"
+        "-framework AVFoundation"
+        "-framework CoreAudio"
+        "-framework Foundation"
+        "-framework GameController"
+        "-framework CoreHaptics"
+        "-framework QuartzCore"
+        "-framework CoreGraphics"
+        "-framework CoreMedia"
+        "-framework CoreImage"
+        "-framework CoreMotion"
+        "-framework CoreVideo"
+        "-framework CoreText"
+        "-framework Metal"
+        "-framework Security"
+        "-framework VideoToolbox"
+        "-framework Accelerate"
+        "-framework IOKit"
+        "-lresolv"
+        "-liconv"
+    )
+
+    target_link_options(ffmpegkit PRIVATE
+        "-v"
+        "-ld64"
+        "-Wl,-w"
+        "-Wl,-dead_strip"
+        "-Wl,-flat_namespace"
+        # "-Wl,-undefined,dynamic_lookup"
     )
 endif()
 
@@ -615,7 +839,11 @@ target_link_directories(ffmpegkit PRIVATE "${FFMPEG_BUILD_DIR}/lib")
 
 if(BUILD_SHARED_LIBS)
     target_compile_definitions(ffmpegkit PRIVATE DLL_EXPORT PIC)
-    target_link_options(ffmpegkit PRIVATE -Wl,--no-undefined)
+    if(NOT APPLE)
+        # Darwin dylibs error on undefined symbols by default; no flag needed.
+        # Linux shared libs require this opt-in.
+        target_link_options(ffmpegkit PRIVATE -Wl,--no-undefined)
+    endif()
 
     if(FFMPEG_STATIC)
         # Static Link Path: Use absolute paths and whole-archive to prevent symbol stripping
@@ -648,7 +876,7 @@ if(BUILD_SHARED_LIBS)
                 #    etc.) - grouped to resolve circular references between them.
                 #    This is the block that was previously misplaced after -Bdynamic.
                 "-Wl,--start-group"
-                PkgConfig::FFMPEG
+                ${BUNDLE_LIBRARIES}
                 "-Wl,--end-group"
 
                 # 4. Windows system DLLs - always dynamic, always last
@@ -660,29 +888,43 @@ if(BUILD_SHARED_LIBS)
                 "-lbcrypt"
                 "-lws2_32"
             )
-        elseif(CMAKE_SYSTEM_NAME MATCHES "Linux" OR ANDROID)
+        elseif(CMAKE_SYSTEM_NAME MATCHES "Linux")
             target_link_libraries(ffmpegkit PRIVATE 
                 "-Wl,--whole-archive"
                 ${FFMPEG_STATIC_LIBS}
+                ${ALSA_LIBRARIES}
                 "-Wl,--no-whole-archive"
-                PkgConfig::FFMPEG
+                ${BUNDLE_LIBRARIES}
+            )
+        elseif(ANDROID)
+            target_link_libraries(ffmpegkit PRIVATE
+                "-Wl,--whole-archive"
+                ${FFMPEG_STATIC_LIBS}
+                "-Wl,--no-whole-archive"
+                ${BUNDLE_LIBRARIES}
+            )
+        elseif(APPLE)
+
+            target_link_libraries(ffmpegkit PRIVATE
+                ${FFMPEG_STATIC_LIBS}
+                ${BUNDLE_LIBRARIES}
             )
         else()
-            target_link_libraries(ffmpegkit PRIVATE ${FFMPEG_STATIC_LIBS} PkgConfig::FFMPEG)
+            target_link_libraries(ffmpegkit PRIVATE ${FFMPEG_STATIC_LIBS} ${BUNDLE_LIBRARIES})
         endif()
     else()
         if(MINGW)
             target_link_libraries(ffmpegkit PRIVATE 
                 "-Wl,--start-group"
                 "${PTW32_STATIC_LIB}"
-                PkgConfig::FFMPEG
+                ${BUNDLE_LIBRARIES}
                 "pthread"
                 "ws2_32" 
                 "bcrypt"
                 "-Wl,--end-group"
             )
         else()
-            target_link_libraries(ffmpegkit PRIVATE PkgConfig::FFMPEG)  
+            target_link_libraries(ffmpegkit PRIVATE ${BUNDLE_LIBRARIES})  
         endif()
     endif()
 
@@ -704,6 +946,7 @@ if(BUILD_SHARED_LIBS)
         ffmpeg*;
         ffprobe*;
         ffplay*;
+        session*;
         media_information*;
         stream_information*;
         chapter*;
@@ -725,10 +968,13 @@ if(BUILD_SHARED_LIBS)
         *;
 };
 ")
-    target_link_options(ffmpegkit PRIVATE "-Wl,--version-script=${LINKER_SCRIPT}")
+    if(NOT APPLE)
+        # --version-script is ELF/GNU ld only; macOS uses -exported_symbols_list instead.
+        target_link_options(ffmpegkit PRIVATE "-Wl,--version-script=${LINKER_SCRIPT}")
+    endif()
 
     # set(CMAKE_MESSAGE_LOG_LEVEL VERBOSE)
-    # message(STATUS "BUNDLE_LIBRARIES: ${BUNDLE_LIBRARIES}")
+    message(DEBUG "BUNDLE_LIBRARIES: ${BUNDLE_LIBRARIES}")
     # set(CMAKE_MESSAGE_LOG_LEVEL DEBUG)
     
     # Bundling Manifest (Requires shared-library.sh)

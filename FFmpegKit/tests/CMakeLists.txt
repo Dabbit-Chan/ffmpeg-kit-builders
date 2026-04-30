@@ -44,3 +44,19 @@ endif()
 target_compile_definitions(ffmpegkit_tests PRIVATE 
     FFMPEG_KIT_TEST_DIR="${CMAKE_CURRENT_SOURCE_DIR}"
 )
+
+if(APPLE)
+    set(DEBUG_PLIST_PATH "${CMAKE_BINARY_DIR}/debug.plist")
+    file(WRITE "${DEBUG_PLIST_PATH}" "<?xml version=\"1.0\" encoding=\"UTF-8\"?>
+<!DOCTYPE plist PUBLIC \"-//Apple//DTD PLIST 1.0//EN\" \"http://www.apple.com/DTDs/PropertyList-1.0.dtd\">
+<plist version=\"1.0\">
+<dict>
+    <key>com.apple.security.get-task-allow</key>
+    <true/>
+</dict>
+</plist>")
+    add_custom_command(TARGET ffmpegkit_tests POST_BUILD
+        COMMAND codesign -f -s - --entitlements "${DEBUG_PLIST_PATH}" $<TARGET_FILE:ffmpegkit_tests>
+        COMMENT "Signing ffmpegkit_tests for debugging"
+    )
+endif()

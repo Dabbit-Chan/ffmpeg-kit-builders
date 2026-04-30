@@ -1,14 +1,8 @@
 diff --git a/src/ffprobe.c b/src/ffprobe.c
-index 7e2950a..7451031 100755
+index 3c29fc2..7917659 100755
 --- a/src/ffprobe.c
 +++ b/src/ffprobe.c
-@@ -23,11 +23,13 @@
-  * simple media prober based on the FFmpeg libraries
-  */
- 
-+#include "SDL_mutex.h"
- #include "config.h"
- #include "libavutil/ffversion.h"
+@@ -28,6 +28,7 @@
  
  #include <string.h>
  #include <math.h>
@@ -16,7 +10,7 @@ index 7e2950a..7451031 100755
  
  #include "libavformat/avformat.h"
  #include "libavformat/version.h"
-@@ -69,6 +71,8 @@
+@@ -70,6 +71,8 @@
  
  #include "libavutil/thread.h"
  
@@ -25,7 +19,7 @@ index 7e2950a..7451031 100755
  // attached as opaque_ref to packets/frames
  typedef struct FrameData {
      int64_t pkt_pos;
-@@ -88,8 +92,8 @@ typedef struct InputFile {
+@@ -89,8 +92,8 @@ typedef struct InputFile {
      int       nb_streams;
  } InputFile;
  
@@ -36,27 +30,16 @@ index 7e2950a..7451031 100755
  
  static int do_analyze_frames = 0;
  static int do_bitexact = 0;
-@@ -150,7 +154,9 @@ typedef struct ReadInterval {
- static ReadInterval *read_intervals;
- static int read_intervals_nb = 0;
+@@ -332,7 +335,7 @@ typedef struct EntrySelection {
  
--static int find_stream_info  = 1;
-+static int find_stream_info = 1;
-+
-+
- 
- /* section structure definition */
- 
-@@ -318,7 +324,7 @@ static struct AVTextFormatSection sections[] = {
-     [SECTION_ID_SUBTITLE] =           { SECTION_ID_SUBTITLE, "subtitle", 0, { -1 } },
- };
+ static EntrySelection selected_entries[FF_ARRAY_ELEMS(sections)] = { 0 };
  
 -static const OptionDef *options;
 +static FFMPEG_THREAD_LOCAL OptionDef *options;
  
  /* FFprobe context */
  static const char *input_filename;
-@@ -2339,7 +2345,7 @@ static int open_input_file(InputFile *ifile, const char *filename,
+@@ -2480,7 +2483,7 @@ static int open_input_file(InputFile *ifile, const char *filename,
  
      ifile->streams = av_calloc(fmt_ctx->nb_streams, sizeof(*ifile->streams));
      if (!ifile->streams)
@@ -65,7 +48,7 @@ index 7e2950a..7451031 100755
      ifile->nb_streams = fmt_ctx->nb_streams;
  
      /* bind a decoder to each input stream */
-@@ -2370,15 +2376,15 @@ static int open_input_file(InputFile *ifile, const char *filename,
+@@ -2501,15 +2504,15 @@ static int open_input_file(InputFile *ifile, const char *filename,
              err = filter_codec_opts(codec_opts, stream->codecpar->codec_id,
                                      fmt_ctx, stream, codec, &opts, NULL);
              if (err < 0)
@@ -84,7 +67,7 @@ index 7e2950a..7451031 100755
  
              if (do_show_log) {
                  // For logging it is needed to disable at least frame threads as otherwise
-@@ -2394,7 +2400,7 @@ static int open_input_file(InputFile *ifile, const char *filename,
+@@ -2525,7 +2528,7 @@ static int open_input_file(InputFile *ifile, const char *filename,
              if (avcodec_open2(ist->dec_ctx, codec, &opts) < 0) {
                  av_log(NULL, AV_LOG_WARNING, "Could not open codec for input stream %d\n",
                         stream->index);
@@ -93,16 +76,22 @@ index 7e2950a..7451031 100755
              }
  
              if ((t = av_dict_iterate(opts, NULL))) {
-@@ -2773,7 +2779,7 @@ static int opt_print_filename(void *optctx, const char *opt, const char *arg)
+@@ -2909,12 +2912,11 @@ static int opt_print_filename(void *optctx, const char *opt, const char *arg)
      return print_input_filename ? 0 : AVERROR(ENOMEM);
  }
  
 -void show_help_default(const char *opt, const char *arg)
 +void ffprobe_show_help_default(const char *opt, const char *arg)
  {
-     av_log_set_callback(log_callback_help);
+-    av_log_set_callback(log_callback_help);
      show_usage();
-@@ -2990,58 +2996,62 @@ DEFINE_OPT_SHOW_SECTION(streams,          STREAMS)
+     show_help_options(options, "Main options:", 0, 0);
+-    printf("\n");
++    av_log(NULL, AV_LOG_INFO, "\n");
+ 
+     show_help_children(avformat_get_class(), AV_OPT_FLAG_DECODING_PARAM);
+     show_help_children(avcodec_get_class(), AV_OPT_FLAG_DECODING_PARAM);
+@@ -3156,61 +3158,65 @@ DEFINE_OPT_SHOW_SECTION(streams,          STREAMS)
  DEFINE_OPT_SHOW_SECTION(programs,         PROGRAMS)
  DEFINE_OPT_SHOW_SECTION(stream_groups,    STREAM_GROUPS)
  
@@ -132,8 +121,10 @@ index 7e2950a..7451031 100755
 +    { "of",                    OPT_TYPE_STRING,      0, { NULL }, "alias for -output_format", "format" },
 +    { "select_streams",        OPT_TYPE_STRING,      0, { NULL }, "select the specified streams", "stream_specifier" },
      { "sections",              OPT_TYPE_FUNC, OPT_EXIT, {.func_arg = opt_sections}, "print sections structure and section information, and exit" },
+-    { "data_dump_format",      OPT_TYPE_STRING,      0, { &data_dump_format }, "set data dump format (available formats are: xxd, base64)" },
 -    { "show_data",             OPT_TYPE_BOOL,        0, { &do_show_data }, "show packets data" },
 -    { "show_data_hash",        OPT_TYPE_STRING,      0, { &show_data_hash }, "show packets data hash" },
++    { "data_dump_format",      OPT_TYPE_STRING,      0, { NULL }, "set data dump format (available formats are: xxd, base64)" },
 +    { "show_data",             OPT_TYPE_BOOL,        0, { NULL }, "show packets data" },
 +    { "show_data_hash",        OPT_TYPE_STRING,      0, { NULL }, "show packets data hash" },
      { "show_error",            OPT_TYPE_FUNC,        0, { .func_arg = &opt_show_error },  "show probing error" },
@@ -174,6 +165,8 @@ index 7e2950a..7451031 100755
 -    { "find_stream_info",      OPT_TYPE_BOOL, OPT_INPUT | OPT_EXPERT, { &find_stream_info },
 +    { "find_stream_info",      OPT_TYPE_BOOL, OPT_INPUT | OPT_EXPERT, { NULL },
          "read and decode the streams to fill missing information with heuristics" },
+     { "c",                     OPT_TYPE_FUNC, OPT_FUNC_ARG, { .func_arg = opt_codec}, "force decoder", "decoder_name" },
+     { "codec",                 OPT_TYPE_FUNC, OPT_FUNC_ARG, { .func_arg = opt_codec}, "alias for -c (force decoder)", "decoder_name" },
      { NULL, },
  };
  
@@ -183,8 +176,8 @@ index 7e2950a..7451031 100755
 +
  static inline int check_section_show_entries(int section_id)
  {
-     struct AVTextFormatSection *section = &sections[section_id];
-@@ -3058,22 +3068,61 @@ static inline int check_section_show_entries(int section_id)
+     const EntrySelection *selection = &selected_entries[section_id];
+@@ -3230,23 +3236,62 @@ static inline int check_section_show_entries(int section_id)
              do_show_##varname = 1;                                      \
      } while (0)
  
@@ -231,29 +224,31 @@ index 7e2950a..7451031 100755
 +    AVTextWriterContext *wctx = NULL;
      char *buf;
      char *f_name = NULL, *f_args = NULL;
-+
+-    int ret, input_ret;
+     AVTextFormatDataDump data_dump_format_id = AV_TEXTFORMAT_DATADUMP_XXD;
+ 
+-    init_dynload();
 +    // For custom AVIO
 +    AVIOContext *avio_buf = NULL;
 +    uint8_t *avio_ptr = NULL;
-+
-     int ret, input_ret, i;
+ 
+-    setvbuf(stderr, NULL, _IONBF, 0); /* win32 runtime needs this */
++    int ret, input_ret, i;
 +    
 +    // Reset state for library usage
 +    ffprobe_reset_internal_state();
 +    ffprobe_tls_init_options();
++
++    init_dynload();
  
-     init_dynload();
- 
--    setvbuf(stderr, NULL, _IONBF, 0); /* win32 runtime needs this */
--
      av_log_set_flags(AV_LOG_SKIP_REPEATED);
  
 -    options = real_options;
      parse_loglevel(argc, argv, options);
      avformat_network_init();
  #if CONFIG_AVDEVICE
-@@ -3150,7 +3199,28 @@ int main(int argc, char **argv)
-         goto end;
+@@ -3335,7 +3380,28 @@ int main(int argc, char **argv)
+         }
      }
  
 -    if (output_filename) {
@@ -282,7 +277,7 @@ index 7e2950a..7451031 100755
          ret = avtextwriter_create_file(&wctx, output_filename);
      } else
          ret = avtextwriter_create_stdout(&wctx);
-@@ -3208,6 +3278,14 @@ int main(int argc, char **argv)
+@@ -3395,6 +3461,14 @@ int main(int argc, char **argv)
      }
  
  end:
@@ -297,7 +292,7 @@ index 7e2950a..7451031 100755
      av_freep(&output_format);
      av_freep(&output_filename);
      av_freep(&input_filename);
-@@ -3222,3 +3300,30 @@ end:
+@@ -3409,3 +3483,31 @@ end:
  
      return ret < 0;
  }
@@ -316,6 +311,7 @@ index 7e2950a..7451031 100755
 +        if (strcmp(real_options[i].name, "print_format") == 0) real_options[i].u.dst_ptr = &output_format;
 +        if (strcmp(real_options[i].name, "of") == 0) real_options[i].u.dst_ptr = &output_format;
 +        if (strcmp(real_options[i].name, "select_streams") == 0) real_options[i].u.dst_ptr = &stream_specifier;
++        if (strcmp(real_options[i].name, "data_dump_format") == 0) real_options[i].u.dst_ptr = &data_dump_format;
 +        if (strcmp(real_options[i].name, "show_data") == 0) real_options[i].u.dst_ptr = &do_show_data;
 +        if (strcmp(real_options[i].name, "show_data_hash") == 0) real_options[i].u.dst_ptr = &show_data_hash;
 +        if (strcmp(real_options[i].name, "show_log") == 0) real_options[i].u.dst_ptr = &do_show_log;

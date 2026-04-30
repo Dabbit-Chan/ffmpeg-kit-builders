@@ -23,7 +23,6 @@
  * simple media prober based on the FFmpeg libraries
  */
 
-#include "SDL_mutex.h"
 #include "config.h"
 #include "libavutil/ffversion.h"
 
@@ -38,6 +37,7 @@
 #include "libavutil/ambient_viewing_environment.h"
 #include "libavutil/avassert.h"
 #include "libavutil/avstring.h"
+#include "libavutil/avutil.h"
 #include "libavutil/bprint.h"
 #include "libavutil/channel_layout.h"
 #include "libavutil/display.h"
@@ -134,6 +134,11 @@ static int use_byte_value_binary_prefix = 0;
 static int use_value_sexagesimal_format = 0;
 static int show_private_data            = 1;
 
+static const char *audio_codec_name = NULL;
+static const char *data_codec_name = NULL;
+static const char *subtitle_codec_name = NULL;
+static const char *video_codec_name = NULL;
+
 #define SHOW_OPTIONAL_FIELDS_AUTO       -1
 #define SHOW_OPTIONAL_FIELDS_NEVER       0
 #define SHOW_OPTIONAL_FIELDS_ALWAYS      1
@@ -142,6 +147,7 @@ static int show_optional_fields = SHOW_OPTIONAL_FIELDS_AUTO;
 static char *output_format;
 static char *stream_specifier;
 static char *show_data_hash;
+static char *data_dump_format;
 
 typedef struct ReadInterval {
     int id;             ///< identifier
@@ -154,9 +160,7 @@ typedef struct ReadInterval {
 static ReadInterval *read_intervals;
 static int read_intervals_nb = 0;
 
-static int find_stream_info = 1;
-
-
+static int find_stream_info  = 1;
 
 /* section structure definition */
 
@@ -252,7 +256,7 @@ static const char *get_stream_group_type(const void *data)
     return av_x_if_null(avformat_stream_group_name(stg->type), "unknown");
 }
 
-static struct AVTextFormatSection sections[] = {
+static const AVTextFormatSection sections[] = {
     [SECTION_ID_CHAPTERS] =           { SECTION_ID_CHAPTERS, "chapters", AV_TEXTFORMAT_SECTION_FLAG_IS_ARRAY, { SECTION_ID_CHAPTER, -1 } },
     [SECTION_ID_CHAPTER] =            { SECTION_ID_CHAPTER, "chapter", 0, { SECTION_ID_CHAPTER_TAGS, -1 } },
     [SECTION_ID_CHAPTER_TAGS] =       { SECTION_ID_CHAPTER_TAGS, "tags", AV_TEXTFORMAT_SECTION_FLAG_HAS_VARIABLE_FIELDS, { -1 }, .element_name = "tag", .unique_name = "chapter_tags" },
@@ -324,6 +328,13 @@ static struct AVTextFormatSection sections[] = {
     [SECTION_ID_SUBTITLE] =           { SECTION_ID_SUBTITLE, "subtitle", 0, { -1 } },
 };
 
+typedef struct EntrySelection {
+    int show_all_entries;
+    AVDictionary *entries_to_show;
+} EntrySelection;
+
+static EntrySelection selected_entries[FF_ARRAY_ELEMS(sections)] = { 0 };
+
 static FFMPEG_THREAD_LOCAL OptionDef *options;
 
 /* FFprobe context */
@@ -357,6 +368,14 @@ typedef struct LogBuffer {
 
 static LogBuffer *log_buffer;
 static int log_buffer_size;
+
+static int is_key_selected_callback(AVTextFormatContext *tctx, const char *key)
+{
+    const AVTextFormatSection *section = tctx->section[tctx->level];
+    const EntrySelection *selection = &selected_entries[section - sections];
+
+    return selection->show_all_entries || av_dict_get(selection->entries_to_show, key, NULL, 0);
+}
 
 static void log_callback(void *ptr, int level, const char *fmt, va_list vl)
 {
@@ -437,6 +456,30 @@ static void log_callback(void *ptr, int level, const char *fmt, va_list vl)
 #define print_duration_ts(k, v)       avtext_print_ts(tfc, k, v, 1)
 #define print_val(k, v, u)      avtext_print_unit_integer(tfc, k, v, u)
 
+static void print_integers(AVTextFormatContext *tfc, const char *key,
+                           const void *data, int size, const char *format,
+                           int columns, int bytes, int offset_add)
+{
+    AVBPrint bp;
+    unsigned offset = 0;
+
+    av_bprint_init(&bp, 0, AV_BPRINT_SIZE_AUTOMATIC);
+    av_bprint_chars(&bp, '\n', 1);
+    while (size) {
+        av_bprintf(&bp, "%08x: ", offset);
+        for (int i = 0, l = FFMIN(size, columns); i < l; i++) {
+            if      (bytes == 1) av_bprintf(&bp, format, *(const uint8_t*)data);
+            else if (bytes == 2) av_bprintf(&bp, format, AV_RN16(data));
+            else if (bytes == 4) av_bprintf(&bp, format, AV_RN32(data));
+            data = (const char*)data + bytes;
+            size--;
+        }
+        av_bprint_chars(&bp, '\n', 1);
+        offset += offset_add;
+    }
+    avtext_print_string(tfc, key, bp.str, 0);
+}
+
 #define REALLOCZ_ARRAY_STREAM(ptr, cur_n, new_n)                        \
 {                                                                       \
     ret = av_reallocp_array(&(ptr), (new_n), sizeof(*(ptr)));           \
@@ -468,7 +511,7 @@ static void print_displaymatrix(AVTextFormatContext *tfc, const int32_t matrix[9
     double rotation = av_display_rotation_get(matrix);
     if (isnan(rotation))
         rotation = 0;
-    avtext_print_integers(tfc, "displaymatrix", (void*)matrix, 9, " %11d", 3, 4, 1);
+    print_integers(tfc, "displaymatrix", matrix, 9, " %11d", 3, 4, 1);
     print_int("rotation", rotation);
 }
 
@@ -1063,6 +1106,12 @@ static void print_pkt_side_data(AVTextFormatContext *tfc,
         print_int("crop_right",  AV_RL32(sd->data + 12));
     } else if (sd->type == AV_PKT_DATA_AFD && sd->size > 0) {
         print_int("active_format", *sd->data);
+    } else if (sd->type == AV_PKT_DATA_EXIF) {
+        print_int("size", sd->size);
+    } else if (sd->type == AV_PKT_DATA_MATROSKA_BLOCKADDITIONAL && sd->size >= 8) {
+        print_int("block_additional_id", AV_RB64(sd->data));
+        if (do_show_data)
+            avtext_print_data(tfc, "block_additional_data", sd->data + 8, sd->size - 8);
     }
 }
 
@@ -1151,6 +1200,16 @@ static void print_chroma_location(AVTextFormatContext *tfc, enum AVChromaLocatio
         print_str_opt("chroma_location", "unspecified");
     } else {
         print_str("chroma_location", val);
+    }
+}
+
+static void print_alpha_mode(AVTextFormatContext *tfc, enum AVAlphaMode alpha_mode)
+{
+    const char *val = av_alpha_mode_name(alpha_mode);
+    if (!val || alpha_mode == AVALPHA_MODE_UNSPECIFIED) {
+        print_str_opt("alpha_mode", "unspecified");
+    } else {
+        print_str("alpha_mode", val);
     }
 }
 
@@ -1342,6 +1401,8 @@ static void print_frame_side_data(AVTextFormatContext *tfc,
             print_film_grain_params(tfc, fgp);
         } else if (sd->type == AV_FRAME_DATA_VIEW_ID) {
             print_int("view_id", *(int*)sd->data);
+        } else if (sd->type == AV_FRAME_DATA_EXIF) {
+            print_int("size", sd->size);
         }
         avtext_print_section_footer(tfc);
     }
@@ -1406,6 +1467,7 @@ static void show_frame(AVTextFormatContext *tfc, AVFrame *frame, AVStream *strea
         print_primaries(tfc, frame->color_primaries);
         print_color_trc(tfc, frame->color_trc);
         print_chroma_location(tfc, frame->chroma_location);
+        print_alpha_mode(tfc, frame->alpha_mode);
         break;
 
     case AVMEDIA_TYPE_AUDIO:
@@ -1761,6 +1823,10 @@ static int show_stream(AVTextFormatContext *tfc, AVFormatContext *fmt_ctx, int s
     print_str("codec_tag_string",    av_fourcc2str(par->codec_tag));
     print_fmt("codec_tag", "0x%04"PRIx32, par->codec_tag);
 
+    av_bprint_clear(&pbuf);
+    if (!av_mime_codec_str(par, stream->avg_frame_rate, &pbuf))
+        print_str("mime_codec_string", pbuf.str);
+
     switch (par->codec_type) {
     case AVMEDIA_TYPE_VIDEO:
         print_int("width",        par->width);
@@ -1809,7 +1875,7 @@ static int show_stream(AVTextFormatContext *tfc, AVFormatContext *fmt_ctx, int s
         else
             print_str_opt("field_order", "unknown");
 
-        if (dec_ctx)
+        if (dec_ctx && do_read_frames)
             print_int("refs", dec_ctx->refs);
         break;
 
@@ -2059,6 +2125,10 @@ static void print_iamf_param_definition(AVTextFormatContext *tfc, const char *na
 static void print_iamf_audio_element_params(AVTextFormatContext *tfc, const AVStreamGroup *stg,
                                             const AVIAMFAudioElement *audio_element)
 {
+    AVBPrint pbuf;
+
+    av_bprint_init(&pbuf, 1, AV_BPRINT_SIZE_UNLIMITED);
+
     avtext_print_section_header(tfc, stg, SECTION_ID_STREAM_GROUP_COMPONENT);
     print_int("nb_layers",          audio_element->nb_layers);
     print_int("audio_element_type", audio_element->audio_element_type);
@@ -2073,8 +2143,12 @@ static void print_iamf_audio_element_params(AVTextFormatContext *tfc, const AVSt
         if (audio_element->audio_element_type == AV_IAMF_AUDIO_ELEMENT_TYPE_CHANNEL) {
             print_int("output_gain_flags", layer->output_gain_flags);
             print_q("output_gain",         layer->output_gain, '/');
-        } else if (audio_element->audio_element_type == AV_IAMF_AUDIO_ELEMENT_TYPE_SCENE)
+        } else if (audio_element->audio_element_type == AV_IAMF_AUDIO_ELEMENT_TYPE_SCENE) {
             print_int("ambisonics_mode",   layer->ambisonics_mode);
+            if (layer->ambisonics_mode == AV_IAMF_AMBISONICS_MODE_PROJECTION)
+                print_list_fmt("demixing_matrix", "%d/%d", layer->nb_demixing_matrix, 1, layer->demixing_matrix[idx].num,
+                                                                                         layer->demixing_matrix[idx].den);
+        }
         avtext_print_section_footer(tfc); // SECTION_ID_STREAM_GROUP_SUBCOMPONENT
     }
     if (audio_element->demixing_info)
@@ -2085,6 +2159,8 @@ static void print_iamf_audio_element_params(AVTextFormatContext *tfc, const AVSt
                                     SECTION_ID_STREAM_GROUP_SUBCOMPONENT);
     avtext_print_section_footer(tfc); // SECTION_ID_STREAM_GROUP_SUBCOMPONENTS
     avtext_print_section_footer(tfc); // SECTION_ID_STREAM_GROUP_COMPONENT
+
+    av_bprint_finalize(&pbuf, NULL);
 }
 
 static void print_iamf_submix_params(AVTextFormatContext *tfc, const AVIAMFSubmix *submix)
@@ -2290,6 +2366,65 @@ static void show_error(AVTextFormatContext *tfc, int err)
     avtext_print_section_footer(tfc);
 }
 
+static int get_decoder_by_name(const char *codec_name, const AVCodec **codec)
+{
+    if (codec_name == NULL)
+        return 0;
+
+    *codec = avcodec_find_decoder_by_name(codec_name);
+    if (*codec == NULL) {
+        av_log(NULL, AV_LOG_ERROR,
+                "No codec could be found with name '%s'\n", codec_name);
+        return AVERROR(EINVAL);
+    }
+    return 0;
+}
+
+static int set_decoders(AVFormatContext *fmt_ctx)
+{
+    int ret;
+
+#define GET_DECODER(type_) \
+    ret = get_decoder_by_name(type_##_codec_name, &fmt_ctx->type_##_codec); \
+    if (ret < 0) return ret;
+
+    GET_DECODER(audio);
+    GET_DECODER(data);
+    GET_DECODER(subtitle);
+    GET_DECODER(video);
+    return 0;
+}
+
+static const AVCodec *get_decoder_for_stream(AVFormatContext *fmt_ctx, AVStream *stream)
+{
+    const AVCodec *codec = NULL;
+    switch (stream->codecpar->codec_type) {
+        case AVMEDIA_TYPE_VIDEO:    codec = fmt_ctx->video_codec; break;
+        case AVMEDIA_TYPE_AUDIO:    codec = fmt_ctx->audio_codec; break;
+        case AVMEDIA_TYPE_SUBTITLE: codec = fmt_ctx->subtitle_codec; break;
+        case AVMEDIA_TYPE_DATA:     codec = fmt_ctx->data_codec; break;
+    }
+
+    if (codec != NULL)
+        return codec;
+
+    if (stream->codecpar->codec_id == AV_CODEC_ID_PROBE) {
+        av_log(NULL, AV_LOG_WARNING,
+               "Failed to probe codec for input stream %d\n", stream->index);
+        return NULL;
+    }
+
+    codec = avcodec_find_decoder(stream->codecpar->codec_id);
+    if (codec == NULL) {
+        av_log(NULL, AV_LOG_WARNING,
+               "Unsupported codec with id %d for input stream %d\n",
+               stream->codecpar->codec_id, stream->index);
+        return NULL;
+    }
+
+    return codec;
+}
+
 static int open_input_file(InputFile *ifile, const char *filename,
                            const char *print_filename)
 {
@@ -2302,6 +2437,9 @@ static int open_input_file(InputFile *ifile, const char *filename,
     if (!fmt_ctx)
         return AVERROR(ENOMEM);
 
+    err = set_decoders(fmt_ctx);
+    if (err < 0)
+        return err;
     if (!av_dict_get(format_opts, "scan_all_pmts", NULL, AV_DICT_MATCH_CASE)) {
         av_dict_set(&format_opts, "scan_all_pmts", "1", AV_DICT_DONT_OVERWRITE);
         scan_all_pmts_set = 1;
@@ -2356,20 +2494,10 @@ static int open_input_file(InputFile *ifile, const char *filename,
 
         ist->st = stream;
 
-        if (stream->codecpar->codec_id == AV_CODEC_ID_PROBE) {
-            av_log(NULL, AV_LOG_WARNING,
-                   "Failed to probe codec for input stream %d\n",
-                    stream->index);
+        codec = get_decoder_for_stream(fmt_ctx, stream);
+        if (!codec)
             continue;
-        }
 
-        codec = avcodec_find_decoder(stream->codecpar->codec_id);
-        if (!codec) {
-            av_log(NULL, AV_LOG_WARNING,
-                    "Unsupported codec with id %d for input stream %d\n",
-                    stream->codecpar->codec_id, stream->index);
-            continue;
-        }
         {
             AVDictionary *opts;
 
@@ -2516,6 +2644,10 @@ end:
     av_freep(&selected_streams);
     av_freep(&streams_with_closed_captions);
     av_freep(&streams_with_film_grain);
+    av_freep(&audio_codec_name);
+    av_freep(&data_codec_name);
+    av_freep(&subtitle_codec_name);
+    av_freep(&video_codec_name);
 
     return ret;
 }
@@ -2652,14 +2784,15 @@ static int opt_format(void *optctx, const char *opt, const char *arg)
 static inline void mark_section_show_entries(SectionID section_id,
                                              int show_all_entries, AVDictionary *entries)
 {
-    struct AVTextFormatSection *section = &sections[section_id];
+    EntrySelection *selection = &selected_entries[section_id];
 
-    section->show_all_entries = show_all_entries;
+    selection->show_all_entries = show_all_entries;
     if (show_all_entries) {
+        const AVTextFormatSection *section = &sections[section_id];
         for (const int *id = section->children_ids; *id != -1; id++)
             mark_section_show_entries(*id, show_all_entries, entries);
     } else {
-        av_dict_copy(&section->entries_to_show, entries, 0);
+        av_dict_copy(&selection->entries_to_show, entries, 0);
     }
 }
 
@@ -2781,10 +2914,9 @@ static int opt_print_filename(void *optctx, const char *opt, const char *arg)
 
 void ffprobe_show_help_default(const char *opt, const char *arg)
 {
-    av_log_set_callback(log_callback_help);
     show_usage();
     show_help_options(options, "Main options:", 0, 0);
-    printf("\n");
+    av_log(NULL, AV_LOG_INFO, "\n");
 
     show_help_children(avformat_get_class(), AV_OPT_FLAG_DECODING_PARAM);
     show_help_children(avcodec_get_class(), AV_OPT_FLAG_DECODING_PARAM);
@@ -2970,6 +3102,36 @@ static int opt_sections(void *optctx, const char *opt, const char *arg)
     return 0;
 }
 
+static int opt_codec(void *optctx, const char *opt, const char *arg)
+{
+   const char *spec = strchr(opt, ':');
+   const char **name;
+   if (!spec) {
+       av_log(NULL, AV_LOG_ERROR,
+              "No media specifier was specified for '%s' in option '%s'. Use -%s:<media_spec> "
+              "where <media_spec> can be one of: 'a' (audio), 'v' (video), 's' (subtitle), 'd' (data)\n",
+               arg, opt, opt);
+       return AVERROR(EINVAL);
+   }
+   spec++;
+
+   switch (spec[0]) {
+   case 'a' : name = &audio_codec_name;    break;
+   case 'd' : name = &data_codec_name;     break;
+   case 's' : name = &subtitle_codec_name; break;
+   case 'v' : name = &video_codec_name;    break;
+   default:
+       av_log(NULL, AV_LOG_ERROR,
+              "Invalid media specifier '%s' in option '%s'. "
+              "Must be one of: 'a' (audio), 'v' (video), 's' (subtitle), 'd' (data)\n", spec, opt);
+       return AVERROR(EINVAL);
+   }
+
+   av_freep(name);
+   *name = av_strdup(arg);
+   return *name ? 0 : AVERROR(ENOMEM);
+}
+
 static int opt_show_versions(void *optctx, const char *opt, const char *arg)
 {
     mark_section_show_entries(SECTION_ID_PROGRAM_VERSION, 1, NULL);
@@ -3013,6 +3175,7 @@ static OptionDef real_options_template[] = {
     { "of",                    OPT_TYPE_STRING,      0, { NULL }, "alias for -output_format", "format" },
     { "select_streams",        OPT_TYPE_STRING,      0, { NULL }, "select the specified streams", "stream_specifier" },
     { "sections",              OPT_TYPE_FUNC, OPT_EXIT, {.func_arg = opt_sections}, "print sections structure and section information, and exit" },
+    { "data_dump_format",      OPT_TYPE_STRING,      0, { NULL }, "set data dump format (available formats are: xxd, base64)" },
     { "show_data",             OPT_TYPE_BOOL,        0, { NULL }, "show packets data" },
     { "show_data_hash",        OPT_TYPE_STRING,      0, { NULL }, "show packets data hash" },
     { "show_error",            OPT_TYPE_FUNC,        0, { .func_arg = &opt_show_error },  "show probing error" },
@@ -3045,6 +3208,8 @@ static OptionDef real_options_template[] = {
     { "print_filename",        OPT_TYPE_FUNC, OPT_FUNC_ARG, {.func_arg = opt_print_filename}, "override the printed input filename", "print_file"},
     { "find_stream_info",      OPT_TYPE_BOOL, OPT_INPUT | OPT_EXPERT, { NULL },
         "read and decode the streams to fill missing information with heuristics" },
+    { "c",                     OPT_TYPE_FUNC, OPT_FUNC_ARG, { .func_arg = opt_codec}, "force decoder", "decoder_name" },
+    { "codec",                 OPT_TYPE_FUNC, OPT_FUNC_ARG, { .func_arg = opt_codec}, "alias for -c (force decoder)", "decoder_name" },
     { NULL, },
 };
 
@@ -3054,9 +3219,12 @@ static FFMPEG_THREAD_LOCAL OptionDef real_options[FF_ARRAY_ELEMS(real_options_te
 
 static inline int check_section_show_entries(int section_id)
 {
-    struct AVTextFormatSection *section = &sections[section_id];
-    if (sections[section_id].show_all_entries || sections[section_id].entries_to_show)
+    const EntrySelection *selection = &selected_entries[section_id];
+
+    if (selection->show_all_entries || selection->entries_to_show)
         return 1;
+
+    const AVTextFormatSection *section = &sections[section_id];
     for (const int *id = section->children_ids; *id != -1; id++)
         if (check_section_show_entries(*id))
             return 1;
@@ -3108,6 +3276,7 @@ int ffprobe_run_internal(int argc, char **argv, AVBPrint *output_buf)
     AVTextWriterContext *wctx = NULL;
     char *buf;
     char *f_name = NULL, *f_args = NULL;
+    AVTextFormatDataDump data_dump_format_id = AV_TEXTFORMAT_DATADUMP_XXD;
 
     // For custom AVIO
     AVIOContext *avio_buf = NULL;
@@ -3199,6 +3368,18 @@ int ffprobe_run_internal(int argc, char **argv, AVBPrint *output_buf)
         goto end;
     }
 
+    if (data_dump_format) {
+        if (!strcmp(data_dump_format, "xxd")) {
+            data_dump_format_id = AV_TEXTFORMAT_DATADUMP_XXD;
+        } else if (!strcmp(data_dump_format, "base64")) {
+            data_dump_format_id = AV_TEXTFORMAT_DATADUMP_BASE64;
+        } else {
+            av_log(NULL, AV_LOG_ERROR, "Unknown data dump format with name '%s'\n", data_dump_format);
+            ret = AVERROR(EINVAL);
+            goto end;
+        }
+    }
+
     if (output_buf) {
         // LIBRARY MODE: Write to memory buffer
         const int avio_ctx_buffer_size = 4096;
@@ -3229,11 +3410,13 @@ int ffprobe_run_internal(int argc, char **argv, AVBPrint *output_buf)
         goto end;
 
     AVTextFormatOptions tf_options = {
+        .is_key_selected              = is_key_selected_callback,
         .show_optional_fields = show_optional_fields,
         .show_value_unit = show_value_unit,
         .use_value_prefix = use_value_prefix,
         .use_byte_value_binary_prefix = use_byte_value_binary_prefix,
         .use_value_sexagesimal_format = use_value_sexagesimal_format,
+        .data_dump_format             = data_dump_format_id,
     };
 
     if ((ret = avtext_context_open(&tctx, f, wctx, f_args, sections, FF_ARRAY_ELEMS(sections), tf_options, show_data_hash)) >= 0) {
@@ -3293,8 +3476,8 @@ end:
     av_freep(&read_intervals);
 
     uninit_opts();
-    for (i = 0; i < FF_ARRAY_ELEMS(sections); i++)
-        av_dict_free(&(sections[i].entries_to_show));
+    for (size_t i = 0; i < FF_ARRAY_ELEMS(selected_entries); ++i)
+        av_dict_free(&selected_entries[i].entries_to_show);
 
     avformat_network_deinit();
 
@@ -3315,6 +3498,7 @@ void ffprobe_tls_init_options(void) {
         if (strcmp(real_options[i].name, "print_format") == 0) real_options[i].u.dst_ptr = &output_format;
         if (strcmp(real_options[i].name, "of") == 0) real_options[i].u.dst_ptr = &output_format;
         if (strcmp(real_options[i].name, "select_streams") == 0) real_options[i].u.dst_ptr = &stream_specifier;
+        if (strcmp(real_options[i].name, "data_dump_format") == 0) real_options[i].u.dst_ptr = &data_dump_format;
         if (strcmp(real_options[i].name, "show_data") == 0) real_options[i].u.dst_ptr = &do_show_data;
         if (strcmp(real_options[i].name, "show_data_hash") == 0) real_options[i].u.dst_ptr = &show_data_hash;
         if (strcmp(real_options[i].name, "show_log") == 0) real_options[i].u.dst_ptr = &do_show_log;

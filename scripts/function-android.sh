@@ -19,6 +19,7 @@ configure_ffmpeg_kit() {
 	local type_postfix="$build_ffmpeg_kit_type"
 
 	if truthy "$build_force"; then
+		remove_path -rf "$ffmpeg_kit_src_dir/build"
 		remove_path -rf "$ffmpeg_kit_src_dir"/already_configured_*
 		remove_path -rf "$ffmpeg_kit_install"
 	fi
@@ -39,9 +40,9 @@ configure_ffmpeg_kit() {
 	export CFLAGS="${local_cflags}"
 	export CXXFLAGS="${local_cxxfalgs}"
 	UNWIND_STATIC=$($CXX -print-file-name=libunwind.a)
-    BUILTINS_STATIC=$($CXX -print-file-name=libclang_rt.builtins-$clang_arch-android.a)
+    BUILTINS_STATIC=$($CXX -print-file-name=libclang_rt.builtins-"${clang_arch}"-android.a)
     export LDFLAGS="${LDFLAGS} -Wl,--allow-multiple-definition -Wl,--exclude-libs,libunwind.a $UNWIND_STATIC $BUILTINS_STATIC"
-    export LDFLAGS=$(echo $LDFLAGS | sed 's/-Wl,--fatal-warnings//g')
+    export LDFLAGS=$(echo "${LDFLAGS}" | sed 's/-Wl,--fatal-warnings//g')
 	export LDFLAGS="${LDFLAGS//-static /} -static-libstdc++ -L${ffmpeg_install_prefix}/lib -L${dependency_install_prefix}/lib"
 
 	local cmake_params="-DCMAKE_SYSTEM_NAME=Android \
@@ -205,11 +206,12 @@ fix_pkgconfig_flags() {
 	find "$install_pkgconfig_dir" -name "*.pc" -exec sed -i -E \
 	-e 's/(^|[[:space:]])-lrt([[:space:]]|$)/ /g' \
 	-e 's/(^|[[:space:]])-lpthread([[:space:]]|$)/ -pthread /g' \
-	-e 's/(^|[[:space:]])-l([[:space:]]|$)/ /g' \{} +
+	-e 's/(^|[[:space:]])-l([[:space:]]|$)/ /g' "{}" + \
+	2>>"$LOG_FILE"
 	find "$dependency_install_prefix/lib" -name "*.la*" -delete
 }
 
-ffmpeg_android_patches() {
+ffmpeg_patches() {
 	if isandroid && [[ "$host_arch" == "armv7a" ]]; then
 		echo "INFO: Patching ffmpeg for Android armv7a..." >>"$LOG_FILE"
 		if [[ -f "$ffmpeg_source_dir/libavutil/hwcontext_vulkan.c" ]]; then
@@ -217,4 +219,63 @@ ffmpeg_android_patches() {
 		fi
 		echo "INFO: Done patching ffmpeg for Android armv7a." >>"$LOG_FILE"
 	fi
+}
+
+create_android_aar() {
+  local arch_pfx="$aar_arch"
+  local bundle_pfx="$(get_bundle_type)"
+  local license_pfx="$(get_bundle_license)"
+  local kit_dir=$(get_ffmpeg_kit_directory)
+  local small_pfx=""
+  local debug_pfx=""
+  if truthy "$do_debug_build"; then
+    debug_pfx="-debug"
+	fi
+  if truthy "$build_small"; then
+    small_pfx="-small"
+  fi
+  local lib_ext=".so"
+  if [[ "$build_ffmpeg_kit_type" == "static" ]]; then
+    lib_ext=".a"
+  fi
+  local jni_libs_dir="${WORKDIR}/$host_platform/jniLibs-${bundle_pfx}${small_pfx}${debug_pfx}-${license_pfx}/jniLibs"
+  if [[ -d "${WORKDIR}/$host_platform/jniLibs-${bundle_pfx}${small_pfx}${debug_pfx}-${license_pfx}" ]]; then
+    rm -rf "${WORKDIR}/$host_platform/jniLibs-${bundle_pfx}${small_pfx}${debug_pfx}-${license_pfx}"
+  fi
+  mkdir -p "${jni_libs_dir}"/{include,lib/pkgconfig,arm64-v8a,armeabi-v7a,x86,x86_64}
+
+  cp -fv "${work_dir}/${kit_dir}/lib/pkgconfig/ffmpegkit.pc" "${jni_libs_dir}/lib/pkgconfig/ffmpegkit.pc" > >(redirect_output)
+  cp -fv "${work_dir}/${kit_dir}/lib/libffmpegkit${lib_ext}" "${jni_libs_dir}/${arch_pfx}/libffmpegkit${lib_ext}" > >(redirect_output)
+
+  FFMPEG_KIT_NAMESPACE="io.github.akashskypatel.ffmpegkit"
+  FFMPEG_KIT_VERSION_CODE="$(date +%Y%m%d)"
+  FFMPEG_KIT_VERSION="$(cat "${BASEDIR}/version")-SNAPSHOT"
+  FFMPEG_KIT_JNI_LIBS_DIR=$(realpath "${jni_libs_dir}")
+  FFMPEG_KIT_OUTPUT_NAME="$(get_bundle_directory)"
+  OSSRH_USERNAME="$(get_maven_username)"
+  OSSRH_PASSWORD="$(get_maven_password)"
+  if [[ "$create_release" == "local" ]]; then
+    GRADLE_COMMAND="publishToMavenLocal"
+  else
+    GRADLE_COMMAND="publishToMavenCentral"
+  fi
+  USER_HOME="/home/vscode"
+  
+  change_dir "${BASEDIR}"
+
+  chmod +x "${BASEDIR}/gradlew"
+
+  { exec "./gradlew" :tools:android:${GRADLE_COMMAND} \
+    --no-daemon --info --warning-mode all --gradle-user-home "${USER_HOME}/.gradle" \
+    -PFFMPEG_KIT_NAMESPACE="${FFMPEG_KIT_NAMESPACE}" \
+    -PANDROID_NDK="${ANDROID_NDK}" \
+    -PANDROID_API_LEVEL="${ANDROID_API_LEVEL}" \
+    -PFFMPEG_KIT_VERSION_CODE="${FFMPEG_KIT_VERSION_CODE}" \
+    -PFFMPEG_KIT_VERSION="${FFMPEG_KIT_VERSION}" \
+    -PFFMPEG_KIT_JNI_LIBS_DIR="${FFMPEG_KIT_JNI_LIBS_DIR}" \
+    -PFFMPEG_KIT_OUTPUT_NAME="${FFMPEG_KIT_OUTPUT_NAME}" \
+    -POSSRH_USERNAME="${OSSRH_USERNAME}" \
+    -PFFMPEG_KIT_ARCHES="$aar_arch" \
+    -POSSRH_PASSWORD="${OSSRH_PASSWORD}" > >(redirect_output); } || { echo "Failed to create AAR for ${FFMPEG_KIT_OUTPUT_NAME}"; exit 1; }
+    echo
 }

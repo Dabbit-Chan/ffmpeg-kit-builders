@@ -1,5 +1,5 @@
 diff --git a/src/ffmpeg_opt.c b/src/ffmpeg_opt.c
-index d714a15..fd67c26 100755
+index a0664e2..863c6e9 100755
 --- a/src/ffmpeg_opt.c
 +++ b/src/ffmpeg_opt.c
 @@ -21,6 +21,7 @@
@@ -19,16 +19,51 @@ index d714a15..fd67c26 100755
  HWDevice *filter_hw_device;
  
  char *vstats_filename;
-@@ -90,6 +93,8 @@ int ignore_unknown_streams = 0;
- int copy_unknown_streams = 0;
- int recast_media = 0;
+@@ -157,10 +160,10 @@ static int show_hwaccels(void *optctx, const char *opt, const char *arg)
+ {
+     enum AVHWDeviceType type = AV_HWDEVICE_TYPE_NONE;
  
-+
-+
- // this struct is passed as the optctx argument
- // to func_arg() for global options
- typedef struct GlobalOptionsContext {
-@@ -1521,26 +1526,26 @@ static const char *const alt_qscale[]         = { "q", NULL};
+-    printf("Hardware acceleration methods:\n");
++    av_log(NULL, AV_LOG_INFO, "Hardware acceleration methods:");
+     while ((type = av_hwdevice_iterate_types(type)) !=
+            AV_HWDEVICE_TYPE_NONE)
+-        printf("%s\n", av_hwdevice_get_type_name(type));
++        av_log(NULL, AV_LOG_INFO, "%s", av_hwdevice_get_type_name(type));
+     printf("\n");
+     return 0;
+ }
+@@ -753,10 +756,10 @@ static int opt_init_hw_device(void *optctx, const char *opt, const char *arg)
+ {
+     if (!strcmp(arg, "list")) {
+         enum AVHWDeviceType type = AV_HWDEVICE_TYPE_NONE;
+-        printf("Supported hardware device types:\n");
++        av_log(NULL, AV_LOG_INFO, "Supported hardware device types:");
+         while ((type = av_hwdevice_iterate_types(type)) !=
+                AV_HWDEVICE_TYPE_NONE)
+-            printf("%s\n", av_hwdevice_get_type_name(type));
++            av_log(NULL, AV_LOG_INFO, "%s", av_hwdevice_get_type_name(type));
+         printf("\n");
+         return AVERROR_EXIT;
+     } else {
+@@ -1304,7 +1307,7 @@ static int opt_filter_complex_script(void *optctx, const char *opt, const char *
+ }
+ #endif
+ 
+-void show_help_default(const char *opt, const char *arg)
++void ffmpeg_show_help_default(const char *opt, const char *arg)
+ {
+     int show_advanced = 0, show_avoptions = 0;
+ 
+@@ -1319,7 +1322,7 @@ void show_help_default(const char *opt, const char *arg)
+ 
+     show_usage();
+ 
+-    printf("Getting help:\n"
++    av_log(NULL, AV_LOG_INFO, "Getting help:\n"
+            "    -h      -- print basic options\n"
+            "    -h long -- print more options\n"
+            "    -h full -- print all options (including all format and codec specific options, very long)\n"
+@@ -1619,26 +1622,26 @@ static const char *const alt_qscale[]         = { "q", NULL};
  static const char *const alt_tag[]            = { "atag", "vtag", "stag", NULL };
  
  #define OFFSET(x) offsetof(OptionsContext, x)
@@ -61,7 +96,7 @@ index d714a15..fd67c26 100755
          "allow recasting stream type in order to force a decoder of different media type" },
      { "c",                      OPT_TYPE_STRING, OPT_PERSTREAM | OPT_INPUT | OPT_OUTPUT | OPT_DECODER | OPT_HAS_CANON,
          { .off       = OFFSET(codec_names) },
-@@ -1614,25 +1619,25 @@ const OptionDef options[] = {
+@@ -1712,25 +1715,25 @@ const OptionDef options[] = {
          "set the number of data frames to output", "number",
          .u1.name_canon = "frames" },
      { "benchmark",              OPT_TYPE_BOOL, OPT_EXPERT,
@@ -92,7 +127,7 @@ index d714a15..fd67c26 100755
          "when dumping packets, also dump the payload" },
      { "re",                     OPT_TYPE_BOOL, OPT_EXPERT | OPT_OFFSET | OPT_INPUT,
          { .off = OFFSET(rate_emu) },
-@@ -1651,16 +1656,16 @@ const OptionDef options[] = {
+@@ -1749,16 +1752,16 @@ const OptionDef options[] = {
          "specify target file type (\"vcd\", \"svcd\", \"dvd\", \"dv\" or \"dv50\" "
          "with optional prefixes \"pal-\", \"ntsc-\" or \"film-\")", "type" },
      { "frame_drop_threshold",   OPT_TYPE_FLOAT, OPT_EXPERT,
@@ -113,7 +148,7 @@ index d714a15..fd67c26 100755
          "copy input stream time base when stream copying", "mode" },
      { "shortest",               OPT_TYPE_BOOL, OPT_EXPERT | OPT_OFFSET | OPT_OUTPUT,
          { .off = OFFSET(shortest) },
-@@ -1672,13 +1677,13 @@ const OptionDef options[] = {
+@@ -1770,13 +1773,13 @@ const OptionDef options[] = {
          { .off = OFFSET(bitexact) },
          "bitexact mode" },
      { "dts_delta_threshold",    OPT_TYPE_FLOAT, OPT_EXPERT,
@@ -130,7 +165,7 @@ index d714a15..fd67c26 100755
          "exit on error", "error" },
      { "abort_on",               OPT_TYPE_FUNC, OPT_FUNC_ARG | OPT_EXPERT,
          { .func_arg = opt_abort_on },
-@@ -1716,7 +1721,7 @@ const OptionDef options[] = {
+@@ -1814,7 +1817,7 @@ const OptionDef options[] = {
          { .func_arg = opt_filter_threads },
          "number of non-complex filter threads" },
      { "filter_buffered_frames", OPT_TYPE_INT, OPT_EXPERT,
@@ -139,7 +174,7 @@ index d714a15..fd67c26 100755
          "maximum number of buffered frames in a filter graph" },
  #if FFMPEG_OPT_FILTER_SCRIPT
      { "filter_script",          OPT_TYPE_STRING, OPT_PERSTREAM | OPT_EXPERT | OPT_OUTPUT,
-@@ -1733,7 +1738,7 @@ const OptionDef options[] = {
+@@ -1831,7 +1834,7 @@ const OptionDef options[] = {
          { .func_arg = opt_filter_complex },
          "create a complex filtergraph", "graph_description" },
      { "filter_complex_threads", OPT_TYPE_INT, OPT_EXPERT,
@@ -148,7 +183,7 @@ index d714a15..fd67c26 100755
          "number of threads for -filter_complex" },
      { "lavfi",               OPT_TYPE_FUNC, OPT_FUNC_ARG | OPT_EXPERT,
          { .func_arg = opt_filter_complex },
-@@ -1744,19 +1749,19 @@ const OptionDef options[] = {
+@@ -1842,19 +1845,19 @@ const OptionDef options[] = {
          "deprecated, use -/filter_complex instead", "filename" },
  #endif
      { "print_graphs",   OPT_TYPE_BOOL, 0,
@@ -173,7 +208,7 @@ index d714a15..fd67c26 100755
          "print progress report during encoding", },
      { "stats_period",        OPT_TYPE_FUNC, OPT_FUNC_ARG | OPT_EXPERT,
          { .func_arg = opt_stats_period },
-@@ -1770,10 +1775,10 @@ const OptionDef options[] = {
+@@ -1868,10 +1871,10 @@ const OptionDef options[] = {
      { "stream_loop",         OPT_TYPE_INT, OPT_EXPERT | OPT_INPUT | OPT_OFFSET,
          { .off = OFFSET(loop) }, "set number of times input stream shall be looped", "loop count" },
      { "debug_ts",            OPT_TYPE_BOOL, OPT_EXPERT,
@@ -186,7 +221,7 @@ index d714a15..fd67c26 100755
          "ratio of decoding errors (0.0: no errors, 1.0: 100% errors) above which ffmpeg returns an error instead of success.", "maximum error rate" },
      { "discard",             OPT_TYPE_STRING, OPT_PERSTREAM | OPT_INPUT | OPT_EXPERT,
          { .off = OFFSET(discard) },
-@@ -1868,7 +1873,7 @@ const OptionDef options[] = {
+@@ -1966,7 +1969,7 @@ const OptionDef options[] = {
          { .func_arg = opt_vstats_file },
          "dump video coding statistics to file", "file" },
      { "vstats_version",             OPT_TYPE_INT,    OPT_VIDEO | OPT_EXPERT,
@@ -195,7 +230,7 @@ index d714a15..fd67c26 100755
          "Version of the vstats format to use."},
      { "vf",                         OPT_TYPE_FUNC,   OPT_VIDEO | OPT_FUNC_ARG | OPT_PERFILE | OPT_OUTPUT | OPT_HAS_CANON,
          { .func_arg = opt_video_filters },
-@@ -2098,3 +2103,40 @@ const OptionDef options[] = {
+@@ -2196,3 +2199,40 @@ const OptionDef options[] = {
  
      { NULL, },
  };

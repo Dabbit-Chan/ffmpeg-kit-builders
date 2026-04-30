@@ -85,7 +85,7 @@ def parse_logs_by_line(log_paths):
                     else:
                         continue
                         
-                match_sym = re.search(r"used\s+(\w+)\s+'", line)
+                match_sym = re.search(r"\s(\w+)\s+'", line)
                 if match_sym:
                     line_patches[current_file][line_num].add(match_sym.group(1))
     return line_patches
@@ -189,7 +189,16 @@ def create_tls_header():
     content = (
         "#ifndef FFMPEG_TLS_H\n#define FFMPEG_TLS_H\n\n"
         "#if defined(_MSC_VER) || defined(__MINGW32__) || defined(__MINGW64__)\n"
+        "    #define FFMPEG_WEAK_SYMBOL __declspec(selectany)\n"
+        "#elif defined(__GNUC__) || defined(__clang__)\n"
+        "    #define FFMPEG_WEAK_SYMBOL __attribute__((weak))\n"
+        "#else\n"
+        "    #define FFMPEG_WEAK_SYMBOL\n"
+        "#endif\n\n"
+        "#if defined(_MSC_VER) || defined(__MINGW32__) || defined(__MINGW64__)\n"
         "    #define FFMPEG_THREAD_LOCAL __declspec(thread)\n"
+        "#elif defined(__APPLE__)\n"
+        "    #define FFMPEG_THREAD_LOCAL __attribute__((visibility(\"hidden\"))) _Thread_local\n"
         "#elif defined(__STDC_VERSION__) && __STDC_VERSION__ >= 201112L\n"
         "    #define FFMPEG_THREAD_LOCAL _Thread_local\n"
         "#else\n"
