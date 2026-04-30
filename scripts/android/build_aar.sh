@@ -515,7 +515,7 @@ for key in "${!PLATFORMS[@]}"; do
               package_name="${FFMPEG_KIT_NAMESPACE}.${FFMPEG_KIT_OUTPUT_NAME}"
               echo "${FFMPEG_KIT_JNI_LIBS_DIR}" > >(redirect_output)
               if find "${FFMPEG_KIT_JNI_LIBS_DIR}" -type f \( -name "*.so" -o -name "*.a" \) | read -r; then
-                [[ "${create_aar}" == "true" ]] && create_aar_artifact "${FFMPEG_KIT_JNI_LIBS_DIR}" "${FFMPEG_KIT_OUTPUT_NAME}" || true
+                [[ "${create_aar}" == "true" ]] && create_aar_artifact "${FFMPEG_KIT_JNI_LIBS_DIR}" "${FFMPEG_KIT_OUTPUT_NAME}"
                 [[ "${create_release}" == "true" ]] && release_asset=$(realpath "${BASEDIR}/tools/android/build/outputs/aar/${FFMPEG_KIT_OUTPUT_NAME}-${assemble_type,,}.aar") || true
                 [[ "${create_release}" == "true" && "$local_build" != "true" ]] && create_release_artifact "${release_asset}" || true
               fi
