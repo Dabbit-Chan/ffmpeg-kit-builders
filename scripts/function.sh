@@ -6669,7 +6669,7 @@ get_github_repo() {
   if [[ -f "$keystore" ]]; then
     local github_repo=$(grep '^GH_REPO=' "$keystore" | cut -d '=' -f2- | tr -d '\r')
     if [[ -z "$github_repo" ]]; then
-      exit_message 1 "GitHub repo not found" | tee -a "$LOG_FILE"
+      exit_message 1 "GitHub repo not found in $keystore" | tee -a "$LOG_FILE"
     fi
     echo "$github_repo"
   else
@@ -6682,7 +6682,7 @@ get_github_owner() {
   if [[ -f "$keystore" ]]; then
     local github_owner=$(grep '^GH_OWNER=' "$keystore" | cut -d '=' -f2- | tr -d '\r')
     if [[ -z "$github_owner" ]]; then
-      exit_message 1 "GitHub owner not found" | tee -a "$LOG_FILE"
+      exit_message 1 "GitHub owner not found in $keystore" | tee -a "$LOG_FILE"
     fi
     echo "$github_owner"
   else
