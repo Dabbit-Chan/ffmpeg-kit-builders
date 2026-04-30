@@ -22,9 +22,22 @@
 #include "LogCallback.hpp"
 #include "StatisticsCallback.hpp"
 #include <mutex>
+#include <sys/time.h>
 
 extern void
 addSessionToSessionHistory(const std::shared_ptr<ffmpegkit::Session> session);
+
+static std::string getCurrentTimeStamp() {
+  time_t now = time(0);
+  struct tm *timeinfo = localtime(&now);
+  char buffer[80];
+  strftime(buffer, sizeof(buffer), "%Y-%m-%d %H:%M:%S", timeinfo);
+  struct timeval tv;
+  gettimeofday(&tv, NULL);
+  char milliseconds[4];
+  snprintf(milliseconds, sizeof(milliseconds), "%03d", (int)(tv.tv_usec / 1000));
+  return std::string(buffer) + "." + std::string(milliseconds);
+}
 
 std::shared_ptr<ffmpegkit::FFmpegSession>
 ffmpegkit::FFmpegSession::create(const std::list<std::string> &arguments) {
@@ -119,7 +132,7 @@ ffmpegkit::FFmpegSession::getAllStatisticsWithTimeout(const int waitTimeout) {
   this->waitForAsynchronousMessagesInTransmit(waitTimeout);
 
   if (this->thereAreAsynchronousMessagesInTransmit()) {
-    std::cout
+    std::cout << "[" << getCurrentTimeStamp() << "] [ffmpeg-kit] [INFO] "
         << "getAllStatisticsWithTimeout was called to return all statistics "
            "but there are still statistics being transmitted for session id "
         << this->getSessionId() << "." << std::endl;

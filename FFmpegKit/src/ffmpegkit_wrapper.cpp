@@ -323,6 +323,9 @@ void DLL_ALIGN ffmpeg_kit_handle_release(void *handle) {
     // indefinitely.  The detached thread will run its TLS destructors when it
     // eventually exits on its own.
     if (session->isFFplay()) {
+      if (session != nullptr) {
+        static_cast<ffmpegkit::FFplaySession*>(session.get())->close();
+      }
       if (timed_out) {
         std::cerr << "[Warning] ffmpeg_kit_handle_release: detaching stuck FFplay thread\n";
         ffmpegkit::FFmpegKitConfig::detachAsyncFFplayThread();

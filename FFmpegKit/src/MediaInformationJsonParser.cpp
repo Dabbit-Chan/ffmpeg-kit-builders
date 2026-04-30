@@ -21,6 +21,19 @@
 #include "json/reader.h"
 #include <iostream>
 #include <memory>
+#include <sys/time.h>
+
+static std::string getCurrentTimeStamp() {
+  time_t now = time(0);
+  struct tm *timeinfo = localtime(&now);
+  char buffer[80];
+  strftime(buffer, sizeof(buffer), "%Y-%m-%d %H:%M:%S", timeinfo);
+  struct timeval tv;
+  gettimeofday(&tv, NULL);
+  char milliseconds[4];
+  snprintf(milliseconds, sizeof(milliseconds), "%03d", (int)(tv.tv_usec / 1000));
+  return std::string(buffer) + "." + std::string(milliseconds);
+}
 
 static const char *MediaInformationJsonParserKeyStreams = "streams";
 static const char *MediaInformationJsonParserKeyChapters = "chapters";
@@ -31,7 +44,8 @@ ffmpegkit::MediaInformationJsonParser::from(
   try {
     return fromWithError(ffprobeJsonOutput);
   } catch (const std::exception &exception) {
-    std::cout << "MediaInformation parsing failed: " << exception.what()
+    std::cout << "[" << getCurrentTimeStamp() << "] [ffmpeg-kit] [ERROR] "
+              << "MediaInformation parsing failed: " << exception.what()
               << std::endl;
     return nullptr;
   }

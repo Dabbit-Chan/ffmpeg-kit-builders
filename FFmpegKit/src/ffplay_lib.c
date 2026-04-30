@@ -258,10 +258,11 @@ void ffplay_lib_on_frame(const uint8_t *pixels, int width, int height,
         ANativeWindow_release(blit_window);
     }
 #endif
-
+    lock_ffplay_api();
     if (g_frame_callback)
-        g_frame_callback(g_frame_callback_userdata,
-                         pixels, width, height, linesize, pixel_format);
+      g_frame_callback(g_frame_callback_userdata, pixels, width, height,
+                       linesize, pixel_format);
+    unlock_ffplay_api();
 }
 
 void ffplay_set_frame_callback(FFplayFrameCallback callback, void *userdata) {
@@ -384,14 +385,12 @@ FFplayContext* ffplay_init(const char* args_string, const FFplayCallbacks *cb) {
     SDL_SetMainReady();
     // via the FFplayFrameCallback registered with ffplay_set_frame_callback().
     SDL_SetHintWithPriority(SDL_HINT_VIDEODRIVER, "dummy", SDL_HINT_OVERRIDE);
+#elif defined(__LINUX__)
+    SDL_SetHintWithPriority(SDL_HINT_VIDEODRIVER, "dummy", SDL_HINT_OVERRIDE);
+    SDL_SetHintWithPriority(SDL_HINT_RENDER_DRIVER, "dummy", SDL_HINT_OVERRIDE);
 #else
-    // Linux: 'offscreen' provides a CPU-backed framebuffer supporting
-    // SDL_CreateRenderer + SDL_RenderReadPixels without a display server.
-    // Works in headed and headless environments (CI, WSL, servers).
-    // ('dummy' lacks a framebuffer and crashes SDL_CreateRenderer.)
-    SDL_SetHintWithPriority(SDL_HINT_VIDEODRIVER, "offscreen", SDL_HINT_OVERRIDE);
-#endif
     SDL_SetHintWithPriority(SDL_HINT_RENDER_DRIVER, "software", SDL_HINT_OVERRIDE);
+#endif
 #if defined(__APPLE__)
     // iOS/macOS: CoreAudio provides real audio output via the system audio stack.
     if (!SDL_getenv("SDL_AUDIODRIVER"))
@@ -748,7 +747,6 @@ int ffplay_step(FFplayContext* ctx) {
     if (ctx->is && ctx->is->show_mode != SHOW_MODE_NONE && (!ctx->is->paused || ctx->is->force_refresh)) {
          video_refresh(ctx->is, &remaining_time);
     }
-
     step_ret = ctx->quit;
 
 step_done:
@@ -1010,7 +1008,7 @@ void ffplay_free(FFplayContext* ctx) {
     
     // Force full SDL shutdown in case multiple inits increased refcount
     while (SDL_WasInit(0)) {
-        SDL_Quit();
+      SDL_Quit();
     }
 
     // Cleanup globals
