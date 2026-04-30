@@ -434,7 +434,7 @@ fi
 
 if [[ ${#android_platforms[@]} -gt 0 ]] && truthy "$build_bundle"; then
   echo "Building AARs..." | tee -a "${LOG_FILE}"
-  sudo -E bash -c "${WORK_DIR}/scripts/android/build_aar.sh --platform=${android_platforms} --bundles=${bundles} --reset"
+  sudo -E bash -c "${WORK_DIR}/scripts/android/build_aar.sh --platform=${android_platforms_str} --bundle=${bundles} --reset"
 fi
 
 # Build XCFrameworks for Apple platforms
@@ -463,6 +463,6 @@ if [[ -n "${apple_platforms_str}" ]] && truthy "$build_bundle"; then
   echo "Bundles: ${bundles}" | tee -a "${LOG_FILE}"
   echo "========================================" | tee -a "${LOG_FILE}"
   
-  sudo -E bash -c "${WORK_DIR}/scripts/apple/build_xcframework.sh --platform=${apple_platforms_str} --bundles=${bundles} --reset"
+  sudo -E bash -c "${WORK_DIR}/scripts/apple/build_xcframework.sh --platform=${apple_platforms_str} --bundle=${bundles} --reset"
 fi
 

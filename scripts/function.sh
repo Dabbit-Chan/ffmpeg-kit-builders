@@ -6558,16 +6558,17 @@ get_keystore(){
   # Ensure the script is running with sudo
   if [ -z "$SUDO_USER" ]; then
     ORIGINAL_USER=$(whoami)
-    ORIGINAL_HOME=$(getent passwd "$ORIGINAL_USER" | cut -d: -f6)
+    ORIGINAL_HOME=$(eval echo ~"$ORIGINAL_USER")
   else
     ORIGINAL_USER="$SUDO_USER"
-    ORIGINAL_HOME=$(getent passwd "$SUDO_USER" | cut -d: -f6)
+    ORIGINAL_HOME=$(eval echo ~"$SUDO_USER")
   fi
 
   if [[ -d "$ORIGINAL_HOME/.config/keystore" ]]; then
     echo "$ORIGINAL_HOME/.config/keystore"
-  elif [[ -d "$(realpath ~/.config/keystore)" ]]; then
-    echo "$(realpath ~/.config/keystore)"
+  elif [[ -d "$HOME/.config/keystore" ]]; then
+    # $HOME is root's home when running with sudo; this matches original ~ expansion
+    realpath "$HOME/.config/keystore"
   else
     exit_message 1 "Keystore directory not found" | tee -a "$LOG_FILE"
   fi
