@@ -71,12 +71,28 @@ CONFIG_AUDIO_AI="\
 --enable-whisper"
 
 # Android general
-CONFIG_ANDROID="--enable-jni"
+CONFIG_ANDROID=" \
+--enable-jni \
+--enable-mediacodec"
 
-# Apple general NON-FREE
-CONFIG_APPLE_NON_FREE="\
---enable-appkit \
---enable-avfoundation"
+CONFIG_WINDOWS="\
+--enable-d3d11va \
+--enable-d3d12va \
+--enable-dxva2 \
+--enable-schannel \
+--enable-mediafoundation"
+
+CONFIG_MACOS="\
+--enable-appkit"
+
+# Apple general
+CONFIG_APPLE="\
+--enable-avfoundation \
+--enable-audiotoolbox \
+--enable-coreimage \
+--enable-metal \
+--enable-securetransport \
+--enable-videotoolbox"
 
 # General libraries
 CONFIG_GENERAL="\
