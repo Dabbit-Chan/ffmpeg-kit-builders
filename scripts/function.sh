@@ -365,6 +365,8 @@ setup_build_environment() {
         "macos") setup_macos_environment ;;
         "ios") setup_ios_environment ;;
         "iphonesimulator") setup_ios_environment "iphonesimulator" ;;
+        "appletvos") setup_tvos_environment "appletvos" ;;
+        "appletvsimulator") setup_tvos_environment "appletvsimulator" ;;
         *) exit_message 1 "setup_build_environment: Unknown host platform '$host_platform'" ;;
     esac
     create_dir "$src_dir"
@@ -772,6 +774,82 @@ setup_ios_environment() {
     create_dir "$dependency_install_prefix/{bin,lib/pkgconfig,include,usr/include}"
 }
 
+setup_tvos_environment() {
+    # Default to appletvos if no argument provided
+    export toolchain_sys="${1:-"appletvos"}"
+    export PATCHDIR="$SCRIPTDIR/tvos/patches"
+    export dependency_install_prefix="$work_dir/libraries"
+    export install_pkgconfig_dir="${dependency_install_prefix}/lib/pkgconfig"
+
+    # SDK setup — toolchain_sys must be 'appletvos' or 'appletvsimulator'
+    export TVOS_SDK_PATH="$(xcrun --sdk "$toolchain_sys" --show-sdk-path)"
+    export SDKROOT="$TVOS_SDK_PATH"
+    export TVOS_SYSROOT="$TVOS_SDK_PATH"
+
+    export PKG_CONFIG_PATH="$install_pkgconfig_dir:$ffmpeg_install_prefix/lib/pkgconfig"
+    export PATH="$original_path"
+
+    # Minimum tvOS version (check your deployment target requirements)
+    export MIN_TVOS_VERSION="13.0"
+
+    case "$host_arch" in
+        "aarch64"|"arm64")
+            export host_arch="arm64"
+            export cmake_host_arch="arm64"
+            export meson_cpu_family="aarch64"
+            export tvos_arch="arm64"
+            if [ "$toolchain_sys" = "appletvsimulator" ]; then
+                export host_target="arm64-apple-tvos-simulator"
+                export rust_target="aarch64-apple-tvos-sim"
+                export cflags_target="arm64-apple-tvos${MIN_TVOS_VERSION}-simulator"
+            else
+                export host_target="arm64-apple-tvos"
+                export rust_target="aarch64-apple-tvos"
+                export cflags_target="arm64-apple-tvos${MIN_TVOS_VERSION}"
+            fi
+            ;;
+        *)
+            exit_message 1 "setup_tvos_environment: Unsupported host arch '$host_arch'"
+            ;;
+    esac
+
+    reset_cross_vars
+
+    # Cross-compilation tools
+    export CC="$(xcrun --sdk "$toolchain_sys" --find clang)"
+    export CXX="$(xcrun --sdk "$toolchain_sys" --find clang++)"
+    export AR="$(xcrun --sdk "$toolchain_sys" --find ar)"
+    export AS="$(xcrun --sdk "$toolchain_sys" --find as)"
+    export RANLIB="$(xcrun --sdk "$toolchain_sys" --find ranlib)"
+    export LD="$(xcrun --sdk "$toolchain_sys" --find ld)"
+    export STRIP="$(xcrun --sdk "$toolchain_sys" --find strip)"
+    export NM="$(xcrun --sdk "$toolchain_sys" --find nm)"
+
+    if [ "$toolchain_sys" = "appletvsimulator" ]; then
+        # Version flag changes from -mios to -mtvos
+        export tvos_version_flag="-mtvos-simulator-version-min=$MIN_TVOS_VERSION"
+        export tvos_cppflags="$original_cppflags -arch $tvos_arch -I${dependency_install_prefix}/include -DTVOS -DTVOS_SIMULATOR"
+    else
+        export tvos_version_flag="-mtvos-version-min=$MIN_TVOS_VERSION"
+        export tvos_cppflags="$original_cppflags -arch $tvos_arch -I${dependency_install_prefix}/include -DTVOS"
+    fi
+
+    export CPPFLAGS="$tvos_cppflags"
+    export tvos_cflags="$original_cflags -arch $tvos_arch -I${dependency_install_prefix}/include $tvos_version_flag -target $cflags_target -isysroot $TVOS_SYSROOT"
+    export CFLAGS="$tvos_cflags"
+    export tvos_cxxflags="$original_cxxflags -arch $tvos_arch -I${dependency_install_prefix}/include"
+    export CXXFLAGS="$tvos_cxxflags"
+    export tvos_ldflags="$original_ldflags -arch $tvos_arch -L${dependency_install_prefix}/lib $tvos_version_flag -target $cflags_target -isysroot $TVOS_SYSROOT"
+    export LDFLAGS="$tvos_ldflags"
+
+    export PREFIX="$dependency_install_prefix"
+    export build_cross_compile=y
+
+    create_dir "$install_pkgconfig_dir"
+    create_dir "$work_dir/pkgconfig"
+    create_dir "$dependency_install_prefix/{bin,lib/pkgconfig,include,usr/include}"
+}
+
 iswindows() {
   if [[ "$host_platform" == "windows" ]]; then
     return 0
@@ -809,6 +887,20 @@ isios() {
 
 isiossimulator() {
   if [[ "$host_platform" == "iphonesimulator" ]]; then
+    return 0
+  fi
+  return 1
+}
+
+istvos() {
+  if [[ "$host_platform" == "tvos" || "$host_platform" == "appletvos" || "$host_platform" == "appletvsimulator" ]]; then
+    return 0
+  fi
+  return 1
+}
+
+istvossimulator() {
+  if [[ "$host_platform" == "appletvsimulator" ]]; then
     return 0
   fi
   return 1
@@ -910,7 +1002,7 @@ reset_cross_vars() {
     export RANLIB="${toolchain_bin_path}/llvm-ranlib"
     export STRIP="${toolchain_bin_path}/llvm-strip"
     export LD="${toolchain_bin_path}/ld.lld"
-  elif isios; then
+  elif isios || ismacos || istvos; then
     export CC="$(xcrun --sdk "$toolchain_sys" --find clang)"
     export CXX="$(xcrun --sdk "$toolchain_sys" --find clang++)"
     export AR="$(xcrun --sdk "$toolchain_sys" --find ar)"
@@ -933,6 +1025,8 @@ reset_cflags() {
     export CFLAGS="$macos_cflags"
   elif isios; then
     export CFLAGS="$ios_cflags"
+  elif istvos; then
+    export CFLAGS="$tvos_cflags"
   elif [[ -n "$original_cflags" ]]; then
     export CFLAGS="$original_cflags"
   else
@@ -951,6 +1045,8 @@ reset_cxxflags() {
     export CXXFLAGS="$macos_cxxflags"
   elif isios; then
     export CXXFLAGS="$ios_cxxflags"
+  elif istvos; then
+    export CXXFLAGS="$tvos_cflags"
   elif [[ -n "$original_cxxflags" ]]; then
     export CXXFLAGS="$original_cxxflags"
   else
@@ -969,6 +1065,8 @@ reset_cppflags() {
     export CPPFLAGS="$macos_cppflags"
   elif isios; then
     export CPPFLAGS="$ios_cppflags"
+  elif istvos; then
+    export CPPFLAGS="$tvos_cppflags"
   elif [[ -n "$original_cppflags" ]]; then
     export CPPFLAGS="$original_cppflags"
   else
@@ -987,6 +1085,8 @@ reset_ldflags() {
     export LDFLAGS="$macos_ldflags"
   elif isios; then
     export LDFLAGS="$ios_ldflags"
+  elif istvos; then
+    export LDFLAGS="$tvos_ldflags"
   elif [[ -n "$original_ldflags" ]]; then
     export LDFLAGS="$original_ldflags"
   else
@@ -4806,16 +4906,26 @@ pick_host_platform() {
     export toolchain_sys="iphonesimulator"
     apply_preset "$CONFIG_IOS"
   }
+  set_tvos() {
+    export host_platform="appletvos"
+    export toolchain_sys="appletvos"
+    apply_preset "$CONFIG_IOS"
+  }
+  set_tvos_simulator() {
+    export host_platform="appletvsimulator"
+    export toolchain_sys="appletvsimulator"
+    apply_preset "$CONFIG_IOS"
+  }
 	if truthy "$accept_defaults" && [[ -z "$1" ]]; then
     set_linux
     return 0
   fi
   unknown_opts=()
-  if [[ ! "$1" =~ ^([1-7]|linux|windows|android|mac(os)?|iphone(os|simulator)?|ios(-sim(ulator)?)?|iphonesim(ulator)?)$ ]]; then
+  if [[ ! "$1" =~ ^([1-9]|linux|windows|android|mac(os)?|iphone(os|simulator)?|ios(-sim(ulator)?)?|iphonesim(ulator)?|tvos(-sim(ulator)?)?|appletvos|appletvsim(ulator)?)$ ]]; then
      unknown_opts+=("$1")
    fi
   export host_platform=${1:-host_platform}
-	while [[ ! "${host_platform,,}" =~ ^([1-7]|linux|windows|android|mac(os)?|iphone(os|simulator)?|ios(-sim(ulator)?)?|iphonesim(ulator)?)$ ]]; do
+	while [[ ! "${host_platform,,}" =~ ^([1-9]|linux|windows|android|mac(os)?|iphone(os|simulator)?|ios(-sim(ulator)?)?|iphonesim(ulator)?|tvos(-sim(ulator)?)?|appletvos|appletvsim(ulator)?)$ ]]; do
 		# shellcheck disable=SC2199
 		if [[ -n "${unknown_opts[@]}" ]]; then
 			echo -e -n 'Unknown option(s)'
@@ -4833,9 +4943,11 @@ Which host platform are you trying to build, update, or clean for?
   4. MacOS
   5. iOS
   6. iOS-Simulator
-  7. Exit
+  7. Apple TV
+  8. Apple TV-Simulator
+  9. Exit
 EOF
-		echo -e -n 'Input your choice [1-7]: '
+		echo -e -n 'Input your choice [1-9]: '
 		read -r host_platform
 	done
   if [[ -z "$host_platform" ]] && truthy "$accept_defaults"; then
@@ -4862,7 +4974,13 @@ EOF
 	6|ios-sim*|iphonesim*|iphone-sim*) set_ios_simulator
   return 0
   ;;
-	7)
+  7|tvos|appletvos) set_tvos
+  return 0
+  ;;
+  8|tvos-sim*|appletvsim*|appletv-sim*) set_tvos_simulator
+  return 0
+  ;;
+	9)
   exit_message 0 "pick_host_platform: exiting"
   ;;
 	*)
@@ -6549,32 +6667,44 @@ set_version() {
 
 get_latest_version_from_changelog() {
   local version_file="$BASEDIR/CHANGELOG.md"
-  local version=$(awk '/## Version / && ++c==1 {print; exit}' "$version_file" | sed -e  's/## Version //')
+  local version=$(awk '/## Version / && ++c==1 {print; exit}' "$version_file" | sed -e 's/## Version //')
   set_version "$version"
   echo "$version"
 }
 
- get_previous_version_from_changelog() {
+get_previous_version_from_changelog() {
   local version_file="$BASEDIR/CHANGELOG.md"
   if [[ ! -f "$version_file" ]]; then
     exit_message 1 "Changelog file not found" | tee -a "$LOG_FILE"
   fi
-  local version=$(awk '/## Version / && ++c==2 {print; exit}' "$version_file" | sed -e  's/## Version //')
+  local version=$(awk '/## Version / && ++c==2 {print; exit}' "$version_file" | sed -e 's/## Version //')
   echo "$version"
-} 
+}
 
 get_changes_from_changelog() {
   local changelog_file="$BASEDIR/CHANGELOG.md"
   local cur_version=$(get_latest_version_from_changelog)
   local prev_version=$(get_previous_version_from_changelog)
-  # Ensure variables are not empty to prevent sed -i'' -e  'unterminated address' errors
+
   if [[ -z "$cur_version" || -z "$prev_version" ]]; then
     echo "Internal Error: Could not determine version range." >&2
     return 1
   fi
-  # Capture range: start at current, end at previous, exclude the previous header line
-  local changes=$(sed -i'' -e -n "/^[#][#] Version $cur_version/,/^[#][#] Version $prev_version/p" "$changelog_file" | head -n -1) 
-  # Remove leading/trailing blank lines and escape for JSON body
+
+  # Escape dots so they are treated literally in regex
+  local cur_esc=$(echo "$cur_version" | sed 's/\./\\./g')
+  local prev_esc=$(echo "$prev_version" | sed 's/\./\\./g')
+
+  # Extract from current version header to line before previous version header
+  # sed -n:    suppress automatic printing
+  # /pat1/,/pat2/p: print the range (both headers included)
+  # sed '$d':  delete last line (the previous version header) – works on macOS
+  local changes=$(sed -n "/^## Version $cur_esc/,/^## Version $prev_esc/p" "$changelog_file" | sed '$d')
+
+  # (Optional) Remove the current version header line if you only want the bullet points:
+  # changes=$(echo "$changes" | sed '1d')
+
+  # Trim leading/trailing blank lines (preserve your original trimming logic)
   echo "$changes" | sed -e '/./,$!d' -e :a -e '/^\n*$/{$d;N;ba' -e '}'
 }
 
