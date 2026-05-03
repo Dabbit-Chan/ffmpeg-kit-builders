@@ -668,6 +668,8 @@ fi
 
 if [[ $host_platform == "iphonesimulator" ]]; then
 	source_platform="ios"
+elif [[ $host_platform == "appletvsimulator" ]]; then
+  source_platform="appletvos"
 else
 	source_platform="$host_platform"
 fi
