@@ -683,6 +683,61 @@ disable_autodetected
 
 apply_preset "$CONFIG_BASE"
 
+if truthy "$build_nonfree"; then
+  echo "INFO: Building with non-free ${host_platform,,} libraries" | tee -a "$LOG_FILE"
+  case "${host_platform,,}" in
+    linux)
+    apply_preset "$CONFIG_LINUX_NON_FREE"
+    ;;
+    windows)
+    apply_preset "$CONFIG_WINDOWS_NON_FREE"
+    ;;
+    android)
+    apply_preset "$CONFIG_ANDROID_NON_FREE"
+    ;;
+    ios|macos|iphonesimulator)
+    apply_preset "$CONFIG_APPLE_NON_FREE"
+    ;;
+    rpi)
+    apply_preset "$CONFIG_RPI_NON_FREE"
+    ;;
+    oh|openharmony|open-harmony|open_harmony|harmony)
+    apply_preset "$CONFIG_OH_NON_FREE"
+    ;;
+    *)
+    ;;
+  esac
+else
+  echo "INFO: Building with free ${host_platform,,} libraries" | tee -a "$LOG_FILE"
+  case "${host_platform,,}" in
+    linux)
+    apply_preset "$CONFIG_LINUX"
+    ;;
+    windows)
+    apply_preset "$CONFIG_WINDOWS"
+    ;;
+    android)
+    apply_preset "$CONFIG_ANDROID"
+    ;;
+    ios|macos|iphonesimulator)
+    apply_preset "$CONFIG_APPLE"
+    if [[ "$host_platform" == "macos" ]]; then
+      apply_preset "$CONFIG_MACOS"
+    elif [[ "$host_platform" == "ios" ]]; then
+      apply_preset "$CONFIG_IOS"
+    fi
+    ;;
+    rpi)
+    apply_preset "$CONFIG_RPI"
+    ;;
+    oh|openharmony|open-harmony|open_harmony|harmony)
+    apply_preset "$CONFIG_OH"
+    ;;
+    *)
+    ;;
+  esac
+fi
+
 if ! truthy "$enable_base"; then
   echo -e "\n  [CONFIG] Enabling selected libraries..." >>"$LOG_FILE"
   apply_preset "$CONFIG_GENERAL"
@@ -745,29 +800,6 @@ if ! truthy "$enable_base"; then
     if ! iswindows; then
       truthy "$enable_smb" || truthy "$enable_full" && apply_preset "$CONFIG_SMB_NON_FREE"
     fi
-
-    case "${host_platform,,}" in
-      linux)
-      truthy "$enable_full" && apply_preset "$CONFIG_LINUX_NON_FREE"
-      ;;
-      windows)
-      truthy "$enable_full" && apply_preset "$CONFIG_WINDOWS_NON_FREE"
-      ;;
-      android)
-      truthy "$enable_full" && apply_preset "$CONFIG_ANDROID_NON_FREE"
-      ;;
-      apple)
-      truthy "$enable_full" && apply_preset "$CONFIG_APPLE_NON_FREE"
-      ;;
-      rpi)
-      truthy "$enable_full" && apply_preset "$CONFIG_RPI_NON_FREE"
-      ;;
-      oh|openharmony|open-harmony|open_harmony|harmony)
-      truthy "$enable_full" && apply_preset "$CONFIG_OH_NON_FREE"
-      ;;
-      *)
-      ;;
-    esac
   fi
 
   truthy "$enable_audio" || truthy "$enable_full" && apply_preset "$CONFIG_AUDIO"
@@ -781,29 +813,6 @@ if ! truthy "$enable_base"; then
   if ! iswindows; then
     truthy "$enable_smb" || truthy "$enable_full" && apply_preset "$CONFIG_SMB"
   fi
-
-  case "${host_platform,,}" in
-    linux)
-    truthy "$enable_full" && apply_preset "$CONFIG_LINUX"
-    ;;
-    windows)
-    truthy "$enable_full" && apply_preset "$CONFIG_WINDOWS"
-    ;;
-    android)
-    truthy "$enable_full" && apply_preset "$CONFIG_ANDROID"
-    ;;
-    apple)
-    truthy "$enable_full" && apply_preset "$CONFIG_APPLE"
-    ;;
-    rpi)
-    truthy "$enable_full" && apply_preset "$CONFIG_RPI"
-    ;;
-    oh|openharmony|open-harmony|open_harmony|harmony)
-    truthy "$enable_full" && apply_preset "$CONFIG_OH"
-    ;;
-    *)
-    ;;
-  esac
 
   if ! truthy "$build_small"; then
     truthy "$enable_audio" || truthy "$enable_full" && apply_preset "$CONFIG_AUDIO_EXTRA"

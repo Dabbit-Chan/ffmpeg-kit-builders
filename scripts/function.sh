@@ -2691,7 +2691,11 @@ do_make() {
 	local extra_make_options="$1"
 	local touch_postfix=""
 	[[ -n $2 ]] && touch_postfix="_${2}_" || touch_postfix="_"
-	extra_make_options="-j$(get_concurrent_proc) $extra_make_options"
+  if [[ "$extra_make_options" =~ -j[0-9]+ ]]; then
+    extra_make_options="${extra_make_options}"
+  else
+    extra_make_options="-j$(get_concurrent_proc) $extra_make_options"
+  fi
 	local cur_dir2=$(pwd)
   local touch_prefix="${host_name}${touch_postfix}already_make"
 	local touch_name=$(get_small_touchfile_name "${touch_prefix}_make" "make $extra_make_options")
@@ -3778,6 +3782,8 @@ configure_ffmpeg() {
   elif isios || isiossimulator; then
     init_options+=" --target-os=darwin"
     init_options+=" --disable-programs"
+    init_options+=" --host-cc=$(xcrun --sdk macosx --find clang)"
+    init_options+=" --objcc=$(xcrun --sdk "$toolchain_sys" --find clang)"
     init_options+=" --cc=$(xcrun --sdk "$toolchain_sys" --find clang)"
     init_options+=" --cxx=$(xcrun --sdk "$toolchain_sys" --find clang++)"
     init_options+=" --ld=$(xcrun --sdk "$toolchain_sys" --find clang++)"
@@ -3854,7 +3860,7 @@ configure_ffmpeg() {
   # --------------------------- OpenHarmony features ----------------------------     
   #------------------------------------------------------------------------------    
   if [[ $host_platform == "harmony" ]]; then
-  truthy "$enable_ohcodec" && config_options+=" --enable-ohcodec"                     # enable OpenHarmony Codec support [no]
+  truthy "$enable_ohcodec" && config_options+=" --enable-ohcodec"                   # enable OpenHarmony Codec support [no]
   fi
   #------------------------------------------------------------------------------    
   # --------------------------- linux/unix features -----------------------------     
@@ -3862,24 +3868,24 @@ configure_ffmpeg() {
   if islinux; then
   truthy "$enable_alsa" && config_options+=" --enable-alsa"                         # enable ALSA support [autodetect]
   truthy "$enable_libdc1394" && { config_options+=" --enable-libdc1394" \
-  && add_extra_libs "-lusb-1.0"; }                                                       # enable IIDC-1394 grabbing using libdc1394 and libraw1394 [no]
+  && add_extra_libs "-lusb-1.0"; }                                                  # enable IIDC-1394 grabbing using libdc1394 and libraw1394 [no]
   truthy "$enable_libdrm" && config_options+=" --enable-libdrm"                     # enable DRM code (Linux) [autodetect]
   truthy "$enable_libiec61883" && { config_options+=" --enable-libiec61883" \
-  && add_extra_libs "-liec61883 -lavc1394 -lrom1394 -lraw1394"; }                        # enable iec61883 via libiec61883 [no]
+  && add_extra_libs "-liec61883 -lavc1394 -lrom1394 -lraw1394"; }                   # enable iec61883 via libiec61883 [no]
   truthy "$enable_libv4l2" && config_options+=" --enable-libv4l2"                   # enable libv4l2/v4l-utils [no]
   truthy "$enable_libxcb_shape" && config_options+=" --enable-libxcb-shape"         # enable X11 grabbing shape rendering [autodetect]
   truthy "$enable_libxcb_shm" && config_options+=" --enable-libxcb-shm"             # enable X11 grabbing shm communication [autodetect]
   truthy "$enable_libxcb_xfixes" && config_options+=" --enable-libxcb-xfixes"       # enable X11 grabbing mouse rendering [autodetect]
   truthy "$enable_libxcb" && config_options+=" --enable-libxcb"                     # enable X11 grabbing using XCB [autodetect]
-  truthy "$enable_rkmpp" && config_options+=" --enable-rkmpp --enable-libdrm"         # enable Rockchip Media Process Platform code [no]
+  truthy "$enable_rkmpp" && config_options+=" --enable-rkmpp --enable-libdrm"       # enable Rockchip Media Process Platform code [no]
   truthy "$enable_v4l2_m2m" && config_options+=" --enable-v4l2-m2m"                 # enable V4L2 mem2mem code [autodetect]
   truthy "$enable_vaapi" && config_options+=" --enable-vaapi"                       # enable Video Acceleration API (mainly Unix/Intel) code [autodetect]
   truthy "$enable_xlib" && config_options+=" --enable-xlib"                         # enable xlib [autodetect]
-                                                                                      # XXX --disable-sndio MinGW/Windows not supported 
+                                                                                    # XXX --disable-sndio MinGW/Windows not supported 
   truthy "$enable_sndio" && config_options+=" --enable-sndio"                       # enable sndio support [autodetect]
-                                                                                      # XXX --enable-libtorch ABI mismatch on windows
+                                                                                    # XXX --enable-libtorch ABI mismatch on windows
   truthy "$enable_ladspa" && config_options+=" --enable-ladspa"                     # enable LADSPA audio filtering [no]
-  truthy "$enable_libxvid" && config_options+=" --enable-libxvid"                     # enable Xvid encoding via xvidcore, native MPEG-4/Xvid encoder exists [no]
+  truthy "$enable_libxvid" && config_options+=" --enable-libxvid"                   # enable Xvid encoding via xvidcore, native MPEG-4/Xvid encoder exists [no]
   truthy "$enable_libpulse" && { config_options+=" --enable-libpulse" \
   && add_extra_libs "-lxcb -lXau -lX11 -liconv -lXdmcp"; }                            # enable Pulseaudio input via libpulse [no]
   truthy "$enable_libjack" && { config_options+=" --enable-libjack" \
@@ -3939,11 +3945,11 @@ configure_ffmpeg() {
   --extra-ldflags=\" -L/usr/lib64 -lsmbclient \""                                       # enable Samba protocol via libsmbclient [no]
   truthy "$enable_libsmbclient" && add_extra_libs "-lsmbclient"
   fi
-  truthy "$enable_bzlib" && config_options+=" --enable-bzlib"                       # enable bzlib [autodetect]
-  truthy "$enable_iconv" && config_options+=" --enable-iconv"                       # enable iconv [autodetect]
-  truthy "$enable_lzma" && config_options+=" --enable-lzma"                         # enable lzma [autodetect]
-  truthy "$enable_sdl2" && config_options+=" --enable-sdl2"                         # enable sdl2 [autodetect]
-  truthy "$enable_zlib" && config_options+=" --enable-zlib"                         # enable zlib [autodetect]
+  truthy "$enable_bzlib" && config_options+=" --enable-bzlib"                         # enable bzlib [autodetect]
+  truthy "$enable_iconv" && config_options+=" --enable-iconv"                         # enable iconv [autodetect]
+  truthy "$enable_lzma" && config_options+=" --enable-lzma"                           # enable lzma [autodetect]
+  truthy "$enable_sdl2" && config_options+=" --enable-sdl2"                           # enable sdl2 [autodetect]
+  truthy "$enable_zlib" && config_options+=" --enable-zlib"                           # enable zlib [autodetect]
   truthy "$enable_libvo_amrwbenc" && config_options+=" --enable-libvo-amrwbenc"       # enable AMR-WB encoding via libvo-amrwbenc [no]
   truthy "$enable_libopencore_amrnb" && config_options+=" --enable-libopencore-amrnb" # enable AMR-NB de/encoding via libopencore-amrnb [no]
   truthy "$enable_libopencore_amrwb" && config_options+=" --enable-libopencore-amrwb" # enable AMR-WB decoding via libopencore-amrwb [no]
@@ -4094,12 +4100,24 @@ configure_ffmpeg() {
   # ------------------------------ apple features -------------------------------     
   if ismacos || isios; then
     truthy "$enable_avfoundation" && config_options+=" --enable-avfoundation"           # enable Apple AVFoundation framework [autodetect]
+    truthy "$enable_avfoundation" && add_extra_libs "-framework AVFoundation"
     truthy "$enable_appkit" && config_options+=" --enable-appkit"                       # enable Apple AppKit framework [autodetect]
+    truthy "$enable_appkit" && add_extra_libs "-framework AppKit"
     truthy "$enable_audiotoolbox" && config_options+=" --enable-audiotoolbox"           # enable Apple AudioToolbox code [autodetect]
+    truthy "$enable_audiotoolbox" && add_extra_libs "-framework AudioToolbox"
     truthy "$enable_coreimage" && config_options+=" --enable-coreimage"                 # enable Apple CoreImage framework [autodetect]
+    truthy "$enable_coreimage" && add_extra_libs "-framework CoreImage"
     truthy "$enable_metal" && config_options+=" --enable-metal"                         # enable Apple Metal framework [autodetect]
+    truthy "$enable_metal" && add_extra_libs "-framework Metal"
     truthy "$enable_securetransport" && config_options+=" --enable-securetransport"     # enable Secure Transport, needed for TLS support on OSX if openssl and gnutls are not used [autodetect]
+    truthy "$enable_securetransport" && add_extra_libs "-framework Security"
     truthy "$enable_videotoolbox" && config_options+=" --enable-videotoolbox"           # enable VideoToolbox code [autodetect]
+    truthy "$enable_videotoolbox" && add_extra_libs "-framework VideoToolbox"
+    if isios; then
+      sed -i'.bak' 's/framework="$1"/framework="$1"\n\theader_file="${2:-$1}"/' configure
+      sed -i'.bak' 's/${framework}\.h/${header_file}\.h/g' configure
+      sed -i'.bak' 's/check_apple_framework CoreAudio/check_apple_framework CoreAudio CoreAudioTypes/g' configure
+    fi
   fi
 
 	if truthy "$build_gpl"; then
@@ -4217,8 +4235,10 @@ install_ffmpeg() {
   isandroid && export AS="$CC" && export LD="$CC"
   if ismacos || isios || isiossimulator; then 
     export AS="gas-preprocessor.pl -arch $meson_cpu_family -- $(xcrun --sdk "$toolchain_sys" --find clang)"
+    local bin2c_py=$(create_bin2c_py)
+    sed -i '.bak' 's|RUN_BIN2C = $(BIN2C)|RUN_BIN2C = python3 ffbuild/bin2c.py|' "$ffmpeg_source_dir/ffbuild/common.mak"
   fi
-	do_make "AS=\"$AS\" PREFIX=\"$ffmpeg_install_prefix\"" "${touch_postfix}" 1 || exit_message 1 "install_ffmpeg: unable to make ffmpeg. see $LOG_FILE for details."
+	do_make "-j1 AS=\"$AS\" PREFIX=\"$ffmpeg_install_prefix\"" "${touch_postfix}" 1 || exit_message 1 "install_ffmpeg: unable to make ffmpeg. see $LOG_FILE for details."
   do_make_install "PREFIX=\"$ffmpeg_install_prefix\"" "" "${touch_postfix}" 1 || exit_message 1 "install_ffmpeg: unable to make install ffmpeg. see $LOG_FILE for details."
 
 	echo -e "INFO: Moving all binaries" | tee -a "$LOG_FILE"

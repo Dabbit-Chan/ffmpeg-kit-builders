@@ -60,6 +60,7 @@ VALID_SMALL_FLAGS=("small" "")
 SMALL_FLAGS=("small" "")
 ANDROID_PLATFORM_ARCHS=()
 APPLE_PLATFORM_ARCHS=()
+BUILD_ARRAY=()
 build_aars=false
 declare -A PLATFORMS
 build_ffmpeg=false
@@ -206,19 +207,15 @@ parse_builds() {
     for valid_b in "${VALID_BUILDS[@]}"; do
       if [[ "$b" == "$valid_b" ]]; then
         valid=true
-        case "$b" in
-          ffmpeg)
+        if [[ "$b" == "ffmpeg" ]]; then
             build_ffmpeg=true
             build_commands+=" --ffmpeg"
-            ;;
-          kit)
+        elif [[ "$b" == "kit" ]]; then
             build_kit=true
             build_commands+=" --kit"
-            ;;
-          bundle)
+        elif [[ "$b" == "bundle" ]]; then
             build_bundle=true
-            ;;
-        esac
+        fi
         break
       fi
     done
@@ -236,14 +233,17 @@ for arg; do
      # input format: platform-arch ex: linux-x86_64 or android-aarch64. Comma separated (without spaces) list of platforms.
      # output format: platform ex: linux or android
      p_args="${arg#*=}"
-     parse_platforms "${p_args}";;
+     parse_platforms "${p_args}"
+     shift;;
     --license=*)
       parse_licenses "${arg#*=}"
       shift;;
     --deps)
-      deps="--deps";;
+      deps="--deps"
+      shift;;
     --reset)
-      reset_state=true;;
+      reset_state=true
+      shift;;
     --help)
       echo "Usage: $0 [--platform=<platform>|<platform-arch>,...] [--deps] [--reset] [--bundles=*] [--help]"
       echo ""
@@ -275,14 +275,17 @@ for arg; do
       exit 0;;
     --bundle=*)
       #comma separated list of bundles to build
-      parse_bundles "${arg#*=}";;
+      parse_bundles "${arg#*=}"
+      shift;;
     --build=*)
       #comma separated list of builds to build
-      parse_builds "${arg#*=}";;
+      parse_builds "${arg#*=}"
+      shift;;
     --clean=*)
       #comma separated list of components to clean
       clean_type="${arg#*=}"
-      no_clean=false;;
+      no_clean=false
+      shift;;
     --small)
       SMALL_FLAGS=("small")
       shift;;
@@ -355,7 +358,7 @@ execute_build() {
 
   echo "[BUILD] Starting: ${cmd_string}" | tee -a "${LOG_FILE}"
 
-  if eval "${cmd_string}" > >(redirect_output) 2>&1; then
+  if eval "${cmd_string}"; then
     mark_completed "${cmd_string}"
     echo "[DONE] Completed: ${cmd_string}" | tee -a "${LOG_FILE}"
     return 0
@@ -383,13 +386,12 @@ for platform in "${!PLATFORMS[@]}"; do
     for bundle in "${BUNDLE_ARRAY[@]}"; do
       for license in "${LICENSE_ARRAY[@]}"; do
         for small in "${SMALL_FLAGS[@]}"; do
+          commands="$build_commands"
           if [[ $small == "small" ]]; then
-            build_commands="--small"
-          else
-            build_commands=""
+            commands+=" --small"
           fi
           if [[ $license == "gpl" ]]; then
-            build_commands="${build_commands} --gpl"
+            commands+=" --gpl"
           fi
           if truthy "${no_clean}"; then
             clean=""
@@ -414,9 +416,9 @@ for platform in "${!PLATFORMS[@]}"; do
             no_bundle="--no-bundle"
           fi
           if [[ "${bundle}" == "debug" ]]; then
-            BUILD_STEPS+=("./runner.sh --host=${platform} --arch=${arch} -y ${deps} --base-bundle --build-debug $build_commands $no_bundle $clean $remote --skip -f --ff-disable-programs")
+            BUILD_STEPS+=("./runner.sh --host=${platform} --arch=${arch} -y ${deps} --base-bundle --build-debug $commands $no_bundle $clean $remote --skip -f --ff-disable-programs")
           else
-            BUILD_STEPS+=("./runner.sh --host=${platform} --arch=${arch} -y ${deps} --${bundle//_/-}-bundle $build_commands $no_bundle $clean $remote --skip -f --ff-disable-programs")
+            BUILD_STEPS+=("./runner.sh --host=${platform} --arch=${arch} -y ${deps} --${bundle//_/-}-bundle $commands $no_bundle $clean $remote --skip -f --ff-disable-programs")
           fi
         done
       done
