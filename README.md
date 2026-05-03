@@ -302,7 +302,7 @@ Shows which bundle first includes each library on Android, Linux, and Windows. `
 > - **Audio+**: libbs2b, libcdio, librubberband, libjack *(Linux)*
 > - **Video+**: libx264, libx265, libdavs2, libdvdnav, libdvdread, libxavs, libxavs2, libxvid *(Linux)*, frei0r, libvidstab
 > - **Video+HW+**: v4l2-m2m *(Linux)*
-> - **Video+ (Windows only)**: avisy
+> - **Video+ (Desktop only)**: avisynth
 > - **AI**: libopenvino, and libtensorflow only available on Desktop builds (MacOS, Linux, and Windows). libtorch only available on Linux and MacOs builds (Windows not supported due ABI mismatch).
 
 
@@ -344,7 +344,7 @@ Shows which bundle first includes each library on Android, Linux, and Windows. `
 | libklvanc, liblensfun, libqrencode, libvmaf, vapoursynth              | v+      | v+    | v+      | v+  | v+    |
 | frei0r, libvidstab<sup>[10](#gpl-info)</sup>                          | v+      | v+    | v+      | v+  | v+    |
 | libv4l2, libxcb, libxcb-shape, libxcb-shm, libxcb-xfixes, xlib        |         | v+    |         |     |       |
-| avisynth<sup>[10](#gpl-info)</sup>                                    |         |       | v+      |     | v+    |
+| avisynth<sup>[10](#gpl-info)</sup>                                    |         | v+    | v+      |     | v+    |
 | decklink<sup>[9](#nonfree-info)</sup> *(--enable-nonfree)*            | v+      | v+    | v+      | v+  | v+    |
 | **Hardware Acceleration**                                             |         |       |         |     |       |
 | amf, libglslang, libmfx, libplacebo, libshaderc, libvpl               | h+      | h+    | h+      | h+  | h+    |
@@ -361,7 +361,7 @@ Shows which bundle first includes each library on Android, Linux, and Windows. `
 | **Nonfree additions** *(Full + --enable-nonfree)*                     |         |       |         |     |       |
 | libfdk-aac<sup>[9](#nonfree-info)</sup>                               | f       | f     | f       | f   | f     |
 | **Platform-specific** *(All bundles)*                                 |         |       |         |     |       |
-| jni, mediacodec, appkit                                               | b+      |       |         |     |       |
+| jni, mediacodec                                                       | b+      |       |         |     |       |
 | appkit, avfoundation, audiotoolbox, coreimage, metal, securetransport |         |       |         | b+  | b+    |
 | videotoolbox, schannel, dxva2, d3d12va, d3d11va, mediafoundation      |         |       |         | b+  | b+    |
 | appkit                                                                |         |       |         |     | b+    |
