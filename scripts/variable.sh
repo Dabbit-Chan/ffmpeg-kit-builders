@@ -70,6 +70,9 @@ CONFIG_AUDIO_AI="\
 --enable-pocketsphinx \
 --enable-whisper"
 
+CONFIG_LINUX="\
+--enable-alsa"
+
 # Android general
 CONFIG_ANDROID=" \
 --enable-jni \
