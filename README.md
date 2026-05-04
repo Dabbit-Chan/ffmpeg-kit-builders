@@ -298,12 +298,21 @@ prebuilt/
 
 Shows which bundle first includes each library on Android, Linux, and Windows. `b+` = Base bundle and above. `a+` = Audio bundle and above. `v+` = Video bundle and above. `h+` = Video+Hardware bundle and above. `f` = Full bundle only. *(empty)* = not available on this platform.
 
-> **GPL licensing** — Libraries marked <sup>[10](#gpl-info)</sup> are only compiled in when `--enable-gpl` is passed. Enabling any GPL library makes the resulting FFmpeg binary GPL-licensed and **non-redistributable under a permissive license**. Without `--enable-gpl`, those libraries are silently skipped even if their bundle is selected. The most impactful GPL libraries by bundle are:
-> - **Audio+**: libbs2b, libcdio, librubberband, libjack *(Linux)*
-> - **Video+**: libx264, libx265, libdavs2, libdvdnav, libdvdread, libxavs, libxavs2, libxvid *(Linux)*, frei0r, libvidstab
-> - **Video+HW+**: v4l2-m2m *(Linux)*
-> - **Video+ (Desktop only)**: avisynth
-> - **AI**: libopenvino, and libtensorflow only available on Desktop builds (MacOS, Linux, and Windows). libtorch only available on Linux and MacOs builds (Windows not supported due ABI mismatch).
+### Filters
+
+> **Windows**: `gfxcapture` is disabled due to MinGW compatibility issues.
+
+### GPL licensing
+
+> - Libraries marked <sup>[10](#gpl-info)</sup> are only compiled in when `--enable-gpl` is passed. Enabling any GPL library makes the resulting FFmpeg binary GPL-licensed and **non-redistributable under a permissive license**. Without `--enable-gpl`, those libraries are silently skipped even if their bundle is selected. The most impactful GPL libraries by bundle are:
+>   - **Audio+**: libbs2b, libcdio, librubberband, libjack *(Linux)*
+>   - **Video+**: libx264, libx265, libdavs2, libdvdnav, libdvdread, libxavs, libxavs2, libxvid *(Linux)*, frei0r, libvidstab
+>   - **Video+HW+**: v4l2-m2m *(Linux)*
+>   - **Video+ (Desktop only)**: avisynth
+
+### AI
+
+> **`libopenvino`**, and **`libtensorflow`** only available on Desktop builds (`MacOS`, `Linux`, and `Windows`). **`libtorch`** only available on `Linux` and `MacOs` builds (`Windows` not supported due ABI mismatch).
 
 
 | Library                                                               | Android | Linux | Windows | iOS | macOS |
@@ -543,10 +552,10 @@ You can also get the full list of supported external libraries by running `--lis
 <sup>11</sup> These libraries can either be selected with GPU support or CPU only. Note that some of them do not support AMD ROCm framework. These libraries are not available on Mobile platforms due to platform limitations.<a id="compute-info"></a></br>
 <sup>12</sup> while these libraries are not compatible with GPL and have a more restrictive license, they are redistributable and will be bundled with non-gpl ffmpeg-kit bundle.<a id="redist-info"></a></br>
 <sup>13</sup> These libraries have been deprecated and will be auto-disabled and repalced by modern library if available.<a id="deprecated-info"></a></br>
-<sup>14</sup> These libraries conflict with other libraries with overlapping functionality. If both conflicting libraries are enabled, the preferred library, indicated by an * will be enabled and the other library will be disabled.<a id="conflict-info"></a></br>
+<sup>14</sup> These libraries conflict with other libraries with overlapping functionality. If both conflicting libraries are enabled, the preferred library, indicated by an * will be enabled and the other library will be disabled:<a id="conflict-info"></a>
 
-libmfx -> libvpl*</br>
-libglslang -> libshaderc*</br>
+>   - libmfx -> libvpl*</br>
+>   - libglslang -> libshaderc*</br>
 
 ## Troubleshooting
 

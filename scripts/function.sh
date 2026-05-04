@@ -3729,7 +3729,10 @@ configure_ffmpeg() {
       local libs=" $1"
       extra_libs+=" $libs"
   }
-  (iswindows || isandroid) && fix_pkgconfig_flags
+  if iswindows || isandroid; then
+    fix_pkgconfig_flags
+    init_options+=" --host-cc=$(command -v cc)"
+  fi
   # Common compiler flags for Windows    
   if ismacos || isios || isiossimulator; then
     get_gas_preprocessor
@@ -3744,6 +3747,7 @@ configure_ffmpeg() {
     init_options+=" --disable-w32threads"
     init_options+=" --enable-pthreads"
     init_options+=" --extra-cflags=\" -DPTW32_STATIC_LIB \""
+    init_options+=" --disable-filter=gfxcapture"
     init_options+=" --extra-ldflags=\" -L${deps_install_prefix}/lib \""
   elif isandroid; then
     # unset PKG_CONFIG_PATH
@@ -4238,7 +4242,7 @@ install_ffmpeg() {
     local bin2c_py=$(create_bin2c_py)
     sed -i '.bak' 's|RUN_BIN2C = $(BIN2C)|RUN_BIN2C = python3 ffbuild/bin2c.py|' "$ffmpeg_source_dir/ffbuild/common.mak"
   fi
-	do_make "-j1 AS=\"$AS\" PREFIX=\"$ffmpeg_install_prefix\"" "${touch_postfix}" 1 || exit_message 1 "install_ffmpeg: unable to make ffmpeg. see $LOG_FILE for details."
+	do_make "AS=\"$AS\" PREFIX=\"$ffmpeg_install_prefix\"" "${touch_postfix}" 1 || exit_message 1 "install_ffmpeg: unable to make ffmpeg. see $LOG_FILE for details."
   do_make_install "PREFIX=\"$ffmpeg_install_prefix\"" "" "${touch_postfix}" 1 || exit_message 1 "install_ffmpeg: unable to make install ffmpeg. see $LOG_FILE for details."
 
 	echo -e "INFO: Moving all binaries" | tee -a "$LOG_FILE"

@@ -407,9 +407,9 @@ for platform in "${!PLATFORMS[@]}"; do
             no_bundle="--no-bundle"
           else
             if [[ "${REMOTE_RELEASE}" == true ]]; then
-              remote="--release=local"
-            else
               remote="--release=remote"
+            else
+              remote="--release=local"
             fi
           fi
           if falsey "${build_bundle}"; then
@@ -498,7 +498,12 @@ fi
 
 if [[ ${#android_platforms[@]} -gt 0 ]] && truthy "$build_bundle"; then
   echo "Building AARs..." | tee -a "${LOG_FILE}"
-  sudo -E bash -c "${WORK_DIR}/scripts/android/build_aar.sh --platform=${android_platforms_str} --bundle=${bundles} --reset"
+  if [[ "${REMOTE_RELEASE}" == true ]]; then
+    remote="--remote"
+  else
+    remote="--local"
+  fi
+  sudo -E bash -c "${WORK_DIR}/scripts/android/build_aar.sh --bundle=${bundles} --reset ${remote}"
 fi
 
 # Build XCFrameworks for Apple platforms
@@ -526,7 +531,11 @@ if [[ -n "${apple_platforms_str}" ]] && truthy "$build_bundle"; then
   echo "Platforms: ${apple_platforms_str}" | tee -a "${LOG_FILE}"
   echo "Bundles: ${bundles}" | tee -a "${LOG_FILE}"
   echo "========================================" | tee -a "${LOG_FILE}"
-  
-  sudo -E bash -c "${WORK_DIR}/scripts/apple/build_xcframework.sh --platform=${apple_platforms_str} --bundle=${bundles} --reset"
+  if [[ "${REMOTE_RELEASE}" == true ]]; then
+    remote="--remote"
+  else
+    remote="--local"
+  fi
+  sudo -E bash -c "${WORK_DIR}/scripts/apple/build_xcframework.sh --platform=${apple_platforms_str} --bundle=${bundles} --reset ${remote}"
 fi
 
