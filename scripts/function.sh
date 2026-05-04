@@ -4342,7 +4342,7 @@ install_ffmpeg() {
     local bin2c_py=$(create_bin2c_py)
     sed -i '.bak' 's|RUN_BIN2C = $(BIN2C)|RUN_BIN2C = python3 ffbuild/bin2c.py|' "$ffmpeg_source_dir/ffbuild/common.mak"
   fi
-	do_make "-j1 AS=\"$AS\" PREFIX=\"$ffmpeg_install_prefix\"" "${touch_postfix}" 1 || exit_message 1 "install_ffmpeg: unable to make ffmpeg. see $LOG_FILE for details."
+	do_make "AS=\"$AS\" PREFIX=\"$ffmpeg_install_prefix\"" "${touch_postfix}" 1 || exit_message 1 "install_ffmpeg: unable to make ffmpeg. see $LOG_FILE for details."
   do_make_install "PREFIX=\"$ffmpeg_install_prefix\"" "" "${touch_postfix}" 1 || exit_message 1 "install_ffmpeg: unable to make install ffmpeg. see $LOG_FILE for details."
 
 	echo -e "INFO: Moving all binaries" | tee -a "$LOG_FILE"
