@@ -963,7 +963,7 @@ create_release_artifact() {
   xcframework_path="${xcframework_output_dir}/${output_name}.xcframework"
   release_asset="${xcframework_output_dir}/${output_name}.xcframework.zip"
   if [[ "${REMOTE_RELEASE}" == "true" ]]; then
-    build_step="create_github_release '${release_asset}' && rm -rf '${xcframework_path}'"
+    build_step="export host_platform='${platform}' && create_github_release '${release_asset}' && rm -rf '${xcframework_path}'"
     BUILD_STEPS+=("${build_step}")
   fi
 }
@@ -976,7 +976,6 @@ for platform in "${!PLATFORM_ARCHS[@]}"; do
         if [[ "${bundle}" == "debug" && ("${small}" == "small") ]]; then
           continue
         fi
-        export host_platform="$platform"
         output_name="$(get_output_name "${bundle}" "${license}" "${small}" "${platform}")"
         xcframework_path="${xcframework_output_dir}/${output_name}.xcframework"
         release_asset="${xcframework_output_dir}/${output_name}.xcframework.zip"
