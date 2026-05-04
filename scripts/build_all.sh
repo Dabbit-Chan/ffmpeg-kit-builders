@@ -407,9 +407,9 @@ for platform in "${!PLATFORMS[@]}"; do
             no_bundle="--no-bundle"
           else
             if [[ "${REMOTE_RELEASE}" == true ]]; then
-              remote="--release=local"
-            else
               remote="--release=remote"
+            else
+              remote="--release=local"
             fi
           fi
           if falsey "${build_bundle}"; then

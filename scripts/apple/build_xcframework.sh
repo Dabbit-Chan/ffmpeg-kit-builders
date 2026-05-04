@@ -55,6 +55,7 @@ VALID_PLATFORMS=("ios" "macos")
 VALID_PLATFORM_ARCHS=("ios-aarch64" "iphonesimulator-aarch64" "macos-aarch64" "macos-x86_64")
 VALID_LICENSES=("lgpl" "gpl")
 VALID_SMALL_FLAGS=("small" "")
+REMOTE_RELEASE=true
 SMALL_FLAGS=("small" "")
 build_type="Release"
 reset_state=false
