@@ -977,7 +977,6 @@ for platform in "${!PLATFORM_ARCHS[@]}"; do
         if [[ "${bundle}" == "debug" && ("${small}" == "small") ]]; then
           continue
         fi
-        export host_platform="$platform"
         output_name="$(get_output_name "${bundle}" "${license}" "${small}" "${platform}")"
         xcframework_path="${xcframework_output_dir}/${output_name}.xcframework"
         release_asset="${xcframework_output_dir}/${output_name}.xcframework.zip"
