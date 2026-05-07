@@ -89,7 +89,7 @@
 //const char program_name[] = "ffmpeg";
 //const int program_birth_year = 2000;
 
-extern void (*report_callback)(int, float, float, int64_t, double, double, double);
+extern void (*report_callback)(int, float, float, int64_t, double, double, double, double);
 
 FILE *vstats_file;
 
@@ -745,7 +745,7 @@ static void print_report(int is_last_report, int64_t timer_start, int64_t cur_ti
         int frame_number = 0;
         float fps = 0.0f;
         float quality = 0.0f;
-        
+        float ft = FFABS64U(pts) / AV_TIME_BASE; // 
         for (OutputStream *ost = ost_iter(NULL); ost; ost = ost_iter(ost)) {
             if (ost->type == AVMEDIA_TYPE_VIDEO) {
                 frame_number = atomic_load(&ost->packets_written);
@@ -759,6 +759,7 @@ static void print_report(int is_last_report, int64_t timer_start, int64_t cur_ti
                         (float)quality, 
                         total_size, 
                         t,
+                        ft,
                         bitrate, 
                         speed);
     }

@@ -22,8 +22,8 @@
 #endif
 
 #include <sys/stat.h>
-#include <sys/types.h>
 #include <sys/time.h>
+#include <sys/types.h>
 
 extern "C" {
 #include "libavutil/bprint.h"
@@ -61,110 +61,118 @@ extern "C" {
 #include <thread> // 2. Standard library headers at the end
 
 #if (defined(__ANDROID__) && __ANDROID_API__ < 28) || defined(__APPLE__)
-#include <pthread.h>
-#include <errno.h>
-#include <time.h>
 #include <cstdlib>
+#include <errno.h>
+#include <pthread.h>
+#include <time.h>
 
 extern "C" {
 
 struct timedjoin_args {
-    pthread_t       td;
-    void            **res;
-    pthread_mutex_t mtx;
-    pthread_cond_t  cond;
-    int             joined;
-    int             detached;
-    int             join_rc;
+  pthread_t td;
+  void **res;
+  pthread_mutex_t mtx;
+  pthread_cond_t cond;
+  int joined;
+  int detached;
+  int join_rc;
 };
 
 static void *waiter_routine(void *ap) {
-    auto *args = static_cast<struct timedjoin_args *>(ap);
-    void *result = nullptr;
-    
-    // Perform the actual join
-    int rc = pthread_join(args->td, &result);
+  auto *args = static_cast<struct timedjoin_args *>(ap);
+  void *result = nullptr;
 
-    pthread_mutex_lock(&args->mtx);
-    args->join_rc = rc;
-    if (rc == 0 && args->res) {
-        *args->res = result;
-    }
-    args->joined = 1;
-    pthread_cond_signal(&args->cond);
-    int detached = args->detached;
-    pthread_mutex_unlock(&args->mtx);
+  // Perform the actual join
+  int rc = pthread_join(args->td, &result);
 
-    if (detached) {
-        pthread_mutex_destroy(&args->mtx);
-        pthread_cond_destroy(&args->cond);
-        free(args);
-    }
-    return nullptr;
+  pthread_mutex_lock(&args->mtx);
+  args->join_rc = rc;
+  if (rc == 0 && args->res) {
+    *args->res = result;
+  }
+  args->joined = 1;
+  pthread_cond_signal(&args->cond);
+  int detached = args->detached;
+  pthread_mutex_unlock(&args->mtx);
+
+  if (detached) {
+    pthread_mutex_destroy(&args->mtx);
+    pthread_cond_destroy(&args->cond);
+    free(args);
+  }
+  return nullptr;
 }
 
 /**
  * Fallback implementation of pthread_timedjoin_np.
- * WARNING: If this returns ETIMEDOUT, the target thread 'td' is effectively 
- * no longer joinable by the caller because an internal waiter thread now 
+ * WARNING: If this returns ETIMEDOUT, the target thread 'td' is effectively
+ * no longer joinable by the caller because an internal waiter thread now
  * owns the join. Attempting to join 'td' again results in Undefined Behavior.
  */
 int pthread_timedjoin_np(pthread_t td, void **res, const struct timespec *ts) {
-    auto *args = static_cast<struct timedjoin_args *>(calloc(1, sizeof(struct timedjoin_args)));
-    if (!args) return ENOMEM;
+  auto *args = static_cast<struct timedjoin_args *>(
+      calloc(1, sizeof(struct timedjoin_args)));
+  if (!args)
+    return ENOMEM;
 
-    args->td = td;
-    args->res = res;
+  args->td = td;
+  args->res = res;
 
-    int ret;
-    if ((ret = pthread_mutex_init(&args->mtx, nullptr)) != 0) goto free_args;
-    if ((ret = pthread_cond_init(&args->cond, nullptr)) != 0) goto destroy_mtx;
+  int ret;
+  if ((ret = pthread_mutex_init(&args->mtx, nullptr)) != 0)
+    goto free_args;
+  if ((ret = pthread_cond_init(&args->cond, nullptr)) != 0)
+    goto destroy_mtx;
 
-    pthread_t waiter_thread;
-    if ((ret = pthread_create(&waiter_thread, nullptr, waiter_routine, args)) != 0) {
-        goto destroy_cond;
-    }
+  pthread_t waiter_thread;
+  if ((ret = pthread_create(&waiter_thread, nullptr, waiter_routine, args)) !=
+      0) {
+    goto destroy_cond;
+  }
 
-    pthread_mutex_lock(&args->mtx);
-    while (!args->joined) {
-        ret = pthread_cond_timedwait(&args->cond, &args->mtx, ts);
-        
-        if (ret == ETIMEDOUT) break;
-        if (ret == 0 || ret == EINTR) continue; // Spurious wakeup or signal
-        
-        // Unexpected system error (EINVAL, etc.) - break to avoid infinite loop
-        break;
-    }
+  pthread_mutex_lock(&args->mtx);
+  while (!args->joined) {
+    ret = pthread_cond_timedwait(&args->cond, &args->mtx, ts);
 
-    int actual_join_rc;  // FIX #2: Declare WITHOUT initialization to allow goto jumps
-    if (!args->joined) {
-        // TIMEOUT PATH: Hand off cleanup responsibility to the waiter thread
-        args->detached = 1;
-        pthread_mutex_unlock(&args->mtx);
-        pthread_detach(waiter_thread);
-        return ETIMEDOUT;
-    }
-    
-    // SUCCESS PATH: Copy the result BEFORE unlocking for strict memory visibility
-    actual_join_rc = args->join_rc;  // Assign here, after the goto targets
+    if (ret == ETIMEDOUT)
+      break;
+    if (ret == 0 || ret == EINTR)
+      continue; // Spurious wakeup or signal
+
+    // Unexpected system error (EINVAL, etc.) - break to avoid infinite loop
+    break;
+  }
+
+  int actual_join_rc; // FIX #2: Declare WITHOUT initialization to allow goto
+                      // jumps
+  if (!args->joined) {
+    // TIMEOUT PATH: Hand off cleanup responsibility to the waiter thread
+    args->detached = 1;
     pthread_mutex_unlock(&args->mtx);
-    
-    // Join the waiter (it's guaranteed to be finishing now)
-    pthread_join(waiter_thread, nullptr);
-    
-    pthread_cond_destroy(&args->cond);
-    pthread_mutex_destroy(&args->mtx);
-    free(args);
-    
-    return actual_join_rc;
+    pthread_detach(waiter_thread);
+    return ETIMEDOUT;
+  }
+
+  // SUCCESS PATH: Copy the result BEFORE unlocking for strict memory visibility
+  actual_join_rc = args->join_rc; // Assign here, after the goto targets
+  pthread_mutex_unlock(&args->mtx);
+
+  // Join the waiter (it's guaranteed to be finishing now)
+  pthread_join(waiter_thread, nullptr);
+
+  pthread_cond_destroy(&args->cond);
+  pthread_mutex_destroy(&args->mtx);
+  free(args);
+
+  return actual_join_rc;
 
 destroy_cond:
-    pthread_cond_destroy(&args->cond);
+  pthread_cond_destroy(&args->cond);
 destroy_mtx:
-    pthread_mutex_destroy(&args->mtx);
+  pthread_mutex_destroy(&args->mtx);
 free_args:
-    free(args);
-    return ret;
+  free(args);
+  return ret;
 }
 
 } // extern "C"
@@ -172,7 +180,7 @@ free_args:
 
 extern "C" {
 void set_report_callback(void (*callback)(int, float, float, int64_t, double,
-                                          double, double));
+                                          double, double, double));
 void cancel_operation(long id);
 }
 
@@ -184,7 +192,8 @@ static std::string getCurrentTimeStamp() {
   struct timeval tv;
   gettimeofday(&tv, NULL);
   char milliseconds[4];
-  snprintf(milliseconds, sizeof(milliseconds), "%03d", (int)(tv.tv_usec / 1000));
+  snprintf(milliseconds, sizeof(milliseconds), "%03d",
+           (int)(tv.tv_usec / 1000));
   return std::string(buffer) + "." + std::string(milliseconds);
 }
 
@@ -321,7 +330,8 @@ static bool fs_create_dir(const std::string &s) {
     mkdirSuccess = (mkdir(s.c_str(), S_IRWXU | S_IRWXG | S_IROTH) != 0);
 #endif
     if (mkdirSuccess) {
-      std::cout << "[" << getCurrentTimeStamp() << "] [ffmpeg-kit] [ERROR] Failed to create directory: " << s
+      std::cout << "[" << getCurrentTimeStamp()
+                << "] [ffmpeg-kit] [ERROR] Failed to create directory: " << s
                 << ". Operation failed with " << errno << "." << std::endl;
       return false;
     }
@@ -373,13 +383,13 @@ public:
 
   CallbackData(const long sessionId, const int videoFrameNumber,
                const float videoFps, const float videoQuality,
-               const int64_t size, const double time, const double bitrate,
-               const double speed)
+               const int64_t size, const double timeElapsed, const double time,
+               const double bitrate, const double speed)
       : _type{StatisticsType}, _sessionId{sessionId},
         _statisticsFrameNumber{videoFrameNumber}, _statisticsFps{videoFps},
         _statisticsQuality{videoQuality}, _statisticsSize{size},
-        _statisticsTime{time}, _statisticsBitrate{bitrate},
-        _statisticsSpeed{speed} {}
+        _statisticsTimeElapsed{timeElapsed}, _statisticsTime{time},
+        _statisticsBitrate{bitrate}, _statisticsSpeed{speed} {}
 
   ~CallbackData() {
     if (_type == LogType) {
@@ -403,6 +413,8 @@ public:
 
   int64_t getStatisticsSize() { return _statisticsSize; }
 
+  double getStatisticsTimeElapsed() { return _statisticsTimeElapsed; }
+
   double getStatisticsTime() { return _statisticsTime; }
 
   double getStatisticsBitrate() { return _statisticsBitrate; }
@@ -416,13 +428,14 @@ private:
   int _logLevel;     // log level
   AVBPrint _logData; // log data
 
-  int _statisticsFrameNumber; // statistics frame number
-  float _statisticsFps;       // statistics fps
-  float _statisticsQuality;   // statistics quality
-  int64_t _statisticsSize;    // statistics size
-  double _statisticsTime;     // statistics time
-  double _statisticsBitrate;  // statistics bitrate
-  double _statisticsSpeed;    // statistics speed
+  int _statisticsFrameNumber;    // statistics frame number
+  float _statisticsFps;          // statistics fps
+  float _statisticsQuality;      // statistics quality
+  int64_t _statisticsSize;       // statistics size
+  double _statisticsTimeElapsed; // statistics time elapsed
+  double _statisticsTime;        // statistics time
+  double _statisticsBitrate;     // statistics bitrate
+  double _statisticsSpeed;       // statistics speed
 };
 
 /**
@@ -524,9 +537,9 @@ static void logCallbackDataAdd(int level, AVBPrint *data) {
       (currentSession != nullptr) ? currentSession->getSessionId() : 0;
 
   if (currentSession != nullptr) {
-    currentSession->debugLog("logCallbackDataAdd sessionId: %ld level: %d msg: %s",
-                             sessionId, level,
-                             (data->str ? data->str : "NULL"));
+    currentSession->debugLog(
+        "logCallbackDataAdd sessionId: %ld level: %d msg: %s", sessionId, level,
+        (data->str ? data->str : "NULL"));
   }
 
   std::unique_lock<KitMutex> lock(getCallbackDataMutex(), std::defer_lock);
@@ -546,7 +559,8 @@ static void logCallbackDataAdd(int level, AVBPrint *data) {
  * Adds statistics data to the end of callback data list.
  */
 static void statisticsCallbackDataAdd(int frameNumber, float fps, float quality,
-                                      int64_t size, double time, double bitrate,
+                                      int64_t size, double timeElapsed,
+                                      double time, double bitrate,
                                       double speed) {
   std::shared_ptr<ffmpegkit::Session> currentSession = tlsSession;
   if (currentSession == nullptr) {
@@ -558,8 +572,9 @@ static void statisticsCallbackDataAdd(int frameNumber, float fps, float quality,
       (currentSession != nullptr) ? currentSession->getSessionId() : 0;
 
   std::unique_lock<KitMutex> lock(getCallbackDataMutex(), std::defer_lock);
-  CallbackData *callbackData = new CallbackData(
-      sessionId, frameNumber, fps, quality, size, time, bitrate, speed);
+  CallbackData *callbackData =
+      new CallbackData(sessionId, frameNumber, fps, quality, size, timeElapsed,
+                       time, bitrate, speed);
 
   std::atomic_fetch_add(
       &sessionInTransitMessageCountMap[sessionId % SESSION_MAP_SIZE], 1);
@@ -635,11 +650,11 @@ int cancelRequested(long sessionId) {
 }
 
 FFMPEG_THREAD_LOCAL void (*report_callback)(int, float, float, int64_t, double,
-                                            double, double) = NULL;
+                                            double, double, double) = NULL;
 extern void sigterm_handler(int sig);
 
 void set_report_callback(void (*callback)(int, float, float, int64_t, double,
-                                          double, double)) {
+                                          double, double, double)) {
   report_callback = callback;
 }
 
@@ -737,10 +752,10 @@ void ffmpegkit_log_callback_function(void *ptr, int level, const char *format,
  */
 void ffmpegkit_statistics_callback_function(int frameNumber, float fps,
                                             float quality, int64_t size,
-                                            double time, double bitrate,
-                                            double speed) {
-  statisticsCallbackDataAdd(frameNumber, fps, quality, size, time, bitrate,
-                            speed);
+                                            double timeElapsed, double time,
+                                            double bitrate, double speed) {
+  statisticsCallbackDataAdd(frameNumber, fps, quality, size, timeElapsed, time,
+                            bitrate, speed);
 }
 
 static void process_log(long sessionId, int levelValueInt,
@@ -775,7 +790,9 @@ static void process_log(long sessionId, int levelValueInt,
         // NOTIFY SESSION CALLBACK DEFINED
         sessionLogCallback(log);
       } catch (const std::exception &exception) {
-        std::cout << "[" << getCurrentTimeStamp() << "] [ffmpeg-kit] [ERROR] Exception thrown inside session log callback. "
+        std::cout << "[" << getCurrentTimeStamp()
+                  << "] [ffmpeg-kit] [ERROR] Exception thrown inside session "
+                     "log callback. "
                   << exception.what() << std::endl;
       }
     }
@@ -790,7 +807,9 @@ static void process_log(long sessionId, int levelValueInt,
         // NOTIFY GLOBAL CALLBACK DEFINED
         logCallback(log);
       } catch (const std::exception &exception) {
-        std::cout << "[" << getCurrentTimeStamp() << "] [ffmpeg-kit] [ERROR] Exception thrown inside global log callback. "
+        std::cout << "[" << getCurrentTimeStamp()
+                  << "] [ffmpeg-kit] [ERROR] Exception thrown inside global "
+                     "log callback. "
                   << exception.what() << std::endl;
       }
     }
@@ -828,19 +847,20 @@ static void process_log(long sessionId, int levelValueInt,
     break;
   default:
     // WRITE TO STDOUT
-    std::cout << "[" << getCurrentTimeStamp() << "] [ffmpeg-kit] " << ffmpegkit::FFmpegKitConfig::logLevelToString(levelValue)
+    std::cout << "[" << getCurrentTimeStamp() << "] [ffmpeg-kit] "
+              << ffmpegkit::FFmpegKitConfig::logLevelToString(levelValue)
               << ": " << logMessage->str;
     break;
   }
 }
 
 void process_statistics(long sessionId, int videoFrameNumber, float videoFps,
-                        float videoQuality, long size, double time,
-                        double bitrate, double speed) {
+                        float videoQuality, long size, double timeElapsed,
+                        double time, double bitrate, double speed) {
   std::shared_ptr<ffmpegkit::Statistics> statistics =
-      std::make_shared<ffmpegkit::Statistics>(sessionId, videoFrameNumber,
-                                              videoFps, videoQuality, size,
-                                              time, bitrate, speed);
+      std::make_shared<ffmpegkit::Statistics>(
+          sessionId, videoFrameNumber, videoFps, videoQuality, size,
+          timeElapsed, time, bitrate, speed);
 
   auto session = ffmpegkit::FFmpegKitConfig::getSession(sessionId);
   if (session != nullptr && session->isFFmpeg()) {
@@ -854,7 +874,9 @@ void process_statistics(long sessionId, int videoFrameNumber, float videoFps,
       try {
         sessionStatisticsCallback(statistics);
       } catch (const std::exception &exception) {
-        std::cout << "[" << getCurrentTimeStamp() << "] [ffmpeg-kit] [ERROR] Exception thrown inside session statistics callback. "
+        std::cout << "[" << getCurrentTimeStamp()
+                  << "] [ffmpeg-kit] [ERROR] Exception thrown inside session "
+                     "statistics callback. "
                   << exception.what() << std::endl;
       }
     }
@@ -866,7 +888,9 @@ void process_statistics(long sessionId, int videoFrameNumber, float videoFps,
       try {
         statisticsCallback(statistics);
       } catch (const std::exception &exception) {
-        std::cout << "[" << getCurrentTimeStamp() << "] [ffmpeg-kit] [ERROR] Exception thrown inside global statistics callback. "
+        std::cout << "[" << getCurrentTimeStamp()
+                  << "] [ffmpeg-kit] [ERROR] Exception thrown inside global "
+                     "statistics callback. "
                   << exception.what() << std::endl;
       }
     }
@@ -880,7 +904,9 @@ void *callbackThreadFunction(void *pointer) {
   int activeLogLevel = av_log_get_level();
   if ((activeLogLevel != ffmpegkit::LevelAVLogQuiet) &&
       (ffmpegkit::LevelAVLogDebug <= activeLogLevel)) {
-    std::cout << "[" << getCurrentTimeStamp() << "] [ffmpeg-kit] [INFO] Async callback block started." << std::endl;
+    std::cout << "[" << getCurrentTimeStamp()
+              << "] [ffmpeg-kit] [INFO] Async callback block started."
+              << std::endl;
   }
 
   while (redirectionEnabled.load(std::memory_order_acquire)) {
@@ -899,6 +925,7 @@ void *callbackThreadFunction(void *pointer) {
                              callbackData->getStatisticsFps(),
                              callbackData->getStatisticsQuality(),
                              callbackData->getStatisticsSize(),
+                             callbackData->getStatisticsTimeElapsed(),
                              callbackData->getStatisticsTime(),
                              callbackData->getStatisticsBitrate(),
                              callbackData->getStatisticsSpeed());
@@ -919,8 +946,10 @@ void *callbackThreadFunction(void *pointer) {
       activeLogLevel = av_log_get_level();
       if ((activeLogLevel != ffmpegkit::LevelAVLogQuiet) &&
           (ffmpegkit::LevelAVLogWarning <= activeLogLevel)) {
-        std::cout << "[" << getCurrentTimeStamp() << "] [ffmpeg-kit] [INFO] Async callback block received error: " << exception.what()
-                  << std::endl;
+        std::cout
+            << "[" << getCurrentTimeStamp()
+            << "] [ffmpeg-kit] [INFO] Async callback block received error: "
+            << exception.what() << std::endl;
       }
     }
   }
@@ -928,7 +957,9 @@ void *callbackThreadFunction(void *pointer) {
   activeLogLevel = av_log_get_level();
   if ((activeLogLevel != ffmpegkit::LevelAVLogQuiet) &&
       (ffmpegkit::LevelAVLogDebug <= activeLogLevel)) {
-    std::cout << "[" << getCurrentTimeStamp() << "] [ffmpeg-kit] [INFO] Async callback block stopped." << std::endl;
+    std::cout << "[" << getCurrentTimeStamp()
+              << "] [ffmpeg-kit] [INFO] Async callback block stopped."
+              << std::endl;
   }
 
   return NULL;
@@ -1093,7 +1124,8 @@ int executeFFplay(const long sessionId,
   for (const auto &arg : *arguments) {
     if (arg == "-h" || arg == "--help" || arg == "-help" || arg == "?") {
       helpRequested = true;
-      tlsSession->debugLog("FFplayExecute: sessionId: %ld ffplay help requested", sessionId);
+      tlsSession->debugLog(
+          "FFplayExecute: sessionId: %ld ffplay help requested", sessionId);
       break;
     }
   }
@@ -1112,10 +1144,13 @@ int executeFFplay(const long sessionId,
       removeSession(sessionId);
       tlsSession = nullptr;
       globalSessionId = 0;
-      tlsSession->debugLog("FFplayExecute: sessionId: %ld ffplay help displayed, returning success", sessionId);
+      tlsSession->debugLog("FFplayExecute: sessionId: %ld ffplay help "
+                           "displayed, returning success",
+                           sessionId);
       return 0; // Success - help was displayed
     } else if (tlsSession != nullptr) {
-      tlsSession->debugLog("FFplayExecute: sessionId: %ld ffplay_init FAILED", sessionId);
+      tlsSession->debugLog("FFplayExecute: sessionId: %ld ffplay_init FAILED",
+                           sessionId);
     }
     removeSession(sessionId);
     tlsSession = nullptr;
@@ -1124,7 +1159,8 @@ int executeFFplay(const long sessionId,
   }
 
   if (tlsSession != nullptr) {
-    tlsSession->debugLog("FFplayExecute: sessionId: %ld ffplay_init SUCCESS", sessionId);
+    tlsSession->debugLog("FFplayExecute: sessionId: %ld ffplay_init SUCCESS",
+                         sessionId);
   }
 
   // 4. Bind ffplay context to session
@@ -1137,7 +1173,8 @@ int executeFFplay(const long sessionId,
   int returnCode = ffplay_start(ctx);
   if (returnCode == 0) {
     if (tlsSession != nullptr) {
-      tlsSession->debugLog("FFplayExecute: sessionId: %ld ffplay_start SUCCESS", sessionId);
+      tlsSession->debugLog("FFplayExecute: sessionId: %ld ffplay_start SUCCESS",
+                           sessionId);
     }
     int stepCount = 0;
     while (ffplay_step(ctx) == 0) {
@@ -1150,7 +1187,9 @@ int executeFFplay(const long sessionId,
     }
   } else {
     if (tlsSession != nullptr) {
-      tlsSession->debugLog("FFplayExecute: sessionId: %ld ffplay_start FAILED (rc=%d), skipping step loop", sessionId, returnCode);
+      tlsSession->debugLog("FFplayExecute: sessionId: %ld ffplay_start FAILED "
+                           "(rc=%d), skipping step loop",
+                           sessionId, returnCode);
     }
   }
 
@@ -1187,7 +1226,8 @@ void ffmpegkit::FFmpegKitConfig::detachAsyncFFplayThread() {
 
 void *ffmpegKitInitialize() {
   std::call_once(ffmpegKitInitializerFlag, []() {
-    std::cout << "[" << getCurrentTimeStamp() << "] [ffmpeg-kit] [INFO] Loading ffmpeg-kit." << std::endl;
+    std::cout << "[" << getCurrentTimeStamp()
+              << "] [ffmpeg-kit] [INFO] Loading ffmpeg-kit." << std::endl;
 
     // Eagerly initialize all Meyers Singletons to establish a strict
     // happens-before edge prior to spawning any background threads.
@@ -1221,15 +1261,19 @@ void *ffmpegKitInitialize() {
 
     ffmpegkit::FFmpegKitConfig::enableRedirection();
 
-    std::cout << "[" << getCurrentTimeStamp() << "] [ffmpeg-kit] [INFO] Loaded ffmpeg-kit-" << ffmpegkit::Packages::getPackageName()
-              << "-" << ffmpegkit::ArchDetect::getArch() << "-"
+    std::cout << "[" << getCurrentTimeStamp()
+              << "] [ffmpeg-kit] [INFO] Loaded ffmpeg-kit-"
+              << ffmpegkit::Packages::getPackageName() << "-"
+              << ffmpegkit::ArchDetect::getArch() << "-"
               << (ffmpegkit::Packages::getIsGpl()       ? "gpl"
                   : ffmpegkit::Packages::getIsNonFree() ? "nonfree"
                                                         : "lgpl")
               << "-" << ffmpegkit::FFmpegKitConfig::getVersion() << "-"
               << ffmpegkit::FFmpegKitConfig::getBuildDate() << "." << std::endl;
     static const char kStamp[] = __DATE__ " " __TIME__;
-    std::cout << "[" << getCurrentTimeStamp() << "] [ffmpeg-kit] [INFO] Build timestamp: " << kStamp << std::endl;
+    std::cout << "[" << getCurrentTimeStamp()
+              << "] [ffmpeg-kit] [INFO] Build timestamp: " << kStamp
+              << std::endl;
   });
 
   std::lock_guard<KitMutex> lock(getCallbackDataMutex());
@@ -1251,7 +1295,10 @@ void ffmpegkit::FFmpegKitConfig::enableRedirection() {
 
   int rc = pthread_create(&callbackThread, NULL, callbackThreadFunction, NULL);
   if (rc != 0) {
-    std::cout << "[" << getCurrentTimeStamp() << "] [ffmpeg-kit] [ERROR] Failed to create async callback block: %d" << rc << std::endl;
+    std::cout
+        << "[" << getCurrentTimeStamp()
+        << "] [ffmpeg-kit] [ERROR] Failed to create async callback block: %d"
+        << rc << std::endl;
     lock.unlock();
     return;
   }
@@ -1286,15 +1333,21 @@ void ffmpegkit::FFmpegKitConfig::disableRedirection() {
     struct timespec ts;
     clock_gettime(CLOCK_REALTIME, &ts);
     std::string timestamp = getCurrentTimeStamp();
-    std::cout << "[" << timestamp << "] [ffmpeg-kit] [INFO] Attempting timed join for callback thread" << std::endl;
+    std::cout
+        << "[" << timestamp
+        << "] [ffmpeg-kit] [INFO] Attempting timed join for callback thread"
+        << std::endl;
     ts.tv_sec += 5;
     int rc = pthread_timedjoin_np(callbackThread, nullptr, &ts);
     if (rc != 0) {
       // If tryjoin failed (thread still running) or isn't supported,
       // we must detach to prevent leaks and avoid blocking.
       timestamp = getCurrentTimeStamp();
-      std::cout << "[" << timestamp << "] [ffmpeg-kit] [WARNING] Failed to join callback thread (timeout or error: "
-                << rc << ") at " << timestamp << ", detaching instead." << std::endl;
+      std::cout << "[" << timestamp
+                << "] [ffmpeg-kit] [WARNING] Failed to join callback thread "
+                   "(timeout or error: "
+                << rc << ") at " << timestamp << ", detaching instead."
+                << std::endl;
       pthread_detach(callbackThread);
     }
 #endif
@@ -1341,13 +1394,18 @@ void ffmpegkit::FFmpegKitConfig::setFontDirectoryList(
       !fs_create_dir(tempConfigurationDirectory)) {
     return;
   }
-  std::cout << "[" << getCurrentTimeStamp() << "] [ffmpeg-kit] [INFO] Created temporary font conf directory: TRUE." << std::endl;
+  std::cout
+      << "[" << getCurrentTimeStamp()
+      << "] [ffmpeg-kit] [INFO] Created temporary font conf directory: TRUE."
+      << std::endl;
 
   if (fs_exists(fontConfigurationFile, true, false)) {
     bool fontConfigurationDeleted = std::remove(fontConfigurationFile.c_str());
-    std::cout << "[" << getCurrentTimeStamp() << "] [ffmpeg-kit] [INFO] Deleted old temporary font configuration: "
-              << (fontConfigurationDeleted == 0 ? "TRUE" : "FALSE") << "."
-              << std::endl;
+    std::cout
+        << "[" << getCurrentTimeStamp()
+        << "] [ffmpeg-kit] [INFO] Deleted old temporary font configuration: "
+        << (fontConfigurationDeleted == 0 ? "TRUE" : "FALSE") << "."
+        << std::endl;
   }
 
   /* PROCESS MAPPINGS FIRST */
@@ -1393,20 +1451,25 @@ void ffmpegkit::FFmpegKitConfig::setFontDirectoryList(
     fontConfigurationStream << fontConfiguration;
   }
   if (fontConfigurationStream.bad()) {
-    std::cout << "[" << getCurrentTimeStamp() << "] [ffmpeg-kit] [ERROR] Failed to set font directory. Error received while saving "
+    std::cout << "[" << getCurrentTimeStamp()
+              << "] [ffmpeg-kit] [ERROR] Failed to set font directory. Error "
+                 "received while saving "
                  "font configuration: "
               << fontConfigurationStream.rdbuf() << "." << std::endl;
   }
   fontConfigurationStream.close();
 
-  std::cout << "[" << getCurrentTimeStamp() << "] [ffmpeg-kit] [INFO] Saved new temporary font configuration with "
-            << validFontNameMappingCount << " font name mappings." << std::endl;
+  std::cout
+      << "[" << getCurrentTimeStamp()
+      << "] [ffmpeg-kit] [INFO] Saved new temporary font configuration with "
+      << validFontNameMappingCount << " font name mappings." << std::endl;
 
   ffmpegkit::FFmpegKitConfig::setFontconfigConfigurationPath(
       tempConfigurationDirectory.c_str());
 
   for (const auto &fontDirectoryPath : fontDirectoryList) {
-    std::cout << "[" << getCurrentTimeStamp() << "] [ffmpeg-kit] [INFO] Font directory " << fontDirectoryPath
+    std::cout << "[" << getCurrentTimeStamp()
+              << "] [ffmpeg-kit] [INFO] Font directory " << fontDirectoryPath
               << " registered successfully." << std::endl;
   }
 }
@@ -1463,8 +1526,10 @@ ffmpegkit::FFmpegKitConfig::registerNewFFmpegPipe() {
   if (rc == 0) {
     return newFFmpegPipePath;
   } else {
-    std::cout << "[" << getCurrentTimeStamp() << "] [ffmpeg-kit] [ERROR] Failed to register new FFmpeg pipe " << newFFmpegPipePath
-              << ". Operation failed with rc=" << rc << "." << std::endl;
+    std::cout << "[" << getCurrentTimeStamp()
+              << "] [ffmpeg-kit] [ERROR] Failed to register new FFmpeg pipe "
+              << newFFmpegPipePath << ". Operation failed with rc=" << rc << "."
+              << std::endl;
     return nullptr;
   }
 }
@@ -1532,7 +1597,8 @@ void ffmpegkit::FFmpegKitConfig::ffmpegExecute(
 
     auto returnCode = std::make_shared<ffmpegkit::ReturnCode>(returnCodeValue);
     ffmpegSession->complete(returnCode);
-    ffmpegSession->debugLog("FFmpegExecute: sessionId: %ld complete", ffmpegSession->getSessionId());
+    ffmpegSession->debugLog("FFmpegExecute: sessionId: %ld complete",
+                            ffmpegSession->getSessionId());
     tlsSession = nullptr;
   } catch (const std::exception &exception) {
     if (ffmpegSession != nullptr) {
@@ -1540,7 +1606,8 @@ void ffmpegkit::FFmpegKitConfig::ffmpegExecute(
                               ffmpegSession->getSessionId(), exception.what());
     }
     ffmpegSession->fail(exception.what());
-    std::cout << "[" << getCurrentTimeStamp() << "] [ffmpeg-kit] [ERROR] FFmpeg execute failed: "
+    std::cout << "[" << getCurrentTimeStamp()
+              << "] [ffmpeg-kit] [ERROR] FFmpeg execute failed: "
               << ffmpegkit::FFmpegKitConfig::argumentsToString(
                      ffmpegSession->getArguments())
               << "." << exception.what() << std::endl;
@@ -1563,7 +1630,8 @@ void ffmpegkit::FFmpegKitConfig::ffprobeExecute(
 
     auto returnCode = std::make_shared<ffmpegkit::ReturnCode>(returnCodeValue);
     ffprobeSession->complete(returnCode);
-    ffprobeSession->debugLog("FFprobeExecute: sessionId: %ld complete", ffprobeSession->getSessionId());
+    ffprobeSession->debugLog("FFprobeExecute: sessionId: %ld complete",
+                             ffprobeSession->getSessionId());
     tlsSession = nullptr;
   } catch (const std::exception &exception) {
     if (ffprobeSession != nullptr) {
@@ -1572,7 +1640,8 @@ void ffmpegkit::FFmpegKitConfig::ffprobeExecute(
                                exception.what());
     }
     ffprobeSession->fail(exception.what());
-    std::cout << "[" << getCurrentTimeStamp() << "] [ffmpeg-kit] [ERROR] FFprobe execute failed: "
+    std::cout << "[" << getCurrentTimeStamp()
+              << "] [ffmpeg-kit] [ERROR] FFprobe execute failed: "
               << ffmpegkit::FFmpegKitConfig::argumentsToString(
                      ffprobeSession->getArguments())
               << "." << exception.what() << std::endl;
@@ -1599,7 +1668,9 @@ void ffmpegkit::FFmpegKitConfig::ffplayExecute(
     auto prevSession = getSession(previousSessionId);
     if (prevSession) {
       if (!prevSession->waitFor(waitTimeout)) {
-        std::cout << "[" << getCurrentTimeStamp() << "] [ffmpeg-kit] [ERROR] FFplay execute failed: Timed out waiting for previous "
+        std::cout << "[" << getCurrentTimeStamp()
+                  << "] [ffmpeg-kit] [ERROR] FFplay execute failed: Timed out "
+                     "waiting for previous "
                      "FFplay session "
                   << previousSessionId << " to complete." << std::endl;
         activeFFplaySessionId.compare_exchange_strong(sessionId, 0);
@@ -1632,7 +1703,9 @@ void ffmpegkit::FFmpegKitConfig::ffplayExecute(
     }
     activeFFplaySessionId.compare_exchange_strong(sessionId, 0);
     ffplaySession->fail(exception.what());
-    std::cout << "[" << getCurrentTimeStamp() << "] [ffmpeg-kit] [ERROR] FFplay execute failed: " << exception.what() << std::endl;
+    std::cout << "[" << getCurrentTimeStamp()
+              << "] [ffmpeg-kit] [ERROR] FFplay execute failed: "
+              << exception.what() << std::endl;
     tlsSession = nullptr;
   }
 }
@@ -1686,7 +1759,8 @@ void ffmpegkit::FFmpegKitConfig::getMediaInformationExecute(
         "GetMediaInformationExecute: sessionId: %ld exception: %s",
         mediaInformationSession->getSessionId(), exception.what());
     mediaInformationSession->fail(exception.what());
-    std::cout << "[" << getCurrentTimeStamp() << "] [ffmpeg-kit] [ERROR] Get media information execute failed: "
+    std::cout << "[" << getCurrentTimeStamp()
+              << "] [ffmpeg-kit] [ERROR] Get media information execute failed: "
               << ffmpegkit::FFmpegKitConfig::argumentsToString(
                      mediaInformationSession->getArguments())
               << "." << exception.what() << std::endl;
@@ -1730,8 +1804,10 @@ void ffmpegkit::FFmpegKitConfig::asyncFFmpegExecute(
           try {
             completeCallback(session);
           } catch (const std::exception &e) {
-            std::cout << "[" << getCurrentTimeStamp() << "] [ffmpeg-kit] [ERROR] Exception in session complete callback: " << e.what()
-                      << std::endl;
+            std::cout << "[" << getCurrentTimeStamp()
+                      << "] [ffmpeg-kit] [ERROR] Exception in session complete "
+                         "callback: "
+                      << e.what() << std::endl;
           }
         }
         {
@@ -1742,8 +1818,10 @@ void ffmpegkit::FFmpegKitConfig::asyncFFmpegExecute(
             try {
               globalCallback(session);
             } catch (const std::exception &e) {
-              std::cout << "[" << getCurrentTimeStamp() << "] [ffmpeg-kit] [ERROR] Exception in global complete callback: " << e.what()
-                        << std::endl;
+              std::cout << "[" << getCurrentTimeStamp()
+                        << "] [ffmpeg-kit] [ERROR] Exception in global "
+                           "complete callback: "
+                        << e.what() << std::endl;
             }
           }
         }
@@ -1772,8 +1850,10 @@ void ffmpegkit::FFmpegKitConfig::asyncFFprobeExecute(
           try {
             completeCallback(session);
           } catch (const std::exception &e) {
-            std::cout << "[" << getCurrentTimeStamp() << "] [ffmpeg-kit] [ERROR] Exception in session complete callback: " << e.what()
-                      << std::endl;
+            std::cout << "[" << getCurrentTimeStamp()
+                      << "] [ffmpeg-kit] [ERROR] Exception in session complete "
+                         "callback: "
+                      << e.what() << std::endl;
           }
         }
         {
@@ -1784,8 +1864,10 @@ void ffmpegkit::FFmpegKitConfig::asyncFFprobeExecute(
             try {
               globalCallback(session);
             } catch (const std::exception &e) {
-              std::cout << "[" << getCurrentTimeStamp() << "] [ffmpeg-kit] [ERROR] Exception in global complete callback: " << e.what()
-                        << std::endl;
+              std::cout << "[" << getCurrentTimeStamp()
+                        << "] [ffmpeg-kit] [ERROR] Exception in global "
+                           "complete callback: "
+                        << e.what() << std::endl;
             }
           }
         }
@@ -1824,8 +1906,10 @@ void ffmpegkit::FFmpegKitConfig::asyncFFplayExecute(
           try {
             completeCallback(session);
           } catch (const std::exception &e) {
-            std::cout << "[" << getCurrentTimeStamp() << "] [ffmpeg-kit] [ERROR] Exception in session complete callback: " << e.what()
-                      << std::endl;
+            std::cout << "[" << getCurrentTimeStamp()
+                      << "] [ffmpeg-kit] [ERROR] Exception in session complete "
+                         "callback: "
+                      << e.what() << std::endl;
           }
         }
         {
@@ -1836,8 +1920,10 @@ void ffmpegkit::FFmpegKitConfig::asyncFFplayExecute(
             try {
               globalCallback(session);
             } catch (const std::exception &e) {
-              std::cout << "[" << getCurrentTimeStamp() << "] [ffmpeg-kit] [ERROR] Exception in global complete callback: " << e.what()
-                        << std::endl;
+              std::cout << "[" << getCurrentTimeStamp()
+                        << "] [ffmpeg-kit] [ERROR] Exception in global "
+                           "complete callback: "
+                        << e.what() << std::endl;
             }
           }
         }
@@ -1871,8 +1957,10 @@ void ffmpegkit::FFmpegKitConfig::asyncGetMediaInformationExecute(
           try {
             completeCallback(session);
           } catch (const std::exception &e) {
-            std::cout << "[" << getCurrentTimeStamp() << "] [ffmpeg-kit] [ERROR] Exception in session complete callback: " << e.what()
-                      << std::endl;
+            std::cout << "[" << getCurrentTimeStamp()
+                      << "] [ffmpeg-kit] [ERROR] Exception in session complete "
+                         "callback: "
+                      << e.what() << std::endl;
           }
         }
         {
@@ -1883,8 +1971,10 @@ void ffmpegkit::FFmpegKitConfig::asyncGetMediaInformationExecute(
             try {
               globalCallback(session);
             } catch (const std::exception &e) {
-              std::cout << "[" << getCurrentTimeStamp() << "] [ffmpeg-kit] [ERROR] Exception in global complete callback: " << e.what()
-                        << std::endl;
+              std::cout << "[" << getCurrentTimeStamp()
+                        << "] [ffmpeg-kit] [ERROR] Exception in global "
+                           "complete callback: "
+                        << e.what() << std::endl;
             }
           }
         }

@@ -32,13 +32,15 @@ class Statistics : public FFmpegKitObject {
 public:
   Statistics(const long sessionId, const int videoFrameNumber,
              const float videoFps, const float videoQuality, const int64_t size,
-             const double time, const double bitrate, const double speed);
+             const double timeElapsed, const double time, const double bitrate,
+             const double speed);
 
   long getSessionId();
   int getVideoFrameNumber();
   float getVideoFps();
   float getVideoQuality();
   int64_t getSize();
+  double getTimeElapsed();
   double getTime();
   double getBitrate();
   double getSpeed();
@@ -49,6 +51,7 @@ private:
   const float _videoFps;
   const float _videoQuality;
   const int64_t _size;
+  const double _timeElapsed;
   const double _time;
   const double _bitrate;
   const double _speed;
