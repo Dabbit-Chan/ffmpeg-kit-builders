@@ -1,5 +1,10 @@
 # FFmpegKit Changelog
 
+## Version 0.10.1
+
+- Added null pointer checks to wrapper functions for robustness
+- Changed `ffmpeg_kit_statistics_get_time` functions to return time instead of time elapsed and added separate `ffmpeg_kit_statistics_get_time_elapsed` functions to get time elapsed.
+
 ## Version 0.10.0
  
 - **FFmpeg 8.1 Upgrade**: Upgraded FFmpeg from 8.0 to 8.1 with updated build patches and synchronized source files.
