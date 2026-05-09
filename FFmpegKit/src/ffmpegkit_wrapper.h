@@ -2021,6 +2021,16 @@ FFMPEG_KIT_C_EXPORT double
 ffmpeg_kit_statistics_get_time(StatisticsHandle handle);
 
 /**
+ * Gets the time elapsed in milliseconds.
+ *
+ * @param handle the statistics handle
+ * @return the time elapsed in milliseconds (consistent with the time argument passed
+ *         to FFmpegKitStatisticsCallback)
+ */
+FFMPEG_KIT_C_EXPORT double
+ffmpeg_kit_statistics_get_time_elapsed(StatisticsHandle handle);
+
+/**
  * Gets the bitrate.
  *
  * @param handle the statistics handle

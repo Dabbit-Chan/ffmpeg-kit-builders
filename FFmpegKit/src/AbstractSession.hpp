@@ -379,7 +379,6 @@ private:
   mutable std::mutex _debugLogMutex;
   std::atomic<bool> _debuggingEnabled{false};
   std::string _debugLog;
-  std::atomic<bool> _isCancelled{false};
 
 protected:
   mutable std::mutex _stateMutex;
@@ -391,7 +390,7 @@ private:
   std::chrono::time_point<std::chrono::system_clock> _endTime;
   std::shared_ptr<std::list<std::string>> _arguments;
   std::shared_ptr<std::list<std::shared_ptr<ffmpegkit::Log>>> _logs;
-  std::atomic<SessionState> _state{SessionStateCreated};
+  SessionState _state{SessionStateCreated};
   std::shared_ptr<ffmpegkit::ReturnCode> _returnCode;
   std::string _failStackTrace;
   LogRedirectionStrategy _logRedirectionStrategy;

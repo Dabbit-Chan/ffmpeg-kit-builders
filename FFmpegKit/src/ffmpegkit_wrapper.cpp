@@ -3550,6 +3550,17 @@ double DLL_ALIGN ffmpeg_kit_statistics_get_time(StatisticsHandle handle) {
     return -1;
   }
 }
+double DLL_ALIGN ffmpeg_kit_statistics_get_time_elapsed(StatisticsHandle handle) {
+  try {
+    auto ptr = get_ptr<Statistics>(handle);
+    return ptr ? ptr->getTimeElapsed() * 1000.0 : -1;
+  } catch (const std::exception &e) {
+    std::cerr << "[Exception] in ffmpeg_kit_statistics_get_time_elapsed: "
+              << e.what() << std::endl;
+    PRINT_STACK_TRACE();
+    return -1;
+  }
+}
 double DLL_ALIGN ffmpeg_kit_statistics_get_bitrate(StatisticsHandle handle) {
   try {
     auto ptr = get_ptr<Statistics>(handle);

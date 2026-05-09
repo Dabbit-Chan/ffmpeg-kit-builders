@@ -228,7 +228,6 @@ private:
   FFmpegSessionCompleteCallback _completeCallback;
   std::shared_ptr<std::list<std::shared_ptr<ffmpegkit::Statistics>>>
       _statistics;
-  mutable std::mutex _statisticsMutex;
 };
 
 } // namespace ffmpegkit
