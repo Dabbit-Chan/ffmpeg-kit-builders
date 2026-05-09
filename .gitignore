@@ -40,3 +40,5 @@ mempalace.yaml
 QWEN.md
 .ffmpeg-kit-build-xcframework-state
 .DS_Store
+.aider*
+.codex
