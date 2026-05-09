@@ -20,10 +20,13 @@
 #ifndef FFMPEG_KIT_ABSTRACT_SESSION_H
 #define FFMPEG_KIT_ABSTRACT_SESSION_H
 
-#include <mutex>
-#include <condition_variable>
-#include "Session.hpp"
 #include <atomic>
+#include <condition_variable>
+#include <memory>
+#include <mutex>
+#include <list>
+#include <string>
+#include "Session.hpp"
 
 namespace ffmpegkit {
 
@@ -376,19 +379,19 @@ private:
   mutable std::mutex _debugLogMutex;
   std::atomic<bool> _debuggingEnabled{false};
   std::string _debugLog;
+  std::atomic<bool> _isCancelled{false};
 
 protected:
   mutable std::mutex _stateMutex;
   mutable std::condition_variable _stateConditionVariable;
 
 private:
-
   std::chrono::time_point<std::chrono::system_clock> _createTime;
   std::chrono::time_point<std::chrono::system_clock> _startTime;
   std::chrono::time_point<std::chrono::system_clock> _endTime;
   std::shared_ptr<std::list<std::string>> _arguments;
   std::shared_ptr<std::list<std::shared_ptr<ffmpegkit::Log>>> _logs;
-  SessionState _state;
+  std::atomic<SessionState> _state{SessionStateCreated};
   std::shared_ptr<ffmpegkit::ReturnCode> _returnCode;
   std::string _failStackTrace;
   LogRedirectionStrategy _logRedirectionStrategy;
