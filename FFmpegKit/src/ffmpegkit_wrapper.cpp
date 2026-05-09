@@ -2647,7 +2647,8 @@ char * DLL_ALIGN stream_information_get_real_frame_rate(StreamInformationHandle 
 }
 char * DLL_ALIGN stream_information_get_time_base(StreamInformationHandle handle) {
   try {
-    return strdup_safe_ptr(get_ptr<StreamInformation>(handle)->getTimeBase());
+    auto ptr = get_ptr<StreamInformation>(handle);
+    return ptr ? strdup_safe_ptr(ptr->getTimeBase()) : nullptr;
   } catch (const std::exception &e) {
     std::cerr << "[Exception] in stream_information_get_time_base: " << e.what()
               << std::endl;
@@ -2660,7 +2661,8 @@ int64_t DLL_ALIGN stream_information_get_width(StreamInformationHandle handle) {
   try {
     if (!handle)
       return 0;
-    auto val = get_ptr<StreamInformation>(handle)->getWidth();
+    auto ptr = get_ptr<StreamInformation>(handle);
+    auto val = ptr ? ptr->getWidth() : nullptr;
     return val ? *val : 0;
   } catch (const std::exception &e) {
     std::cerr << "[Exception] in stream_information_get_width: " << e.what()
@@ -2673,7 +2675,8 @@ int64_t DLL_ALIGN stream_information_get_height(StreamInformationHandle handle) 
   try {
     if (!handle)
       return 0;
-    auto val = get_ptr<StreamInformation>(handle)->getHeight();
+    auto ptr = get_ptr<StreamInformation>(handle);
+    auto val = ptr ? ptr->getHeight() : nullptr;
     return val ? *val : 0;
   } catch (const std::exception &e) {
     std::cerr << "[Exception] in stream_information_get_height: " << e.what()
@@ -2686,7 +2689,8 @@ int64_t DLL_ALIGN stream_information_get_index(StreamInformationHandle handle) {
   try {
     if (!handle)
       return -1;
-    auto val = get_ptr<StreamInformation>(handle)->getIndex();
+    auto ptr = get_ptr<StreamInformation>(handle);
+    auto val = ptr ? ptr->getIndex() : nullptr;
     return val ? *val : -1;
   } catch (const std::exception &e) {
     std::cerr << "[Exception] in stream_information_get_index: " << e.what()
@@ -2697,7 +2701,8 @@ int64_t DLL_ALIGN stream_information_get_index(StreamInformationHandle handle) {
 }
 char * DLL_ALIGN stream_information_get_tags_json(StreamInformationHandle handle) {
   try {
-    auto tags = get_ptr<StreamInformation>(handle)->getTags();
+    auto ptr = get_ptr<StreamInformation>(handle);
+    auto tags = ptr ? ptr->getTags() : nullptr;
     return tags ? strdup_cpp(tags->toStyledString()) : nullptr;
   } catch (const std::exception &e) {
     std::cerr << "[Exception] in stream_information_get_tags_json: " << e.what()
@@ -2712,7 +2717,8 @@ int64_t DLL_ALIGN chapter_get_id(ChapterHandle handle) {
   try {
     if (!handle)
       return -1;
-    auto val = get_ptr<Chapter>(handle)->getId();
+    auto ptr = get_ptr<Chapter>(handle);
+    auto val = ptr ? ptr->getId() : nullptr;
     return val ? *val : -1;
   } catch (const std::exception &e) {
     std::cerr << "[Exception] in chapter_get_id: " << e.what() << std::endl;
@@ -2722,7 +2728,8 @@ int64_t DLL_ALIGN chapter_get_id(ChapterHandle handle) {
 }
 char * DLL_ALIGN chapter_get_time_base(ChapterHandle handle) {
   try {
-    return strdup_safe_ptr(get_ptr<Chapter>(handle)->getTimeBase());
+    auto ptr = get_ptr<Chapter>(handle);
+    return ptr ? strdup_safe_ptr(ptr->getTimeBase()) : nullptr;
   } catch (const std::exception &e) {
     std::cerr << "[Exception] in chapter_get_time_base: " << e.what()
               << std::endl;
@@ -2734,7 +2741,8 @@ int64_t DLL_ALIGN chapter_get_start(ChapterHandle handle) {
   try {
     if (!handle)
       return -1;
-    auto val = get_ptr<Chapter>(handle)->getStart();
+    auto ptr = get_ptr<Chapter>(handle);
+    auto val = ptr ? ptr->getStart() : nullptr;
     return val ? *val : -1;
   } catch (const std::exception &e) {
     std::cerr << "[Exception] in chapter_get_start: " << e.what() << std::endl;
@@ -2744,7 +2752,8 @@ int64_t DLL_ALIGN chapter_get_start(ChapterHandle handle) {
 }
 char * DLL_ALIGN chapter_get_start_time(ChapterHandle handle) {
   try {
-    return strdup_safe_ptr(get_ptr<Chapter>(handle)->getStartTime());
+    auto ptr = get_ptr<Chapter>(handle);
+    return ptr ? strdup_safe_ptr(ptr->getStartTime()) : nullptr;
   } catch (const std::exception &e) {
     std::cerr << "[Exception] in chapter_get_start_time: " << e.what()
               << std::endl;
@@ -2756,7 +2765,8 @@ int64_t DLL_ALIGN chapter_get_end(ChapterHandle handle) {
   try {
     if (!handle)
       return -1;
-    auto val = get_ptr<Chapter>(handle)->getEnd();
+    auto ptr = get_ptr<Chapter>(handle);
+    auto val = ptr ? ptr->getEnd() : nullptr;
     return val ? *val : -1;
   } catch (const std::exception &e) {
     std::cerr << "[Exception] in chapter_get_end: " << e.what() << std::endl;
@@ -2766,7 +2776,8 @@ int64_t DLL_ALIGN chapter_get_end(ChapterHandle handle) {
 }
 char * DLL_ALIGN chapter_get_end_time(ChapterHandle handle) {
   try {
-    return strdup_safe_ptr(get_ptr<Chapter>(handle)->getEndTime());
+    auto ptr = get_ptr<Chapter>(handle);
+    return ptr ? strdup_safe_ptr(ptr->getEndTime()) : nullptr;
   } catch (const std::exception &e) {
     std::cerr << "[Exception] in chapter_get_end_time: " << e.what()
               << std::endl;
@@ -2776,7 +2787,8 @@ char * DLL_ALIGN chapter_get_end_time(ChapterHandle handle) {
 }
 char * DLL_ALIGN chapter_get_tags_json(ChapterHandle handle) {
   try {
-    auto tags = get_ptr<Chapter>(handle)->getTags();
+    auto ptr = get_ptr<Chapter>(handle);
+    auto tags = ptr ? ptr->getTags() : nullptr;
     return tags ? strdup_cpp(tags->toStyledString()) : nullptr;
   } catch (const std::exception &e) {
     std::cerr << "[Exception] in chapter_get_tags_json: " << e.what()
@@ -3316,7 +3328,10 @@ int64_t DLL_ALIGN ffmpeg_kit_session_get_create_time(void *session_handle) {
   try {
     if (!session_handle)
       return 0;
-    auto tp = get_ptr<Session>(session_handle)->getCreateTime();
+    auto ptr = get_ptr<Session>(session_handle);
+    if (!ptr)
+      return -1;
+    auto tp = ptr->getCreateTime();
     return std::chrono::duration_cast<std::chrono::milliseconds>(
                tp.time_since_epoch())
         .count();
@@ -3332,7 +3347,10 @@ int64_t DLL_ALIGN ffmpeg_kit_session_get_start_time(void *session_handle) {
   try {
     if (!session_handle)
       return 0;
-    auto tp = get_ptr<Session>(session_handle)->getStartTime();
+    auto ptr = get_ptr<Session>(session_handle);
+    if (!ptr)
+      return -1;
+    auto tp = ptr->getStartTime();
     return std::chrono::duration_cast<std::chrono::milliseconds>(
                tp.time_since_epoch())
         .count();
@@ -3348,7 +3366,10 @@ int64_t DLL_ALIGN ffmpeg_kit_session_get_end_time(void *session_handle) {
   try {
     if (!session_handle)
       return 0;
-    auto tp = get_ptr<Session>(session_handle)->getEndTime();
+    auto ptr = get_ptr<Session>(session_handle);
+    if (!ptr)
+      return -1;
+    auto tp = ptr->getEndTime();
     return std::chrono::duration_cast<std::chrono::milliseconds>(
                tp.time_since_epoch())
         .count();
@@ -3364,7 +3385,8 @@ int64_t DLL_ALIGN ffmpeg_kit_session_get_duration(void *session_handle) {
   try {
     if (!session_handle)
       return 0;
-    return get_ptr<Session>(session_handle)->getDuration();
+    auto ptr = get_ptr<Session>(session_handle);
+    return ptr ? ptr->getDuration() : -1;
   } catch (const std::exception &e) {
     std::cerr << "[Exception] in ffmpeg_kit_session_get_duration: " << e.what()
               << std::endl;
@@ -3377,7 +3399,8 @@ char * DLL_ALIGN ffmpeg_kit_session_get_command(void *session_handle) {
   try {
     if (!session_handle)
       return nullptr;
-    return strdup_cpp(get_ptr<Session>(session_handle)->getCommand());
+    auto ptr = get_ptr<Session>(session_handle);
+    return ptr ? strdup_cpp(ptr->getCommand()) : nullptr;
   } catch (const std::exception &e) {
     std::cerr << "[Exception] in ffmpeg_kit_session_get_command: " << e.what()
               << std::endl;
@@ -3390,7 +3413,8 @@ int64_t DLL_ALIGN ffmpeg_kit_session_get_logs_count(void *session_handle) {
   try {
     if (!session_handle)
       return 0;
-    return get_ptr<Session>(session_handle)->getLogsCount();
+    auto ptr = get_ptr<Session>(session_handle);
+    return ptr ? ptr->getLogsCount() : -1;
   } catch (const std::exception &e) {
     std::cerr << "[Exception] in ffmpeg_kit_session_get_logs_count: "
               << e.what() << std::endl;
@@ -3403,7 +3427,8 @@ char * DLL_ALIGN ffmpeg_kit_session_get_log_at(void *session_handle, int64_t ind
   try {
     if (!session_handle)
       return nullptr;
-    auto log = get_ptr<Session>(session_handle)->getLogAt(index);
+    auto ptr = get_ptr<Session>(session_handle);
+    auto log = ptr ? ptr->getLogAt(index) : nullptr;
     if (log) {
       const std::string &message = log->getMessage();
       return strdup_cpp(message);
@@ -3422,7 +3447,8 @@ int64_t DLL_ALIGN ffmpeg_kit_session_get_log_level_at(void *session_handle,
   try {
     if (!session_handle)
       return 0;
-    auto log = get_ptr<Session>(session_handle)->getLogAt(index);
+    auto ptr = get_ptr<Session>(session_handle);
+    auto log = ptr ? ptr->getLogAt(index) : nullptr;
     if (log) {
       return (int64_t)log->getLevel();
     }
@@ -3439,7 +3465,8 @@ int64_t DLL_ALIGN ffmpeg_kit_session_get_statistics_count(void *session_handle) 
   try {
     if (!session_handle)
       return 0;
-    return get_ptr<FFmpegSession>(session_handle)->getStatisticsCount();
+    auto ptr = get_ptr<FFmpegSession>(session_handle);
+    return ptr ? ptr->getStatisticsCount() : -1;
   } catch (const std::exception &e) {
     std::cerr << "[Exception] in ffmpeg_kit_session_get_statistics_count: "
               << e.what() << std::endl;
@@ -3453,7 +3480,8 @@ StatisticsHandle DLL_ALIGN ffmpeg_kit_session_get_statistics_at(void *session_ha
   try {
     if (!session_handle)
       return nullptr;
-    auto stats = get_ptr<FFmpegSession>(session_handle)->getStatisticsAt(index);
+    auto ptr = get_ptr<FFmpegSession>(session_handle);
+    auto stats = ptr ? ptr->getStatisticsAt(index) : nullptr;
     if (stats) {
       return create_handle(stats);
     }
@@ -3469,7 +3497,8 @@ StatisticsHandle DLL_ALIGN ffmpeg_kit_session_get_statistics_at(void *session_ha
 /* Statistics Getters */
 int64_t DLL_ALIGN ffmpeg_kit_statistics_get_video_frame_number(StatisticsHandle handle) {
   try {
-    return get_ptr<Statistics>(handle)->getVideoFrameNumber();
+    auto ptr = get_ptr<Statistics>(handle);
+    return ptr ? ptr->getVideoFrameNumber() : -1;
   } catch (const std::exception &e) {
     std::cerr << "[Exception] in ffmpeg_kit_statistics_get_video_frame_number: "
               << e.what() << std::endl;
@@ -3479,7 +3508,8 @@ int64_t DLL_ALIGN ffmpeg_kit_statistics_get_video_frame_number(StatisticsHandle 
 }
 double DLL_ALIGN ffmpeg_kit_statistics_get_video_fps(StatisticsHandle handle) {
   try {
-    return get_ptr<Statistics>(handle)->getVideoFps();
+    auto ptr = get_ptr<Statistics>(handle);
+    return ptr ? ptr->getVideoFps() : -1;
   } catch (const std::exception &e) {
     std::cerr << "[Exception] in ffmpeg_kit_statistics_get_video_fps: "
               << e.what() << std::endl;
@@ -3489,7 +3519,8 @@ double DLL_ALIGN ffmpeg_kit_statistics_get_video_fps(StatisticsHandle handle) {
 }
 double DLL_ALIGN ffmpeg_kit_statistics_get_video_quality(StatisticsHandle handle) {
   try {
-    return get_ptr<Statistics>(handle)->getVideoQuality();
+    auto ptr = get_ptr<Statistics>(handle);
+    return ptr ? ptr->getVideoQuality() : -1;
   } catch (const std::exception &e) {
     std::cerr << "[Exception] in ffmpeg_kit_statistics_get_video_quality: "
               << e.what() << std::endl;
@@ -3499,7 +3530,8 @@ double DLL_ALIGN ffmpeg_kit_statistics_get_video_quality(StatisticsHandle handle
 }
 int64_t DLL_ALIGN ffmpeg_kit_statistics_get_size(StatisticsHandle handle) {
   try {
-    return (int64_t)get_ptr<Statistics>(handle)->getSize();
+    auto ptr = get_ptr<Statistics>(handle);
+    return ptr ? (int64_t)ptr->getSize() : -1;
   } catch (const std::exception &e) {
     std::cerr << "[Exception] in ffmpeg_kit_statistics_get_size: " << e.what()
               << std::endl;
@@ -3509,7 +3541,8 @@ int64_t DLL_ALIGN ffmpeg_kit_statistics_get_size(StatisticsHandle handle) {
 }
 double DLL_ALIGN ffmpeg_kit_statistics_get_time(StatisticsHandle handle) {
   try {
-    return get_ptr<Statistics>(handle)->getTime() * 1000.0;
+    auto ptr = get_ptr<Statistics>(handle);
+    return ptr ? ptr->getTime() * 1000.0 : -1;
   } catch (const std::exception &e) {
     std::cerr << "[Exception] in ffmpeg_kit_statistics_get_time: " << e.what()
               << std::endl;
@@ -3519,7 +3552,8 @@ double DLL_ALIGN ffmpeg_kit_statistics_get_time(StatisticsHandle handle) {
 }
 double DLL_ALIGN ffmpeg_kit_statistics_get_bitrate(StatisticsHandle handle) {
   try {
-    return get_ptr<Statistics>(handle)->getBitrate();
+    auto ptr = get_ptr<Statistics>(handle);
+    return ptr ? ptr->getBitrate() : -1;
   } catch (const std::exception &e) {
     std::cerr << "[Exception] in ffmpeg_kit_statistics_get_bitrate: "
               << e.what() << std::endl;
@@ -3529,7 +3563,8 @@ double DLL_ALIGN ffmpeg_kit_statistics_get_bitrate(StatisticsHandle handle) {
 }
 double DLL_ALIGN ffmpeg_kit_statistics_get_speed(StatisticsHandle handle) {
   try {
-    return get_ptr<Statistics>(handle)->getSpeed();
+    auto ptr = get_ptr<Statistics>(handle);
+    return ptr ? ptr->getSpeed() : -1;
   } catch (const std::exception &e) {
     std::cerr << "[Exception] in ffmpeg_kit_statistics_get_speed: " << e.what()
               << std::endl;
@@ -3555,8 +3590,8 @@ char * DLL_ALIGN media_information_get_start_time(MediaInformationHandle handle)
 char * DLL_ALIGN media_information_get_string_property(MediaInformationHandle handle,
                                             const char *key) {
   try {
-    return strdup_safe_ptr(
-        get_ptr<MediaInformation>(handle)->getStringProperty(key));
+    auto ptr = get_ptr<MediaInformation>(handle);
+    return ptr ? strdup_safe_ptr(ptr->getStringProperty(key)) : nullptr;
   } catch (const std::exception &e) {
     std::cerr << "[Exception] in media_information_get_string_property: "
               << e.what() << std::endl;
@@ -3568,7 +3603,8 @@ char * DLL_ALIGN media_information_get_string_property(MediaInformationHandle ha
 int64_t DLL_ALIGN media_information_get_number_property(MediaInformationHandle handle,
                                               const char *key) {
   try {
-    auto val = get_ptr<MediaInformation>(handle)->getNumberProperty(key);
+    auto ptr = get_ptr<MediaInformation>(handle);
+    auto val = ptr ? ptr->getNumberProperty(key) : nullptr;
     return val ? *val : -1;
   } catch (const std::exception &e) {
     std::cerr << "[Exception] in media_information_get_number_property: "
@@ -3580,7 +3616,8 @@ int64_t DLL_ALIGN media_information_get_number_property(MediaInformationHandle h
 
 char * DLL_ALIGN media_information_get_all_properties_json(MediaInformationHandle handle) {
   try {
-    auto props = get_ptr<MediaInformation>(handle)->getAllProperties();
+    auto ptr = get_ptr<MediaInformation>(handle);
+    auto props = ptr ? ptr->getAllProperties() : nullptr;
     return props ? strdup_cpp(props->toStyledString()) : nullptr;
   } catch (const std::exception &e) {
     std::cerr << "[Exception] in media_information_get_all_properties_json: "
@@ -3593,8 +3630,8 @@ char * DLL_ALIGN media_information_get_all_properties_json(MediaInformationHandl
 // StreamInformation
 char * DLL_ALIGN stream_information_get_channel_layout(StreamInformationHandle handle) {
   try {
-    return strdup_safe_ptr(
-        get_ptr<StreamInformation>(handle)->getChannelLayout());
+    auto ptr = get_ptr<StreamInformation>(handle);
+    return ptr ? strdup_safe_ptr(ptr->getChannelLayout()) : nullptr;
   } catch (const std::exception &e) {
     std::cerr << "[Exception] in stream_information_get_channel_layout: "
               << e.what() << std::endl;
@@ -3606,8 +3643,8 @@ char * DLL_ALIGN stream_information_get_channel_layout(StreamInformationHandle h
 char * DLL_ALIGN
 stream_information_get_sample_aspect_ratio(StreamInformationHandle handle) {
   try {
-    return strdup_safe_ptr(
-        get_ptr<StreamInformation>(handle)->getSampleAspectRatio());
+    auto ptr = get_ptr<StreamInformation>(handle);
+    return ptr ? strdup_safe_ptr(ptr->getSampleAspectRatio()) : nullptr;
   } catch (const std::exception &e) {
     std::cerr << "[Exception] in stream_information_get_sample_aspect_ratio: "
               << e.what() << std::endl;
@@ -3618,8 +3655,8 @@ stream_information_get_sample_aspect_ratio(StreamInformationHandle handle) {
 
 char * DLL_ALIGN stream_information_get_codec_time_base(StreamInformationHandle handle) {
   try {
-    return strdup_safe_ptr(
-        get_ptr<StreamInformation>(handle)->getCodecTimeBase());
+    auto ptr = get_ptr<StreamInformation>(handle);
+    return ptr ? strdup_safe_ptr(ptr->getCodecTimeBase()) : nullptr;
   } catch (const std::exception &e) {
     std::cerr << "[Exception] in stream_information_get_codec_time_base: "
               << e.what() << std::endl;
@@ -3631,8 +3668,8 @@ char * DLL_ALIGN stream_information_get_codec_time_base(StreamInformationHandle 
 char * DLL_ALIGN stream_information_get_string_property(StreamInformationHandle handle,
                                              const char *key) {
   try {
-    return strdup_safe_ptr(
-        get_ptr<StreamInformation>(handle)->getStringProperty(key));
+    auto ptr = get_ptr<StreamInformation>(handle);
+    return ptr ? strdup_safe_ptr(ptr->getStringProperty(key)) : nullptr;
   } catch (const std::exception &e) {
     std::cerr << "[Exception] in stream_information_get_string_property: "
               << e.what() << std::endl;
@@ -3644,7 +3681,8 @@ char * DLL_ALIGN stream_information_get_string_property(StreamInformationHandle 
 int64_t DLL_ALIGN stream_information_get_number_property(StreamInformationHandle handle,
                                                const char *key) {
   try {
-    auto val = get_ptr<StreamInformation>(handle)->getNumberProperty(key);
+    auto ptr = get_ptr<StreamInformation>(handle);
+    auto val = ptr ? ptr->getNumberProperty(key) : nullptr;
     return val ? *val : -1;
   } catch (const std::exception &e) {
     std::cerr << "[Exception] in stream_information_get_number_property: "
@@ -3657,7 +3695,8 @@ int64_t DLL_ALIGN stream_information_get_number_property(StreamInformationHandle
 char * DLL_ALIGN
 stream_information_get_all_properties_json(StreamInformationHandle handle) {
   try {
-    auto props = get_ptr<StreamInformation>(handle)->getAllProperties();
+    auto ptr = get_ptr<StreamInformation>(handle);
+    auto props = ptr ? ptr->getAllProperties() : nullptr;
     return props ? strdup_cpp(props->toStyledString()) : nullptr;
   } catch (const std::exception &e) {
     std::cerr << "[Exception] in stream_information_get_all_properties_json: "
@@ -3670,7 +3709,8 @@ stream_information_get_all_properties_json(StreamInformationHandle handle) {
 // Chapter
 char * DLL_ALIGN chapter_get_string_property(ChapterHandle handle, const char *key) {
   try {
-    return strdup_safe_ptr(get_ptr<Chapter>(handle)->getStringProperty(key));
+    auto ptr = get_ptr<Chapter>(handle);
+    return ptr ? strdup_safe_ptr(ptr->getStringProperty(key)) : nullptr;
   } catch (const std::exception &e) {
     std::cerr << "[Exception] in chapter_get_string_property: " << e.what()
               << std::endl;
@@ -3681,7 +3721,8 @@ char * DLL_ALIGN chapter_get_string_property(ChapterHandle handle, const char *k
 
 int64_t DLL_ALIGN chapter_get_number_property(ChapterHandle handle, const char *key) {
   try {
-    auto val = get_ptr<Chapter>(handle)->getNumberProperty(key);
+    auto ptr = get_ptr<Chapter>(handle);
+    auto val = ptr ? ptr->getNumberProperty(key) : nullptr;
     return val ? *val : -1;
   } catch (const std::exception &e) {
     std::cerr << "[Exception] in chapter_get_number_property: " << e.what()
