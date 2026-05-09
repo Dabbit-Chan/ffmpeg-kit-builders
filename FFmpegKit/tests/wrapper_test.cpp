@@ -1329,6 +1329,11 @@ TEST(FFmpegKitTest, RobustnessTest) {
     // and it's too large to be a "fake" ID.
     EXPECT_EQ(ffmpeg_kit_session_get_session_id(session), -1);
     EXPECT_EQ(ffmpeg_kit_session_get_output(session), nullptr);
+    EXPECT_EQ(ffmpeg_kit_session_get_logs_count(session), -1);
+    EXPECT_EQ(ffmpeg_kit_session_get_command(session), nullptr);
+    EXPECT_EQ(ffmpeg_kit_session_get_log_at(session, 0), nullptr);
+    EXPECT_EQ(ffmpeg_kit_session_get_statistics_count(session), -1);
+    EXPECT_EQ(ffmpeg_kit_session_get_statistics_at(session, 0), nullptr);
     
     // 5. Try with "fake" handle (ID as pointer)
     // This should work because get_ptr_internal now supports looking up by ID in history
