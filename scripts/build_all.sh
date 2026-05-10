@@ -461,16 +461,80 @@ for step in "${BUILD_STEPS[@]}"; do
   execute_build "${step}" "${current_step}/${total_steps}"
 done
 
-echo ""
-echo "========================================"
-echo "All builds completed successfully!"
-echo "========================================"
+# save end time
+END_TIME=$(date +%s)
+ELAPSED_TIME=$((END_TIME - START_TIME))
+# elapsed time in h:m:s
+ELAPSED_H=$((ELAPSED_TIME / 3600))
+ELAPSED_M=$(((ELAPSED_TIME % 3600) / 60))
+ELAPSED_S=$((ELAPSED_TIME % 60))
+ELAPSED_TIME_HMS="${ELAPSED_H}h:${ELAPSED_M}m:${ELAPSED_S}s"
 
-rm -f "${STATE_FILE}"
+echo "" | tee -a "${LOG_FILE}"
+echo "========================================" | tee -a "${LOG_FILE}"
+echo "All builds completed successfully!" | tee -a "${LOG_FILE}"
+echo "Elapsed time: ${ELAPSED_TIME_HMS}" | tee -a "${LOG_FILE}"
+echo "========================================" | tee -a "${LOG_FILE}"
 
-android_platforms=$(IFS=,; echo "${ANDROID_PLATFORM_ARCHS[*]}")
+rm -rf "${STATE_DIR}"
 
-if truthy "$build_aars" && truthy "$build_bundle"; then
-  echo "Building AARs..."
-  sudo -E bash -c "${WORK_DIR}/scripts/build_aar.sh --platform=${android_platforms} --bundles=${bundles}"
+# Build XCFrameworks for Apple platforms
+declare -a android_platforms
+android_platforms=()
+android_platforms_str=""
+for platform in "${!PLATFORMS[@]}"; do
+  case "${platform}" in
+    "android")
+      android_platforms+=("${platform}")
+      ;;
+    *)
+      ;;
+  esac
+done
+
+if [[ ${#android_platforms[@]} -gt 0 ]]; then
+  android_platforms_str=$(IFS=,; echo "${android_platforms[*]}")
+fi
+
+if [[ ${#android_platforms[@]} -gt 0 ]] && truthy "$build_bundle"; then
+  echo "Building AARs..." | tee -a "${LOG_FILE}"
+  if [[ "${REMOTE_RELEASE}" == true ]]; then
+    remote="--remote"
+  else
+    remote="--local"
+  fi
+  sudo -E bash -c "${WORK_DIR}/scripts/android/build_aar.sh --bundle=${bundles} --reset ${remote}"
+fi
+
+# Build XCFrameworks for Apple platforms
+declare -a apple_platforms
+apple_platforms=()
+apple_platforms_str=""
+for platform in "${!PLATFORMS[@]}"; do
+  case "${platform}" in
+    "ios"|"macos")
+      apple_platforms+=("${platform}")
+      ;;
+    *)
+      ;;
+  esac
+done
+
+if [[ ${#apple_platforms[@]} -gt 0 ]]; then
+  apple_platforms_str=$(IFS=,; echo "${apple_platforms[*]}")
+fi
+
+if [[ -n "${apple_platforms_str}" ]] && truthy "$build_bundle"; then
+  echo "========================================" | tee -a "${LOG_FILE}"
+  echo "Building XCFrameworks for Apple platforms" | tee -a "${LOG_FILE}"
+  echo "========================================" | tee -a "${LOG_FILE}"
+  echo "Platforms: ${apple_platforms_str}" | tee -a "${LOG_FILE}"
+  echo "Bundles: ${bundles}" | tee -a "${LOG_FILE}"
+  echo "========================================" | tee -a "${LOG_FILE}"
+  if [[ "${REMOTE_RELEASE}" == true ]]; then
+    remote="--remote"
+  else
+    remote="--local"
+  fi
+  sudo -E bash -c "${WORK_DIR}/scripts/apple/build_xcframework.sh --platform=${apple_platforms_str} --bundle=${bundles} --reset ${remote}"
 fi
