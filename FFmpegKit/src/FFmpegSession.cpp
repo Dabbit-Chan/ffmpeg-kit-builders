@@ -187,6 +187,14 @@ void ffmpegkit::FFmpegSession::addStatistics(
   _statistics->push_back(statistics);
 }
 
+FFmpegContext *ffmpegkit::FFmpegSession::getContext() {
+  return _context.load(std::memory_order_acquire);
+}
+
+void ffmpegkit::FFmpegSession::setContext(FFmpegContext *context) {
+  _context.store(context, std::memory_order_release);
+}
+
 bool ffmpegkit::FFmpegSession::isFFmpeg() const { return true; }
 
 bool ffmpegkit::FFmpegSession::isFFprobe() const { return false; }
@@ -194,6 +202,14 @@ bool ffmpegkit::FFmpegSession::isFFprobe() const { return false; }
 bool ffmpegkit::FFmpegSession::isFFplay() const { return false; }
 
 bool ffmpegkit::FFmpegSession::isMediaInformation() const { return false; }
+
+void ffmpegkit::FFmpegSession::cancel() {
+  FFmpegContext *context = getContext();
+  if (context != nullptr) {
+    ffmpeg_cancel(context);
+  }
+  ffmpegkit::AbstractSession::cancel();
+}
 
 void ffmpegkit::FFmpegSession::setCompleteCallback(
     const FFmpegSessionCompleteCallback completeCallback) {

@@ -19,6 +19,7 @@
 
 #include "FFmpegKit.hpp"
 #include "FFmpegKitConfig.hpp"
+#include "libavutil/log.h"
 
 extern "C" {
 void cancel_operation(long id);
@@ -95,7 +96,8 @@ void ffmpegkit::FFmpegKit::cancel() {
 }
 
 void ffmpegkit::FFmpegKit::cancel(const long sessionId) {
-  cancel_operation(sessionId);
+    av_log(NULL, AV_LOG_DEBUG, "FFmpegKit::cancel session_id=%ld\n", sessionId);
+    cancel_operation(sessionId);
 }
 
 std::shared_ptr<std::list<std::shared_ptr<ffmpegkit::FFmpegSession>>>

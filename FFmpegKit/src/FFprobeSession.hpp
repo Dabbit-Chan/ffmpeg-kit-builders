@@ -22,6 +22,9 @@
 
 #include "AbstractSession.hpp"
 #include "FFprobeSessionCompleteCallback.hpp"
+#include "ffprobe_lib.h"
+
+#include <atomic>
 
 namespace ffmpegkit {
 
@@ -115,6 +118,21 @@ public:
   bool isMediaInformation() const override;
 
   /**
+   * Returns the bound native ffprobe context.
+   */
+  FFprobeContext *getContext();
+
+  /**
+   * Binds the native ffprobe context for active execution.
+   */
+  void setContext(FFprobeContext *context);
+
+  /**
+   * Cancels the ffprobe session.
+   */
+  void cancel() override;
+
+  /**
    * Sets the session specific complete callback.
    *
    * @param completeCallback session specific complete callback
@@ -139,6 +157,7 @@ private:
                  const LogRedirectionStrategy logRedirectionStrategy);
 
   FFprobeSessionCompleteCallback _completeCallback;
+  std::atomic<FFprobeContext *> _context{nullptr};
 };
 
 } // namespace ffmpegkit

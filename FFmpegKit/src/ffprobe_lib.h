@@ -49,6 +49,16 @@ extern "C"
   FFMPEG_API FFprobeContext *ffprobe_init(const char *args_string);
 
   /**
+   * Binds a logical session id to the wrapper context.
+   */
+  FFMPEG_API void ffprobe_set_session_id(FFprobeContext *ctx, long session_id);
+
+  /**
+   * Returns the bound logical session id.
+   */
+  FFMPEG_API long ffprobe_get_session_id(const FFprobeContext *ctx);
+
+  /**
    * Run ffprobe.
    * Thread-safe (mutex locked), blocking.
    *
@@ -56,6 +66,31 @@ extern "C"
    * @return 0 on success, <0 on error.
    */
   FFMPEG_API int ffprobe_run(FFprobeContext *ctx);
+
+  /**
+   * Signal the current probe operation to cancel.
+   */
+  FFMPEG_API void ffprobe_cancel(FFprobeContext *ctx);
+
+  /**
+   * Returns whether the context has an outstanding cancel request.
+   */
+  FFMPEG_API int ffprobe_cancel_requested(const FFprobeContext *ctx);
+
+  /**
+   * Binds the wrapper context to the current thread.
+   */
+  FFMPEG_API void ffprobe_bind_thread_context(FFprobeContext *ctx);
+
+  /**
+   * Clears any wrapper context bound to the current thread.
+   */
+  FFMPEG_API void ffprobe_unbind_thread_context(void);
+
+  /**
+   * Returns the wrapper context bound to the current thread.
+   */
+  FFMPEG_API FFprobeContext *ffprobe_get_current_context(void);
 
   /**
    * Retrieve the captured output string.

@@ -68,6 +68,27 @@ void uninit_opts(void);
 void log_callback_help(void* ptr, int level, const char* fmt, va_list vl);
 
 /**
+ * Process-global delegate callback used by embedding runtimes that need to
+ * retain ownership of av_log() while FFTools temporarily layer additional
+ * behaviors such as -report or ffprobe -show_log collection.
+ */
+typedef void (*ffmpegkit_log_delegate_callback)(void *ptr, int level,
+                                                const char *fmt, va_list vl);
+
+/**
+ * Installs or clears the process-global log delegate callback.
+ */
+void ffmpegkit_set_log_delegate_callback(
+    ffmpegkit_log_delegate_callback callback);
+
+/**
+ * Dispatches a log event to the currently configured delegate callback, or to
+ * av_log_default_callback() when no delegate is installed.
+ */
+void ffmpegkit_dispatch_log_callback(void *ptr, int level, const char *fmt,
+                                     va_list vl);
+
+/**
  * Fallback for options that are not explicitly handled, these will be
  * parsed through AVOptions.
  */

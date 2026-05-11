@@ -20,6 +20,8 @@
 #include <stdint.h>
 
 #include "ffmpeg.h"
+#include "ffmpeg_lib.h"
+#include "ffmpegkit_session_context.h"
 
 #include "libavutil/avassert.h"
 #include "libavutil/avstring.h"
@@ -77,6 +79,8 @@ void enc_free(Encoder **penc)
 
     if (enc->enc_ctx)
         av_freep(&enc->enc_ctx->stats_in);
+    if (enc->enc_ctx)
+        ffmpegkit_unregister_root_context(enc->enc_ctx);
     avcodec_free_context(&enc->enc_ctx);
 
     av_freep(penc);
@@ -120,6 +124,12 @@ int enc_alloc(Encoder **penc, const AVCodec *codec,
     if (!ep->e.enc_ctx) {
         ret = AVERROR(ENOMEM);
         goto fail;
+    }
+    {
+        FFmpegContext *wrapper_ctx = ffmpeg_get_current_context();
+        const long session_id = ffmpeg_get_session_id(wrapper_ctx);
+        if (session_id != 0)
+            ffmpegkit_register_root_context(ep->e.enc_ctx, session_id);
     }
 
     *penc = &ep->e;

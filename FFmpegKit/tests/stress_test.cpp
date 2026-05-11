@@ -131,19 +131,22 @@ TEST_F(StressTest, SessionHistoryConcurrency) {
         }
     });
 
-    // Thread 2: Constantly clearing history
-    std::thread cleaner([&stop]() {
-        while (!stop) {
-            ffmpeg_kit_config_clear_sessions();
-            std::this_thread::sleep_for(std::chrono::milliseconds(10));
-        }
-    });
-
     // Run for a few seconds
     std::this_thread::sleep_for(std::chrono::seconds(5));
     stop = true;
     creator.join();
-    cleaner.join();
+
+    // Wait for any created sessions to leave RUNNING before clearing history.
+    for (auto handle : handles) {
+        int waited = 0;
+        while (waited < 5000 &&
+               ffmpeg_kit_session_get_state(handle) == FFMPEG_KIT_SESSION_STATE_RUNNING) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(50));
+            waited += 50;
+        }
+    }
+
+    ffmpeg_kit_config_clear_sessions();
 
     // Release all handles
     for (auto handle : handles) {

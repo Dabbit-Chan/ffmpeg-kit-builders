@@ -35,6 +35,8 @@
 #include "libavcodec/codec.h"
 
 #include "ffmpeg.h"
+#include "ffmpeg_lib.h"
+#include "ffmpegkit_session_context.h"
 
 typedef struct DecoderPriv {
     Decoder             dec;
@@ -124,6 +126,8 @@ void dec_free(Decoder **pdec)
         return;
     dp = dp_from_dec(dec);
 
+    if (dp->dec_ctx)
+        ffmpegkit_unregister_root_context(dp->dec_ctx);
     avcodec_free_context(&dp->dec_ctx);
 
     av_frame_free(&dp->frame);
@@ -1021,6 +1025,8 @@ static int decoder_thread(void *arg)
 
 finish:
     dec_thread_uninit(&dt);
+    if (dp->dec_ctx)
+        ffmpegkit_unregister_root_context(dp->dec_ctx);
     avcodec_free_context(&dp->dec_ctx);
 
     return ret;
@@ -1561,6 +1567,12 @@ static int dec_open(DecoderPriv *dp, AVDictionary **dec_opts,
     dp->dec_ctx = avcodec_alloc_context3(codec);
     if (!dp->dec_ctx)
         return AVERROR(ENOMEM);
+    {
+        FFmpegContext *wrapper_ctx = ffmpeg_get_current_context();
+        const long session_id = ffmpeg_get_session_id(wrapper_ctx);
+        if (session_id != 0)
+            ffmpegkit_register_root_context(dp->dec_ctx, session_id);
+    }
 
     ret = avcodec_parameters_to_context(dp->dec_ctx, o->par);
     if (ret < 0) {

@@ -22,6 +22,7 @@
 #include "ffmpeg.h"
 #include "ffmpeg_lib.h"
 #include "ffmpeg_sched.h"
+#include "ffmpegkit_session_context.h"
 #include "ffmpeg_utils.h"
 
 #include "libavutil/avassert.h"
@@ -926,6 +927,8 @@ void ifile_close(InputFile **pf)
         istg_free(&f->stream_groups[i]);
     av_freep(&f->stream_groups);
 
+    if (f->ctx)
+        ffmpegkit_unregister_root_context(f->ctx);
     avformat_close_input(&f->ctx);
 
     av_packet_free(&d->pkt_heartbeat);
@@ -1938,6 +1941,12 @@ int ifile_open(const OptionsContext *o, const char *filename, Scheduler *sch)
     ic = avformat_alloc_context();
     if (!ic)
         return AVERROR(ENOMEM);
+    {
+        FFmpegContext *wrapper_ctx = ffmpeg_get_current_context();
+        const long session_id = ffmpeg_get_session_id(wrapper_ctx);
+        if (session_id != 0)
+            ffmpegkit_register_root_context(ic, session_id);
+    }
     ic->name = av_strdup(d->log_name);
     if (o->audio_sample_rate.nb_opt) {
         av_dict_set_int(&o->g->format_opts, "sample_rate", o->audio_sample_rate.opt[o->audio_sample_rate.nb_opt - 1].u.i, 0);
@@ -2021,6 +2030,8 @@ int ifile_open(const OptionsContext *o, const char *filename, Scheduler *sch)
                    "Error opening input: %s\n", av_err2str(err));
         if (err == AVERROR_PROTOCOL_NOT_FOUND)
             av_log(d, AV_LOG_ERROR, "Did you mean file:%s?\n", filename);
+        if (ic)
+            ffmpegkit_unregister_root_context(ic);
         return err;
     }
     f->ctx = ic;

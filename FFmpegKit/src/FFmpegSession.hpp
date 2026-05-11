@@ -23,6 +23,9 @@
 #include "AbstractSession.hpp"
 #include "FFmpegSessionCompleteCallback.hpp"
 #include "StatisticsCallback.hpp"
+#include "ffmpeg_lib.h"
+
+#include <atomic>
 
 namespace ffmpegkit {
 
@@ -191,6 +194,21 @@ public:
   bool isMediaInformation() const override;
 
   /**
+   * Returns the bound native ffmpeg context.
+   */
+  FFmpegContext *getContext();
+
+  /**
+   * Binds the native ffmpeg context for active execution.
+   */
+  void setContext(FFmpegContext *context);
+
+  /**
+   * Cancels the ffmpeg session.
+   */
+  void cancel() override;
+
+  /**
    * Sets the session specific complete callback.
    *
    * @param completeCallback session specific complete callback
@@ -228,6 +246,7 @@ private:
   FFmpegSessionCompleteCallback _completeCallback;
   std::shared_ptr<std::list<std::shared_ptr<ffmpegkit::Statistics>>>
       _statistics;
+  std::atomic<FFmpegContext *> _context{nullptr};
 };
 
 } // namespace ffmpegkit

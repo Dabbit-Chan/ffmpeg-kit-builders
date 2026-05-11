@@ -94,6 +94,14 @@ ffmpegkit::FFprobeSession::getCompleteCallback() {
   return _completeCallback;
 }
 
+FFprobeContext *ffmpegkit::FFprobeSession::getContext() {
+  return _context.load(std::memory_order_acquire);
+}
+
+void ffmpegkit::FFprobeSession::setContext(FFprobeContext *context) {
+  _context.store(context, std::memory_order_release);
+}
+
 bool ffmpegkit::FFprobeSession::isFFmpeg() const { return false; }
 
 bool ffmpegkit::FFprobeSession::isFFprobe() const { return true; }
@@ -101,6 +109,14 @@ bool ffmpegkit::FFprobeSession::isFFprobe() const { return true; }
 bool ffmpegkit::FFprobeSession::isFFplay() const { return false; }
 
 bool ffmpegkit::FFprobeSession::isMediaInformation() const { return false; }
+
+void ffmpegkit::FFprobeSession::cancel() {
+  FFprobeContext *context = getContext();
+  if (context != nullptr) {
+    ffprobe_cancel(context);
+  }
+  ffmpegkit::AbstractSession::cancel();
+}
 
 void ffmpegkit::FFprobeSession::setCompleteCallback(
     const FFprobeSessionCompleteCallback completeCallback) {

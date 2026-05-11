@@ -668,7 +668,7 @@ int ffplay_step(FFplayContext* ctx) {
                 
                 lock_ffplay_api();
                 if (ctx->is) {
-                    ctx->is->audio_volume = vol;
+                    atomic_store(&ctx->is->audio_volume, vol);
                 }
                 unlock_ffplay_api();
                 
@@ -909,7 +909,7 @@ float ffplay_get_volume(FFplayContext* ctx) {
     float vol = 0.0;
     lock_ffplay_api();
     if (ctx && active_ffplay_ctx == ctx && ctx->is) {
-        vol = (float)ctx->is->audio_volume / SDL_MIX_MAXVOLUME;
+        vol = (float)atomic_load(&ctx->is->audio_volume) / SDL_MIX_MAXVOLUME;
     }
     unlock_ffplay_api();
     return vol;

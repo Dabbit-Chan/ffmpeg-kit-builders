@@ -1,9 +1,31 @@
 #include <gtest/gtest.h>
 #include "ffmpegkit_wrapper.h"
+#include <algorithm>
 #include <cstdio>
 #include <cstdlib>
+#include <cstring>
+#include <atomic>
+#include <condition_variable>
+#include <filesystem>
+#include <fstream>
+#include <iterator>
+#include <future>
+#include <mutex>
+#include <sstream>
 #include <thread>
 #include <chrono>
+#include <vector>
+
+#ifdef _WIN32
+#include <winsock2.h>
+#include <ws2tcpip.h>
+#else
+#include <arpa/inet.h>
+#include <netinet/in.h>
+#include <sys/socket.h>
+#include <sys/types.h>
+#include <unistd.h>
+#endif
 
 #ifndef FFMPEG_KIT_TEST_DIR
 #define FFMPEG_KIT_TEST_DIR "."
@@ -16,6 +38,512 @@ void test_log_callback(FFmpegSessionHandle session, const char *message, void *d
     // Optional: verify log output if needed
     printf("Log: %s\n", message);
 }
+
+namespace {
+
+struct CompletionSignal {
+    CompletionSignal()
+        : future(promise.get_future()) {}
+
+    std::mutex mutex;
+    std::promise<void> promise;
+    std::future<void> future;
+    bool completed = false;
+};
+
+static void complete_callback(FFmpegSessionHandle session, void *user_data);
+static void probe_complete_callback(FFprobeSessionHandle session,
+                                    void *user_data);
+
+class ScopedFFmpegCompleteCallback {
+public:
+    ScopedFFmpegCompleteCallback(FFmpegSessionHandle session,
+                                 std::shared_ptr<CompletionSignal> signal)
+        : session_(session), signal_(std::move(signal)) {
+        if (session_) {
+            ffmpeg_kit_set_complete_callback(session_, complete_callback,
+                                             signal_.get());
+        }
+    }
+
+    ~ScopedFFmpegCompleteCallback() {
+        if (session_) {
+            ffmpeg_kit_set_complete_callback(session_, nullptr, nullptr);
+        }
+    }
+
+    ScopedFFmpegCompleteCallback(const ScopedFFmpegCompleteCallback &) = delete;
+    ScopedFFmpegCompleteCallback &operator=(const ScopedFFmpegCompleteCallback &) = delete;
+
+private:
+    FFmpegSessionHandle session_{nullptr};
+    std::shared_ptr<CompletionSignal> signal_;
+};
+
+class ScopedFFprobeCompleteCallback {
+public:
+    ScopedFFprobeCompleteCallback(FFprobeSessionHandle session,
+                                 std::shared_ptr<CompletionSignal> signal)
+        : session_(session), signal_(std::move(signal)) {
+        if (session_) {
+            ffprobe_kit_set_complete_callback(session_, probe_complete_callback,
+                                             signal_.get());
+        }
+    }
+
+    ~ScopedFFprobeCompleteCallback() {
+        if (session_) {
+            ffprobe_kit_set_complete_callback(session_, nullptr, nullptr);
+        }
+    }
+
+    ScopedFFprobeCompleteCallback(const ScopedFFprobeCompleteCallback &) = delete;
+    ScopedFFprobeCompleteCallback &operator=(const ScopedFFprobeCompleteCallback &) = delete;
+
+private:
+    FFprobeSessionHandle session_{nullptr};
+    std::shared_ptr<CompletionSignal> signal_;
+};
+
+static bool tsan_active() {
+#if defined(__SANITIZE_THREAD__)
+    return true;
+#elif defined(__has_feature)
+#if __has_feature(thread_sanitizer)
+    return true;
+#else
+    return false;
+#endif
+#else
+    return false;
+#endif
+}
+
+static void complete_callback(FFmpegSessionHandle session, void *user_data) {
+    (void)session;
+    auto *signal = static_cast<CompletionSignal *>(user_data);
+    if (!signal) {
+        return;
+    }
+    {
+        std::lock_guard<std::mutex> lock(signal->mutex);
+        if (signal->completed) {
+            return;
+        }
+        signal->completed = true;
+        signal->promise.set_value();
+    }
+}
+
+static void probe_complete_callback(FFprobeSessionHandle session,
+                                           void *user_data) {
+    (void)session;
+    auto *signal = static_cast<CompletionSignal *>(user_data);
+    if (!signal) {
+        return;
+    }
+    {
+        std::lock_guard<std::mutex> lock(signal->mutex);
+        if (signal->completed) {
+            return;
+        }
+        signal->completed = true;
+        signal->promise.set_value();
+    }
+}
+
+static bool wait_for_completion_signal(const std::shared_ptr<CompletionSignal> &signal,
+                                       int timeout_ms) {
+    if (!signal) {
+        return false;
+    }
+    return signal->future.wait_for(std::chrono::milliseconds(timeout_ms)) ==
+           std::future_status::ready;
+}
+
+static bool wait_for_running_state(void *session_handle, int timeout_ms) {
+    int waited = 0;
+    while (waited < timeout_ms) {
+        if (ffmpeg_kit_session_get_state(session_handle) ==
+            FFMPEG_KIT_SESSION_STATE_RUNNING) {
+            return true;
+        }
+        std::this_thread::sleep_for(std::chrono::milliseconds(50));
+        waited += 50;
+    }
+    return ffmpeg_kit_session_get_state(session_handle) ==
+           FFMPEG_KIT_SESSION_STATE_RUNNING;
+}
+
+static std::string session_logs_as_string(void *session_handle) {
+    char *logs = ffmpeg_kit_session_get_logs_as_string(session_handle);
+    if (logs == nullptr) {
+        return {};
+    }
+
+    std::string result(logs);
+    free(logs);
+    return result;
+}
+
+static void expect_logs_isolated(void *session_handle, const char *expected,
+                                 const char *unexpected) {
+    const std::string logs = session_logs_as_string(session_handle);
+    ASSERT_FALSE(logs.empty());
+    EXPECT_NE(logs.find(expected), std::string::npos)
+        << "Expected to find log signature: " << expected << "\nLogs:\n" << logs;
+    EXPECT_EQ(logs.find(unexpected), std::string::npos)
+        << "Unexpectedly found foreign log signature: " << unexpected
+        << "\nLogs:\n" << logs;
+}
+
+static std::string quote_path(const std::filesystem::path &path) {
+    return "\"" + path.string() + "\"";
+}
+
+#ifdef _WIN32
+using SocketType = SOCKET;
+static constexpr SocketType kInvalidSocket = INVALID_SOCKET;
+static void close_socket(SocketType socket) {
+    if (socket != INVALID_SOCKET) {
+        closesocket(socket);
+    }
+}
+#else
+using SocketType = int;
+static constexpr SocketType kInvalidSocket = -1;
+static void close_socket(SocketType socket) {
+    if (socket >= 0) {
+        close(socket);
+    }
+}
+#endif
+
+class LocalHttpStallServer {
+public:
+    enum class StreamEndMode {
+        StallAfterBody,
+        CloseAfterBody,
+    };
+
+    explicit LocalHttpStallServer(
+        const std::string &asset_path,
+        StreamEndMode stream_end_mode = StreamEndMode::StallAfterBody)
+        : asset_path_(asset_path), stream_end_mode_(stream_end_mode) {}
+
+    bool start() {
+        if (!load_asset()) {
+            last_error_ = "failed to load asset";
+            return false;
+        }
+
+#ifdef _WIN32
+        static std::once_flag winsock_once;
+        static bool winsock_ready = false;
+        std::call_once(winsock_once, []() {
+            WSADATA wsaData;
+            winsock_ready = (WSAStartup(MAKEWORD(2, 2), &wsaData) == 0);
+        });
+        if (!winsock_ready) {
+            last_error_ = "winsock initialization failed";
+            return false;
+        }
+#endif
+
+        listen_socket_.store(::socket(AF_INET, SOCK_STREAM, 0));
+        if (listen_socket_.load() == kInvalidSocket) {
+            last_error_ = "socket creation failed";
+            return false;
+        }
+
+        int reuse = 1;
+        setsockopt(listen_socket_.load(), SOL_SOCKET, SO_REUSEADDR,
+                   reinterpret_cast<const char *>(&reuse), sizeof(reuse));
+
+        sockaddr_in addr{};
+        addr.sin_family = AF_INET;
+        addr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+        addr.sin_port = htons(0);
+
+        if (bind(listen_socket_.load(), reinterpret_cast<sockaddr *>(&addr), sizeof(addr)) != 0) {
+            last_error_ = "bind failed";
+            cleanup_socket();
+            return false;
+        }
+
+        if (listen(listen_socket_.load(), 1) != 0) {
+            last_error_ = "listen failed";
+            cleanup_socket();
+            return false;
+        }
+
+        sockaddr_in bound_addr{};
+        socklen_t bound_len = sizeof(bound_addr);
+        if (getsockname(listen_socket_.load(), reinterpret_cast<sockaddr *>(&bound_addr),
+                        &bound_len) != 0) {
+            last_error_ = "getsockname failed";
+            cleanup_socket();
+            return false;
+        }
+        port_ = ntohs(bound_addr.sin_port);
+
+        server_thread_ = std::thread([this]() { run(); });
+
+        std::unique_lock<std::mutex> lock(state_mutex_);
+        ready_cv_.wait(lock, [this]() {
+            return ready_.load(std::memory_order_acquire) ||
+                   failed_.load(std::memory_order_acquire);
+        });
+        const bool started = ready_.load(std::memory_order_acquire) &&
+                             !failed_.load(std::memory_order_acquire);
+        if (!started && last_error_.empty()) {
+            last_error_ = "server thread did not become ready";
+        }
+        return started;
+    }
+
+    void stop() {
+        stop_requested_.store(true);
+        close_socket(client_socket_.exchange(kInvalidSocket));
+        close_socket(listen_socket_.exchange(kInvalidSocket));
+        if (server_thread_.joinable()) {
+            server_thread_.join();
+        }
+        cleanup_socket();
+    }
+
+    ~LocalHttpStallServer() {
+        stop();
+    }
+
+    std::string url(const std::string &path) const {
+        return "http://127.0.0.1:" + std::to_string(port_) + path;
+    }
+
+    const std::string &last_error() const {
+        return last_error_;
+    }
+
+    bool wait_for_segment_request(const std::string &segment_path,
+                                  int timeout_ms) {
+        std::unique_lock<std::mutex> lock(state_mutex_);
+        return request_cv_.wait_for(lock, std::chrono::milliseconds(timeout_ms),
+                                    [&]() {
+                                        return requested_path_ == segment_path ||
+                                               failed_.load(std::memory_order_acquire);
+                                    });
+    }
+
+    bool wait_for_body_bytes(size_t minimum_bytes, int timeout_ms) {
+        std::unique_lock<std::mutex> lock(state_mutex_);
+        return request_cv_.wait_for(lock, std::chrono::milliseconds(timeout_ms),
+                                    [&]() {
+                                        return body_bytes_sent_ >= minimum_bytes ||
+                                               failed_.load(std::memory_order_acquire);
+                                    });
+    }
+
+private:
+    bool load_asset() {
+        for (int waited = 0; waited <= 2000; waited += 50) {
+            std::ifstream file(asset_path_, std::ios::binary);
+            if (file) {
+                std::vector<uint8_t> bytes((std::istreambuf_iterator<char>(file)),
+                                           std::istreambuf_iterator<char>());
+                if (!bytes.empty()) {
+                    file_bytes_ = std::move(bytes);
+                    return true;
+                }
+            }
+            std::this_thread::sleep_for(std::chrono::milliseconds(50));
+        }
+        return false;
+    }
+
+    void cleanup_socket() {
+        close_socket(listen_socket_.exchange(kInvalidSocket));
+        close_socket(client_socket_.exchange(kInvalidSocket));
+    }
+
+    static bool path_contains(const std::string &request, const char *needle) {
+        return request.find(needle) != std::string::npos;
+    }
+
+    std::string read_request(SocketType client) {
+        std::string request;
+        char buffer[1024];
+        for (;;) {
+            int received = recv(client, buffer, sizeof(buffer), 0);
+            if (received <= 0) {
+                break;
+            }
+            request.append(buffer, buffer + received);
+            if (request.find("\r\n\r\n") != std::string::npos) {
+                break;
+            }
+        }
+        return request;
+    }
+
+    size_t send_all(SocketType client, const char *data, size_t size) {
+        size_t written = 0;
+        while (written < size && !stop_requested_.load()) {
+            int sent = send(client, data + written, static_cast<int>(size - written), 0);
+            if (sent <= 0) {
+                break;
+            }
+            written += static_cast<size_t>(sent);
+        }
+        return written;
+    }
+
+    void handle_client(SocketType client) {
+        const std::string request = read_request(client);
+        if (request.empty()) {
+            return;
+        }
+
+        if (path_contains(request, "GET /segment0.ts")) {
+            {
+                std::lock_guard<std::mutex> lock(state_mutex_);
+                requested_path_ = "/segment0.ts";
+            }
+            request_cv_.notify_all();
+            std::ostringstream headers;
+            headers << "HTTP/1.1 200 OK\r\n"
+                    << "Content-Type: video/MP2T\r\n"
+                    << "Connection: keep-alive\r\n"
+                    << "Content-Length: " << file_bytes_.size() << "\r\n\r\n";
+            const std::string header_blob = headers.str();
+            send_all(client, header_blob.c_str(), header_blob.size());
+            const size_t initial_bytes = std::min<size_t>(
+                file_bytes_.size(),
+                std::max<size_t>(128 * 1024, file_bytes_.size() / 2));
+            const size_t body_bytes = send_all(
+                client, reinterpret_cast<const char *>(file_bytes_.data()),
+                initial_bytes);
+            {
+                std::lock_guard<std::mutex> lock(state_mutex_);
+                body_bytes_sent_ = body_bytes;
+            }
+            request_cv_.notify_all();
+            if (stream_end_mode_ == StreamEndMode::CloseAfterBody) {
+                return;
+            }
+            while (!stop_requested_.load()) {
+                std::this_thread::sleep_for(std::chrono::milliseconds(100));
+            }
+        } else if (path_contains(request, "GET /segment1.ts")) {
+            {
+                std::lock_guard<std::mutex> lock(state_mutex_);
+                requested_path_ = "/segment1.ts";
+            }
+            request_cv_.notify_all();
+            std::ostringstream headers;
+            headers << "HTTP/1.1 200 OK\r\n"
+                    << "Content-Type: video/MP2T\r\n"
+                    << "Connection: keep-alive\r\n"
+                    << "Content-Length: " << file_bytes_.size() << "\r\n\r\n";
+            const std::string header_blob = headers.str();
+            send_all(client, header_blob.c_str(), header_blob.size());
+            while (!stop_requested_.load()) {
+                std::this_thread::sleep_for(std::chrono::milliseconds(100));
+            }
+
+        } else if (path_contains(request, "GET /master.m3u8")) {
+            const std::string playlist =
+                "#EXTM3U\r\n"
+                "#EXT-X-VERSION:3\r\n"
+                "#EXT-X-TARGETDURATION:6\r\n"
+                "#EXT-X-MEDIA-SEQUENCE:0\r\n"
+                "#EXTINF:6.0,\r\n"
+                "/segment0.ts\r\n"
+                "#EXTINF:6.0,\r\n"
+                "/segment1.ts\r\n";
+            std::ostringstream headers;
+            headers << "HTTP/1.1 200 OK\r\n"
+                    << "Content-Type: application/vnd.apple.mpegurl\r\n"
+                    << "Connection: close\r\n"
+                    << "Content-Length: " << playlist.size() << "\r\n\r\n";
+            const std::string header_blob = headers.str();
+            send_all(client, header_blob.c_str(), header_blob.size());
+            send_all(client, playlist.c_str(), playlist.size());
+        } else {
+            const std::string not_found =
+                "HTTP/1.1 404 Not Found\r\nConnection: close\r\nContent-Length: 0\r\n\r\n";
+            send_all(client, not_found.c_str(), not_found.size());
+        }
+    }
+
+    void run() {
+        {
+            std::lock_guard<std::mutex> lock(state_mutex_);
+            ready_.store(true, std::memory_order_release);
+        }
+        ready_cv_.notify_all();
+
+        while (!stop_requested_.load()) {
+            const SocketType listen_socket = listen_socket_.load();
+            if (listen_socket == kInvalidSocket) {
+                break;
+            }
+            fd_set readfds;
+            FD_ZERO(&readfds);
+            FD_SET(listen_socket, &readfds);
+            timeval timeout{};
+            timeout.tv_sec = 0;
+            timeout.tv_usec = 100000;
+            int ready = select(static_cast<int>(listen_socket) + 1, &readfds, nullptr, nullptr, &timeout);
+            if (ready <= 0 || !FD_ISSET(listen_socket, &readfds)) {
+                continue;
+            }
+
+            sockaddr_in client_addr{};
+            socklen_t client_len = sizeof(client_addr);
+            SocketType client_socket = accept(listen_socket, reinterpret_cast<sockaddr *>(&client_addr), &client_len);
+            if (client_socket == kInvalidSocket) {
+                continue;
+            }
+
+            client_socket_.store(client_socket);
+            handle_client(client_socket);
+            close_socket(client_socket_.exchange(kInvalidSocket));
+        }
+    }
+
+    std::string asset_path_;
+    StreamEndMode stream_end_mode_;
+    std::vector<uint8_t> file_bytes_;
+    std::atomic<SocketType> listen_socket_{kInvalidSocket};
+    std::atomic<SocketType> client_socket_{kInvalidSocket};
+    int port_{0};
+    std::thread server_thread_;
+    std::atomic<bool> stop_requested_{false};
+    std::mutex state_mutex_;
+    std::condition_variable ready_cv_;
+    std::condition_variable request_cv_;
+    std::atomic<bool> ready_{false};
+    std::atomic<bool> failed_{false};
+    std::string requested_path_;
+    size_t body_bytes_sent_{0};
+    std::string last_error_;
+};
+
+static void remove_matching_files(const std::filesystem::path &dir,
+                                  const std::string &prefix) {
+    if (!std::filesystem::exists(dir)) {
+        return;
+    }
+    for (const auto &entry : std::filesystem::directory_iterator(dir)) {
+        const std::string filename = entry.path().filename().string();
+        if (filename.rfind(prefix, 0) == 0) {
+            std::error_code ec;
+            std::filesystem::remove(entry.path(), ec);
+        }
+    }
+}
+
+} // namespace
 
 TEST(FFmpegKitTest, VersionCheck) {
     char *version = ffmpeg_kit_config_get_ffmpeg_version();
@@ -762,59 +1290,6 @@ TEST_F(FFplayKitInteractiveTest, GlobalAPIs) {
     ffmpeg_kit_handle_release(session);
 }
 
-// dont really need this test? sessions are ending instatnly
-// TEST_F(FFplayKitInteractiveTest, TimeoutSession) {
-//     const char* video_file = TEST_VIDEO_FILE;
-//     char command[256];
-//     snprintf(command, sizeof(command), "-loglevel fatal -nodisp -autoexit -i %s", video_file);
-
-//     // 1. Start Session 1 normally
-//     FFplaySessionHandle session1 = ffplay_kit_execute_async(command, nullptr, nullptr, 1000);
-//     printf("Session 1: %p\n", session1);
-//     ASSERT_NE(session1, nullptr);
-//     WaitForSeconds(2);
-//     printf("Session 1 is playing: %d\n", ffplay_kit_session_is_playing(session1));
-//     EXPECT_EQ(ffplay_kit_session_is_playing(session1), 1);
-
-//     // 2. Create Session 2
-//     FFplaySessionHandle session2 = ffplay_kit_create_session(command);
-//     printf("Session 2: %p\n", session2);
-//     ASSERT_NE(session2, nullptr);
-
-//     // 3. Execute Session 2 with a very short timeout (5ms)
-//     // This should fail because Session 1 is running and won't stop instantly
-//     ffplay_kit_session_execute_async(session2, 0);
-    
-//     // Wait for async execution to process
-//     WaitForSeconds(1);
-
-//     // 4. Verify Session 2 failed
-//     FFmpegKitSessionState state2 = ffmpeg_kit_session_get_state(session2);
-    
-//     // It should be FAILED
-//     if (state2 != FFMPEG_KIT_SESSION_STATE_FAILED) {
-//          printf("Session 2 state: %d\n", state2);
-//          char *failStackTrace = ffmpeg_kit_session_get_fail_stack_trace(session2);
-//          if (failStackTrace) {
-//              printf("Fail Stack Trace:\n%s\n", failStackTrace);
-//              free(failStackTrace);
-//          }
-//     }
-//     printf("State 2: %d\n", state2);
-//     EXPECT_EQ(state2, FFMPEG_KIT_SESSION_STATE_FAILED);
-
-//     // Session 1 might still be running or stopped depending on how far cleanup
-//     // got cleanup requests cancel on Session 1 even if we timeout waiting for
-//     // it So session 1 might eventually stop.
-
-//     ffplay_kit_session_close(session1);
-//     ffplay_kit_session_close(session2);
-    
-//     ffmpeg_kit_handle_release(session1);
-//     ffmpeg_kit_handle_release(session2);
-// }
-
-
 TEST(FFmpegKitTest, PackageName) {
     char *pkg = ffmpeg_kit_packages_get_package_name();
     // Default might be "ffmpeg-kit" or similar
@@ -1058,6 +1533,481 @@ TEST(FFmpegKitTest, ConcurrentFFprobeSessions) {
     // Cleanup
     ffmpeg_kit_handle_release(ffprobe_session1);
     ffmpeg_kit_handle_release(ffprobe_session2);
+}
+
+TEST(FFmpegKitTest, ConcurrentLongRunningFFmpegSessions) {
+    const std::filesystem::path output_dir =
+        std::filesystem::temp_directory_path() / "ffmpegkit_parallel_ffmpeg";
+    std::error_code ec;
+    std::filesystem::create_directories(output_dir, ec);
+    ASSERT_FALSE(ec) << "Failed to create temporary output directory";
+
+    const std::filesystem::path output1 = output_dir / "parallel_ffmpeg_1.mp4";
+    const std::filesystem::path output2 = output_dir / "parallel_ffmpeg_2.mp4";
+    auto signal1 = std::make_shared<CompletionSignal>();
+    auto signal2 = std::make_shared<CompletionSignal>();
+
+    std::ostringstream command1;
+    command1
+        << "-y -nostdin -hide_banner -loglevel warning -re "
+        << "-f lavfi -i testsrc=duration=12:size=320x240:rate=30 "
+        << "-threads 1 -pix_fmt yuv420p -c:v mpeg4 -q:v 5 -an "
+        << quote_path(output1);
+
+    std::ostringstream command2;
+    command2
+        << "-y -nostdin -hide_banner -loglevel warning -re "
+        << "-f lavfi -i testsrc2=duration=12:size=352x288:rate=24 "
+        << "-threads 1 -pix_fmt yuv420p -c:v mpeg4 -q:v 5 -an "
+        << quote_path(output2);
+
+    FFmpegSessionHandle session1 = ffmpeg_kit_create_session(command1.str().c_str());
+    FFmpegSessionHandle session2 = ffmpeg_kit_create_session(command2.str().c_str());
+    ASSERT_NE(session1, nullptr);
+    ASSERT_NE(session2, nullptr);
+    ScopedFFmpegCompleteCallback callback1(session1, signal1);
+    ScopedFFmpegCompleteCallback callback2(session2, signal2);
+
+    ffmpeg_kit_session_execute_async(session1);
+    ffmpeg_kit_session_execute_async(session2);
+
+    auto wait_for_running = [](FFmpegSessionHandle handle, int timeout_ms) {
+        int waited = 0;
+        while (waited < timeout_ms) {
+            if (ffmpeg_kit_session_get_state(handle) == FFMPEG_KIT_SESSION_STATE_RUNNING) {
+                return true;
+            }
+            std::this_thread::sleep_for(std::chrono::milliseconds(50));
+            waited += 50;
+        }
+        return ffmpeg_kit_session_get_state(handle) == FFMPEG_KIT_SESSION_STATE_RUNNING;
+    };
+
+    EXPECT_TRUE(wait_for_running(session1, 5000));
+    EXPECT_TRUE(wait_for_running(session2, 5000));
+
+    ASSERT_TRUE(wait_for_completion_signal(signal1, 30000));
+    ASSERT_TRUE(wait_for_completion_signal(signal2, 30000));
+
+    EXPECT_EQ(ffmpeg_kit_session_get_state(session1), FFMPEG_KIT_SESSION_STATE_COMPLETED);
+    EXPECT_EQ(ffmpeg_kit_session_get_state(session2), FFMPEG_KIT_SESSION_STATE_COMPLETED);
+
+    ffmpeg_kit_handle_release(session1);
+    ffmpeg_kit_handle_release(session2);
+    remove_matching_files(output_dir, "parallel_ffmpeg_");
+    std::filesystem::remove_all(output_dir, ec);
+}
+
+TEST(FFmpegKitTest, ConcurrentFFmpegCancellationIsolation) {
+    auto signal1 = std::make_shared<CompletionSignal>();
+    auto signal2 = std::make_shared<CompletionSignal>();
+
+    std::ostringstream command1;
+    command1
+        << "-y -nostdin -hide_banner -loglevel debug "
+        << "-re -f lavfi -i testsrc2=size=320x240:rate=30 "
+        << "-an -c:v mpeg4 -f null -";
+
+    std::ostringstream command2;
+    command2
+        << "-y -nostdin -hide_banner -loglevel debug "
+        << "-re -f lavfi -i sine=frequency=1000:sample_rate=44100 "
+        << "-vn -c:a aac -f null -";
+
+    FFmpegSessionHandle session1 = ffmpeg_kit_create_session(command1.str().c_str());
+    FFmpegSessionHandle session2 = ffmpeg_kit_create_session(command2.str().c_str());
+    ASSERT_NE(session1, nullptr);
+    ASSERT_NE(session2, nullptr);
+    ScopedFFmpegCompleteCallback callback1(session1, signal1);
+    ScopedFFmpegCompleteCallback callback2(session2, signal2);
+
+    ffmpeg_kit_session_execute_async(session1);
+    ffmpeg_kit_session_execute_async(session2);
+
+    EXPECT_TRUE(wait_for_running_state(session1, 5000));
+    EXPECT_TRUE(wait_for_running_state(session2, 5000));
+    ASSERT_EQ(ffmpeg_kit_session_get_state(session1), FFMPEG_KIT_SESSION_STATE_RUNNING);
+    ASSERT_EQ(ffmpeg_kit_session_get_state(session2), FFMPEG_KIT_SESSION_STATE_RUNNING);
+
+    std::this_thread::sleep_for(std::chrono::milliseconds(1000));
+    ffmpeg_kit_session_cancel(session2);
+    ASSERT_TRUE(wait_for_completion_signal(signal2, 30000));
+    EXPECT_EQ(ffmpeg_kit_session_get_state(session1), FFMPEG_KIT_SESSION_STATE_RUNNING);
+    EXPECT_NE(ffmpeg_kit_session_get_state(session2), FFMPEG_KIT_SESSION_STATE_RUNNING);
+
+    std::this_thread::sleep_for(std::chrono::milliseconds(1000));
+    ffmpeg_kit_session_cancel(session1);
+    ASSERT_TRUE(wait_for_completion_signal(signal1, 30000));
+    EXPECT_NE(ffmpeg_kit_session_get_state(session1), FFMPEG_KIT_SESSION_STATE_RUNNING);
+
+    ffmpeg_kit_handle_release(session1);
+    ffmpeg_kit_handle_release(session2);
+}
+
+TEST(FFmpegKitTest, ParallelFFmpegLogAttributionIsolation) {
+    auto signal1 = std::make_shared<CompletionSignal>();
+    auto signal2 = std::make_shared<CompletionSignal>();
+
+    const char *signature1 = "testsrc2=size=176x144:rate=12:duration=3";
+    const char *signature2 = "color=c=blue:size=160x120:rate=10:duration=3";
+
+    std::ostringstream command1;
+    command1
+        << "-y -nostdin -hide_banner -loglevel info "
+        << "-re -f lavfi -i " << signature1 << " "
+        << "-an -frames:v 24 -f null -";
+
+    std::ostringstream command2;
+    command2
+        << "-y -nostdin -hide_banner -loglevel info "
+        << "-re -f lavfi -i " << signature2 << " "
+        << "-an -frames:v 20 -f null -";
+
+    FFmpegSessionHandle session1 = ffmpeg_kit_create_session(command1.str().c_str());
+    FFmpegSessionHandle session2 = ffmpeg_kit_create_session(command2.str().c_str());
+    ASSERT_NE(session1, nullptr);
+    ASSERT_NE(session2, nullptr);
+
+    ScopedFFmpegCompleteCallback callback1(session1, signal1);
+    ScopedFFmpegCompleteCallback callback2(session2, signal2);
+
+    ffmpeg_kit_session_execute_async(session1);
+    ffmpeg_kit_session_execute_async(session2);
+
+    EXPECT_TRUE(wait_for_running_state(session1, 5000));
+    EXPECT_TRUE(wait_for_running_state(session2, 5000));
+
+    ASSERT_TRUE(wait_for_completion_signal(signal1, 30000));
+    ASSERT_TRUE(wait_for_completion_signal(signal2, 30000));
+    EXPECT_EQ(ffmpeg_kit_session_get_state(session1),
+              FFMPEG_KIT_SESSION_STATE_COMPLETED);
+    EXPECT_EQ(ffmpeg_kit_session_get_state(session2),
+              FFMPEG_KIT_SESSION_STATE_COMPLETED);
+
+    expect_logs_isolated(session1, signature1, signature2);
+    expect_logs_isolated(session2, signature2, signature1);
+
+    ffmpeg_kit_handle_release(session1);
+    ffmpeg_kit_handle_release(session2);
+}
+
+TEST(FFmpegKitTest, ParallelFFprobeLogAttributionIsolation) {
+    auto signal1 = std::make_shared<CompletionSignal>();
+    auto signal2 = std::make_shared<CompletionSignal>();
+
+    const char *signature1 = "testsrc2=size=123x77:rate=7:duration=2";
+    const char *signature2 = "sine=frequency=777:sample_rate=22050:duration=2";
+
+    std::ostringstream command1;
+    command1
+        << "-hide_banner -loglevel info -show_streams -show_format "
+        << "-f lavfi -i " << signature1;
+
+    std::ostringstream command2;
+    command2
+        << "-hide_banner -loglevel info -show_streams -show_format "
+        << "-f lavfi -i " << signature2;
+
+    FFprobeSessionHandle session1 =
+        ffprobe_kit_create_session(command1.str().c_str());
+    FFprobeSessionHandle session2 =
+        ffprobe_kit_create_session(command2.str().c_str());
+    ASSERT_NE(session1, nullptr);
+    ASSERT_NE(session2, nullptr);
+
+    ScopedFFprobeCompleteCallback callback1(session1, signal1);
+    ScopedFFprobeCompleteCallback callback2(session2, signal2);
+
+    ffprobe_kit_session_execute_async(session1);
+    ffprobe_kit_session_execute_async(session2);
+
+    EXPECT_TRUE(wait_for_running_state(session1, 5000));
+    EXPECT_TRUE(wait_for_running_state(session2, 5000));
+
+    ASSERT_TRUE(wait_for_completion_signal(signal1, 30000));
+    ASSERT_TRUE(wait_for_completion_signal(signal2, 30000));
+    EXPECT_EQ(ffmpeg_kit_session_get_state(session1),
+              FFMPEG_KIT_SESSION_STATE_COMPLETED);
+    EXPECT_EQ(ffmpeg_kit_session_get_state(session2),
+              FFMPEG_KIT_SESSION_STATE_COMPLETED);
+
+    expect_logs_isolated(session1, signature1, signature2);
+    expect_logs_isolated(session2, signature2, signature1);
+
+    ffmpeg_kit_handle_release(session1);
+    ffmpeg_kit_handle_release(session2);
+}
+
+TEST(FFmpegKitTest, FFprobeShowLogPreservesCompletionCallback) {
+    std::ostringstream command;
+    command << "-hide_banner -loglevel info -show_frames -show_log 48 "
+            << "-read_intervals 0%+1 -select_streams v:0 -i "
+            << TEST_VIDEO_FILE;
+
+    FFprobeSessionHandle session =
+        ffprobe_kit_create_session(command.str().c_str());
+    ASSERT_NE(session, nullptr);
+
+    auto signal = std::make_shared<CompletionSignal>();
+    ScopedFFprobeCompleteCallback callback(session, signal);
+
+    ffprobe_kit_session_execute_async(session);
+
+    ASSERT_TRUE(wait_for_completion_signal(signal, 30000))
+        << "Timed out waiting for ffprobe -show_log completion callback";
+
+    const int final_state = ffmpeg_kit_session_get_state(session);
+    EXPECT_EQ(final_state, FFMPEG_KIT_SESSION_STATE_COMPLETED);
+
+    const std::string logs = session_logs_as_string(session);
+    EXPECT_FALSE(logs.empty());
+
+    ffmpeg_kit_handle_release(session);
+}
+
+TEST(FFmpegKitTest, MixedParallelFFmpegAndFFprobeExecutionCancellation) {
+    auto ffmpeg_signal = std::make_shared<CompletionSignal>();
+    auto ffprobe_signal = std::make_shared<CompletionSignal>();
+
+    std::ostringstream ffmpeg_command;
+    ffmpeg_command
+        << "-y -nostdin -hide_banner -loglevel debug "
+        << "-re -f lavfi -i testsrc2=size=320x240:rate=30 "
+        << "-an -c:v mpeg4 -f null -";
+
+    std::ostringstream ffprobe_command;
+    ffprobe_command
+        << "-hide_banner -loglevel warning -select_streams v:0 -count_frames -show_streams "
+        << "-f lavfi -i testsrc2=size=160x120:rate=5";
+
+    FFmpegSessionHandle ffmpeg_session = ffmpeg_kit_create_session(ffmpeg_command.str().c_str());
+    FFprobeSessionHandle ffprobe_session = ffprobe_kit_create_session(ffprobe_command.str().c_str());
+
+    ASSERT_NE(ffmpeg_session, nullptr);
+    ASSERT_NE(ffprobe_session, nullptr);
+    ScopedFFmpegCompleteCallback ffmpeg_callback(ffmpeg_session, ffmpeg_signal);
+    ScopedFFprobeCompleteCallback ffprobe_callback(ffprobe_session, ffprobe_signal);
+
+    ffmpeg_kit_session_execute_async(ffmpeg_session);
+    ffprobe_kit_session_execute_async(ffprobe_session);
+
+    EXPECT_TRUE(wait_for_running_state(ffmpeg_session, 5000));
+    EXPECT_TRUE(wait_for_running_state(ffprobe_session, 5000));
+    ASSERT_EQ(ffmpeg_kit_session_get_state(ffmpeg_session), FFMPEG_KIT_SESSION_STATE_RUNNING);
+    ASSERT_EQ(ffmpeg_kit_session_get_state(ffprobe_session), FFMPEG_KIT_SESSION_STATE_RUNNING);
+    std::this_thread::sleep_for(std::chrono::milliseconds(1000));
+    ffmpeg_kit_session_cancel(ffmpeg_session);
+
+    EXPECT_EQ(ffmpeg_kit_session_get_state(ffprobe_session), FFMPEG_KIT_SESSION_STATE_RUNNING);
+    std::this_thread::sleep_for(std::chrono::milliseconds(1000));
+    ffprobe_kit_cancel_session(ffmpeg_kit_session_get_session_id(ffprobe_session));
+
+    ASSERT_TRUE(wait_for_completion_signal(ffmpeg_signal, 30000));
+    ASSERT_TRUE(wait_for_completion_signal(ffprobe_signal, 30000));
+
+    EXPECT_NE(ffmpeg_kit_session_get_state(ffmpeg_session), FFMPEG_KIT_SESSION_STATE_RUNNING);
+    EXPECT_NE(ffmpeg_kit_session_get_state(ffprobe_session), FFMPEG_KIT_SESSION_STATE_RUNNING);
+
+    ffmpeg_kit_handle_release(ffmpeg_session);
+    ffmpeg_kit_handle_release(ffprobe_session);
+}
+
+TEST(FFmpegKitTest, UnattributedCallbacksDoNotBlockSessionCompletion) {
+    auto signal = std::make_shared<CompletionSignal>();
+
+    std::ostringstream command;
+    command
+        << "-y -nostdin -hide_banner -loglevel debug "
+        << "-re -f lavfi -i testsrc2=size=320x240:rate=30 "
+        << "-an -c:v mpeg4 -f null -";
+
+    FFmpegSessionHandle session = ffmpeg_kit_create_session(command.str().c_str());
+    ASSERT_NE(session, nullptr);
+
+    ScopedFFmpegCompleteCallback callback(session, signal);
+    ffmpeg_kit_session_execute_async(session);
+
+    ASSERT_TRUE(wait_for_running_state(session, 5000));
+    ASSERT_EQ(ffmpeg_kit_session_get_state(session),
+              FFMPEG_KIT_SESSION_STATE_RUNNING);
+
+    const char *foreign_signature = "synthetic-unattributed-log";
+    std::atomic<bool> stop_emitter{false};
+    std::thread emitter([&stop_emitter, foreign_signature]() {
+        int emitted = 0;
+        while (!stop_emitter.load() && emitted < 100) {
+            ffmpeg_kit_test_emit_unattributed_log(foreign_signature);
+            std::this_thread::sleep_for(std::chrono::milliseconds(10));
+            emitted++;
+        }
+    });
+
+    std::this_thread::sleep_for(std::chrono::milliseconds(500));
+    ffmpeg_kit_session_cancel(session);
+
+    ASSERT_TRUE(wait_for_completion_signal(signal, 30000));
+    EXPECT_NE(ffmpeg_kit_session_get_state(session),
+              FFMPEG_KIT_SESSION_STATE_RUNNING);
+
+    stop_emitter.store(true);
+    emitter.join();
+
+    const std::string logs = session_logs_as_string(session);
+    EXPECT_EQ(logs.find(foreign_signature), std::string::npos)
+        << "Unattributed log leaked into real session log:\n" << logs;
+
+    ffmpeg_kit_handle_release(session);
+}
+
+TEST(FFmpegKitTest, CancelStalledHttpStream) {
+    const std::filesystem::path output_dir =
+        std::filesystem::temp_directory_path() / "ffmpegkit_cancel";
+    std::error_code ec;
+    std::filesystem::create_directories(output_dir, ec);
+    ASSERT_FALSE(ec) << "Failed to create temporary output directory";
+
+    const std::filesystem::path segment_path = output_dir / "segment.ts";
+    {
+        std::ostringstream setup_command;
+        setup_command
+            << "-y -hide_banner -loglevel fatal "
+            << "-f lavfi -i testsrc=duration=8:size=128x128:rate=10 "
+            << "-f lavfi -i sine=frequency=1000:duration=8 "
+            << "-shortest -c:v mpeg2video -c:a mp2 -f mpegts "
+            << "\"" << segment_path.string() << "\"";
+
+        FFmpegSessionHandle setup_session = ffmpeg_kit_execute(setup_command.str().c_str());
+        ASSERT_NE(setup_session, nullptr);
+        EXPECT_EQ(ffmpeg_kit_session_get_state(setup_session),
+                  FFMPEG_KIT_SESSION_STATE_COMPLETED);
+        ffmpeg_kit_handle_release(setup_session);
+    }
+
+    LocalHttpStallServer server(segment_path.string());
+    ASSERT_TRUE(server.start());
+
+    const std::string user_agent = "FFmpegKit-Issue8-Test";
+    const std::string url = server.url("/segment0.ts");
+    const std::string output_prefix = "cancel_midstream_";
+    const std::string output_pattern =
+        (output_dir / (output_prefix + "%03d.ts")).string();
+    auto completion_signal = std::make_shared<CompletionSignal>();
+
+    std::ostringstream command;
+    command
+        << "-y -nostdin -xerror -hide_banner -loglevel warning "
+        << "-reconnect 1 -reconnect_at_eof 1 -reconnect_streamed 1 -reconnect_delay_max 5 "
+        << "-rw_timeout 5000000 "
+        << "-max_delay 5000000 -thread_queue_size 512 "
+        << "-user_agent \"" << user_agent << "\" "
+        << "-i \"" << url << "\" "
+        << "-map 0:v:0 -map 0:a:0 -c copy "
+        << "-f segment -segment_time 2 -reset_timestamps 1 "
+        << "\"" << output_pattern << "\"";
+
+    FFmpegSessionHandle session = ffmpeg_kit_create_session(command.str().c_str());
+    ASSERT_NE(session, nullptr);
+    ScopedFFmpegCompleteCallback callback(session, completion_signal);
+
+    ffmpeg_kit_session_execute_async(session);
+
+    int64_t session_id = ffmpeg_kit_session_get_session_id(session);
+    ASSERT_GT(session_id, 0);
+
+    auto wait_for_state = [&](FFmpegKitSessionState target_a,
+                              FFmpegKitSessionState target_b,
+                              int timeout_ms) {
+        int waited = 0;
+        while (waited < timeout_ms) {
+            FFmpegKitSessionState state = ffmpeg_kit_session_get_state(session);
+            if (state == target_a || state == target_b) {
+                return state;
+            }
+            std::this_thread::sleep_for(std::chrono::milliseconds(50));
+            waited += 50;
+        }
+        return ffmpeg_kit_session_get_state(session);
+    };
+
+    FFmpegKitSessionState initial_state = wait_for_state(
+        FFMPEG_KIT_SESSION_STATE_RUNNING, FFMPEG_KIT_SESSION_STATE_FAILED, 5000);
+    ASSERT_EQ(initial_state, FFMPEG_KIT_SESSION_STATE_RUNNING);
+
+    ASSERT_TRUE(server.wait_for_segment_request("/segment0.ts", 15000));
+    ASSERT_TRUE(server.wait_for_body_bytes(128 * 1024, 15000));
+    ASSERT_EQ(ffmpeg_kit_session_get_state(session), FFMPEG_KIT_SESSION_STATE_RUNNING)
+        << "Session ended before mid-stream cancellation was issued";
+    ffmpeg_kit_session_cancel(session);
+
+    const bool completed = wait_for_completion_signal(completion_signal, 120000);
+    ASSERT_TRUE(completed) << "Timed out waiting for onComplete callback after mid-stream cancel";
+    FFmpegKitSessionState final_state = ffmpeg_kit_session_get_state(session);
+    EXPECT_NE(final_state, FFMPEG_KIT_SESSION_STATE_RUNNING);
+    EXPECT_TRUE(final_state == FFMPEG_KIT_SESSION_STATE_COMPLETED ||
+                final_state == FFMPEG_KIT_SESSION_STATE_FAILED);
+    ffmpeg_kit_handle_release(session);
+    remove_matching_files(output_dir, output_prefix);
+    std::filesystem::remove_all(output_dir, ec);
+}
+
+TEST(FFmpegKitTest, UnexpectedMidStreamEndCallsOnComplete) {
+    const std::filesystem::path output_dir =
+        std::filesystem::temp_directory_path() / "ffmpegkit_unexpected_end";
+    std::error_code ec;
+    std::filesystem::create_directories(output_dir, ec);
+    ASSERT_FALSE(ec) << "Failed to create temporary output directory";
+
+    const std::filesystem::path segment_path = output_dir / "segment.ts";
+    {
+        std::ostringstream setup_command;
+        setup_command
+            << "-y -hide_banner -loglevel fatal "
+            << "-f lavfi -i testsrc=duration=8:size=128x128:rate=10 "
+            << "-f lavfi -i sine=frequency=1000:duration=8 "
+            << "-shortest -c:v mpeg2video -c:a mp2 -f mpegts "
+            << "\"" << segment_path.string() << "\"";
+
+        FFmpegSessionHandle setup_session = ffmpeg_kit_execute(setup_command.str().c_str());
+        ASSERT_NE(setup_session, nullptr);
+        EXPECT_EQ(ffmpeg_kit_session_get_state(setup_session),
+                  FFMPEG_KIT_SESSION_STATE_COMPLETED);
+        ffmpeg_kit_handle_release(setup_session);
+    }
+
+    LocalHttpStallServer server(
+        segment_path.string(),
+        LocalHttpStallServer::StreamEndMode::CloseAfterBody);
+    ASSERT_TRUE(server.start()) << server.last_error();
+
+    const std::string url = server.url("/segment0.ts");
+    auto completion_signal = std::make_shared<CompletionSignal>();
+
+    std::ostringstream command;
+    command
+        << "-y -nostdin -xerror -hide_banner -loglevel warning "
+        << "-rw_timeout 5000000 "
+        << "-i \"" << url << "\" "
+        << "-map 0:v:0 -map 0:a:0 -c copy -f null -";
+
+    FFmpegSessionHandle session = ffmpeg_kit_create_session(command.str().c_str());
+    ASSERT_NE(session, nullptr);
+    ScopedFFmpegCompleteCallback callback(session, completion_signal);
+
+    ffmpeg_kit_session_execute_async(session);
+
+    ASSERT_TRUE(server.wait_for_segment_request("/segment0.ts", 15000));
+    ASSERT_TRUE(server.wait_for_body_bytes(128 * 1024, 15000));
+
+    const bool completed = wait_for_completion_signal(completion_signal, 120000);
+    ASSERT_TRUE(completed) << "Timed out waiting for onComplete callback after unexpected stream end";
+    FFmpegKitSessionState final_state = ffmpeg_kit_session_get_state(session);
+    EXPECT_NE(final_state, FFMPEG_KIT_SESSION_STATE_RUNNING);
+    EXPECT_TRUE(final_state == FFMPEG_KIT_SESSION_STATE_COMPLETED ||
+                final_state == FFMPEG_KIT_SESSION_STATE_FAILED);
+
+    ffmpeg_kit_handle_release(session);
+    remove_matching_files(output_dir, "");
+    std::filesystem::remove_all(output_dir, ec);
 }
 
 TEST(FFmpegKitTest, SessionManagement) {
