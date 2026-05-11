@@ -53,7 +53,7 @@ typedef void (*FFmpegKitCompleteCallback)(FFmpegSessionHandle session,
 typedef void (*FFmpegKitLogCallback)(FFmpegSessionHandle session,
                                      const char *log, void *user_data);
 typedef void (*FFmpegKitStatisticsCallback)(
-    FFmpegSessionHandle session, int64_t time, int64_t size, double bitrate,
+    FFmpegSessionHandle session, int64_t time_elapsed, int64_t time, int64_t size, double bitrate,
     double speed, int64_t videoFrameNumber, double videoFps,
     double videoQuality, void *user_data);
 typedef void (*FFprobeKitCompleteCallback)(FFprobeSessionHandle session,
