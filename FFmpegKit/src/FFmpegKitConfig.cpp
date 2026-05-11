@@ -57,6 +57,7 @@ extern "C" {
 #include <cctype>
 #include <cstdlib>
 #include <ctime>
+#include <functional>
 #include <fstream>
 #include <iostream>
 #include <climits>
@@ -195,7 +196,11 @@ void ffmpegkit_set_log_delegate_callback(
 static std::string getCurrentTimeStamp() {
   time_t now = time(0);
   struct tm timeinfo;
+#if defined(_WIN32) || defined(_WIN64)
+  localtime_s(&timeinfo, &now);
+#else
   localtime_r(&now, &timeinfo);
+#endif
   char buffer[80];
   strftime(buffer, sizeof(buffer), "%Y-%m-%d %H:%M:%S", &timeinfo);
   struct timeval tv;
@@ -354,7 +359,8 @@ static bool shouldLogAttributionDiagnostics() {
 
 static std::string currentThreadIdString() {
   std::ostringstream stream;
-  stream << std::this_thread::get_id();
+  stream << static_cast<unsigned long long>(
+      std::hash<std::thread::id>{}(std::this_thread::get_id()));
   return stream.str();
 }
 
