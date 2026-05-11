@@ -1,3 +1,4 @@
+#include "ffmpeg_tls.h"
 /*
  * Copyright (c) 2007-2010 Stefano Sabatini
  *
@@ -67,11 +68,18 @@
 #include "libavfilter/version.h"
 #include "textformat/avtextformat.h"
 #include "cmdutils.h"
+#include "ffprobe_lib.h"
 #include "opt_common.h"
 
 #include "libavutil/thread.h"
 
 static void ffprobe_tls_init_options(void);
+
+static int decode_interrupt_cb(void *ctx)
+{
+    FFprobeContext *wrapper_ctx = ctx ? ctx : ffprobe_get_current_context();
+    return ffprobe_cancel_requested(wrapper_ctx);
+}
 
 // attached as opaque_ref to packets/frames
 typedef struct FrameData {
@@ -95,59 +103,59 @@ typedef struct InputFile {
 //const char program_name[] = "ffprobe";
 //const int program_birth_year = 2007;
 
-static int do_analyze_frames = 0;
-static int do_bitexact = 0;
-static int do_count_frames = 0;
-static int do_count_packets = 0;
-static int do_read_frames  = 0;
-static int do_read_packets = 0;
-static int do_show_chapters = 0;
-static int do_show_error   = 0;
-static int do_show_format  = 0;
-static int do_show_frames  = 0;
-static int do_show_packets = 0;
-static int do_show_programs = 0;
-static int do_show_stream_groups = 0;
-static int do_show_stream_group_components = 0;
-static int do_show_streams = 0;
-static int do_show_stream_disposition = 0;
-static int do_show_stream_group_disposition = 0;
-static int do_show_data    = 0;
-static int do_show_program_version  = 0;
-static int do_show_library_versions = 0;
-static int do_show_pixel_formats = 0;
-static int do_show_pixel_format_flags = 0;
-static int do_show_pixel_format_components = 0;
-static int do_show_log = 0;
+static FFMPEG_THREAD_LOCAL int do_analyze_frames = 0;
+static FFMPEG_THREAD_LOCAL int do_bitexact = 0;
+static FFMPEG_THREAD_LOCAL int do_count_frames = 0;
+static FFMPEG_THREAD_LOCAL int do_count_packets = 0;
+static FFMPEG_THREAD_LOCAL int do_read_frames  = 0;
+static FFMPEG_THREAD_LOCAL int do_read_packets = 0;
+static FFMPEG_THREAD_LOCAL int do_show_chapters = 0;
+static FFMPEG_THREAD_LOCAL int do_show_error   = 0;
+static FFMPEG_THREAD_LOCAL int do_show_format  = 0;
+static FFMPEG_THREAD_LOCAL int do_show_frames  = 0;
+static FFMPEG_THREAD_LOCAL int do_show_packets = 0;
+static FFMPEG_THREAD_LOCAL int do_show_programs = 0;
+static FFMPEG_THREAD_LOCAL int do_show_stream_groups = 0;
+static FFMPEG_THREAD_LOCAL int do_show_stream_group_components = 0;
+static FFMPEG_THREAD_LOCAL int do_show_streams = 0;
+static FFMPEG_THREAD_LOCAL int do_show_stream_disposition = 0;
+static FFMPEG_THREAD_LOCAL int do_show_stream_group_disposition = 0;
+static FFMPEG_THREAD_LOCAL int do_show_data    = 0;
+static FFMPEG_THREAD_LOCAL int do_show_program_version  = 0;
+static FFMPEG_THREAD_LOCAL int do_show_library_versions = 0;
+static FFMPEG_THREAD_LOCAL int do_show_pixel_formats = 0;
+static FFMPEG_THREAD_LOCAL int do_show_pixel_format_flags = 0;
+static FFMPEG_THREAD_LOCAL int do_show_pixel_format_components = 0;
+static FFMPEG_THREAD_LOCAL int do_show_log = 0;
 
-static int do_show_chapter_tags = 0;
-static int do_show_format_tags = 0;
-static int do_show_frame_tags = 0;
-static int do_show_program_tags = 0;
-static int do_show_stream_group_tags = 0;
-static int do_show_stream_tags = 0;
-static int do_show_packet_tags = 0;
+static FFMPEG_THREAD_LOCAL int do_show_chapter_tags = 0;
+static FFMPEG_THREAD_LOCAL int do_show_format_tags = 0;
+static FFMPEG_THREAD_LOCAL int do_show_frame_tags = 0;
+static FFMPEG_THREAD_LOCAL int do_show_program_tags = 0;
+static FFMPEG_THREAD_LOCAL int do_show_stream_group_tags = 0;
+static FFMPEG_THREAD_LOCAL int do_show_stream_tags = 0;
+static FFMPEG_THREAD_LOCAL int do_show_packet_tags = 0;
 
-static int show_value_unit              = 0;
-static int use_value_prefix             = 0;
-static int use_byte_value_binary_prefix = 0;
-static int use_value_sexagesimal_format = 0;
-static int show_private_data            = 1;
+static FFMPEG_THREAD_LOCAL int show_value_unit              = 0;
+static FFMPEG_THREAD_LOCAL int use_value_prefix             = 0;
+static FFMPEG_THREAD_LOCAL int use_byte_value_binary_prefix = 0;
+static FFMPEG_THREAD_LOCAL int use_value_sexagesimal_format = 0;
+static FFMPEG_THREAD_LOCAL int show_private_data            = 1;
 
-static const char *audio_codec_name = NULL;
-static const char *data_codec_name = NULL;
-static const char *subtitle_codec_name = NULL;
-static const char *video_codec_name = NULL;
+static FFMPEG_THREAD_LOCAL const char *audio_codec_name = NULL;
+static FFMPEG_THREAD_LOCAL const char *data_codec_name = NULL;
+static FFMPEG_THREAD_LOCAL const char *subtitle_codec_name = NULL;
+static FFMPEG_THREAD_LOCAL const char *video_codec_name = NULL;
 
 #define SHOW_OPTIONAL_FIELDS_AUTO       -1
 #define SHOW_OPTIONAL_FIELDS_NEVER       0
 #define SHOW_OPTIONAL_FIELDS_ALWAYS      1
-static int show_optional_fields = SHOW_OPTIONAL_FIELDS_AUTO;
+static FFMPEG_THREAD_LOCAL int show_optional_fields = SHOW_OPTIONAL_FIELDS_AUTO;
 
-static char *output_format;
-static char *stream_specifier;
-static char *show_data_hash;
-static char *data_dump_format;
+static FFMPEG_THREAD_LOCAL char *output_format;
+static FFMPEG_THREAD_LOCAL char *stream_specifier;
+static FFMPEG_THREAD_LOCAL char *show_data_hash;
+static FFMPEG_THREAD_LOCAL char *data_dump_format;
 
 typedef struct ReadInterval {
     int id;             ///< identifier
@@ -157,10 +165,10 @@ typedef struct ReadInterval {
     int duration_frames;
 } ReadInterval;
 
-static ReadInterval *read_intervals;
-static int read_intervals_nb = 0;
+static FFMPEG_THREAD_LOCAL ReadInterval *read_intervals;
+static FFMPEG_THREAD_LOCAL int read_intervals_nb = 0;
 
-static int find_stream_info  = 1;
+static FFMPEG_THREAD_LOCAL int find_stream_info  = 1;
 
 /* section structure definition */
 
@@ -333,29 +341,29 @@ typedef struct EntrySelection {
     AVDictionary *entries_to_show;
 } EntrySelection;
 
-static EntrySelection selected_entries[FF_ARRAY_ELEMS(sections)] = { 0 };
+static FFMPEG_THREAD_LOCAL EntrySelection selected_entries[FF_ARRAY_ELEMS(sections)] = { 0 };
 
 static FFMPEG_THREAD_LOCAL OptionDef *options;
 
 /* FFprobe context */
-static const char *input_filename;
-static const char *print_input_filename;
-static const AVInputFormat *iformat = NULL;
-static const char *output_filename = NULL;
+static FFMPEG_THREAD_LOCAL const char *input_filename;
+static FFMPEG_THREAD_LOCAL const char *print_input_filename;
+static FFMPEG_THREAD_LOCAL const AVInputFormat *iformat = NULL;
+static FFMPEG_THREAD_LOCAL const char *output_filename = NULL;
 
 static const char unit_second_str[]         = "s"    ;
 static const char unit_hertz_str[]          = "Hz"   ;
 static const char unit_byte_str[]           = "byte" ;
 static const char unit_bit_per_second_str[] = "bit/s";
 
-static int nb_streams;
-static uint64_t *nb_streams_packets;
-static uint64_t *nb_streams_frames;
-static int *selected_streams;
-static int *streams_with_closed_captions;
-static int *streams_with_film_grain;
+static FFMPEG_THREAD_LOCAL int nb_streams;
+static FFMPEG_THREAD_LOCAL uint64_t *nb_streams_packets;
+static FFMPEG_THREAD_LOCAL uint64_t *nb_streams_frames;
+static FFMPEG_THREAD_LOCAL int *selected_streams;
+static FFMPEG_THREAD_LOCAL int *streams_with_closed_captions;
+static FFMPEG_THREAD_LOCAL int *streams_with_film_grain;
 
-static AVMutex log_mutex = AV_MUTEX_INITIALIZER;
+static FFMPEG_THREAD_LOCAL AVMutex log_mutex = AV_MUTEX_INITIALIZER;
 
 typedef struct LogBuffer {
     char *context_name;
@@ -366,8 +374,8 @@ typedef struct LogBuffer {
     AVClassCategory parent_category;
 }LogBuffer;
 
-static LogBuffer *log_buffer;
-static int log_buffer_size;
+static FFMPEG_THREAD_LOCAL LogBuffer *log_buffer;
+static FFMPEG_THREAD_LOCAL int log_buffer_size;
 
 static int is_key_selected_callback(AVTextFormatContext *tctx, const char *key)
 {
@@ -382,7 +390,7 @@ static void log_callback(void *ptr, int level, const char *fmt, va_list vl)
     AVClass* avc = ptr ? *(AVClass **) ptr : NULL;
     va_list vl2;
     char line[1024];
-    static int print_prefix = 1;
+    static FFMPEG_THREAD_LOCAL int print_prefix = 1;
     void *new_log_buffer;
 
     va_copy(vl2, vl);
@@ -2436,6 +2444,9 @@ static int open_input_file(InputFile *ifile, const char *filename,
     fmt_ctx = avformat_alloc_context();
     if (!fmt_ctx)
         return AVERROR(ENOMEM);
+
+    fmt_ctx->interrupt_callback.callback = decode_interrupt_cb;
+    fmt_ctx->interrupt_callback.opaque   = ffprobe_get_current_context();
 
     err = set_decoders(fmt_ctx);
     if (err < 0)

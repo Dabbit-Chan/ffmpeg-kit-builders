@@ -1,8 +1,16 @@
 diff --git a/src/ffmpeg.c b/src/ffmpeg.c
-index b394243..6cf82c3 100755
+index b394243..e61da44 100755
 --- a/src/ffmpeg.c
 +++ b/src/ffmpeg.c
-@@ -86,8 +86,10 @@
+@@ -78,6 +78,7 @@
+ #include "libavdevice/avdevice.h"
+ 
+ #include "cmdutils.h"
++#include "ffmpeg_lib.h"
+ #if CONFIG_MEDIACODEC
+ #include "compat/android/binder.h"
+ #endif
+@@ -86,8 +87,15 @@
  #include "ffmpeg_utils.h"
  #include "graph/graphprint.h"
  
@@ -11,11 +19,16 @@ index b394243..6cf82c3 100755
 +//const char program_name[] = "ffmpeg";
 +//const int program_birth_year = 2000;
 +
-+extern void (*report_callback)(int, float, float, int64_t, double, double, double, double);
++extern void (*report_callback)(int, float, float, int64_t, double, double,
++                               double, double);
++
++extern void sch_set_thread_hooks(Scheduler *sch, void *opaque,
++                                 void (*thread_init)(void *opaque),
++                                 void (*thread_uninit)(void *opaque));
  
  FILE *vstats_file;
  
-@@ -99,6 +101,7 @@ typedef struct BenchmarkTimeStamps {
+@@ -99,6 +107,7 @@ typedef struct BenchmarkTimeStamps {
  
  static BenchmarkTimeStamps get_benchmark_time_stamps(void);
  static int64_t getmaxrss(void);
@@ -23,7 +36,7 @@ index b394243..6cf82c3 100755
  
  atomic_uint nb_output_dumped = 0;
  
-@@ -138,24 +141,24 @@ void term_exit(void)
+@@ -138,24 +147,24 @@ void term_exit(void)
      term_exit_sigsafe();
  }
  
@@ -56,7 +69,7 @@ index b394243..6cf82c3 100755
      }
  }
  
-@@ -179,7 +182,7 @@ static BOOL WINAPI CtrlHandler(DWORD fdwCtrlType)
+@@ -179,7 +188,7 @@ static BOOL WINAPI CtrlHandler(DWORD fdwCtrlType)
             process is hard terminated, so stall as long as we need to
             to try and let the main thread(s) clean up and gracefully terminate
             (we have at most 5 seconds, but should be done far before that). */
@@ -65,7 +78,7 @@ index b394243..6cf82c3 100755
              Sleep(0);
          }
          return TRUE;
-@@ -253,6 +256,7 @@ void term_init(void)
+@@ -253,6 +262,7 @@ void term_init(void)
  /* read a key without blocking */
  static int read_key(void)
  {
@@ -73,7 +86,7 @@ index b394243..6cf82c3 100755
  #if HAVE_TERMIOS_H
      int n = 1;
      struct timeval tv;
-@@ -264,7 +268,6 @@ static int read_key(void)
+@@ -264,7 +274,6 @@ static int read_key(void)
      tv.tv_usec = 0;
      n = select(1, &rfds, NULL, NULL, &tv);
      if (n > 0) {
@@ -81,7 +94,7 @@ index b394243..6cf82c3 100755
          n = read(0, &ch, 1);
          if (n == 1)
              return ch;
-@@ -289,7 +292,6 @@ static int read_key(void)
+@@ -289,7 +298,6 @@ static int read_key(void)
          }
          //Read it
          if(nchars != 0) {
@@ -89,16 +102,31 @@ index b394243..6cf82c3 100755
              if (read(0, &ch, 1) == 1)
                  return ch;
              return 0;
-@@ -306,7 +308,7 @@ static int read_key(void)
+@@ -306,7 +314,22 @@ static int read_key(void)
  
  static int decode_interrupt_cb(void *ctx)
  {
 -    return received_nb_signals > atomic_load(&transcode_init_done);
++    FFmpegContext *wrapper_ctx = ctx ? ctx : ffmpeg_get_current_context();
++    if (wrapper_ctx && ffmpeg_cancel_requested(wrapper_ctx))
++        return 1;
++
 +    return atomic_load(&received_nb_signals) > atomic_load(&transcode_init_done);
++}
++
++static void ffmpeg_thread_context_init(void *opaque)
++{
++    ffmpeg_bind_thread_context((FFmpegContext *)opaque);
++}
++
++static void ffmpeg_thread_context_uninit(void *opaque)
++{
++    (void)opaque;
++    ffmpeg_unbind_thread_context();
  }
  
  const AVIOInterruptCB int_cb = { decode_interrupt_cb, NULL };
-@@ -358,14 +360,14 @@ static void ffmpeg_cleanup(int ret)
+@@ -358,14 +381,14 @@ static void ffmpeg_cleanup(int ret)
  
      avformat_network_deinit();
  
@@ -116,7 +144,7 @@ index b394243..6cf82c3 100755
  }
  
  OutputStream *ost_iter(OutputStream *prev)
-@@ -400,33 +402,42 @@ InputStream *ist_iter(InputStream *prev)
+@@ -400,33 +423,42 @@ InputStream *ist_iter(InputStream *prev)
      return NULL;
  }
  
@@ -165,7 +193,7 @@ index b394243..6cf82c3 100755
          }
  
          if (src) {
-@@ -446,8 +457,7 @@ static int frame_data_ensure(AVBufferRef **dst, int writable)
+@@ -446,8 +478,7 @@ static int frame_data_ensure(AVBufferRef **dst, int writable)
                        AVERROR(ENOMEM);
                  if (ret < 0) {
                      av_buffer_unref(dst);
@@ -175,7 +203,7 @@ index b394243..6cf82c3 100755
                  }
              }
  
-@@ -456,12 +466,11 @@ static int frame_data_ensure(AVBufferRef **dst, int writable)
+@@ -456,12 +487,11 @@ static int frame_data_ensure(AVBufferRef **dst, int writable)
                                            fd_src->side_data, fd_src->nb_side_data, 0);
                  if (ret < 0) {
                      av_buffer_unref(dst);
@@ -190,7 +218,7 @@ index b394243..6cf82c3 100755
          } else {
              fd->dec.frame_num = UINT64_MAX;
              fd->dec.pts       = AV_NOPTS_VALUE;
-@@ -471,7 +480,11 @@ static int frame_data_ensure(AVBufferRef **dst, int writable)
+@@ -471,7 +501,11 @@ static int frame_data_ensure(AVBufferRef **dst, int writable)
          }
      }
  
@@ -203,7 +231,7 @@ index b394243..6cf82c3 100755
  }
  
  FrameData *frame_data(AVFrame *frame)
-@@ -717,7 +730,7 @@ static void print_report(int is_last_report, int64_t timer_start, int64_t cur_ti
+@@ -717,7 +751,7 @@ static void print_report(int is_last_report, int64_t timer_start, int64_t cur_ti
      if (progress_avio) {
          av_bprintf(&buf_script, "progress=%s\n",
                     is_last_report ? "end" : "continue");
@@ -212,7 +240,7 @@ index b394243..6cf82c3 100755
                     FFMIN(buf_script.len, buf_script.size - 1));
          avio_flush(progress_avio);
          av_bprint_finalize(&buf_script, NULL);
-@@ -728,6 +741,29 @@ static void print_report(int is_last_report, int64_t timer_start, int64_t cur_ti
+@@ -728,6 +762,29 @@ static void print_report(int is_last_report, int64_t timer_start, int64_t cur_ti
          }
      }
  
@@ -242,7 +270,7 @@ index b394243..6cf82c3 100755
      first_report = 0;
  }
  
-@@ -906,7 +942,7 @@ static int transcode(Scheduler *sch)
+@@ -906,7 +963,7 @@ static int transcode(Scheduler *sch)
      while (!sch_wait(sch, stats_period, &transcode_ts)) {
          int64_t cur_time= av_gettime_relative();
  
@@ -251,7 +279,7 @@ index b394243..6cf82c3 100755
              break;
  
          /* if 'q' pressed, exits */
-@@ -978,13 +1014,45 @@ static int64_t getmaxrss(void)
+@@ -978,13 +1035,45 @@ static int64_t getmaxrss(void)
  #endif
  }
  
@@ -285,7 +313,7 @@ index b394243..6cf82c3 100755
 +    }
 +}
 +
-+int ffmpeg_run_internal(int argc, char **argv)
++int ffmpeg_run_internal(FFmpegContext *wrapper_ctx, int argc, char **argv)
  {
      Scheduler *sch = NULL;
  
@@ -298,7 +326,18 @@ index b394243..6cf82c3 100755
      init_dynload();
  
      setvbuf(stderr,NULL,_IONBF,0); /* win32 runtime needs this */
-@@ -1012,8 +1080,7 @@ int main(int argc, char **argv)
+@@ -1005,6 +1094,10 @@ int main(int argc, char **argv)
+         goto finish;
+     }
+ 
++    sch_set_thread_hooks(sch, wrapper_ctx, ffmpeg_thread_context_init,
++                         ffmpeg_thread_context_uninit);
++    ffmpeg_set_scheduler(wrapper_ctx, sch);
++
+     /* parse options and open all input/output files */
+     ret = ffmpeg_parse_options(argc, argv, sch);
+     if (ret < 0)
+@@ -1012,8 +1105,7 @@ int main(int argc, char **argv)
  
      if (nb_output_files <= 0 && nb_input_files == 0) {
          show_usage();
@@ -308,7 +347,7 @@ index b394243..6cf82c3 100755
          goto finish;
      }
  
-@@ -1040,7 +1107,7 @@ int main(int argc, char **argv)
+@@ -1040,7 +1132,7 @@ int main(int argc, char **argv)
                 utime / 1000000.0, stime / 1000000.0, rtime / 1000000.0);
      }
  
@@ -317,7 +356,7 @@ index b394243..6cf82c3 100755
            (ret == FFMPEG_ERROR_RATE_EXCEEDED) ?  69 : ret;
  
  finish:
-@@ -1051,8 +1118,8 @@ finish:
+@@ -1051,8 +1143,8 @@ finish:
  
      sch_free(&sch);
  
