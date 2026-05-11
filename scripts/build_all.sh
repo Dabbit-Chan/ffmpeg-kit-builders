@@ -269,6 +269,7 @@ for arg; do
       echo "  --small       Build with small flags (reduces binary size)."
       echo "  --not-small   Build without small flag."
       echo "  --both        Build both small and full versions (default)"
+      echo "  --snapshot    Create snapshot version (Android only)."
       echo "  --help        Show this help message"
       echo ""
       echo "State file location: ${STATE_FILE}"
@@ -300,6 +301,9 @@ for arg; do
       shift;;
     --local)
       REMOTE_RELEASE=false
+      shift;;
+    --snapshot)
+      SNAPSHOT=" --snapshot"
       shift;;
     *)  
       echo "Invalid argument: ${arg}"
@@ -503,7 +507,7 @@ if [[ ${#android_platforms[@]} -gt 0 ]] && truthy "$build_bundle"; then
   else
     remote="--local"
   fi
-  sudo -E bash -c "${WORK_DIR}/scripts/android/build_aar.sh --bundle=${bundles} --reset ${remote}"
+  sudo -E bash -c "${WORK_DIR}/scripts/android/build_aar.sh --bundle=${bundles} --reset ${remote} ${SNAPSHOT}"
 fi
 
 # Build XCFrameworks for Apple platforms
