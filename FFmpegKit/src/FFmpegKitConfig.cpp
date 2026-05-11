@@ -1941,12 +1941,16 @@ void ffmpegkit::FFmpegKitConfig::ffprobeExecute(
     int returnCodeValue =
         executeFFprobe(ffprobeSession, ffprobeSession->getArguments());
 
-    // Wait for all logs/stats to be processed by the callback thread
+    auto returnCode = std::make_shared<ffmpegkit::ReturnCode>(returnCodeValue);
+    ffprobeSession->complete(returnCode);
+
+    // Generic FFprobe sessions should become terminal as soon as probing ends.
+    // Drain any remaining asynchronous log traffic after the terminal state is
+    // visible so concurrent tests and follow-on sessions are not blocked by
+    // callback-thread backlog under heavy sanitizer load.
     ffprobeSession->waitForAsynchronousMessagesInTransmit(
         AbstractSession::DefaultTimeoutForAsynchronousMessagesInTransmit);
 
-    auto returnCode = std::make_shared<ffmpegkit::ReturnCode>(returnCodeValue);
-    ffprobeSession->complete(returnCode);
     ffprobeSession->debugLog("FFprobeExecute: sessionId: %ld complete",
                              ffprobeSession->getSessionId());
     clearSessionFromThread();
@@ -2006,12 +2010,15 @@ void ffmpegkit::FFmpegKitConfig::ffplayExecute(
     // RESET ACTIVE SESSION ID IF IT'S STILL US
     activeFFplaySessionId.compare_exchange_strong(sessionId, 0);
 
-    // Wait for all logs/stats to be processed by the callback thread
+    auto returnCode = std::make_shared<ffmpegkit::ReturnCode>(returnCodeValue);
+    ffplaySession->complete(returnCode);
+
+    // FFplay controls and single-session handoff should observe terminal state
+    // immediately after playback stops. Drain the callback backlog afterward so
+    // verbose status lines do not keep the session in RUNNING under TSAN.
     ffplaySession->waitForAsynchronousMessagesInTransmit(
         AbstractSession::DefaultTimeoutForAsynchronousMessagesInTransmit);
 
-    auto returnCode = std::make_shared<ffmpegkit::ReturnCode>(returnCodeValue);
-    ffplaySession->complete(returnCode);
     clearSessionFromThread();
   } catch (const std::exception &exception) {
     if (ffplaySession != nullptr) {
