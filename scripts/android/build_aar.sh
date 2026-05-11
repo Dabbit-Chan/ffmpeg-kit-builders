@@ -394,7 +394,7 @@ GRADLE_COMMAND="publishToMavenCentral"
 USER_HOME="/home/vscode"
 GRADLE_USER_HOME="${USER_HOME}/.gradle"
 
-if [[ ! -f "${GRADLE_USER_HOME}/gradle.properties" && ! -f "${USER_HOME}/.gnupg/secring.gpg" ]] || [[ "$local_build" == "true" ]]; then
+if [[ ! -f "${GRADLE_USER_HOME}/gradle.properties" && ! -f "${USER_HOME}/.gnupg/secring.gpg" ]] || [[ "$local_build" == "true" || "$SNAPSHOT" == "true" ]]; then
   GRADLE_COMMAND="publishToMavenLocal"
 fi
 
