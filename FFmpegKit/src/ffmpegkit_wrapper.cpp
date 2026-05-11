@@ -26,6 +26,8 @@ extern "C" {
 #include "libavformat/avformat.h"
 }
 
+#include <sys/time.h>
+
 #include "ffmpegkit_wrapper.h"
 #include "ffplay_lib.h"
 #include "AbstractSession.hpp"
@@ -48,8 +50,20 @@ extern "C" {
 #include <thread>
 #include <vector>
 #include <chrono>
+#include <ctime>
 
-
+static std::string getCurrentTimeStamp() {
+  time_t now = time(0);
+  struct tm *timeinfo = localtime(&now);
+  char buffer[80];
+  strftime(buffer, sizeof(buffer), "%Y-%m-%d %H:%M:%S", timeinfo);
+  struct timeval tv;
+  gettimeofday(&tv, NULL);
+  char milliseconds[4];
+  snprintf(milliseconds, sizeof(milliseconds), "%03d",
+           (int)(tv.tv_usec / 1000));
+  return std::string(buffer) + "." + std::string(milliseconds);
+}
 
 #ifdef _WIN32
 #include <windows.h>
@@ -262,7 +276,7 @@ list_to_handle_array(std::shared_ptr<std::list<std::shared_ptr<T>>> list) {
     array[i] = nullptr;
     return array;
   } catch (const std::exception &e) {
-    std::cerr << "[Exception] in list_to_handle_array: " << e.what()
+    std::cerr << "[" << getCurrentTimeStamp() << "] [ffmpeg-kit] [Exception] in list_to_handle_array: " << e.what()
               << std::endl;
     PRINT_STACK_TRACE();
     return nullptr;
@@ -309,7 +323,7 @@ void DLL_ALIGN ffmpeg_kit_handle_release(void *handle) {
     auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(10);
     while (session->getState() == SessionStateRunning) {
       if (std::chrono::steady_clock::now() > deadline) {
-        std::cerr << "[Warning] ffmpeg_kit_handle_release: timed out waiting for session to stop\n";
+        std::cerr << "[" << getCurrentTimeStamp() << "] [ffmpeg-kit] [Warning] ffmpeg_kit_handle_release: timed out waiting for session to stop\n";
         timed_out = true;
         break;
       }
@@ -327,7 +341,7 @@ void DLL_ALIGN ffmpeg_kit_handle_release(void *handle) {
         static_cast<ffmpegkit::FFplaySession*>(session.get())->close();
       }
       if (timed_out) {
-        std::cerr << "[Warning] ffmpeg_kit_handle_release: detaching stuck FFplay thread\n";
+        std::cerr << "[" << getCurrentTimeStamp() << "] [ffmpeg-kit] [Warning] ffmpeg_kit_handle_release: detaching stuck FFplay thread\n";
         ffmpegkit::FFmpegKitConfig::detachAsyncFFplayThread();
       } else {
         ffmpegkit::FFmpegKitConfig::joinAsyncFFplayThread();
@@ -364,7 +378,7 @@ void DLL_ALIGN ffmpeg_kit_config_clear_sessions() {
     // Finally, clear the backend history
     FFmpegKitConfig::clearSessions();
   } catch (const std::exception &e) {
-    std::cerr << "[Exception] in ffmpeg_kit_config_clear_sessions: " << e.what()
+    std::cerr << "[" << getCurrentTimeStamp() << "] [ffmpeg-kit] [Exception] in ffmpeg_kit_config_clear_sessions: " << e.what()
               << std::endl;
     PRINT_STACK_TRACE();
   }
@@ -379,7 +393,7 @@ FFmpegSessionHandle DLL_ALIGN ffmpeg_kit_execute(const char *command) {
     auto session = FFmpegKit::execute(std::string(command));
     return create_handle(session);
   } catch (const std::exception &e) {
-    std::cerr << "[Exception] in ffmpeg_kit_execute: " << e.what() << std::endl;
+    std::cerr << "[" << getCurrentTimeStamp() << "] [ffmpeg-kit] [Exception] in ffmpeg_kit_execute: " << e.what() << std::endl;
     PRINT_STACK_TRACE();
     return nullptr;
   }
@@ -404,7 +418,7 @@ ffmpeg_kit_execute_async(const char *command,
     FFmpegKitConfig::asyncFFmpegExecute(session);
     return handle;
   } catch (const std::exception &e) {
-    std::cerr << "[Exception] in ffmpeg_kit_execute_async: " << e.what()
+    std::cerr << "[" << getCurrentTimeStamp() << "] [ffmpeg-kit] [Exception] in ffmpeg_kit_execute_async: " << e.what()
               << std::endl;
     PRINT_STACK_TRACE();
     return nullptr;
@@ -448,7 +462,7 @@ FFmpegSessionHandle DLL_ALIGN ffmpeg_kit_execute_async_full(
     FFmpegKitConfig::asyncFFmpegExecute(session);
     return handle;
   } catch (const std::exception &e) {
-    std::cerr << "[Exception] in ffmpeg_kit_execute_async_full: " << e.what()
+    std::cerr << "[" << getCurrentTimeStamp() << "] [ffmpeg-kit] [Exception] in ffmpeg_kit_execute_async_full: " << e.what()
               << std::endl;
     PRINT_STACK_TRACE();
     return nullptr;
@@ -465,7 +479,7 @@ FFmpegSessionHandle DLL_ALIGN ffmpeg_kit_create_session(const char *command) {
     
     return create_handle(session);
   } catch (const std::exception &e) {
-    std::cerr << "[Exception] in ffmpeg_kit_create_session: " << e.what()
+    std::cerr << "[" << getCurrentTimeStamp() << "] [ffmpeg-kit] [Exception] in ffmpeg_kit_create_session: " << e.what()
               << std::endl;
     PRINT_STACK_TRACE();
     return nullptr;
@@ -508,7 +522,7 @@ FFmpegSessionHandle DLL_ALIGN ffmpeg_kit_create_session_with_callbacks(
     session->setStatisticsCallback(stats);
     return handle;
   } catch (const std::exception &e) {
-    std::cerr << "[Exception] in ffmpeg_kit_create_session_with_callbacks: "
+    std::cerr << "[" << getCurrentTimeStamp() << "] [ffmpeg-kit] [Exception] in ffmpeg_kit_create_session_with_callbacks: "
               << e.what() << std::endl;
     PRINT_STACK_TRACE();
     return nullptr;
@@ -530,7 +544,7 @@ FFmpegSessionHandle DLL_ALIGN ffmpeg_kit_create_session_from_argv(int argc, cons
 
         return create_handle(session);
     } catch (const std::exception &e) {
-        std::cerr << "[Wrapper Exception] create_session_from_argv: " << e.what() << std::endl;
+        std::cerr << "[" << getCurrentTimeStamp() << "] [ffmpeg-kit] [Exception] create_session_from_argv: " << e.what() << std::endl;
         PRINT_STACK_TRACE();
         return nullptr;
     }
@@ -581,7 +595,7 @@ FFmpegSessionHandle DLL_ALIGN ffmpeg_kit_create_session_from_argv_with_callbacks
 
         return handle;
     } catch (const std::exception &e) {
-        std::cerr << "[Wrapper Exception] create_session_from_argv_with_callbacks: " << e.what() << std::endl;
+        std::cerr << "[" << getCurrentTimeStamp() << "] [ffmpeg-kit] [Exception] create_session_from_argv_with_callbacks: " << e.what() << std::endl;
         PRINT_STACK_TRACE();
         return nullptr;
     }
@@ -594,7 +608,7 @@ void DLL_ALIGN ffmpeg_kit_close_session(FFmpegSessionHandle handle) {
             ptr->cancel();
         }
     } catch (const std::exception &e) {
-        std::cerr << "[Exception] in ffmpeg_kit_close_session: " << e.what() << std::endl;
+        std::cerr << "[" << getCurrentTimeStamp() << "] [ffmpeg-kit] [Exception] in ffmpeg_kit_close_session: " << e.what() << std::endl;
         PRINT_STACK_TRACE();
     }
 }
@@ -604,6 +618,17 @@ void DLL_ALIGN ffmpeg_kit_debug_print_stack() {
     uintptr_t stack_ptr = (uintptr_t)&p;
     printf("[DEBUG] Entry Stack Pointer: 0x%llx\n", (unsigned long long)stack_ptr);
     printf("[DEBUG] Alignment: %d\n", (int)(stack_ptr % 16));
+}
+
+void DLL_ALIGN ffmpeg_kit_test_emit_unattributed_log(const char *message) {
+    try {
+        av_log(nullptr, AV_LOG_INFO, "%s\n", message ? message : "");
+    } catch (const std::exception &e) {
+        std::cerr << "[" << getCurrentTimeStamp()
+                  << "] [ffmpeg-kit] [Exception] in ffmpeg_kit_test_emit_unattributed_log: "
+                  << e.what() << std::endl;
+        PRINT_STACK_TRACE();
+    }
 }
 
 void DLL_ALIGN ffmpeg_kit_set_log_callback(FFmpegSessionHandle session,
@@ -620,7 +645,7 @@ void DLL_ALIGN ffmpeg_kit_set_log_callback(FFmpegSessionHandle session,
       ptr->setLogCallback(log);
     }
   } catch (const std::exception &e) {
-    std::cerr << "[Exception] in ffmpeg_kit_set_log_callback: " << e.what()
+    std::cerr << "[" << getCurrentTimeStamp() << "] [ffmpeg-kit] [Exception] in ffmpeg_kit_set_log_callback: " << e.what()
               << std::endl;
     PRINT_STACK_TRACE();
   }
@@ -643,7 +668,7 @@ void DLL_ALIGN ffmpeg_kit_set_statistics_callback(FFmpegSessionHandle session,
       ptr->setStatisticsCallback(stats);
     }
   } catch (const std::exception &e) {
-    std::cerr << "[Exception] in ffmpeg_kit_set_statistics_callback: "
+    std::cerr << "[" << getCurrentTimeStamp() << "] [ffmpeg-kit] [Exception] in ffmpeg_kit_set_statistics_callback: "
               << e.what() << std::endl;
     PRINT_STACK_TRACE();
   }
@@ -664,7 +689,7 @@ void DLL_ALIGN ffmpeg_kit_set_complete_callback(FFmpegSessionHandle session,
       ptr->setCompleteCallback(complete);
     }
   } catch (const std::exception &e) {
-    std::cerr << "[Exception] in ffmpeg_kit_set_complete_callback: " << e.what()
+    std::cerr << "[" << getCurrentTimeStamp() << "] [ffmpeg-kit] [Exception] in ffmpeg_kit_set_complete_callback: " << e.what()
               << std::endl;
     PRINT_STACK_TRACE();
   }
@@ -703,7 +728,7 @@ void DLL_ALIGN ffmpeg_kit_set_callbacks(FFmpegSessionHandle session,
       ptr->setStatisticsCallback(stats);
     }
   } catch (const std::exception &e) {
-    std::cerr << "[Exception] in ffmpeg_kit_set_callbacks: " << e.what()
+    std::cerr << "[" << getCurrentTimeStamp() << "] [ffmpeg-kit] [Exception] in ffmpeg_kit_set_callbacks: " << e.what()
               << std::endl;
     PRINT_STACK_TRACE();
   }
@@ -714,9 +739,11 @@ void DLL_ALIGN ffmpeg_kit_session_execute(FFmpegSessionHandle session) {
     auto ptr = get_ptr<FFmpegSession>(session);
     if (ptr) {
       FFmpegKitConfig::ffmpegExecute(ptr);
+    } else {
+      std::cerr << "[" << getCurrentTimeStamp() << "] [ffmpeg-kit] [Error] in ffmpeg_kit_session_execute: session not found" << std::endl;
     }
   } catch (const std::exception &e) {
-    std::cerr << "[Exception] in ffmpeg_kit_session_execute: " << e.what()
+    std::cerr << "[" << getCurrentTimeStamp() << "] [ffmpeg-kit] [Exception] in ffmpeg_kit_session_execute: " << e.what()
               << std::endl;
     PRINT_STACK_TRACE();
   }
@@ -727,9 +754,26 @@ void DLL_ALIGN ffmpeg_kit_session_execute_async(FFmpegSessionHandle session) {
     auto ptr = get_ptr<FFmpegSession>(session);
     if (ptr) {
       FFmpegKitConfig::asyncFFmpegExecute(ptr);
+    } else {
+      std::cerr << "[" << getCurrentTimeStamp() << "] [ffmpeg-kit] [Error] in ffmpeg_kit_session_execute_async: session not found" << std::endl;
     }
   } catch (const std::exception &e) {
-    std::cerr << "[Exception] in ffmpeg_kit_session_execute_async: " << e.what()
+    std::cerr << "[" << getCurrentTimeStamp() << "] [ffmpeg-kit] [Exception] in ffmpeg_kit_session_execute_async: " << e.what()
+              << std::endl;
+    PRINT_STACK_TRACE();
+  }
+}
+
+void DLL_ALIGN ffmpeg_kit_session_cancel(FFmpegSessionHandle session) {
+  try {
+    auto ptr = get_ptr<FFmpegSession>(session);
+    if (ptr) {
+      ptr->cancel();
+    } else {
+      std::cerr << "[" << getCurrentTimeStamp() << "] [ffmpeg-kit] [Error] in ffmpeg_kit_session_cancel: session not found" << std::endl;
+    }
+  } catch (const std::exception &e) {
+    std::cerr << "[" << getCurrentTimeStamp() << "] [ffmpeg-kit] [Exception] in ffmpeg_kit_session_cancel: " << e.what()
               << std::endl;
     PRINT_STACK_TRACE();
   }
@@ -739,7 +783,7 @@ void DLL_ALIGN ffmpeg_kit_cancel(void) {
   try {
     FFmpegKit::cancel();
   } catch (const std::exception &e) {
-    std::cerr << "[Exception] in ffmpeg_kit_cancel: " << e.what() << std::endl;
+    std::cerr << "[" << getCurrentTimeStamp() << "] [ffmpeg-kit] [Exception] in ffmpeg_kit_cancel: " << e.what() << std::endl;
     PRINT_STACK_TRACE();
   }
 }
@@ -748,7 +792,7 @@ void DLL_ALIGN ffmpeg_kit_cancel_session(int64_t session_id) {
   try {
     FFmpegKit::cancel(session_id);
   } catch (const std::exception &e) {
-    std::cerr << "[Exception] in ffmpeg_kit_cancel_session: " << e.what()
+    std::cerr << "[" << getCurrentTimeStamp() << "] [ffmpeg-kit] [Exception] in ffmpeg_kit_cancel_session: " << e.what()
               << std::endl;
     PRINT_STACK_TRACE();
   }
@@ -763,7 +807,7 @@ FFprobeSessionHandle DLL_ALIGN ffprobe_kit_execute(const char *command) {
     auto session = FFprobeKit::execute(std::string(command));
     return create_handle(session);
   } catch (const std::exception &e) {
-    std::cerr << "[Exception] in ffprobe_kit_execute: " << e.what()
+    std::cerr << "[" << getCurrentTimeStamp() << "] [ffmpeg-kit] [Exception] in ffprobe_kit_execute: " << e.what()
               << std::endl;
     PRINT_STACK_TRACE();
     return nullptr;
@@ -788,7 +832,7 @@ FFprobeSessionHandle DLL_ALIGN ffprobe_kit_execute_async(const char *command,
     FFmpegKitConfig::asyncFFprobeExecute(session);
     return handle;
   } catch (const std::exception &e) {
-    std::cerr << "[Exception] in ffprobe_kit_execute_async: " << e.what()
+    std::cerr << "[" << getCurrentTimeStamp() << "] [ffmpeg-kit] [Exception] in ffprobe_kit_execute_async: " << e.what()
               << std::endl;
     PRINT_STACK_TRACE();
     return nullptr;
@@ -803,7 +847,7 @@ void DLL_ALIGN ffprobe_kit_cancel(void) {
       }
     } 
   } catch (const std::exception &e) {
-    std::cerr << "[Exception] in ffprobe_kit_cancel: " << e.what() << std::endl;
+    std::cerr << "[" << getCurrentTimeStamp() << "] [ffmpeg-kit] [Exception] in ffprobe_kit_cancel: " << e.what() << std::endl;
     PRINT_STACK_TRACE();
   }
 }
@@ -815,7 +859,7 @@ void DLL_ALIGN ffprobe_kit_cancel_session(int64_t session_id) {
       session->cancel();
     }
   } catch (const std::exception &e) {
-    std::cerr << "[Exception] in ffprobe_kit_cancel_session: " << e.what() << std::endl;
+    std::cerr << "[" << getCurrentTimeStamp() << "] [ffmpeg-kit] [Exception] in ffprobe_kit_cancel_session: " << e.what() << std::endl;
     PRINT_STACK_TRACE();
   }
 }
@@ -828,7 +872,7 @@ FFprobeSessionHandle DLL_ALIGN ffprobe_kit_create_session(const char *command) {
     auto session = FFprobeSession::create(arguments);
     return create_handle(session);
   } catch (const std::exception &e) {
-    std::cerr << "[Exception] in ffprobe_kit_create_session: " << e.what()
+    std::cerr << "[" << getCurrentTimeStamp() << "] [ffmpeg-kit] [Exception] in ffprobe_kit_create_session: " << e.what()
               << std::endl;
     PRINT_STACK_TRACE();
     return nullptr;
@@ -861,7 +905,7 @@ FFprobeSessionHandle DLL_ALIGN ffprobe_kit_create_session_with_callbacks(
     session->setLogCallback(log);
     return handle;
   } catch (const std::exception &e) {
-    std::cerr << "[Exception] in ffprobe_kit_create_session_with_callbacks: "
+    std::cerr << "[" << getCurrentTimeStamp() << "] [ffmpeg-kit] [Exception] in ffprobe_kit_create_session_with_callbacks: "
               << e.what() << std::endl;
     PRINT_STACK_TRACE();
     return nullptr;
@@ -883,7 +927,7 @@ FFprobeSessionHandle DLL_ALIGN ffprobe_kit_create_session_from_argv(int argc, co
 
         return create_handle(session);
     } catch (const std::exception &e) {
-        std::cerr << "[Wrapper Exception] ffprobe_create_session_from_argv: " << e.what() << std::endl;
+        std::cerr << "[" << getCurrentTimeStamp() << "] [ffmpeg-kit] [Exception] ffprobe_create_session_from_argv: " << e.what() << std::endl;
         PRINT_STACK_TRACE();
         return nullptr;
     }
@@ -923,7 +967,7 @@ FFprobeSessionHandle DLL_ALIGN ffprobe_kit_create_session_from_argv_with_callbac
 
         return handle;
     } catch (const std::exception &e) {
-        std::cerr << "[Wrapper Exception] ffprobe_create_session_from_argv_with_callbacks: " << e.what() << std::endl;
+        std::cerr << "[" << getCurrentTimeStamp() << "] [ffmpeg-kit] [Exception] ffprobe_create_session_from_argv_with_callbacks: " << e.what() << std::endl;
         PRINT_STACK_TRACE();
         return nullptr;
     }
@@ -936,7 +980,7 @@ void DLL_ALIGN ffprobe_kit_close_session(FFprobeSessionHandle handle) {
       ptr->cancel();
     }
   } catch (const std::exception &e) {
-    std::cerr << "[Exception] in ffprobe_kit_close_session: " << e.what()
+    std::cerr << "[" << getCurrentTimeStamp() << "] [ffmpeg-kit] [Exception] in ffprobe_kit_close_session: " << e.what()
               << std::endl;
     PRINT_STACK_TRACE();
   }
@@ -957,7 +1001,7 @@ void DLL_ALIGN ffprobe_kit_set_log_callback(FFprobeSessionHandle session,
       ptr->setLogCallback(log);
     }
   } catch (const std::exception &e) {
-    std::cerr << "[Exception] in ffprobe_kit_set_log_callback: " << e.what()
+    std::cerr << "[" << getCurrentTimeStamp() << "] [ffmpeg-kit] [Exception] in ffprobe_kit_set_log_callback: " << e.what()
               << std::endl;
     PRINT_STACK_TRACE();
   }
@@ -978,7 +1022,7 @@ void DLL_ALIGN ffprobe_kit_set_complete_callback(FFprobeSessionHandle session,
       ptr->setCompleteCallback(complete);
     }
   } catch (const std::exception &e) {
-    std::cerr << "[Exception] in ffprobe_kit_set_complete_callback: "
+    std::cerr << "[" << getCurrentTimeStamp() << "] [ffmpeg-kit] [Exception] in ffprobe_kit_set_complete_callback: "
               << e.what() << std::endl;
     PRINT_STACK_TRACE();
   }
@@ -1006,7 +1050,7 @@ void DLL_ALIGN ffprobe_kit_set_callbacks(FFprobeSessionHandle session,
       ptr->setLogCallback(log);
     }
   } catch (const std::exception &e) {
-    std::cerr << "[Exception] in ffprobe_kit_set_callbacks: " << e.what()
+    std::cerr << "[" << getCurrentTimeStamp() << "] [ffmpeg-kit] [Exception] in ffprobe_kit_set_callbacks: " << e.what()
               << std::endl;
     PRINT_STACK_TRACE();
   }
@@ -1019,7 +1063,7 @@ void DLL_ALIGN ffprobe_kit_session_execute(FFprobeSessionHandle session) {
       FFmpegKitConfig::ffprobeExecute(ptr);
     }
   } catch (const std::exception &e) {
-    std::cerr << "[Exception] in ffprobe_kit_session_execute: " << e.what()
+    std::cerr << "[" << getCurrentTimeStamp() << "] [ffmpeg-kit] [Exception] in ffprobe_kit_session_execute: " << e.what()
               << std::endl;
     PRINT_STACK_TRACE();
   }
@@ -1032,7 +1076,7 @@ void DLL_ALIGN ffprobe_kit_session_execute_async(FFprobeSessionHandle session) {
       FFmpegKitConfig::asyncFFprobeExecute(ptr);
     }
   } catch (const std::exception &e) {
-    std::cerr << "[Exception] in ffprobe_kit_session_execute_async: "
+    std::cerr << "[" << getCurrentTimeStamp() << "] [ffmpeg-kit] [Exception] in ffprobe_kit_session_execute_async: "
               << e.what() << std::endl;
     PRINT_STACK_TRACE();
   }
@@ -1045,7 +1089,7 @@ MediaInformationSessionHandle DLL_ALIGN ffprobe_kit_get_media_information(const 
     auto session = FFprobeKit::getMediaInformation(std::string(path));
     return create_handle(session);
   } catch (const std::exception &e) {
-    std::cerr << "[Exception] in ffprobe_kit_get_media_information: "
+    std::cerr << "[" << getCurrentTimeStamp() << "] [ffmpeg-kit] [Exception] in ffprobe_kit_get_media_information: "
               << e.what() << std::endl;
     PRINT_STACK_TRACE();
     return nullptr;
@@ -1070,7 +1114,7 @@ MediaInformationSessionHandle DLL_ALIGN ffprobe_kit_get_media_information_async(
     }
     return handle;
   } catch (const std::exception &e) {
-    std::cerr << "[Exception] in ffprobe_kit_get_media_information_async: "
+    std::cerr << "[" << getCurrentTimeStamp() << "] [ffmpeg-kit] [Exception] in ffprobe_kit_get_media_information_async: "
               << e.what() << std::endl;
     PRINT_STACK_TRACE();
     return nullptr;
@@ -1086,7 +1130,7 @@ FFplaySessionHandle DLL_ALIGN ffplay_kit_execute(const char *command, int64_t ti
     auto session = FFplayKit::execute(std::string(command), timeout);
     return create_handle(session);
   } catch (const std::exception &e) {
-    std::cerr << "[Exception] in ffplay_kit_execute: " << e.what() << std::endl;
+    std::cerr << "[" << getCurrentTimeStamp() << "] [ffmpeg-kit] [Exception] in ffplay_kit_execute: " << e.what() << std::endl;
     PRINT_STACK_TRACE();
     return nullptr;
   }
@@ -1110,7 +1154,7 @@ FFplaySessionHandle DLL_ALIGN ffplay_kit_execute_async(const char *command,
     FFmpegKitConfig::asyncFFplayExecute(session, waitTimeout);
     return handle;
   } catch (const std::exception &e) {
-    std::cerr << "[Exception] in ffplay_kit_execute_async: " << e.what()
+    std::cerr << "[" << getCurrentTimeStamp() << "] [ffmpeg-kit] [Exception] in ffplay_kit_execute_async: " << e.what()
               << std::endl;
     PRINT_STACK_TRACE();
     return nullptr;
@@ -1125,7 +1169,7 @@ FFplaySessionHandle DLL_ALIGN ffplay_kit_create_session(const char *command) {
     auto session = FFplaySession::create(arguments);
     return create_handle(session);
   } catch (const std::exception &e) {
-    std::cerr << "[Exception] in ffplay_kit_create_session: " << e.what()
+    std::cerr << "[" << getCurrentTimeStamp() << "] [ffmpeg-kit] [Exception] in ffplay_kit_create_session: " << e.what()
               << std::endl;
     PRINT_STACK_TRACE();
     return nullptr;
@@ -1158,7 +1202,7 @@ FFplaySessionHandle DLL_ALIGN ffplay_kit_create_session_with_callbacks(
     session->setLogCallback(log);
     return handle;
   } catch (const std::exception &e) {
-    std::cerr << "[Exception] in ffplay_kit_create_session_with_callbacks: "
+    std::cerr << "[" << getCurrentTimeStamp() << "] [ffmpeg-kit] [Exception] in ffplay_kit_create_session_with_callbacks: "
               << e.what() << std::endl;
     PRINT_STACK_TRACE();
     return nullptr;
@@ -1180,7 +1224,7 @@ FFplaySessionHandle DLL_ALIGN ffplay_kit_create_session_from_argv(int argc, cons
 
         return create_handle(session);
     } catch (const std::exception &e) {
-        std::cerr << "[Wrapper Exception] ffplay_create_session_from_argv: " << e.what() << std::endl;
+        std::cerr << "[" << getCurrentTimeStamp() << "] [ffmpeg-kit] [Exception] ffplay_create_session_from_argv: " << e.what() << std::endl;
         PRINT_STACK_TRACE();
         return nullptr;
     }
@@ -1222,7 +1266,7 @@ FFplaySessionHandle DLL_ALIGN ffplay_kit_create_session_from_argv_with_callbacks
 
         return handle;
     } catch (const std::exception &e) {
-        std::cerr << "[Wrapper Exception] ffplay_create_session_from_argv_with_callbacks: " << e.what() << std::endl;
+        std::cerr << "[" << getCurrentTimeStamp() << "] [ffmpeg-kit] [Exception] ffplay_create_session_from_argv_with_callbacks: " << e.what() << std::endl;
         PRINT_STACK_TRACE();
         return nullptr;
     }
@@ -1246,7 +1290,7 @@ void DLL_ALIGN ffplay_kit_set_log_callback(FFplaySessionHandle session,
       ptr->setLogCallback(log);
     }
   } catch (const std::exception &e) {
-    std::cerr << "[Exception] in ffplay_kit_set_log_callback: " << e.what()
+    std::cerr << "[" << getCurrentTimeStamp() << "] [ffmpeg-kit] [Exception] in ffplay_kit_set_log_callback: " << e.what()
               << std::endl;
     PRINT_STACK_TRACE();
   }
@@ -1267,7 +1311,7 @@ void DLL_ALIGN ffplay_kit_set_complete_callback(FFplaySessionHandle session,
       ptr->setCompleteCallback(complete);
     }
   } catch (const std::exception &e) {
-    std::cerr << "[Exception] in ffplay_kit_set_complete_callback: " << e.what()
+    std::cerr << "[" << getCurrentTimeStamp() << "] [ffmpeg-kit] [Exception] in ffplay_kit_set_complete_callback: " << e.what()
               << std::endl;
     PRINT_STACK_TRACE();
   }
@@ -1295,7 +1339,7 @@ void DLL_ALIGN ffplay_kit_set_callbacks(FFplaySessionHandle session,
       ptr->setLogCallback(log);
     }
   } catch (const std::exception &e) {
-    std::cerr << "[Exception] in ffplay_kit_set_callbacks: " << e.what()
+    std::cerr << "[" << getCurrentTimeStamp() << "] [ffmpeg-kit] [Exception] in ffplay_kit_set_callbacks: " << e.what()
               << std::endl;
     PRINT_STACK_TRACE();
   }
@@ -1308,7 +1352,7 @@ void DLL_ALIGN ffplay_kit_session_execute(FFplaySessionHandle session, int64_t t
       FFmpegKitConfig::ffplayExecute(ptr, timeout);
     }
   } catch (const std::exception &e) {
-    std::cerr << "[Exception] in ffplay_kit_session_execute: " << e.what()
+    std::cerr << "[" << getCurrentTimeStamp() << "] [ffmpeg-kit] [Exception] in ffplay_kit_session_execute: " << e.what()
               << std::endl;
     PRINT_STACK_TRACE();
   }
@@ -1319,7 +1363,7 @@ FFplaySessionHandle DLL_ALIGN ffplay_kit_get_current_session(void) {
     auto session = FFmpegKitConfig::getActiveFFplaySession();
     return create_handle(std::dynamic_pointer_cast<FFplaySession>(session));
   } catch (const std::exception &e) {
-    std::cerr << "[Exception] in ffplay_kit_get_current_session: " << e.what()
+    std::cerr << "[" << getCurrentTimeStamp() << "] [ffmpeg-kit] [Exception] in ffplay_kit_get_current_session: " << e.what()
               << std::endl;
     PRINT_STACK_TRACE();
     return nullptr;
@@ -1334,7 +1378,7 @@ void DLL_ALIGN ffplay_kit_session_execute_async(FFplaySessionHandle session,
       FFmpegKitConfig::asyncFFplayExecute(ptr, timeout);
     }
   } catch (const std::exception &e) {
-    std::cerr << "[Exception] in ffplay_kit_session_execute_async: " << e.what()
+    std::cerr << "[" << getCurrentTimeStamp() << "] [ffmpeg-kit] [Exception] in ffplay_kit_session_execute_async: " << e.what()
               << std::endl;
     PRINT_STACK_TRACE();
   }
@@ -1347,7 +1391,7 @@ void DLL_ALIGN ffplay_kit_session_seek(FFplaySessionHandle session, double secon
       ptr->seek(seconds);
     }
   } catch (const std::exception &e) {
-    std::cerr << "[Exception] in ffplay_kit_session_seek: " << e.what()
+    std::cerr << "[" << getCurrentTimeStamp() << "] [ffmpeg-kit] [Exception] in ffplay_kit_session_seek: " << e.what()
               << std::endl;
     PRINT_STACK_TRACE();
   }
@@ -1360,7 +1404,7 @@ void DLL_ALIGN ffplay_kit_session_pause(FFplaySessionHandle session) {
       ptr->pause();
     }
   } catch (const std::exception &e) {
-    std::cerr << "[Exception] in ffplay_kit_session_pause: " << e.what()
+    std::cerr << "[" << getCurrentTimeStamp() << "] [ffmpeg-kit] [Exception] in ffplay_kit_session_pause: " << e.what()
               << std::endl;
     PRINT_STACK_TRACE();
   }
@@ -1373,7 +1417,7 @@ void DLL_ALIGN ffplay_kit_session_start(FFplaySessionHandle session) {
       ptr->start();
     }
   } catch (const std::exception &e) {
-    std::cerr << "[Exception] in ffplay_kit_session_start: " << e.what()
+    std::cerr << "[" << getCurrentTimeStamp() << "] [ffmpeg-kit] [Exception] in ffplay_kit_session_start: " << e.what()
               << std::endl;
     PRINT_STACK_TRACE();
   }
@@ -1386,7 +1430,7 @@ void DLL_ALIGN ffplay_kit_session_resume(FFplaySessionHandle session) {
       ptr->resume();
     }
   } catch (const std::exception &e) {
-    std::cerr << "[Exception] in ffplay_kit_session_resume: " << e.what()
+    std::cerr << "[" << getCurrentTimeStamp() << "] [ffmpeg-kit] [Exception] in ffplay_kit_session_resume: " << e.what()
               << std::endl;
     PRINT_STACK_TRACE();
   }
@@ -1399,7 +1443,7 @@ void DLL_ALIGN ffplay_kit_session_stop(FFplaySessionHandle session) {
       ptr->stop();
     }
   } catch (const std::exception &e) {
-    std::cerr << "[Exception] in ffplay_kit_session_stop: " << e.what()
+    std::cerr << "[" << getCurrentTimeStamp() << "] [ffmpeg-kit] [Exception] in ffplay_kit_session_stop: " << e.what()
               << std::endl;
     PRINT_STACK_TRACE();
   }
@@ -1412,7 +1456,7 @@ void DLL_ALIGN ffplay_kit_session_close(FFplaySessionHandle session) {
       ptr->close();
     }
   } catch (const std::exception &e) {
-    std::cerr << "[Exception] in ffplay_kit_session_close: " << e.what()
+    std::cerr << "[" << getCurrentTimeStamp() << "] [ffmpeg-kit] [Exception] in ffplay_kit_session_close: " << e.what()
               << std::endl;
     PRINT_STACK_TRACE();
   }
@@ -1426,7 +1470,7 @@ double DLL_ALIGN ffplay_kit_session_get_position(FFplaySessionHandle session) {
     }
     return 0.0;
   } catch (const std::exception &e) {
-    std::cerr << "[Exception] in ffplay_kit_session_get_position: " << e.what()
+    std::cerr << "[" << getCurrentTimeStamp() << "] [ffmpeg-kit] [Exception] in ffplay_kit_session_get_position: " << e.what()
               << std::endl;
     PRINT_STACK_TRACE();
     return -1.0;
@@ -1441,7 +1485,7 @@ void DLL_ALIGN ffplay_kit_session_set_position(FFplaySessionHandle session,
       ptr->setPosition(seconds);
     }
   } catch (const std::exception &e) {
-    std::cerr << "[Exception] in ffplay_kit_session_set_position: " << e.what()
+    std::cerr << "[" << getCurrentTimeStamp() << "] [ffmpeg-kit] [Exception] in ffplay_kit_session_set_position: " << e.what()
               << std::endl;
     PRINT_STACK_TRACE();
   }
@@ -1453,7 +1497,7 @@ int DLL_ALIGN ffplay_kit_session_get_video_width(FFplaySessionHandle session) {
     if (ptr) return ptr->getVideoWidth();
     return 0;
   } catch (const std::exception &e) {
-    std::cerr << "[Exception] in ffplay_kit_session_get_video_width: " << e.what() << std::endl;
+    std::cerr << "[" << getCurrentTimeStamp() << "] [ffmpeg-kit] [Exception] in ffplay_kit_session_get_video_width: " << e.what() << std::endl;
     return 0;
   }
 }
@@ -1464,7 +1508,7 @@ int DLL_ALIGN ffplay_kit_session_get_video_height(FFplaySessionHandle session) {
     if (ptr) return ptr->getVideoHeight();
     return 0;
   } catch (const std::exception &e) {
-    std::cerr << "[Exception] in ffplay_kit_session_get_video_height: " << e.what() << std::endl;
+    std::cerr << "[" << getCurrentTimeStamp() << "] [ffmpeg-kit] [Exception] in ffplay_kit_session_get_video_height: " << e.what() << std::endl;
     return 0;
   }
 }
@@ -1488,7 +1532,7 @@ int DLL_ALIGN ffplay_kit_has_video_stream(const char *path) {
     avformat_close_input(&fmt_ctx);
     return (ret < 0) ? -1 : has_video;
   } catch (const std::exception &e) {
-    std::cerr << "[Exception] in ffplay_kit_has_video_stream: " << e.what() << std::endl;
+    std::cerr << "[" << getCurrentTimeStamp() << "] [ffmpeg-kit] [Exception] in ffplay_kit_has_video_stream: " << e.what() << std::endl;
     return -1;
   }
 }
@@ -1501,7 +1545,7 @@ double DLL_ALIGN ffplay_kit_session_get_duration(FFplaySessionHandle session) {
     }
     return 0.0;
   } catch (const std::exception &e) {
-    std::cerr << "[Exception] in ffplay_kit_session_get_duration: " << e.what()
+    std::cerr << "[" << getCurrentTimeStamp() << "] [ffmpeg-kit] [Exception] in ffplay_kit_session_get_duration: " << e.what()
               << std::endl;
     PRINT_STACK_TRACE();
     return -1.0;
@@ -1516,7 +1560,7 @@ bool DLL_ALIGN ffplay_kit_session_is_playing(FFplaySessionHandle session) {
     }
     return false;
   } catch (const std::exception &e) {
-    std::cerr << "[Exception] in ffplay_kit_session_is_playing: " << e.what()
+    std::cerr << "[" << getCurrentTimeStamp() << "] [ffmpeg-kit] [Exception] in ffplay_kit_session_is_playing: " << e.what()
               << std::endl;
     PRINT_STACK_TRACE();
     return false;
@@ -1531,7 +1575,7 @@ bool DLL_ALIGN ffplay_kit_session_is_paused(FFplaySessionHandle session) {
     }
     return false;
   } catch (const std::exception &e) {
-    std::cerr << "[Exception] in ffplay_kit_session_is_paused: " << e.what()
+    std::cerr << "[" << getCurrentTimeStamp() << "] [ffmpeg-kit] [Exception] in ffplay_kit_session_is_paused: " << e.what()
               << std::endl;
     PRINT_STACK_TRACE();
     return false;
@@ -1545,7 +1589,7 @@ void DLL_ALIGN ffplay_kit_session_set_volume(FFplaySessionHandle session, double
       ptr->setVolume(volume);
     }
   } catch (const std::exception &e) {
-    std::cerr << "[Exception] in ffplay_kit_session_set_volume: " << e.what()
+    std::cerr << "[" << getCurrentTimeStamp() << "] [ffmpeg-kit] [Exception] in ffplay_kit_session_set_volume: " << e.what()
               << std::endl;
     PRINT_STACK_TRACE();
   }
@@ -1559,7 +1603,7 @@ double DLL_ALIGN ffplay_kit_session_get_volume(FFplaySessionHandle session) {
     }
     return -1.0;  // invalid handle — same sentinel as context-not-ready
   } catch (const std::exception &e) {
-    std::cerr << "[Exception] in ffplay_kit_session_get_volume: " << e.what()
+    std::cerr << "[" << getCurrentTimeStamp() << "] [ffmpeg-kit] [Exception] in ffplay_kit_session_get_volume: " << e.what()
               << std::endl;
     PRINT_STACK_TRACE();
     return -1.0;
@@ -1570,7 +1614,7 @@ void DLL_ALIGN ffplay_kit_seek(double seconds) {
   try {
     FFplayKit::seek(seconds);
   } catch (const std::exception &e) {
-    std::cerr << "[Exception] in ffplay_kit_seek: " << e.what() << std::endl;
+    std::cerr << "[" << getCurrentTimeStamp() << "] [ffmpeg-kit] [Exception] in ffplay_kit_seek: " << e.what() << std::endl;
     PRINT_STACK_TRACE();
   }
 }
@@ -1579,7 +1623,7 @@ void DLL_ALIGN ffplay_kit_start(void) {
   try {
     FFplayKit::start();
   } catch (const std::exception &e) {
-    std::cerr << "[Exception] in ffplay_kit_start: " << e.what() << std::endl;
+    std::cerr << "[" << getCurrentTimeStamp() << "] [ffmpeg-kit] [Exception] in ffplay_kit_start: " << e.what() << std::endl;
     PRINT_STACK_TRACE();
   }
 }
@@ -1588,7 +1632,7 @@ void DLL_ALIGN ffplay_kit_pause(void) {
   try {
     FFplayKit::pause();
   } catch (const std::exception &e) {
-    std::cerr << "[Exception] in ffplay_kit_pause: " << e.what() << std::endl;
+    std::cerr << "[" << getCurrentTimeStamp() << "] [ffmpeg-kit] [Exception] in ffplay_kit_pause: " << e.what() << std::endl;
     PRINT_STACK_TRACE();
   }
 }
@@ -1597,7 +1641,7 @@ void DLL_ALIGN ffplay_kit_resume(void) {
   try {
     FFplayKit::resume();
   } catch (const std::exception &e) {
-    std::cerr << "[Exception] in ffplay_kit_resume: " << e.what() << std::endl;
+    std::cerr << "[" << getCurrentTimeStamp() << "] [ffmpeg-kit] [Exception] in ffplay_kit_resume: " << e.what() << std::endl;
     PRINT_STACK_TRACE();
   }
 }
@@ -1606,7 +1650,7 @@ void DLL_ALIGN ffplay_kit_stop(void) {
   try {
     FFplayKit::stop();
   } catch (const std::exception &e) {
-    std::cerr << "[Exception] in ffplay_kit_stop: " << e.what() << std::endl;
+    std::cerr << "[" << getCurrentTimeStamp() << "] [ffmpeg-kit] [Exception] in ffplay_kit_stop: " << e.what() << std::endl;
     PRINT_STACK_TRACE();
   }
 }
@@ -1615,7 +1659,7 @@ void DLL_ALIGN ffplay_kit_close(void) {
   try {
     FFplayKit::close();
   } catch (const std::exception &e) {
-    std::cerr << "[Exception] in ffplay_kit_close: " << e.what() << std::endl;
+    std::cerr << "[" << getCurrentTimeStamp() << "] [ffmpeg-kit] [Exception] in ffplay_kit_close: " << e.what() << std::endl;
     PRINT_STACK_TRACE();
   }
 }
@@ -1624,7 +1668,7 @@ double DLL_ALIGN ffplay_kit_get_position(void) {
   try {
     return FFplayKit::getPosition();
   } catch (const std::exception &e) {
-    std::cerr << "[Exception] in ffplay_kit_get_position: " << e.what()
+    std::cerr << "[" << getCurrentTimeStamp() << "] [ffmpeg-kit] [Exception] in ffplay_kit_get_position: " << e.what()
               << std::endl;
     PRINT_STACK_TRACE();
     return -1.0;
@@ -1635,7 +1679,7 @@ void DLL_ALIGN ffplay_kit_set_position(double seconds) {
   try {
     FFplayKit::setPosition(seconds);
   } catch (const std::exception &e) {
-    std::cerr << "[Exception] in ffplay_kit_set_position: " << e.what()
+    std::cerr << "[" << getCurrentTimeStamp() << "] [ffmpeg-kit] [Exception] in ffplay_kit_set_position: " << e.what()
               << std::endl;
     PRINT_STACK_TRACE();
   }
@@ -1645,7 +1689,7 @@ double DLL_ALIGN ffplay_kit_get_duration(void) {
   try {
     return FFplayKit::getDuration();
   } catch (const std::exception &e) {
-    std::cerr << "[Exception] in ffplay_kit_get_duration: " << e.what()
+    std::cerr << "[" << getCurrentTimeStamp() << "] [ffmpeg-kit] [Exception] in ffplay_kit_get_duration: " << e.what()
               << std::endl;
     PRINT_STACK_TRACE();
     return -1.0;
@@ -1656,7 +1700,7 @@ bool DLL_ALIGN ffplay_kit_is_playing(void) {
   try {
     return FFplayKit::isPlaying();
   } catch (const std::exception &e) {
-    std::cerr << "[Exception] in ffplay_kit_is_playing: " << e.what()
+    std::cerr << "[" << getCurrentTimeStamp() << "] [ffmpeg-kit] [Exception] in ffplay_kit_is_playing: " << e.what()
               << std::endl;
     PRINT_STACK_TRACE();
     return false;
@@ -1667,7 +1711,7 @@ bool DLL_ALIGN ffplay_kit_is_paused(void) {
   try {
     return FFplayKit::isPaused();
   } catch (const std::exception &e) {
-    std::cerr << "[Exception] in ffplay_kit_is_paused: " << e.what()
+    std::cerr << "[" << getCurrentTimeStamp() << "] [ffmpeg-kit] [Exception] in ffplay_kit_is_paused: " << e.what()
               << std::endl;
     PRINT_STACK_TRACE();
     return false;
@@ -1678,7 +1722,7 @@ void DLL_ALIGN ffplay_kit_set_volume(double volume) {
   try {
     FFplayKit::setVolume(volume);
   } catch (const std::exception &e) {
-    std::cerr << "[Exception] in ffplay_kit_set_volume: " << e.what()
+    std::cerr << "[" << getCurrentTimeStamp() << "] [ffmpeg-kit] [Exception] in ffplay_kit_set_volume: " << e.what()
               << std::endl;
     PRINT_STACK_TRACE();
   }
@@ -1688,7 +1732,7 @@ double DLL_ALIGN ffplay_kit_get_volume(void) {
   try {
     return FFplayKit::getVolume();
   } catch (const std::exception &e) {
-    std::cerr << "[Exception] in ffplay_kit_get_volume: " << e.what()
+    std::cerr << "[" << getCurrentTimeStamp() << "] [ffmpeg-kit] [Exception] in ffplay_kit_get_volume: " << e.what()
               << std::endl;
     PRINT_STACK_TRACE();
     return -1.0;
@@ -1739,7 +1783,7 @@ void DLL_ALIGN ffmpeg_kit_config_enable_redirection(void) {
   try {
     FFmpegKitConfig::enableRedirection();
   } catch (const std::exception &e) {
-    std::cerr << "[Exception] in ffmpeg_kit_config_enable_redirection: "
+    std::cerr << "[" << getCurrentTimeStamp() << "] [ffmpeg-kit] [Exception] in ffmpeg_kit_config_enable_redirection: "
               << e.what() << std::endl;
     PRINT_STACK_TRACE();
   }
@@ -1749,7 +1793,7 @@ void DLL_ALIGN ffmpeg_kit_config_disable_redirection(void) {
   try {
     FFmpegKitConfig::disableRedirection();
   } catch (const std::exception &e) {
-    std::cerr << "[Exception] in ffmpeg_kit_config_disable_redirection: "
+    std::cerr << "[" << getCurrentTimeStamp() << "] [ffmpeg-kit] [Exception] in ffmpeg_kit_config_disable_redirection: "
               << e.what() << std::endl;
     PRINT_STACK_TRACE();
   }
@@ -1759,7 +1803,7 @@ void DLL_ALIGN ffmpeg_kit_config_set_log_level(FFmpegKitLogLevel level) {
   try {
     FFmpegKitConfig::setLogLevel((Level)level);
   } catch (const std::exception &e) {
-    std::cerr << "[Exception] in ffmpeg_kit_config_set_log_level: " << e.what()
+    std::cerr << "[" << getCurrentTimeStamp() << "] [ffmpeg-kit] [Exception] in ffmpeg_kit_config_set_log_level: " << e.what()
               << std::endl;
     PRINT_STACK_TRACE();
   }
@@ -1769,7 +1813,7 @@ FFmpegKitLogLevel DLL_ALIGN ffmpeg_kit_config_get_log_level(void) {
   try {
     return (FFmpegKitLogLevel)FFmpegKitConfig::getLogLevel();
   } catch (const std::exception &e) {
-    std::cerr << "[Exception] in ffmpeg_kit_config_get_log_level: " << e.what()
+    std::cerr << "[" << getCurrentTimeStamp() << "] [ffmpeg-kit] [Exception] in ffmpeg_kit_config_get_log_level: " << e.what()
               << std::endl;
     PRINT_STACK_TRACE();
     return FFmpegKitLogLevel::FFMPEG_KIT_LOG_LEVEL_INFO;
@@ -1780,7 +1824,7 @@ char * DLL_ALIGN ffmpeg_kit_config_log_level_to_string(FFmpegKitLogLevel level) 
   try {
     return strdup_cpp(FFmpegKitConfig::logLevelToString((Level)level));
   } catch (const std::exception &e) {
-    std::cerr << "[Exception] in ffmpeg_kit_config_log_level_to_string: "
+    std::cerr << "[" << getCurrentTimeStamp() << "] [ffmpeg-kit] [Exception] in ffmpeg_kit_config_log_level_to_string: "
               << e.what() << std::endl;
     PRINT_STACK_TRACE();
     return strdup_cpp(FFmpegKitConfig::logLevelToString(Level::LevelAVLogInfo));
@@ -1795,7 +1839,7 @@ void DLL_ALIGN ffmpeg_kit_config_set_font_directory(const char *path,
     std::map<std::string, std::string> map;
     FFmpegKitConfig::setFontDirectory(path ? std::string(path) : "", map);
   } catch (const std::exception &e) {
-    std::cerr << "[Exception] in ffmpeg_kit_config_set_font_directory: "
+    std::cerr << "[" << getCurrentTimeStamp() << "] [ffmpeg-kit] [Exception] in ffmpeg_kit_config_set_font_directory: "
               << e.what() << std::endl;
     PRINT_STACK_TRACE();
   }
@@ -1809,7 +1853,7 @@ int64_t DLL_ALIGN ffmpeg_kit_config_set_environment_variable(const char *name,
     return FFmpegKitConfig::setEnvironmentVariable(std::string(name),
                                                    std::string(value));
   } catch (const std::exception &e) {
-    std::cerr << "[Exception] in ffmpeg_kit_config_set_environment_variable: "
+    std::cerr << "[" << getCurrentTimeStamp() << "] [ffmpeg-kit] [Exception] in ffmpeg_kit_config_set_environment_variable: "
               << e.what() << std::endl;
     PRINT_STACK_TRACE();
     return -1;
@@ -1820,7 +1864,7 @@ void DLL_ALIGN ffmpeg_kit_config_ignore_signal(FFmpegKitSignal signal) {
   try {
     FFmpegKitConfig::ignoreSignal((Signal)signal);
   } catch (const std::exception &e) {
-    std::cerr << "[Exception] in ffmpeg_kit_config_ignore_signal: " << e.what()
+    std::cerr << "[" << getCurrentTimeStamp() << "] [ffmpeg-kit] [Exception] in ffmpeg_kit_config_ignore_signal: " << e.what()
               << std::endl;
     PRINT_STACK_TRACE();
   }
@@ -1830,7 +1874,7 @@ char * DLL_ALIGN ffmpeg_kit_config_get_ffmpeg_version(void) {
   try {
     return strdup_cpp(FFmpegKitConfig::getFFmpegVersion());
   } catch (const std::exception &e) {
-    std::cerr << "[Exception] in ffmpeg_kit_config_get_ffmpeg_version: "
+    std::cerr << "[" << getCurrentTimeStamp() << "] [ffmpeg-kit] [Exception] in ffmpeg_kit_config_get_ffmpeg_version: "
               << e.what() << std::endl;
     PRINT_STACK_TRACE();
     return nullptr;
@@ -1841,7 +1885,7 @@ char * DLL_ALIGN ffmpeg_kit_config_get_ffmpeg_architecture(void) {
   try {
     return strdup_cpp(FFmpegKitConfig::getFFmpegArchitecture());
   } catch (const std::exception &e) {
-    std::cerr << "[Exception] in ffmpeg_kit_config_get_ffmpeg_architecture: "
+    std::cerr << "[" << getCurrentTimeStamp() << "] [ffmpeg-kit] [Exception] in ffmpeg_kit_config_get_ffmpeg_architecture: "
               << e.what() << std::endl;
     PRINT_STACK_TRACE();
     return nullptr;
@@ -1852,7 +1896,7 @@ char * DLL_ALIGN ffmpeg_kit_config_get_version(void) {
   try {
     return strdup_cpp(FFmpegKitConfig::getVersion());
   } catch (const std::exception &e) {
-    std::cerr << "[Exception] in ffmpeg_kit_config_get_version: " << e.what()
+    std::cerr << "[" << getCurrentTimeStamp() << "] [ffmpeg-kit] [Exception] in ffmpeg_kit_config_get_version: " << e.what()
               << std::endl;
     PRINT_STACK_TRACE();
     return nullptr;
@@ -1864,7 +1908,7 @@ void DLL_ALIGN ffmpeg_kit_config_set_audio_output_device(const char *device_name
     FFmpegKitConfig::setAudioOutputDevice(device_name ? std::string(device_name)
                                                       : "");
   } catch (const std::exception &e) {
-    std::cerr << "[Exception] in ffmpeg_kit_config_set_audio_output_device: "
+    std::cerr << "[" << getCurrentTimeStamp() << "] [ffmpeg-kit] [Exception] in ffmpeg_kit_config_set_audio_output_device: "
               << e.what() << std::endl;
     PRINT_STACK_TRACE();
   }
@@ -1874,7 +1918,7 @@ char * DLL_ALIGN ffmpeg_kit_config_list_audio_output_devices(void) {
   try {
     return strdup_cpp(FFmpegKitConfig::listAudioOutputDevices());
   } catch (const std::exception &e) {
-    std::cerr << "[Exception] in ffmpeg_kit_config_list_audio_output_devices: "
+    std::cerr << "[" << getCurrentTimeStamp() << "] [ffmpeg-kit] [Exception] in ffmpeg_kit_config_list_audio_output_devices: "
               << e.what() << std::endl;
     PRINT_STACK_TRACE();
     return nullptr;
@@ -1887,7 +1931,7 @@ char * DLL_ALIGN ffmpeg_kit_packages_get_package_name(void) {
   try {
     return strdup_cpp(Packages::getPackageName());
   } catch (const std::exception &e) {
-    std::cerr << "[Exception] in ffmpeg_kit_packages_get_package_name: "
+    std::cerr << "[" << getCurrentTimeStamp() << "] [ffmpeg-kit] [Exception] in ffmpeg_kit_packages_get_package_name: "
               << e.what() << std::endl;
     PRINT_STACK_TRACE();
     return nullptr;
@@ -1905,7 +1949,7 @@ char * DLL_ALIGN ffmpeg_kit_packages_get_bundled_libraries(void) {
     }
     return strdup_cpp(result);
   } catch (const std::exception &e) {
-    std::cerr << "[Exception] in ffmpeg_kit_packages_get_bundled_libraries: "
+    std::cerr << "[" << getCurrentTimeStamp() << "] [ffmpeg-kit] [Exception] in ffmpeg_kit_packages_get_bundled_libraries: "
               << e.what() << std::endl;
     PRINT_STACK_TRACE();
     return nullptr;
@@ -1923,7 +1967,7 @@ char * DLL_ALIGN ffmpeg_kit_packages_get_external_libraries(void) {
     }
     return strdup_cpp(result);
   } catch (const std::exception &e) {
-    std::cerr << "[Exception] in ffmpeg_kit_packages_get_external_libraries: "
+    std::cerr << "[" << getCurrentTimeStamp() << "] [ffmpeg-kit] [Exception] in ffmpeg_kit_packages_get_external_libraries: "
               << e.what() << std::endl;
     PRINT_STACK_TRACE();
     return nullptr;
@@ -1934,7 +1978,7 @@ char * DLL_ALIGN ffmpeg_kit_packages_get_bundle_type(void) {
   try {
     return strdup_cpp(Packages::getBundleType());
   } catch (const std::exception &e) {
-    std::cerr << "[Exception] in ffmpeg_kit_packages_get_bundle_type: "
+    std::cerr << "[" << getCurrentTimeStamp() << "] [ffmpeg-kit] [Exception] in ffmpeg_kit_packages_get_bundle_type: "
               << e.what() << std::endl;
     PRINT_STACK_TRACE();
     return nullptr;
@@ -1945,7 +1989,7 @@ bool DLL_ALIGN ffmpeg_kit_packages_get_is_gpl(void) {
   try {
     return Packages::getIsGpl();
   } catch (const std::exception &e) {
-    std::cerr << "[Exception] in ffmpeg_kit_packages_get_is_gpl: "
+    std::cerr << "[" << getCurrentTimeStamp() << "] [ffmpeg-kit] [Exception] in ffmpeg_kit_packages_get_is_gpl: "
               << e.what() << std::endl;
     PRINT_STACK_TRACE();
     return false;
@@ -1956,7 +2000,7 @@ bool DLL_ALIGN ffmpeg_kit_packages_get_is_nonfree(void) {
   try {
     return Packages::getIsNonFree();
   } catch (const std::exception &e) {
-    std::cerr << "[Exception] in ffmpeg_kit_packages_get_is_nonfree: "
+    std::cerr << "[" << getCurrentTimeStamp() << "] [ffmpeg-kit] [Exception] in ffmpeg_kit_packages_get_is_nonfree: "
               << e.what() << std::endl;
     PRINT_STACK_TRACE();
     return false;
@@ -1974,7 +2018,7 @@ char * DLL_ALIGN ffmpeg_kit_packages_get_registered_codecs(void) {
     }
     return strdup_cpp(result);
   } catch (const std::exception &e) {
-    std::cerr << "[Exception] in ffmpeg_kit_packages_get_registered_codecs: "
+    std::cerr << "[" << getCurrentTimeStamp() << "] [ffmpeg-kit] [Exception] in ffmpeg_kit_packages_get_registered_codecs: "
               << e.what() << std::endl;
     PRINT_STACK_TRACE();
     return nullptr;
@@ -1992,7 +2036,7 @@ char * DLL_ALIGN ffmpeg_kit_packages_get_registered_encoders(void) {
     }
     return strdup_cpp(result);
   } catch (const std::exception &e) {
-    std::cerr << "[Exception] in ffmpeg_kit_packages_get_registered_encoders: "
+    std::cerr << "[" << getCurrentTimeStamp() << "] [ffmpeg-kit] [Exception] in ffmpeg_kit_packages_get_registered_encoders: "
               << e.what() << std::endl;
     PRINT_STACK_TRACE();
     return nullptr;
@@ -2010,7 +2054,7 @@ char * DLL_ALIGN ffmpeg_kit_packages_get_registered_decoders(void) {
     }
     return strdup_cpp(result);
   } catch (const std::exception &e) {
-    std::cerr << "[Exception] in ffmpeg_kit_packages_get_registered_decoders: "
+    std::cerr << "[" << getCurrentTimeStamp() << "] [ffmpeg-kit] [Exception] in ffmpeg_kit_packages_get_registered_decoders: "
               << e.what() << std::endl;
     PRINT_STACK_TRACE();
     return nullptr;
@@ -2028,7 +2072,7 @@ char * DLL_ALIGN ffmpeg_kit_packages_get_registered_muxers(void) {
     }
     return strdup_cpp(result);
   } catch (const std::exception &e) {
-    std::cerr << "[Exception] in ffmpeg_kit_packages_get_registered_muxers: "
+    std::cerr << "[" << getCurrentTimeStamp() << "] [ffmpeg-kit] [Exception] in ffmpeg_kit_packages_get_registered_muxers: "
               << e.what() << std::endl;
     PRINT_STACK_TRACE();
     return nullptr;
@@ -2046,7 +2090,7 @@ char * DLL_ALIGN ffmpeg_kit_packages_get_registered_demuxers(void) {
     }
     return strdup_cpp(result);
   } catch (const std::exception &e) {
-    std::cerr << "[Exception] in ffmpeg_kit_packages_get_registered_demuxers: "
+    std::cerr << "[" << getCurrentTimeStamp() << "] [ffmpeg-kit] [Exception] in ffmpeg_kit_packages_get_registered_demuxers: "
               << e.what() << std::endl;
     PRINT_STACK_TRACE();
     return nullptr;
@@ -2064,7 +2108,7 @@ char * DLL_ALIGN ffmpeg_kit_packages_get_registered_filters(void) {
     }
     return strdup_cpp(result);
   } catch (const std::exception &e) {
-    std::cerr << "[Exception] in ffmpeg_kit_packages_get_registered_filters: "
+    std::cerr << "[" << getCurrentTimeStamp() << "] [ffmpeg-kit] [Exception] in ffmpeg_kit_packages_get_registered_filters: "
               << e.what() << std::endl;
     PRINT_STACK_TRACE();
     return nullptr;
@@ -2082,7 +2126,7 @@ char * DLL_ALIGN ffmpeg_kit_packages_get_registered_protocols(void) {
     }
     return strdup_cpp(result);
   } catch (const std::exception &e) {
-    std::cerr << "[Exception] in ffmpeg_kit_packages_get_registered_protocols: "
+    std::cerr << "[" << getCurrentTimeStamp() << "] [ffmpeg-kit] [Exception] in ffmpeg_kit_packages_get_registered_protocols: "
               << e.what() << std::endl;
     PRINT_STACK_TRACE();
     return nullptr;
@@ -2100,7 +2144,7 @@ char * DLL_ALIGN ffmpeg_kit_packages_get_registered_bitstream_filters(void) {
     }
     return strdup_cpp(result);
   } catch (const std::exception &e) {
-    std::cerr << "[Exception] in ffmpeg_kit_packages_get_registered_bitstream_filters: "
+    std::cerr << "[" << getCurrentTimeStamp() << "] [ffmpeg-kit] [Exception] in ffmpeg_kit_packages_get_registered_bitstream_filters: "
               << e.what() << std::endl;
     PRINT_STACK_TRACE();
     return nullptr;
@@ -2111,7 +2155,7 @@ char * DLL_ALIGN ffmpeg_kit_packages_get_build_configuration(void) {
   try {
     return strdup_cpp(Packages::getBuildConfiguration());
   } catch (const std::exception &e) {
-    std::cerr << "[Exception] in ffmpeg_kit_packages_get_build_configuration: "
+    std::cerr << "[" << getCurrentTimeStamp() << "] [ffmpeg-kit] [Exception] in ffmpeg_kit_packages_get_build_configuration: "
               << e.what() << std::endl;
     PRINT_STACK_TRACE();
     return nullptr;
@@ -2127,7 +2171,7 @@ int64_t DLL_ALIGN ffmpeg_kit_session_get_session_id(void *session_handle) {
     auto ptr = get_ptr<Session>(session_handle);
     return ptr ? ptr->getSessionId() : -1;
   } catch (const std::exception &e) {
-    std::cerr << "[Exception] in ffmpeg_kit_session_get_session_id: "
+    std::cerr << "[" << getCurrentTimeStamp() << "] [ffmpeg-kit] [Exception] in ffmpeg_kit_session_get_session_id: "
               << e.what() << std::endl;
     PRINT_STACK_TRACE();
     return -1;
@@ -2142,7 +2186,7 @@ FFmpegKitSessionState DLL_ALIGN ffmpeg_kit_session_get_state(void *session_handl
     return ptr ? (FFmpegKitSessionState)ptr->getState()
                : FFMPEG_KIT_SESSION_STATE_CREATED;
   } catch (const std::exception &e) {
-    std::cerr << "[Exception] in ffmpeg_kit_session_get_state: " << e.what()
+    std::cerr << "[" << getCurrentTimeStamp() << "] [ffmpeg-kit] [Exception] in ffmpeg_kit_session_get_state: " << e.what()
               << std::endl;
     PRINT_STACK_TRACE();
     return FFMPEG_KIT_SESSION_STATE_FAILED;
@@ -2157,7 +2201,7 @@ int64_t DLL_ALIGN ffmpeg_kit_session_get_return_code(void *session_handle) {
     auto obj = ptr ? ptr->getReturnCode() : nullptr;
     return obj ? obj->getValue() : -1;
   } catch (const std::exception &e) {
-    std::cerr << "[Exception] in ffmpeg_kit_session_get_return_code: "
+    std::cerr << "[" << getCurrentTimeStamp() << "] [ffmpeg-kit] [Exception] in ffmpeg_kit_session_get_return_code: "
               << e.what() << std::endl;
     PRINT_STACK_TRACE();
     return -1;
@@ -2171,7 +2215,7 @@ char * DLL_ALIGN ffmpeg_kit_session_get_output(void *session_handle) {
     auto ptr = get_ptr<Session>(session_handle);
     return ptr ? strdup_cpp(ptr->getOutput()) : nullptr;
   } catch (const std::exception &e) {
-    std::cerr << "[Exception] in ffmpeg_kit_session_get_output: " << e.what()
+    std::cerr << "[" << getCurrentTimeStamp() << "] [ffmpeg-kit] [Exception] in ffmpeg_kit_session_get_output: " << e.what()
               << std::endl;
     PRINT_STACK_TRACE();
     return nullptr;
@@ -2185,7 +2229,7 @@ char * DLL_ALIGN ffmpeg_kit_session_get_logs_as_string(void *session_handle) {
     auto ptr = get_ptr<Session>(session_handle);
     return ptr ? strdup_cpp(ptr->getLogsAsString()) : nullptr;
   } catch (const std::exception &e) {
-    std::cerr << "[Exception] in ffmpeg_kit_session_get_logs_as_string: "
+    std::cerr << "[" << getCurrentTimeStamp() << "] [ffmpeg-kit] [Exception] in ffmpeg_kit_session_get_logs_as_string: "
               << e.what() << std::endl;
     PRINT_STACK_TRACE();
     return nullptr;
@@ -2199,7 +2243,7 @@ char * DLL_ALIGN ffmpeg_kit_session_get_fail_stack_trace(void *session_handle) {
     auto ptr = get_ptr<Session>(session_handle);
     return ptr ? strdup_cpp(ptr->getFailStackTrace()) : nullptr;
   } catch (const std::exception &e) {
-    std::cerr << "[Exception] in ffmpeg_kit_session_get_fail_stack_trace: "
+    std::cerr << "[" << getCurrentTimeStamp() << "] [ffmpeg-kit] [Exception] in ffmpeg_kit_session_get_fail_stack_trace: "
               << e.what() << std::endl;
     PRINT_STACK_TRACE();
     return nullptr;
@@ -2217,7 +2261,7 @@ media_information_create_session(const char *command) {
     auto session = MediaInformationSession::create(arguments);
     return create_handle(session);
   } catch (const std::exception &e) {
-    std::cerr << "[Exception] in media_information_create_session: " << e.what()
+    std::cerr << "[" << getCurrentTimeStamp() << "] [ffmpeg-kit] [Exception] in media_information_create_session: " << e.what()
               << std::endl;
     PRINT_STACK_TRACE();
     return nullptr;
@@ -2273,7 +2317,7 @@ void DLL_ALIGN media_information_kit_set_log_callback(
       ptr->setLogCallback(log);
     }
   } catch (const std::exception &e) {
-    std::cerr << "[Exception] in media_information_kit_set_log_callback: "
+    std::cerr << "[" << getCurrentTimeStamp() << "] [ffmpeg-kit] [Exception] in media_information_kit_set_log_callback: "
               << e.what() << std::endl;
     PRINT_STACK_TRACE();
   }
@@ -2294,7 +2338,7 @@ void DLL_ALIGN media_information_kit_set_complete_callback(
       ptr->setCompleteCallback(complete);
     }
   } catch (const std::exception &e) {
-    std::cerr << "[Exception] in media_information_kit_set_complete_callback: "
+    std::cerr << "[" << getCurrentTimeStamp() << "] [ffmpeg-kit] [Exception] in media_information_kit_set_complete_callback: "
               << e.what() << std::endl;
     PRINT_STACK_TRACE();
   }
@@ -2323,7 +2367,7 @@ void DLL_ALIGN media_information_kit_set_callbacks(
       ptr->setLogCallback(log);
     }
   } catch (const std::exception &e) {
-    std::cerr << "[Exception] in media_information_kit_set_callbacks: "
+    std::cerr << "[" << getCurrentTimeStamp() << "] [ffmpeg-kit] [Exception] in media_information_kit_set_callbacks: "
               << e.what() << std::endl;
     PRINT_STACK_TRACE();
   }
@@ -2337,7 +2381,7 @@ void DLL_ALIGN media_information_session_execute(MediaInformationSessionHandle s
       FFmpegKitConfig::getMediaInformationExecute(ptr, timeout);
     }
   } catch (const std::exception &e) {
-    std::cerr << "[Exception] in media_information_session_execute: "
+    std::cerr << "[" << getCurrentTimeStamp() << "] [ffmpeg-kit] [Exception] in media_information_session_execute: "
               << e.what() << std::endl;
     PRINT_STACK_TRACE();
   }
@@ -2351,7 +2395,7 @@ void DLL_ALIGN media_information_session_execute_async(
       FFmpegKitConfig::asyncGetMediaInformationExecute(ptr, timeout);
     }
   } catch (const std::exception &e) {
-    std::cerr << "[Exception] in media_information_session_execute_async: "
+    std::cerr << "[" << getCurrentTimeStamp() << "] [ffmpeg-kit] [Exception] in media_information_session_execute_async: "
               << e.what() << std::endl;
     PRINT_STACK_TRACE();
   }
@@ -2381,7 +2425,7 @@ char * DLL_ALIGN media_information_get_filename(MediaInformationHandle handle) {
     auto ptr = get_ptr<MediaInformation>(handle);
     return ptr ? strdup_safe_ptr(ptr->getFilename()) : nullptr;
   } catch (const std::exception &e) {
-    std::cerr << "[Exception] in media_information_get_filename: " << e.what()
+    std::cerr << "[" << getCurrentTimeStamp() << "] [ffmpeg-kit] [Exception] in media_information_get_filename: " << e.what()
               << std::endl;
     PRINT_STACK_TRACE();
     return nullptr;
@@ -2392,7 +2436,7 @@ char * DLL_ALIGN media_information_get_format(MediaInformationHandle handle) {
     auto ptr = get_ptr<MediaInformation>(handle);
     return ptr ? strdup_safe_ptr(ptr->getFormat()) : nullptr;
   } catch (const std::exception &e) {
-    std::cerr << "[Exception] in media_information_get_format: " << e.what()
+    std::cerr << "[" << getCurrentTimeStamp() << "] [ffmpeg-kit] [Exception] in media_information_get_format: " << e.what()
               << std::endl;
     PRINT_STACK_TRACE();
     return nullptr;
@@ -2403,7 +2447,7 @@ char * DLL_ALIGN media_information_get_long_format(MediaInformationHandle handle
     auto ptr = get_ptr<MediaInformation>(handle);
     return ptr ? strdup_safe_ptr(ptr->getLongFormat()) : nullptr;
   } catch (const std::exception &e) {
-    std::cerr << "[Exception] in media_information_get_long_format: "
+    std::cerr << "[" << getCurrentTimeStamp() << "] [ffmpeg-kit] [Exception] in media_information_get_long_format: "
               << e.what() << std::endl;
     PRINT_STACK_TRACE();
     return nullptr;
@@ -2414,7 +2458,7 @@ char * DLL_ALIGN media_information_get_duration(MediaInformationHandle handle) {
     auto ptr = get_ptr<MediaInformation>(handle);
     return ptr ? strdup_safe_ptr(ptr->getDuration()) : nullptr;
   } catch (const std::exception &e) {
-    std::cerr << "[Exception] in media_information_get_duration: " << e.what()
+    std::cerr << "[" << getCurrentTimeStamp() << "] [ffmpeg-kit] [Exception] in media_information_get_duration: " << e.what()
               << std::endl;
     PRINT_STACK_TRACE();
     return nullptr;
@@ -2425,7 +2469,7 @@ char * DLL_ALIGN media_information_get_bitrate(MediaInformationHandle handle) {
     auto ptr = get_ptr<MediaInformation>(handle);
     return ptr ? strdup_safe_ptr(ptr->getBitrate()) : nullptr;
   } catch (const std::exception &e) {
-    std::cerr << "[Exception] in media_information_get_bitrate: " << e.what()
+    std::cerr << "[" << getCurrentTimeStamp() << "] [ffmpeg-kit] [Exception] in media_information_get_bitrate: " << e.what()
               << std::endl;
     PRINT_STACK_TRACE();
     return nullptr;
@@ -2436,7 +2480,7 @@ char * DLL_ALIGN media_information_get_size(MediaInformationHandle handle) {
     auto ptr = get_ptr<MediaInformation>(handle);
     return ptr ? strdup_safe_ptr(ptr->getSize()) : nullptr;
   } catch (const std::exception &e) {
-    std::cerr << "[Exception] in media_information_get_size: " << e.what()
+    std::cerr << "[" << getCurrentTimeStamp() << "] [ffmpeg-kit] [Exception] in media_information_get_size: " << e.what()
               << std::endl;
     PRINT_STACK_TRACE();
     return nullptr;
@@ -2450,7 +2494,7 @@ char * DLL_ALIGN media_information_get_tags_json(MediaInformationHandle handle) 
     auto tags = ptr->getTags();
     return tags ? strdup_cpp(tags->toStyledString()) : nullptr;
   } catch (const std::exception &e) {
-    std::cerr << "[Exception] in media_information_get_tags_json: " << e.what()
+    std::cerr << "[" << getCurrentTimeStamp() << "] [ffmpeg-kit] [Exception] in media_information_get_tags_json: " << e.what()
               << std::endl;
     PRINT_STACK_TRACE();
     return nullptr;
@@ -2465,7 +2509,7 @@ int64_t DLL_ALIGN media_information_get_streams_count(MediaInformationHandle han
     auto streams = ptr ? ptr->getStreams() : nullptr;
     return streams ? streams->size() : 0;
   } catch (const std::exception &e) {
-    std::cerr << "[Exception] in media_information_get_streams_count: "
+    std::cerr << "[" << getCurrentTimeStamp() << "] [ffmpeg-kit] [Exception] in media_information_get_streams_count: "
               << e.what() << std::endl;
     PRINT_STACK_TRACE();
     return -1;
@@ -2484,7 +2528,7 @@ media_information_get_stream_at(MediaInformationHandle handle, int64_t index) {
     }
     return nullptr;
   } catch (const std::exception &e) {
-    std::cerr << "[Exception] in media_information_get_stream_at: " << e.what()
+    std::cerr << "[" << getCurrentTimeStamp() << "] [ffmpeg-kit] [Exception] in media_information_get_stream_at: " << e.what()
               << std::endl;
     PRINT_STACK_TRACE();
     return nullptr;
@@ -2499,7 +2543,7 @@ int64_t DLL_ALIGN media_information_get_chapters_count(MediaInformationHandle ha
     auto chapters = ptr ? ptr->getChapters() : nullptr;
     return chapters ? chapters->size() : 0;
   } catch (const std::exception &e) {
-    std::cerr << "[Exception] in media_information_get_chapters_count: "
+    std::cerr << "[" << getCurrentTimeStamp() << "] [ffmpeg-kit] [Exception] in media_information_get_chapters_count: "
               << e.what() << std::endl;
     PRINT_STACK_TRACE();
     return -1;
@@ -2518,7 +2562,7 @@ ChapterHandle DLL_ALIGN media_information_get_chapter_at(MediaInformationHandle 
     }
     return nullptr;
   } catch (const std::exception &e) {
-    std::cerr << "[Exception] in media_information_get_chapter_at: " << e.what()
+    std::cerr << "[" << getCurrentTimeStamp() << "] [ffmpeg-kit] [Exception] in media_information_get_chapter_at: " << e.what()
               << std::endl;
     PRINT_STACK_TRACE();
     return nullptr;
@@ -2538,7 +2582,7 @@ char * DLL_ALIGN stream_information_get_type(StreamInformationHandle handle) {
     auto ptr = get_ptr<StreamInformation>(handle);
     return ptr ? strdup_safe_ptr(ptr->getType()) : nullptr;
   } catch (const std::exception &e) {
-    std::cerr << "[Exception] in stream_information_get_type: " << e.what()
+    std::cerr << "[" << getCurrentTimeStamp() << "] [ffmpeg-kit] [Exception] in stream_information_get_type: " << e.what()
               << std::endl;
     PRINT_STACK_TRACE();
     return nullptr;
@@ -2549,7 +2593,7 @@ char * DLL_ALIGN stream_information_get_codec(StreamInformationHandle handle) {
     auto ptr = get_ptr<StreamInformation>(handle);
     return ptr ? strdup_safe_ptr(ptr->getCodec()) : nullptr;
   } catch (const std::exception &e) {
-    std::cerr << "[Exception] in stream_information_get_codec: " << e.what()
+    std::cerr << "[" << getCurrentTimeStamp() << "] [ffmpeg-kit] [Exception] in stream_information_get_codec: " << e.what()
               << std::endl;
     PRINT_STACK_TRACE();
     return nullptr;
@@ -2560,7 +2604,7 @@ char * DLL_ALIGN stream_information_get_codec_long(StreamInformationHandle handl
     auto ptr = get_ptr<StreamInformation>(handle);
     return ptr ? strdup_safe_ptr(ptr->getCodecLong()) : nullptr;
   } catch (const std::exception &e) {
-    std::cerr << "[Exception] in stream_information_get_codec_long: "
+    std::cerr << "[" << getCurrentTimeStamp() << "] [ffmpeg-kit] [Exception] in stream_information_get_codec_long: "
               << e.what() << std::endl;
     PRINT_STACK_TRACE();
     return nullptr;
@@ -2571,7 +2615,7 @@ char * DLL_ALIGN stream_information_get_format(StreamInformationHandle handle) {
     auto ptr = get_ptr<StreamInformation>(handle);
     return ptr ? strdup_safe_ptr(ptr->getFormat()) : nullptr;
   } catch (const std::exception &e) {
-    std::cerr << "[Exception] in stream_information_get_format: " << e.what()
+    std::cerr << "[" << getCurrentTimeStamp() << "] [ffmpeg-kit] [Exception] in stream_information_get_format: " << e.what()
               << std::endl;
     PRINT_STACK_TRACE();
     return nullptr;
@@ -2582,7 +2626,7 @@ char * DLL_ALIGN stream_information_get_bitrate(StreamInformationHandle handle) 
     auto ptr = get_ptr<StreamInformation>(handle);
     return ptr ? strdup_safe_ptr(ptr->getBitrate()) : nullptr;
   } catch (const std::exception &e) {
-    std::cerr << "[Exception] in stream_information_get_bitrate: " << e.what()
+    std::cerr << "[" << getCurrentTimeStamp() << "] [ffmpeg-kit] [Exception] in stream_information_get_bitrate: " << e.what()
               << std::endl;
     PRINT_STACK_TRACE();
     return nullptr;
@@ -2593,7 +2637,7 @@ char * DLL_ALIGN stream_information_get_sample_rate(StreamInformationHandle hand
     auto ptr = get_ptr<StreamInformation>(handle);
     return ptr ? strdup_safe_ptr(ptr->getSampleRate()) : nullptr;
   } catch (const std::exception &e) {
-    std::cerr << "[Exception] in stream_information_get_sample_rate: "
+    std::cerr << "[" << getCurrentTimeStamp() << "] [ffmpeg-kit] [Exception] in stream_information_get_sample_rate: "
               << e.what() << std::endl;
     PRINT_STACK_TRACE();
     return nullptr;
@@ -2604,7 +2648,7 @@ char * DLL_ALIGN stream_information_get_sample_format(StreamInformationHandle ha
     auto ptr = get_ptr<StreamInformation>(handle);
     return ptr ? strdup_safe_ptr(ptr->getSampleFormat()) : nullptr;
   } catch (const std::exception &e) {
-    std::cerr << "[Exception] in stream_information_get_sample_format: "
+    std::cerr << "[" << getCurrentTimeStamp() << "] [ffmpeg-kit] [Exception] in stream_information_get_sample_format: "
               << e.what() << std::endl;
     PRINT_STACK_TRACE();
     return nullptr;
@@ -2616,7 +2660,7 @@ stream_information_get_display_aspect_ratio(StreamInformationHandle handle) {
     auto ptr = get_ptr<StreamInformation>(handle);
     return ptr ? strdup_safe_ptr(ptr->getDisplayAspectRatio()) : nullptr;
   } catch (const std::exception &e) {
-    std::cerr << "[Exception] in stream_information_get_display_aspect_ratio: "
+    std::cerr << "[" << getCurrentTimeStamp() << "] [ffmpeg-kit] [Exception] in stream_information_get_display_aspect_ratio: "
               << e.what() << std::endl;
     PRINT_STACK_TRACE();
     return nullptr;
@@ -2628,7 +2672,7 @@ stream_information_get_average_frame_rate(StreamInformationHandle handle) {
     auto ptr = get_ptr<StreamInformation>(handle);
     return ptr ? strdup_safe_ptr(ptr->getAverageFrameRate()) : nullptr;
   } catch (const std::exception &e) {
-    std::cerr << "[Exception] in stream_information_get_average_frame_rate: "
+    std::cerr << "[" << getCurrentTimeStamp() << "] [ffmpeg-kit] [Exception] in stream_information_get_average_frame_rate: "
               << e.what() << std::endl;
     PRINT_STACK_TRACE();
     return nullptr;
@@ -2639,7 +2683,7 @@ char * DLL_ALIGN stream_information_get_real_frame_rate(StreamInformationHandle 
     auto ptr = get_ptr<StreamInformation>(handle);
     return ptr ? strdup_safe_ptr(ptr->getRealFrameRate()) : nullptr;
   } catch (const std::exception &e) {
-    std::cerr << "[Exception] in stream_information_get_real_frame_rate: "
+    std::cerr << "[" << getCurrentTimeStamp() << "] [ffmpeg-kit] [Exception] in stream_information_get_real_frame_rate: "
               << e.what() << std::endl;
     PRINT_STACK_TRACE();
     return nullptr;
@@ -2650,7 +2694,7 @@ char * DLL_ALIGN stream_information_get_time_base(StreamInformationHandle handle
     auto ptr = get_ptr<StreamInformation>(handle);
     return ptr ? strdup_safe_ptr(ptr->getTimeBase()) : nullptr;
   } catch (const std::exception &e) {
-    std::cerr << "[Exception] in stream_information_get_time_base: " << e.what()
+    std::cerr << "[" << getCurrentTimeStamp() << "] [ffmpeg-kit] [Exception] in stream_information_get_time_base: " << e.what()
               << std::endl;
     PRINT_STACK_TRACE();
     return nullptr;
@@ -2665,7 +2709,7 @@ int64_t DLL_ALIGN stream_information_get_width(StreamInformationHandle handle) {
     auto val = ptr ? ptr->getWidth() : nullptr;
     return val ? *val : 0;
   } catch (const std::exception &e) {
-    std::cerr << "[Exception] in stream_information_get_width: " << e.what()
+    std::cerr << "[" << getCurrentTimeStamp() << "] [ffmpeg-kit] [Exception] in stream_information_get_width: " << e.what()
               << std::endl;
     PRINT_STACK_TRACE();
     return -1;
@@ -2679,7 +2723,7 @@ int64_t DLL_ALIGN stream_information_get_height(StreamInformationHandle handle) 
     auto val = ptr ? ptr->getHeight() : nullptr;
     return val ? *val : 0;
   } catch (const std::exception &e) {
-    std::cerr << "[Exception] in stream_information_get_height: " << e.what()
+    std::cerr << "[" << getCurrentTimeStamp() << "] [ffmpeg-kit] [Exception] in stream_information_get_height: " << e.what()
               << std::endl;
     PRINT_STACK_TRACE();
     return -1;
@@ -2693,7 +2737,7 @@ int64_t DLL_ALIGN stream_information_get_index(StreamInformationHandle handle) {
     auto val = ptr ? ptr->getIndex() : nullptr;
     return val ? *val : -1;
   } catch (const std::exception &e) {
-    std::cerr << "[Exception] in stream_information_get_index: " << e.what()
+    std::cerr << "[" << getCurrentTimeStamp() << "] [ffmpeg-kit] [Exception] in stream_information_get_index: " << e.what()
               << std::endl;
     PRINT_STACK_TRACE();
     return -1;
@@ -2705,7 +2749,7 @@ char * DLL_ALIGN stream_information_get_tags_json(StreamInformationHandle handle
     auto tags = ptr ? ptr->getTags() : nullptr;
     return tags ? strdup_cpp(tags->toStyledString()) : nullptr;
   } catch (const std::exception &e) {
-    std::cerr << "[Exception] in stream_information_get_tags_json: " << e.what()
+    std::cerr << "[" << getCurrentTimeStamp() << "] [ffmpeg-kit] [Exception] in stream_information_get_tags_json: " << e.what()
               << std::endl;
     PRINT_STACK_TRACE();
     return nullptr;
@@ -2721,7 +2765,7 @@ int64_t DLL_ALIGN chapter_get_id(ChapterHandle handle) {
     auto val = ptr ? ptr->getId() : nullptr;
     return val ? *val : -1;
   } catch (const std::exception &e) {
-    std::cerr << "[Exception] in chapter_get_id: " << e.what() << std::endl;
+    std::cerr << "[" << getCurrentTimeStamp() << "] [ffmpeg-kit] [Exception] in chapter_get_id: " << e.what() << std::endl;
     PRINT_STACK_TRACE();
     return -1;
   }
@@ -2731,7 +2775,7 @@ char * DLL_ALIGN chapter_get_time_base(ChapterHandle handle) {
     auto ptr = get_ptr<Chapter>(handle);
     return ptr ? strdup_safe_ptr(ptr->getTimeBase()) : nullptr;
   } catch (const std::exception &e) {
-    std::cerr << "[Exception] in chapter_get_time_base: " << e.what()
+    std::cerr << "[" << getCurrentTimeStamp() << "] [ffmpeg-kit] [Exception] in chapter_get_time_base: " << e.what()
               << std::endl;
     PRINT_STACK_TRACE();
     return nullptr;
@@ -2745,7 +2789,7 @@ int64_t DLL_ALIGN chapter_get_start(ChapterHandle handle) {
     auto val = ptr ? ptr->getStart() : nullptr;
     return val ? *val : -1;
   } catch (const std::exception &e) {
-    std::cerr << "[Exception] in chapter_get_start: " << e.what() << std::endl;
+    std::cerr << "[" << getCurrentTimeStamp() << "] [ffmpeg-kit] [Exception] in chapter_get_start: " << e.what() << std::endl;
     PRINT_STACK_TRACE();
     return -1;
   }
@@ -2755,7 +2799,7 @@ char * DLL_ALIGN chapter_get_start_time(ChapterHandle handle) {
     auto ptr = get_ptr<Chapter>(handle);
     return ptr ? strdup_safe_ptr(ptr->getStartTime()) : nullptr;
   } catch (const std::exception &e) {
-    std::cerr << "[Exception] in chapter_get_start_time: " << e.what()
+    std::cerr << "[" << getCurrentTimeStamp() << "] [ffmpeg-kit] [Exception] in chapter_get_start_time: " << e.what()
               << std::endl;
     PRINT_STACK_TRACE();
     return nullptr;
@@ -2769,7 +2813,7 @@ int64_t DLL_ALIGN chapter_get_end(ChapterHandle handle) {
     auto val = ptr ? ptr->getEnd() : nullptr;
     return val ? *val : -1;
   } catch (const std::exception &e) {
-    std::cerr << "[Exception] in chapter_get_end: " << e.what() << std::endl;
+    std::cerr << "[" << getCurrentTimeStamp() << "] [ffmpeg-kit] [Exception] in chapter_get_end: " << e.what() << std::endl;
     PRINT_STACK_TRACE();
     return -1;
   }
@@ -2779,7 +2823,7 @@ char * DLL_ALIGN chapter_get_end_time(ChapterHandle handle) {
     auto ptr = get_ptr<Chapter>(handle);
     return ptr ? strdup_safe_ptr(ptr->getEndTime()) : nullptr;
   } catch (const std::exception &e) {
-    std::cerr << "[Exception] in chapter_get_end_time: " << e.what()
+    std::cerr << "[" << getCurrentTimeStamp() << "] [ffmpeg-kit] [Exception] in chapter_get_end_time: " << e.what()
               << std::endl;
     PRINT_STACK_TRACE();
     return nullptr;
@@ -2791,7 +2835,7 @@ char * DLL_ALIGN chapter_get_tags_json(ChapterHandle handle) {
     auto tags = ptr ? ptr->getTags() : nullptr;
     return tags ? strdup_cpp(tags->toStyledString()) : nullptr;
   } catch (const std::exception &e) {
-    std::cerr << "[Exception] in chapter_get_tags_json: " << e.what()
+    std::cerr << "[" << getCurrentTimeStamp() << "] [ffmpeg-kit] [Exception] in chapter_get_tags_json: " << e.what()
               << std::endl;
     PRINT_STACK_TRACE();
     return nullptr;
@@ -2804,7 +2848,7 @@ FFmpegSessionHandle * DLL_ALIGN ffmpeg_kit_get_sessions(void) {
     return (FFmpegSessionHandle *)list_to_handle_array(
         FFmpegKitConfig::getSessions());
   } catch (const std::exception &e) {
-    std::cerr << "[Exception] in ffmpeg_kit_get_sessions: " << e.what()
+    std::cerr << "[" << getCurrentTimeStamp() << "] [ffmpeg-kit] [Exception] in ffmpeg_kit_get_sessions: " << e.what()
               << std::endl;
     PRINT_STACK_TRACE();
     return nullptr;
@@ -2814,7 +2858,7 @@ FFmpegSessionHandle * DLL_ALIGN ffmpeg_kit_list_sessions(void) {
   try {
     return ffmpeg_kit_get_sessions();
   } catch (const std::exception &e) {
-    std::cerr << "[Exception] in ffmpeg_kit_list_sessions: " << e.what()
+    std::cerr << "[" << getCurrentTimeStamp() << "] [ffmpeg-kit] [Exception] in ffmpeg_kit_list_sessions: " << e.what()
               << std::endl;
     PRINT_STACK_TRACE();
     return nullptr;
@@ -2826,7 +2870,7 @@ FFmpegSessionHandle * DLL_ALIGN ffmpeg_kit_get_ffmpeg_sessions(void) {
     return (FFmpegSessionHandle *)list_to_handle_array(
         FFmpegKitConfig::getFFmpegSessions());
   } catch (const std::exception &e) {
-    std::cerr << "[Exception] in ffmpeg_kit_get_ffmpeg_sessions: " << e.what()
+    std::cerr << "[" << getCurrentTimeStamp() << "] [ffmpeg-kit] [Exception] in ffmpeg_kit_get_ffmpeg_sessions: " << e.what()
               << std::endl;
     PRINT_STACK_TRACE();
     return nullptr;
@@ -2838,7 +2882,7 @@ FFprobeSessionHandle * DLL_ALIGN ffmpeg_kit_get_ffprobe_sessions(void) {
     return (FFprobeSessionHandle *)list_to_handle_array(
         FFmpegKitConfig::getFFprobeSessions());
   } catch (const std::exception &e) {
-    std::cerr << "[Exception] in ffmpeg_kit_get_ffprobe_sessions: " << e.what()
+    std::cerr << "[" << getCurrentTimeStamp() << "] [ffmpeg-kit] [Exception] in ffmpeg_kit_get_ffprobe_sessions: " << e.what()
               << std::endl;
     PRINT_STACK_TRACE();
     return nullptr;
@@ -2848,7 +2892,7 @@ FFprobeSessionHandle * DLL_ALIGN ffprobe_kit_list_sessions(void) {
   try {
     return ffmpeg_kit_get_ffprobe_sessions();
   } catch (const std::exception &e) {
-    std::cerr << "[Exception] in ffprobe_kit_list_sessions: " << e.what()
+    std::cerr << "[" << getCurrentTimeStamp() << "] [ffmpeg-kit] [Exception] in ffprobe_kit_list_sessions: " << e.what()
               << std::endl;
     PRINT_STACK_TRACE();
     return nullptr;
@@ -2860,7 +2904,7 @@ FFplaySessionHandle * DLL_ALIGN ffmpeg_kit_get_ffplay_sessions(void) {
     return (FFplaySessionHandle *)list_to_handle_array(
         FFmpegKitConfig::getFFplaySessions());
   } catch (const std::exception &e) {
-    std::cerr << "[Exception] in ffmpeg_kit_get_ffplay_sessions: " << e.what()
+    std::cerr << "[" << getCurrentTimeStamp() << "] [ffmpeg-kit] [Exception] in ffmpeg_kit_get_ffplay_sessions: " << e.what()
               << std::endl;
     PRINT_STACK_TRACE();
     return nullptr;
@@ -2872,7 +2916,7 @@ MediaInformationSessionHandle * DLL_ALIGN ffmpeg_kit_get_media_information_sessi
     return (MediaInformationSessionHandle *)list_to_handle_array(
         FFmpegKitConfig::getMediaInformationSessions());
   } catch (const std::exception &e) {
-    std::cerr << "[Exception] in ffmpeg_kit_get_media_information_sessions: "
+    std::cerr << "[" << getCurrentTimeStamp() << "] [ffmpeg-kit] [Exception] in ffmpeg_kit_get_media_information_sessions: "
               << e.what() << std::endl;
     PRINT_STACK_TRACE();
     return nullptr;
@@ -2882,7 +2926,7 @@ MediaInformationSessionHandle * DLL_ALIGN media_information_kit_list_sessions(vo
   try {
     return ffmpeg_kit_get_media_information_sessions();
   } catch (const std::exception &e) {
-    std::cerr << "[Exception] in media_information_kit_list_sessions: "
+    std::cerr << "[" << getCurrentTimeStamp() << "] [ffmpeg-kit] [Exception] in media_information_kit_list_sessions: "
               << e.what() << std::endl;
     PRINT_STACK_TRACE();
     return nullptr;
@@ -2893,7 +2937,7 @@ FFmpegSessionHandle DLL_ALIGN ffmpeg_kit_get_session(int64_t session_id) {
   try {
     return create_handle(FFmpegKitConfig::getSession(session_id));
   } catch (const std::exception &e) {
-    std::cerr << "[Exception] in ffmpeg_kit_get_session: " << e.what()
+    std::cerr << "[" << getCurrentTimeStamp() << "] [ffmpeg-kit] [Exception] in ffmpeg_kit_get_session: " << e.what()
               << std::endl;
     PRINT_STACK_TRACE();
     return nullptr;
@@ -2904,7 +2948,7 @@ FFmpegSessionHandle DLL_ALIGN ffmpeg_kit_get_last_session(void) {
   try {
     return create_handle(FFmpegKitConfig::getLastSession());
   } catch (const std::exception &e) {
-    std::cerr << "[Exception] in ffmpeg_kit_get_last_session: " << e.what()
+    std::cerr << "[" << getCurrentTimeStamp() << "] [ffmpeg-kit] [Exception] in ffmpeg_kit_get_last_session: " << e.what()
               << std::endl;
     PRINT_STACK_TRACE();
     return nullptr;
@@ -2915,7 +2959,7 @@ FFmpegSessionHandle DLL_ALIGN ffmpeg_kit_get_last_ffmpeg_session(void) {
   try {
     return create_handle(FFmpegKitConfig::getLastFFmpegSession());
   } catch (const std::exception &e) {
-    std::cerr << "[Exception] in ffmpeg_kit_get_last_ffmpeg_session: "
+    std::cerr << "[" << getCurrentTimeStamp() << "] [ffmpeg-kit] [Exception] in ffmpeg_kit_get_last_ffmpeg_session: "
               << e.what() << std::endl;
     PRINT_STACK_TRACE();
     return nullptr;
@@ -2926,7 +2970,7 @@ FFprobeSessionHandle DLL_ALIGN ffmpeg_kit_get_last_ffprobe_session(void) {
   try {
     return create_handle(FFmpegKitConfig::getLastFFprobeSession());
   } catch (const std::exception &e) {
-    std::cerr << "[Exception] in ffmpeg_kit_get_last_ffprobe_session: "
+    std::cerr << "[" << getCurrentTimeStamp() << "] [ffmpeg-kit] [Exception] in ffmpeg_kit_get_last_ffprobe_session: "
               << e.what() << std::endl;
     PRINT_STACK_TRACE();
     return nullptr;
@@ -2936,7 +2980,7 @@ FFprobeSessionHandle DLL_ALIGN ffprobe_kit_get_last_session(void) {
   try {
     return ffmpeg_kit_get_last_ffprobe_session();
   } catch (const std::exception &e) {
-    std::cerr << "[Exception] in ffprobe_kit_get_last_session: " << e.what()
+    std::cerr << "[" << getCurrentTimeStamp() << "] [ffmpeg-kit] [Exception] in ffprobe_kit_get_last_session: " << e.what()
               << std::endl;
     PRINT_STACK_TRACE();
     return nullptr;
@@ -2950,7 +2994,7 @@ FFprobeSessionHandle DLL_ALIGN ffprobe_kit_get_last_completed_session(void) {
     }
     return nullptr;
   } catch (const std::exception &e) {
-    std::cerr << "[Exception] in ffprobe_kit_get_last_completed_session: "
+    std::cerr << "[" << getCurrentTimeStamp() << "] [ffmpeg-kit] [Exception] in ffprobe_kit_get_last_completed_session: "
               << e.what() << std::endl;
     PRINT_STACK_TRACE();
     return nullptr;
@@ -2961,7 +3005,7 @@ FFplaySessionHandle DLL_ALIGN ffmpeg_kit_get_last_ffplay_session(void) {
   try {
     return create_handle(FFmpegKitConfig::getLastFFplaySession());
   } catch (const std::exception &e) {
-    std::cerr << "[Exception] in ffmpeg_kit_get_last_ffplay_session: "
+    std::cerr << "[" << getCurrentTimeStamp() << "] [ffmpeg-kit] [Exception] in ffmpeg_kit_get_last_ffplay_session: "
               << e.what() << std::endl;
     PRINT_STACK_TRACE();
     return nullptr;
@@ -2985,7 +3029,7 @@ FFmpegSessionHandle DLL_ALIGN ffmpeg_kit_get_last_completed_session(void) {
   try {
     return create_handle(FFmpegKitConfig::getLastCompletedSession());
   } catch (const std::exception &e) {
-    std::cerr << "[Exception] in ffmpeg_kit_get_last_completed_session: "
+    std::cerr << "[" << getCurrentTimeStamp() << "] [ffmpeg-kit] [Exception] in ffmpeg_kit_get_last_completed_session: "
               << e.what() << std::endl;
     PRINT_STACK_TRACE();
     return nullptr;
@@ -2996,7 +3040,7 @@ int64_t DLL_ALIGN ffmpeg_kit_get_session_history_size(void) {
   try {
     return FFmpegKitConfig::getSessionHistorySize();
   } catch (const std::exception &e) {
-    std::cerr << "[Exception] in ffmpeg_kit_get_session_history_size: "
+    std::cerr << "[" << getCurrentTimeStamp() << "] [ffmpeg-kit] [Exception] in ffmpeg_kit_get_session_history_size: "
               << e.what() << std::endl;
     PRINT_STACK_TRACE();
     return -1;
@@ -3007,7 +3051,7 @@ void DLL_ALIGN ffmpeg_kit_set_session_history_size(int64_t size) {
   try {
     FFmpegKitConfig::setSessionHistorySize(size);
   } catch (const std::exception &e) {
-    std::cerr << "[Exception] in ffmpeg_kit_set_session_history_size: "
+    std::cerr << "[" << getCurrentTimeStamp() << "] [ffmpeg-kit] [Exception] in ffmpeg_kit_set_session_history_size: "
               << e.what() << std::endl;
     PRINT_STACK_TRACE();
   }
@@ -3017,7 +3061,7 @@ void DLL_ALIGN ffmpeg_kit_clear_sessions(void) {
   try {
     FFmpegKitConfig::clearSessions();
   } catch (const std::exception &e) {
-    std::cerr << "[Exception] in ffmpeg_kit_clear_sessions: " << e.what()
+    std::cerr << "[" << getCurrentTimeStamp() << "] [ffmpeg-kit] [Exception] in ffmpeg_kit_clear_sessions: " << e.what()
               << std::endl;
     PRINT_STACK_TRACE();
   }
@@ -3067,7 +3111,7 @@ void DLL_ALIGN ffmpeg_kit_config_enable_log_callback(FFmpegKitLogCallback log_cb
       FFmpegKitConfig::enableLogCallback(nullptr);
     }
   } catch (const std::exception &e) {
-    std::cerr << "[Exception] in ffmpeg_kit_config_enable_log_callback: "
+    std::cerr << "[" << getCurrentTimeStamp() << "] [ffmpeg-kit] [Exception] in ffmpeg_kit_config_enable_log_callback: "
               << e.what() << std::endl;
     PRINT_STACK_TRACE();
   }
@@ -3094,7 +3138,7 @@ void DLL_ALIGN ffmpeg_kit_config_enable_statistics_callback(
       FFmpegKitConfig::enableStatisticsCallback(nullptr);
     }
   } catch (const std::exception &e) {
-    std::cerr << "[Exception] in ffmpeg_kit_config_enable_statistics_callback: "
+    std::cerr << "[" << getCurrentTimeStamp() << "] [ffmpeg-kit] [Exception] in ffmpeg_kit_config_enable_statistics_callback: "
               << e.what() << std::endl;
     PRINT_STACK_TRACE();
   }
@@ -3117,7 +3161,7 @@ void DLL_ALIGN ffmpeg_kit_config_enable_ffmpeg_session_complete_callback(
       FFmpegKitConfig::enableFFmpegSessionCompleteCallback(nullptr);
     }
   } catch (const std::exception &e) {
-    std::cerr << "[Exception] in "
+    std::cerr << "[" << getCurrentTimeStamp() << "] [ffmpeg-kit] [Exception] in "
                  "ffmpeg_kit_config_enable_ffmpeg_session_complete_callback: "
               << e.what() << std::endl;
     PRINT_STACK_TRACE();
@@ -3141,7 +3185,7 @@ void DLL_ALIGN ffmpeg_kit_config_enable_ffprobe_session_complete_callback(
       FFmpegKitConfig::enableFFprobeSessionCompleteCallback(nullptr);
     }
   } catch (const std::exception &e) {
-    std::cerr << "[Exception] in "
+    std::cerr << "[" << getCurrentTimeStamp() << "] [ffmpeg-kit] [Exception] in "
                  "ffmpeg_kit_config_enable_ffprobe_session_complete_callback: "
               << e.what() << std::endl;
     PRINT_STACK_TRACE();
@@ -3165,7 +3209,7 @@ void DLL_ALIGN ffmpeg_kit_config_enable_ffplay_session_complete_callback(
       FFmpegKitConfig::enableFFplaySessionCompleteCallback(nullptr);
     }
   } catch (const std::exception &e) {
-    std::cerr << "[Exception] in "
+    std::cerr << "[" << getCurrentTimeStamp() << "] [ffmpeg-kit] [Exception] in "
                  "ffmpeg_kit_config_enable_ffplay_session_complete_callback: "
               << e.what() << std::endl;
     PRINT_STACK_TRACE();
@@ -3189,7 +3233,7 @@ void DLL_ALIGN ffmpeg_kit_config_enable_media_information_session_complete_callb
       FFmpegKitConfig::enableMediaInformationSessionCompleteCallback(nullptr);
     }
   } catch (const std::exception &e) {
-    std::cerr << "[Exception] in "
+    std::cerr << "[" << getCurrentTimeStamp() << "] [ffmpeg-kit] [Exception] in "
                  "ffmpeg_kit_config_enable_media_information_session_complete_"
                  "callback: "
               << e.what() << std::endl;
@@ -3202,7 +3246,7 @@ char * DLL_ALIGN ffmpeg_kit_config_register_new_ffmpeg_pipe(void) {
   try {
     return strdup_safe_ptr(FFmpegKitConfig::registerNewFFmpegPipe());
   } catch (const std::exception &e) {
-    std::cerr << "[Exception] in ffmpeg_kit_config_register_new_ffmpeg_pipe: "
+    std::cerr << "[" << getCurrentTimeStamp() << "] [ffmpeg-kit] [Exception] in ffmpeg_kit_config_register_new_ffmpeg_pipe: "
               << e.what() << std::endl;
     PRINT_STACK_TRACE();
     return nullptr;
@@ -3215,7 +3259,7 @@ void DLL_ALIGN ffmpeg_kit_config_close_ffmpeg_pipe(const char *pipe_path) {
       FFmpegKitConfig::closeFFmpegPipe(std::string(pipe_path));
     }
   } catch (const std::exception &e) {
-    std::cerr << "[Exception] in ffmpeg_kit_config_close_ffmpeg_pipe: "
+    std::cerr << "[" << getCurrentTimeStamp() << "] [ffmpeg-kit] [Exception] in ffmpeg_kit_config_close_ffmpeg_pipe: "
               << e.what() << std::endl;
     PRINT_STACK_TRACE();
   }
@@ -3236,7 +3280,7 @@ void DLL_ALIGN ffmpeg_kit_config_set_font_directory_list(const char **font_direc
     std::map<std::string, std::string> map;
     FFmpegKitConfig::setFontDirectoryList(fonts, map);
   } catch (const std::exception &e) {
-    std::cerr << "[Exception] in ffmpeg_kit_config_set_font_directory_list: "
+    std::cerr << "[" << getCurrentTimeStamp() << "] [ffmpeg-kit] [Exception] in ffmpeg_kit_config_set_font_directory_list: "
               << e.what() << std::endl;
     PRINT_STACK_TRACE();
   }
@@ -3246,7 +3290,7 @@ char * DLL_ALIGN ffmpeg_kit_config_get_build_date(void) {
   try {
     return strdup_cpp(FFmpegKitConfig::getBuildDate());
   } catch (const std::exception &e) {
-    std::cerr << "[Exception] in ffmpeg_kit_config_get_build_date: " << e.what()
+    std::cerr << "[" << getCurrentTimeStamp() << "] [ffmpeg-kit] [Exception] in ffmpeg_kit_config_get_build_date: " << e.what()
               << std::endl;
     PRINT_STACK_TRACE();
     return nullptr;
@@ -3258,7 +3302,7 @@ char * DLL_ALIGN ffmpeg_kit_config_session_state_to_string(FFmpegKitSessionState
     return strdup_cpp(
         FFmpegKitConfig::sessionStateToString((SessionState)state));
   } catch (const std::exception &e) {
-    std::cerr << "[Exception] in ffmpeg_kit_config_session_state_to_string: "
+    std::cerr << "[" << getCurrentTimeStamp() << "] [ffmpeg-kit] [Exception] in ffmpeg_kit_config_session_state_to_string: "
               << e.what() << std::endl;
     PRINT_STACK_TRACE();
     return nullptr;
@@ -3285,7 +3329,7 @@ char ** DLL_ALIGN ffmpeg_kit_config_parse_arguments(const char *command,
     array[i] = nullptr;
     return array;
   } catch (const std::exception &e) {
-    std::cerr << "[Exception] in ffmpeg_kit_config_parse_arguments: "
+    std::cerr << "[" << getCurrentTimeStamp() << "] [ffmpeg-kit] [Exception] in ffmpeg_kit_config_parse_arguments: "
               << e.what() << std::endl;
     PRINT_STACK_TRACE();
     return nullptr;
@@ -3305,7 +3349,7 @@ char * DLL_ALIGN ffmpeg_kit_config_arguments_to_string(char **arguments,
     }
     return strdup_cpp(FFmpegKitConfig::argumentsToString(list));
   } catch (const std::exception &e) {
-    std::cerr << "[Exception] in ffmpeg_kit_config_arguments_to_string: "
+    std::cerr << "[" << getCurrentTimeStamp() << "] [ffmpeg-kit] [Exception] in ffmpeg_kit_config_arguments_to_string: "
               << e.what() << std::endl;
     PRINT_STACK_TRACE();
     return nullptr;
@@ -3316,7 +3360,7 @@ int64_t DLL_ALIGN ffmpeg_kit_config_messages_in_transmit(int64_t session_id) {
   try {
     return FFmpegKitConfig::messagesInTransmit(session_id);
   } catch (const std::exception &e) {
-    std::cerr << "[Exception] in ffmpeg_kit_config_messages_in_transmit: "
+    std::cerr << "[" << getCurrentTimeStamp() << "] [ffmpeg-kit] [Exception] in ffmpeg_kit_config_messages_in_transmit: "
               << e.what() << std::endl;
     PRINT_STACK_TRACE();
     return -1;
@@ -3336,7 +3380,7 @@ int64_t DLL_ALIGN ffmpeg_kit_session_get_create_time(void *session_handle) {
                tp.time_since_epoch())
         .count();
   } catch (const std::exception &e) {
-    std::cerr << "[Exception] in ffmpeg_kit_session_get_create_time: "
+    std::cerr << "[" << getCurrentTimeStamp() << "] [ffmpeg-kit] [Exception] in ffmpeg_kit_session_get_create_time: "
               << e.what() << std::endl;
     PRINT_STACK_TRACE();
     return -1;
@@ -3355,7 +3399,7 @@ int64_t DLL_ALIGN ffmpeg_kit_session_get_start_time(void *session_handle) {
                tp.time_since_epoch())
         .count();
   } catch (const std::exception &e) {
-    std::cerr << "[Exception] in ffmpeg_kit_session_get_start_time: "
+    std::cerr << "[" << getCurrentTimeStamp() << "] [ffmpeg-kit] [Exception] in ffmpeg_kit_session_get_start_time: "
               << e.what() << std::endl;
     PRINT_STACK_TRACE();
     return -1;
@@ -3374,7 +3418,7 @@ int64_t DLL_ALIGN ffmpeg_kit_session_get_end_time(void *session_handle) {
                tp.time_since_epoch())
         .count();
   } catch (const std::exception &e) {
-    std::cerr << "[Exception] in ffmpeg_kit_session_get_end_time: " << e.what()
+    std::cerr << "[" << getCurrentTimeStamp() << "] [ffmpeg-kit] [Exception] in ffmpeg_kit_session_get_end_time: " << e.what()
               << std::endl;
     PRINT_STACK_TRACE();
     return -1;
@@ -3388,7 +3432,7 @@ int64_t DLL_ALIGN ffmpeg_kit_session_get_duration(void *session_handle) {
     auto ptr = get_ptr<Session>(session_handle);
     return ptr ? ptr->getDuration() : -1;
   } catch (const std::exception &e) {
-    std::cerr << "[Exception] in ffmpeg_kit_session_get_duration: " << e.what()
+    std::cerr << "[" << getCurrentTimeStamp() << "] [ffmpeg-kit] [Exception] in ffmpeg_kit_session_get_duration: " << e.what()
               << std::endl;
     PRINT_STACK_TRACE();
     return -1;
@@ -3402,7 +3446,7 @@ char * DLL_ALIGN ffmpeg_kit_session_get_command(void *session_handle) {
     auto ptr = get_ptr<Session>(session_handle);
     return ptr ? strdup_cpp(ptr->getCommand()) : nullptr;
   } catch (const std::exception &e) {
-    std::cerr << "[Exception] in ffmpeg_kit_session_get_command: " << e.what()
+    std::cerr << "[" << getCurrentTimeStamp() << "] [ffmpeg-kit] [Exception] in ffmpeg_kit_session_get_command: " << e.what()
               << std::endl;
     PRINT_STACK_TRACE();
     return nullptr;
@@ -3416,7 +3460,7 @@ int64_t DLL_ALIGN ffmpeg_kit_session_get_logs_count(void *session_handle) {
     auto ptr = get_ptr<Session>(session_handle);
     return ptr ? ptr->getLogsCount() : -1;
   } catch (const std::exception &e) {
-    std::cerr << "[Exception] in ffmpeg_kit_session_get_logs_count: "
+    std::cerr << "[" << getCurrentTimeStamp() << "] [ffmpeg-kit] [Exception] in ffmpeg_kit_session_get_logs_count: "
               << e.what() << std::endl;
     PRINT_STACK_TRACE();
     return -1;
@@ -3435,7 +3479,7 @@ char * DLL_ALIGN ffmpeg_kit_session_get_log_at(void *session_handle, int64_t ind
     }
     return nullptr;
   } catch (const std::exception &e) {
-    std::cerr << "[Exception] in ffmpeg_kit_session_get_log_at: " << e.what()
+    std::cerr << "[" << getCurrentTimeStamp() << "] [ffmpeg-kit] [Exception] in ffmpeg_kit_session_get_log_at: " << e.what()
               << std::endl;
     PRINT_STACK_TRACE();
     return nullptr;
@@ -3454,7 +3498,7 @@ int64_t DLL_ALIGN ffmpeg_kit_session_get_log_level_at(void *session_handle,
     }
     return 0;
   } catch (const std::exception &e) {
-    std::cerr << "[Exception] in ffmpeg_kit_session_get_log_level_at: "
+    std::cerr << "[" << getCurrentTimeStamp() << "] [ffmpeg-kit] [Exception] in ffmpeg_kit_session_get_log_level_at: "
               << e.what() << std::endl;
     PRINT_STACK_TRACE();
     return -1;
@@ -3468,7 +3512,7 @@ int64_t DLL_ALIGN ffmpeg_kit_session_get_statistics_count(void *session_handle) 
     auto ptr = get_ptr<FFmpegSession>(session_handle);
     return ptr ? ptr->getStatisticsCount() : -1;
   } catch (const std::exception &e) {
-    std::cerr << "[Exception] in ffmpeg_kit_session_get_statistics_count: "
+    std::cerr << "[" << getCurrentTimeStamp() << "] [ffmpeg-kit] [Exception] in ffmpeg_kit_session_get_statistics_count: "
               << e.what() << std::endl;
     PRINT_STACK_TRACE();
     return -1;
@@ -3487,7 +3531,7 @@ StatisticsHandle DLL_ALIGN ffmpeg_kit_session_get_statistics_at(void *session_ha
     }
     return nullptr;
   } catch (const std::exception &e) {
-    std::cerr << "[Exception] in ffmpeg_kit_session_get_statistics_at: "
+    std::cerr << "[" << getCurrentTimeStamp() << "] [ffmpeg-kit] [Exception] in ffmpeg_kit_session_get_statistics_at: "
               << e.what() << std::endl;
     PRINT_STACK_TRACE();
     return nullptr;
@@ -3500,7 +3544,7 @@ int64_t DLL_ALIGN ffmpeg_kit_statistics_get_video_frame_number(StatisticsHandle 
     auto ptr = get_ptr<Statistics>(handle);
     return ptr ? ptr->getVideoFrameNumber() : -1;
   } catch (const std::exception &e) {
-    std::cerr << "[Exception] in ffmpeg_kit_statistics_get_video_frame_number: "
+    std::cerr << "[" << getCurrentTimeStamp() << "] [ffmpeg-kit] [Exception] in ffmpeg_kit_statistics_get_video_frame_number: "
               << e.what() << std::endl;
     PRINT_STACK_TRACE();
     return -1;
@@ -3511,7 +3555,7 @@ double DLL_ALIGN ffmpeg_kit_statistics_get_video_fps(StatisticsHandle handle) {
     auto ptr = get_ptr<Statistics>(handle);
     return ptr ? ptr->getVideoFps() : -1;
   } catch (const std::exception &e) {
-    std::cerr << "[Exception] in ffmpeg_kit_statistics_get_video_fps: "
+    std::cerr << "[" << getCurrentTimeStamp() << "] [ffmpeg-kit] [Exception] in ffmpeg_kit_statistics_get_video_fps: "
               << e.what() << std::endl;
     PRINT_STACK_TRACE();
     return -1;
@@ -3522,7 +3566,7 @@ double DLL_ALIGN ffmpeg_kit_statistics_get_video_quality(StatisticsHandle handle
     auto ptr = get_ptr<Statistics>(handle);
     return ptr ? ptr->getVideoQuality() : -1;
   } catch (const std::exception &e) {
-    std::cerr << "[Exception] in ffmpeg_kit_statistics_get_video_quality: "
+    std::cerr << "[" << getCurrentTimeStamp() << "] [ffmpeg-kit] [Exception] in ffmpeg_kit_statistics_get_video_quality: "
               << e.what() << std::endl;
     PRINT_STACK_TRACE();
     return -1;
@@ -3533,7 +3577,7 @@ int64_t DLL_ALIGN ffmpeg_kit_statistics_get_size(StatisticsHandle handle) {
     auto ptr = get_ptr<Statistics>(handle);
     return ptr ? (int64_t)ptr->getSize() : -1;
   } catch (const std::exception &e) {
-    std::cerr << "[Exception] in ffmpeg_kit_statistics_get_size: " << e.what()
+    std::cerr << "[" << getCurrentTimeStamp() << "] [ffmpeg-kit] [Exception] in ffmpeg_kit_statistics_get_size: " << e.what()
               << std::endl;
     PRINT_STACK_TRACE();
     return -1;
@@ -3544,7 +3588,7 @@ double DLL_ALIGN ffmpeg_kit_statistics_get_time(StatisticsHandle handle) {
     auto ptr = get_ptr<Statistics>(handle);
     return ptr ? ptr->getTime() * 1000.0 : -1;
   } catch (const std::exception &e) {
-    std::cerr << "[Exception] in ffmpeg_kit_statistics_get_time: " << e.what()
+    std::cerr << "[" << getCurrentTimeStamp() << "] [ffmpeg-kit] [Exception] in ffmpeg_kit_statistics_get_time: " << e.what()
               << std::endl;
     PRINT_STACK_TRACE();
     return -1;
@@ -3555,7 +3599,7 @@ double DLL_ALIGN ffmpeg_kit_statistics_get_time_elapsed(StatisticsHandle handle)
     auto ptr = get_ptr<Statistics>(handle);
     return ptr ? ptr->getTimeElapsed() * 1000.0 : -1;
   } catch (const std::exception &e) {
-    std::cerr << "[Exception] in ffmpeg_kit_statistics_get_time_elapsed: "
+    std::cerr << "[" << getCurrentTimeStamp() << "] [ffmpeg-kit] [Exception] in ffmpeg_kit_statistics_get_time_elapsed: "
               << e.what() << std::endl;
     PRINT_STACK_TRACE();
     return -1;
@@ -3566,7 +3610,7 @@ double DLL_ALIGN ffmpeg_kit_statistics_get_bitrate(StatisticsHandle handle) {
     auto ptr = get_ptr<Statistics>(handle);
     return ptr ? ptr->getBitrate() : -1;
   } catch (const std::exception &e) {
-    std::cerr << "[Exception] in ffmpeg_kit_statistics_get_bitrate: "
+    std::cerr << "[" << getCurrentTimeStamp() << "] [ffmpeg-kit] [Exception] in ffmpeg_kit_statistics_get_bitrate: "
               << e.what() << std::endl;
     PRINT_STACK_TRACE();
     return -1;
@@ -3577,7 +3621,7 @@ double DLL_ALIGN ffmpeg_kit_statistics_get_speed(StatisticsHandle handle) {
     auto ptr = get_ptr<Statistics>(handle);
     return ptr ? ptr->getSpeed() : -1;
   } catch (const std::exception &e) {
-    std::cerr << "[Exception] in ffmpeg_kit_statistics_get_speed: " << e.what()
+    std::cerr << "[" << getCurrentTimeStamp() << "] [ffmpeg-kit] [Exception] in ffmpeg_kit_statistics_get_speed: " << e.what()
               << std::endl;
     PRINT_STACK_TRACE();
     return -1;
@@ -3591,7 +3635,7 @@ char * DLL_ALIGN media_information_get_start_time(MediaInformationHandle handle)
     auto ptr = get_ptr<MediaInformation>(handle);
     return ptr ? strdup_safe_ptr(ptr->getStartTime()) : nullptr;
   } catch (const std::exception &e) {
-    std::cerr << "[Exception] in media_information_get_start_time: " << e.what()
+    std::cerr << "[" << getCurrentTimeStamp() << "] [ffmpeg-kit] [Exception] in media_information_get_start_time: " << e.what()
               << std::endl;
     PRINT_STACK_TRACE();
     return nullptr;
@@ -3604,7 +3648,7 @@ char * DLL_ALIGN media_information_get_string_property(MediaInformationHandle ha
     auto ptr = get_ptr<MediaInformation>(handle);
     return ptr ? strdup_safe_ptr(ptr->getStringProperty(key)) : nullptr;
   } catch (const std::exception &e) {
-    std::cerr << "[Exception] in media_information_get_string_property: "
+    std::cerr << "[" << getCurrentTimeStamp() << "] [ffmpeg-kit] [Exception] in media_information_get_string_property: "
               << e.what() << std::endl;
     PRINT_STACK_TRACE();
     return nullptr;
@@ -3618,7 +3662,7 @@ int64_t DLL_ALIGN media_information_get_number_property(MediaInformationHandle h
     auto val = ptr ? ptr->getNumberProperty(key) : nullptr;
     return val ? *val : -1;
   } catch (const std::exception &e) {
-    std::cerr << "[Exception] in media_information_get_number_property: "
+    std::cerr << "[" << getCurrentTimeStamp() << "] [ffmpeg-kit] [Exception] in media_information_get_number_property: "
               << e.what() << std::endl;
     PRINT_STACK_TRACE();
     return -1;
@@ -3631,7 +3675,7 @@ char * DLL_ALIGN media_information_get_all_properties_json(MediaInformationHandl
     auto props = ptr ? ptr->getAllProperties() : nullptr;
     return props ? strdup_cpp(props->toStyledString()) : nullptr;
   } catch (const std::exception &e) {
-    std::cerr << "[Exception] in media_information_get_all_properties_json: "
+    std::cerr << "[" << getCurrentTimeStamp() << "] [ffmpeg-kit] [Exception] in media_information_get_all_properties_json: "
               << e.what() << std::endl;
     PRINT_STACK_TRACE();
     return nullptr;
@@ -3644,7 +3688,7 @@ char * DLL_ALIGN stream_information_get_channel_layout(StreamInformationHandle h
     auto ptr = get_ptr<StreamInformation>(handle);
     return ptr ? strdup_safe_ptr(ptr->getChannelLayout()) : nullptr;
   } catch (const std::exception &e) {
-    std::cerr << "[Exception] in stream_information_get_channel_layout: "
+    std::cerr << "[" << getCurrentTimeStamp() << "] [ffmpeg-kit] [Exception] in stream_information_get_channel_layout: "
               << e.what() << std::endl;
     PRINT_STACK_TRACE();
     return nullptr;
@@ -3657,7 +3701,7 @@ stream_information_get_sample_aspect_ratio(StreamInformationHandle handle) {
     auto ptr = get_ptr<StreamInformation>(handle);
     return ptr ? strdup_safe_ptr(ptr->getSampleAspectRatio()) : nullptr;
   } catch (const std::exception &e) {
-    std::cerr << "[Exception] in stream_information_get_sample_aspect_ratio: "
+    std::cerr << "[" << getCurrentTimeStamp() << "] [ffmpeg-kit] [Exception] in stream_information_get_sample_aspect_ratio: "
               << e.what() << std::endl;
     PRINT_STACK_TRACE();
     return nullptr;
@@ -3669,7 +3713,7 @@ char * DLL_ALIGN stream_information_get_codec_time_base(StreamInformationHandle 
     auto ptr = get_ptr<StreamInformation>(handle);
     return ptr ? strdup_safe_ptr(ptr->getCodecTimeBase()) : nullptr;
   } catch (const std::exception &e) {
-    std::cerr << "[Exception] in stream_information_get_codec_time_base: "
+    std::cerr << "[" << getCurrentTimeStamp() << "] [ffmpeg-kit] [Exception] in stream_information_get_codec_time_base: "
               << e.what() << std::endl;
     PRINT_STACK_TRACE();
     return nullptr;
@@ -3682,7 +3726,7 @@ char * DLL_ALIGN stream_information_get_string_property(StreamInformationHandle 
     auto ptr = get_ptr<StreamInformation>(handle);
     return ptr ? strdup_safe_ptr(ptr->getStringProperty(key)) : nullptr;
   } catch (const std::exception &e) {
-    std::cerr << "[Exception] in stream_information_get_string_property: "
+    std::cerr << "[" << getCurrentTimeStamp() << "] [ffmpeg-kit] [Exception] in stream_information_get_string_property: "
               << e.what() << std::endl;
     PRINT_STACK_TRACE();
     return nullptr;
@@ -3696,7 +3740,7 @@ int64_t DLL_ALIGN stream_information_get_number_property(StreamInformationHandle
     auto val = ptr ? ptr->getNumberProperty(key) : nullptr;
     return val ? *val : -1;
   } catch (const std::exception &e) {
-    std::cerr << "[Exception] in stream_information_get_number_property: "
+    std::cerr << "[" << getCurrentTimeStamp() << "] [ffmpeg-kit] [Exception] in stream_information_get_number_property: "
               << e.what() << std::endl;
     PRINT_STACK_TRACE();
     return -1;
@@ -3710,7 +3754,7 @@ stream_information_get_all_properties_json(StreamInformationHandle handle) {
     auto props = ptr ? ptr->getAllProperties() : nullptr;
     return props ? strdup_cpp(props->toStyledString()) : nullptr;
   } catch (const std::exception &e) {
-    std::cerr << "[Exception] in stream_information_get_all_properties_json: "
+    std::cerr << "[" << getCurrentTimeStamp() << "] [ffmpeg-kit] [Exception] in stream_information_get_all_properties_json: "
               << e.what() << std::endl;
     PRINT_STACK_TRACE();
     return nullptr;
@@ -3723,7 +3767,7 @@ char * DLL_ALIGN chapter_get_string_property(ChapterHandle handle, const char *k
     auto ptr = get_ptr<Chapter>(handle);
     return ptr ? strdup_safe_ptr(ptr->getStringProperty(key)) : nullptr;
   } catch (const std::exception &e) {
-    std::cerr << "[Exception] in chapter_get_string_property: " << e.what()
+    std::cerr << "[" << getCurrentTimeStamp() << "] [ffmpeg-kit] [Exception] in chapter_get_string_property: " << e.what()
               << std::endl;
     PRINT_STACK_TRACE();
     return nullptr;
@@ -3736,7 +3780,7 @@ int64_t DLL_ALIGN chapter_get_number_property(ChapterHandle handle, const char *
     auto val = ptr ? ptr->getNumberProperty(key) : nullptr;
     return val ? *val : -1;
   } catch (const std::exception &e) {
-    std::cerr << "[Exception] in chapter_get_number_property: " << e.what()
+    std::cerr << "[" << getCurrentTimeStamp() << "] [ffmpeg-kit] [Exception] in chapter_get_number_property: " << e.what()
               << std::endl;
     PRINT_STACK_TRACE();
     return -1;
@@ -3749,7 +3793,7 @@ char * DLL_ALIGN chapter_get_all_properties_json(ChapterHandle handle) {
     auto props = ptr ? ptr->getAllProperties() : nullptr;
     return props ? strdup_cpp(props->toStyledString()) : nullptr;
   } catch (const std::exception &e) {
-    std::cerr << "[Exception] in chapter_get_all_properties_json: " << e.what()
+    std::cerr << "[" << getCurrentTimeStamp() << "] [ffmpeg-kit] [Exception] in chapter_get_all_properties_json: " << e.what()
               << std::endl;
     PRINT_STACK_TRACE();
     return nullptr;
@@ -3763,7 +3807,7 @@ bool DLL_ALIGN session_is_ffmpeg_session(void *session) {
     auto ptr = get_ptr<AbstractSession>(session);
     return ptr ? ptr->isFFmpeg() : false;
   } catch (const std::exception &e) {
-    std::cerr << "[Exception] in session_is_ffmpeg_session: " << e.what()
+    std::cerr << "[" << getCurrentTimeStamp() << "] [ffmpeg-kit] [Exception] in session_is_ffmpeg_session: " << e.what()
               << std::endl;
     PRINT_STACK_TRACE();
     return false;
@@ -3777,7 +3821,7 @@ bool DLL_ALIGN session_is_ffprobe_session(void *session) {
     auto ptr = get_ptr<AbstractSession>(session);
     return ptr ? ptr->isFFprobe() : false;
   } catch (const std::exception &e) {
-    std::cerr << "[Exception] in session_is_ffprobe_session: " << e.what()
+    std::cerr << "[" << getCurrentTimeStamp() << "] [ffmpeg-kit] [Exception] in session_is_ffprobe_session: " << e.what()
               << std::endl;
     PRINT_STACK_TRACE();
     return false;
@@ -3791,7 +3835,7 @@ bool DLL_ALIGN session_is_ffplay_session(void *session) {
     auto ptr = get_ptr<AbstractSession>(session);
     return ptr ? ptr->isFFplay() : false;
   } catch (const std::exception &e) {
-    std::cerr << "[Exception] in session_is_ffplay_session: " << e.what()
+    std::cerr << "[" << getCurrentTimeStamp() << "] [ffmpeg-kit] [Exception] in session_is_ffplay_session: " << e.what()
               << std::endl;
     PRINT_STACK_TRACE();
     return false;
@@ -3805,7 +3849,7 @@ bool DLL_ALIGN session_is_media_information_session(void *session) {
     auto ptr = get_ptr<AbstractSession>(session);
     return ptr ? ptr->isMediaInformation() : false;
   } catch (const std::exception &e) {
-    std::cerr << "[Exception] in session_is_media_information_session: "
+    std::cerr << "[" << getCurrentTimeStamp() << "] [ffmpeg-kit] [Exception] in session_is_media_information_session: "
               << e.what() << std::endl;
     PRINT_STACK_TRACE();
     return false;
@@ -3826,7 +3870,7 @@ void DLL_ALIGN session_enable_debug_log(void *session) {
     if (ptr)
       ptr->enableDebugLog();
   } catch (const std::exception &e) {
-    std::cerr << "[Exception] in session_enable_debug_log: " << e.what()
+    std::cerr << "[" << getCurrentTimeStamp() << "] [ffmpeg-kit] [Exception] in session_enable_debug_log: " << e.what()
               << std::endl;
     PRINT_STACK_TRACE();
   }
@@ -3840,7 +3884,7 @@ void DLL_ALIGN session_disable_debug_log(void *session) {
     if (ptr)
       ptr->disableDebugLog();
   } catch (const std::exception &e) {
-    std::cerr << "[Exception] in session_disable_debug_log: " << e.what()
+    std::cerr << "[" << getCurrentTimeStamp() << "] [ffmpeg-kit] [Exception] in session_disable_debug_log: " << e.what()
               << std::endl;
     PRINT_STACK_TRACE();
   }
@@ -3853,7 +3897,7 @@ bool DLL_ALIGN session_is_debug_log_enabled(void *session) {
     auto ptr = get_ptr<AbstractSession>(session);
     return ptr ? ptr->isDebugLogEnabled() : false;
   } catch (const std::exception &e) {
-    std::cerr << "[Exception] in session_is_debug_log_enabled: " << e.what()
+    std::cerr << "[" << getCurrentTimeStamp() << "] [ffmpeg-kit] [Exception] in session_is_debug_log_enabled: " << e.what()
               << std::endl;
     PRINT_STACK_TRACE();
     return false;
@@ -3867,7 +3911,7 @@ char * DLL_ALIGN session_get_debug_log(void *session) {
     auto ptr = get_ptr<AbstractSession>(session);
     return ptr ? strdup_cpp(ptr->getDebugLog()) : nullptr;
   } catch (const std::exception &e) {
-    std::cerr << "[Exception] in session_get_debug_log: " << e.what()
+    std::cerr << "[" << getCurrentTimeStamp() << "] [ffmpeg-kit] [Exception] in session_get_debug_log: " << e.what()
               << std::endl;
     PRINT_STACK_TRACE();
     return nullptr;
@@ -3882,7 +3926,7 @@ void DLL_ALIGN session_clear_debug_log(void *session) {
     if (ptr)
       ptr->clearDebugLog();
   } catch (const std::exception &e) {
-    std::cerr << "[Exception] in session_clear_debug_log: " << e.what()
+    std::cerr << "[" << getCurrentTimeStamp() << "] [ffmpeg-kit] [Exception] in session_clear_debug_log: " << e.what()
               << std::endl;
     PRINT_STACK_TRACE();
   }
@@ -3896,7 +3940,7 @@ void DLL_ALIGN ffmpeg_kit_config_enable_debug_log(void *session) {
     if (ptr)
       ptr->enableDebugLog();
   } catch (const std::exception &e) {
-    std::cerr << "[Exception] in ffmpeg_kit_config_enable_debug_log: "
+    std::cerr << "[" << getCurrentTimeStamp() << "] [ffmpeg-kit] [Exception] in ffmpeg_kit_config_enable_debug_log: "
               << e.what() << std::endl;
     PRINT_STACK_TRACE();
   }
@@ -3910,7 +3954,7 @@ void DLL_ALIGN ffmpeg_kit_config_disable_debug_log(void *session) {
     if (ptr)
       ptr->disableDebugLog();
   } catch (const std::exception &e) {
-    std::cerr << "[Exception] in ffmpeg_kit_config_disable_debug_log: "
+    std::cerr << "[" << getCurrentTimeStamp() << "] [ffmpeg-kit] [Exception] in ffmpeg_kit_config_disable_debug_log: "
               << e.what() << std::endl;
     PRINT_STACK_TRACE();
   }
@@ -3923,7 +3967,7 @@ bool DLL_ALIGN ffmpeg_kit_config_is_debug_log_enabled(void *session) {
     auto ptr = get_ptr<AbstractSession>(session);
     return ptr ? ptr->isDebugLogEnabled() : false;
   } catch (const std::exception &e) {
-    std::cerr << "[Exception] in ffmpeg_kit_config_is_debug_log_enabled: "
+    std::cerr << "[" << getCurrentTimeStamp() << "] [ffmpeg-kit] [Exception] in ffmpeg_kit_config_is_debug_log_enabled: "
               << e.what() << std::endl;
     PRINT_STACK_TRACE();
     return false;
@@ -3937,7 +3981,7 @@ char * DLL_ALIGN ffmpeg_kit_config_get_debug_log(void *session) {
     auto ptr = get_ptr<AbstractSession>(session);
     return ptr ? strdup_cpp(ptr->getDebugLog()) : nullptr;
   } catch (const std::exception &e) {
-    std::cerr << "[Exception] in ffmpeg_kit_config_get_debug_log: " << e.what()
+    std::cerr << "[" << getCurrentTimeStamp() << "] [ffmpeg-kit] [Exception] in ffmpeg_kit_config_get_debug_log: " << e.what()
               << std::endl;
     PRINT_STACK_TRACE();
     return nullptr;
@@ -3952,7 +3996,7 @@ void DLL_ALIGN ffmpeg_kit_config_clear_debug_log(void *session) {
     if (ptr)
       ptr->clearDebugLog();
   } catch (const std::exception &e) {
-    std::cerr << "[Exception] in ffmpeg_kit_config_clear_debug_log: "
+    std::cerr << "[" << getCurrentTimeStamp() << "] [ffmpeg-kit] [Exception] in ffmpeg_kit_config_clear_debug_log: "
               << e.what() << std::endl;
     PRINT_STACK_TRACE();
   }

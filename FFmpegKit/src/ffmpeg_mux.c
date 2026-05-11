@@ -24,6 +24,7 @@
 #include "ffmpeg.h"
 #include "ffmpeg_lib.h"
 #include "ffmpeg_mux.h"
+#include "ffmpegkit_session_context.h"
 #include "ffmpeg_utils.h"
 #include "sync_queue.h"
 
@@ -859,6 +860,7 @@ static void fc_close(AVFormatContext **pfc)
 
     if (!(fc->oformat->flags & AVFMT_NOFILE))
         avio_closep(&fc->pb);
+    ffmpegkit_unregister_root_context(fc);
     avformat_free_context(fc);
 
     *pfc = NULL;

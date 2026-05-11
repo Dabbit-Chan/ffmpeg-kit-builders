@@ -269,6 +269,17 @@ FFMPEG_KIT_C_EXPORT void ffmpeg_kit_close_session(FFmpegSessionHandle handle);
  * Debug function to verify stack alignment.
  */
 FFMPEG_KIT_C_EXPORT void ffmpeg_kit_debug_print_stack();
+
+/**
+ * Emits a synthetic unattributed log through the shared FFmpeg log callback.
+ *
+ * Test-only helper used by wrapper regression tests to verify that callbacks
+ * routed to session `0` do not interfere with real session completion.
+ *
+ * @param message the message to emit
+ */
+FFMPEG_KIT_C_EXPORT void
+ffmpeg_kit_test_emit_unattributed_log(const char *message);
 /**
  * Sets the log callback for all FFmpeg sessions.
  *
@@ -329,6 +340,13 @@ ffmpeg_kit_session_execute(FFmpegSessionHandle session);
  */
 FFMPEG_KIT_C_EXPORT void
 ffmpeg_kit_session_execute_async(FFmpegSessionHandle session);
+
+/**
+ * Cancels the FFmpeg session.
+ *
+ * @param session the FFmpeg session to cancel
+ */
+FFMPEG_KIT_C_EXPORT void ffmpeg_kit_session_cancel(FFmpegSessionHandle session);
 
 /* FFprobeKit (FFprobe Execution) */
 

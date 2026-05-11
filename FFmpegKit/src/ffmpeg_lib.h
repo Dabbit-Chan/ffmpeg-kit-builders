@@ -37,6 +37,8 @@ extern "C" {
 #endif
 
 typedef struct FFmpegContext FFmpegContext;
+typedef struct Scheduler Scheduler;
+typedef struct AVIOInterruptCB AVIOInterruptCB;
 
 /**
  * Initialize ffmpeg context by parsing the command line string.
@@ -48,6 +50,11 @@ typedef struct FFmpegContext FFmpegContext;
  * @return Allocated context or NULL on failure.
  */
 FFMPEG_API FFmpegContext *ffmpeg_init(const char *args_string);
+
+/**
+ * Binds a logical session id to the wrapper context.
+ */
+FFMPEG_API void ffmpeg_set_session_id(FFmpegContext *ctx, long session_id);
 
 /**
  * Execute the transcoding operation.
@@ -74,6 +81,41 @@ FFMPEG_API float ffmpeg_get_progress(FFmpegContext *ctx);
  * @param ctx The context.
  */
 FFMPEG_API void ffmpeg_cancel(FFmpegContext *ctx);
+
+/**
+ * Returns whether the context has an outstanding cancel request.
+ */
+FFMPEG_API int ffmpeg_cancel_requested(const FFmpegContext *ctx);
+
+/**
+ * Returns the bound session id.
+ */
+FFMPEG_API long ffmpeg_get_session_id(const FFmpegContext *ctx);
+
+/**
+ * Binds the active scheduler to the wrapper context.
+ */
+FFMPEG_API void ffmpeg_set_scheduler(FFmpegContext *ctx, Scheduler *sch);
+
+/**
+ * Populate an interrupt callback with the current ffmpeg wrapper context.
+ */
+FFMPEG_API void ffmpeg_init_interrupt_callback(AVIOInterruptCB *cb);
+
+/**
+ * Binds the wrapper context to the current thread.
+ */
+FFMPEG_API void ffmpeg_bind_thread_context(FFmpegContext *ctx);
+
+/**
+ * Clears any wrapper context bound to the current thread.
+ */
+FFMPEG_API void ffmpeg_unbind_thread_context(void);
+
+/**
+ * Returns the wrapper context bound to the current thread.
+ */
+FFMPEG_API FFmpegContext *ffmpeg_get_current_context(void);
 
 /**
  * Free the context and associated resources.

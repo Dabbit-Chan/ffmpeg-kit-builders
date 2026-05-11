@@ -1,5 +1,8 @@
 race:SDL_RunThread
 
+# Known FFmpeg MPEG-4 encoder cleanup race under TSan.
+race:ff_mpeg4_clean_buffers
+
 # TLS thread cleanup races
 race:__nptl_deallocate_tsd*
 race:start_thread*

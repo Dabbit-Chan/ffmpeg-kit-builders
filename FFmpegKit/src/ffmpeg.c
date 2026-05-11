@@ -1151,6 +1151,7 @@ finish:
 
     ffmpeg_cleanup(ret);
 
+    ffmpeg_set_scheduler(wrapper_ctx, NULL);
     sch_free(&sch);
 
     //av_log(NULL, AV_LOG_VERBOSE, "\n");

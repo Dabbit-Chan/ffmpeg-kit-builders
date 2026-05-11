@@ -22,6 +22,7 @@
 #include "ffmpeg_kit_assert_override.h"
 #include "libavutil/mem.h"
 #include "libavutil/bprint.h"
+#include <stdatomic.h>
 #include <string.h>
 #include <stdlib.h>
 #include <stdio.h>
@@ -40,9 +41,12 @@ extern void ffprobe_show_help_default(const char *opt, const char *arg);
 
 // Forward declare the auto-generated TLS initializer
 extern void ffprobe_tls_init_options(void);
+extern int cancelRequested(long sessionId);
 
 extern int ffprobe_run_internal(int argc, char **argv, AVBPrint *output_buf);
 extern void ffprobe_reset_internal_state(void);
+
+static FFMPEG_THREAD_LOCAL FFprobeContext *current_ffprobe_context = NULL;
 
 struct FFprobeContext
 {
@@ -51,6 +55,8 @@ struct FFprobeContext
   char **argv;
   AVBPrint output;
   char *output_filename;
+  atomic_int cancelled;
+  long session_id;
 };
 
 // Convert string to argc/argv format with proper quoting
@@ -184,6 +190,54 @@ FFprobeContext *ffprobe_init(const char *args_string)
   return ctx;
 }
 
+void ffprobe_set_session_id(FFprobeContext *ctx, long session_id)
+{
+  if (!ctx)
+    return;
+  ctx->session_id = session_id;
+}
+
+long ffprobe_get_session_id(const FFprobeContext *ctx)
+{
+  return ctx ? ctx->session_id : 0;
+}
+
+void ffprobe_cancel(FFprobeContext *ctx)
+{
+  if (!ctx)
+    return;
+  av_log(NULL, AV_LOG_DEBUG,
+           "[ffmpeg-kit] ffprobe_cancel: cancelling session for session_id: %ld\n", ctx->session_id);
+  atomic_store(&ctx->cancelled, 1);
+}
+
+int ffprobe_cancel_requested(const FFprobeContext *ctx)
+{
+  if (!ctx)
+    return 0;
+  int cancelled = atomic_load(&ctx->cancelled) || cancelRequested(ctx->session_id);
+  if (cancelled) {
+    av_log(NULL, AV_LOG_DEBUG,
+           "[ffmpeg-kit] ffprobe_cancel_requested: cancellation observed for session_id: %ld\n", ctx->session_id);
+  }
+  return cancelled;
+}
+
+void ffprobe_bind_thread_context(FFprobeContext *ctx)
+{
+  current_ffprobe_context = ctx;
+}
+
+void ffprobe_unbind_thread_context(void)
+{
+  current_ffprobe_context = NULL;
+}
+
+FFprobeContext *ffprobe_get_current_context(void)
+{
+  return current_ffprobe_context;
+}
+
 int ffprobe_run(FFprobeContext *ctx)
 {
   if (!ctx)
@@ -196,6 +250,7 @@ int ffprobe_run(FFprobeContext *ctx)
   ffmpeg_kit_assert_jmp_ptr = &assert_jmp;
   ffmpeg_kit_assert_triggered = 0;
   if (setjmp(assert_jmp)) {
+    ffprobe_unbind_thread_context();
     av_log(NULL, AV_LOG_ERROR,
            "[ffmpeg-kit] ffprobe_run: recovered from internal assertion failure. "
            "Session will be marked as failed.\n");
@@ -206,7 +261,9 @@ int ffprobe_run(FFprobeContext *ctx)
   ffprobe_tls_init_options();
   show_help_default_func = ffprobe_show_help_default;
 
+  ffprobe_bind_thread_context(ctx);
   ctx->ret = ffprobe_run_internal(ctx->argc, ctx->argv, &ctx->output);
+  ffprobe_unbind_thread_context();
 
   return ctx->ret;
 }

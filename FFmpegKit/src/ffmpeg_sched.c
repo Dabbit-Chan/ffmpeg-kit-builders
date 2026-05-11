@@ -1793,14 +1793,35 @@ int sch_wait(Scheduler *sch, uint64_t timeout_us, int64_t *transcode_ts)
         pthread_cond_timedwait(&sch->finish_cond, &sch->finish_lock, &tv);
     }
 
-    // abort transcoding if any task failed
-    ret = sch->nb_mux_done == sch->nb_mux || sch->task_failed;
+    // abort transcoding if any task failed or external cancellation requested
+    ret = sch->nb_mux_done == sch->nb_mux || sch->task_failed ||
+          atomic_load(&sch->terminate);
 
     pthread_mutex_unlock(&sch->finish_lock);
 
     *transcode_ts = atomic_load(&sch->last_dts);
 
     return ret;
+}
+
+void sch_request_stop(Scheduler *sch)
+{
+    if (!sch)
+        return;
+
+    atomic_store(&sch->terminate, 1);
+
+    for (unsigned type = 0; type < 2; type++)
+        for (unsigned i = 0; i < (type ? sch->nb_demux : sch->nb_filters); i++) {
+            SchWaiter *w = type ? &sch->demux[i].waiter : &sch->filters[i].waiter;
+            waiter_set(w, 1);
+            if (type)
+                choke_demux(sch, i, 0);
+        }
+
+    pthread_mutex_lock(&sch->finish_lock);
+    pthread_cond_broadcast(&sch->finish_cond);
+    pthread_mutex_unlock(&sch->finish_lock);
 }
 
 static int enc_open(Scheduler *sch, SchEnc *enc, const AVFrame *frame)

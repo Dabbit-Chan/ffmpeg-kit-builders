@@ -26,6 +26,7 @@
 #include "ffmpeg_lib.h"
 #include "ffmpeg_mux.h"
 #include "ffmpeg_sched.h"
+#include "ffmpegkit_session_context.h"
 #include "fopen_utf8.h"
 
 #include "libavformat/avformat.h"
@@ -3385,6 +3386,12 @@ int of_open(const OptionsContext *o, const char *filename, Scheduler *sch)
         return err;
     }
     mux->fc = oc;
+    {
+        FFmpegContext *wrapper_ctx = ffmpeg_get_current_context();
+        const long session_id = ffmpeg_get_session_id(wrapper_ctx);
+        if (session_id != 0)
+            ffmpegkit_register_root_context(oc, session_id);
+    }
 
     av_strlcat(mux->log_name, "/",               sizeof(mux->log_name));
     av_strlcat(mux->log_name, oc->oformat->name, sizeof(mux->log_name));

@@ -7,6 +7,8 @@ extern "C" {
 
 void ffmpegkit_bind_session_id(long session_id);
 void ffmpegkit_unbind_session_id(void);
+void ffmpegkit_register_root_context(const void *root, long session_id);
+void ffmpegkit_unregister_root_context(const void *root);
 
 #ifdef __cplusplus
 }

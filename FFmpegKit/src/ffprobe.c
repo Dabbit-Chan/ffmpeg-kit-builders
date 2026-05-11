@@ -58,6 +58,8 @@
 #include "libavutil/libm.h"
 #include "libavutil/parseutils.h"
 #include "libavutil/timecode.h"
+#include "ffmpegkit_session_context.h"
+#include "ffprobe_lib.h"
 #include "libavutil/timestamp.h"
 #include "libavdevice/avdevice.h"
 #include "libavdevice/version.h"
@@ -394,7 +396,7 @@ static void log_callback(void *ptr, int level, const char *fmt, va_list vl)
     void *new_log_buffer;
 
     va_copy(vl2, vl);
-    av_log_default_callback(ptr, level, fmt, vl);
+    ffmpegkit_dispatch_log_callback(ptr, level, fmt, vl);
     av_log_format_line(ptr, level, fmt, vl2, line, sizeof(line), &print_prefix);
     va_end(vl2);
 
@@ -1649,6 +1651,10 @@ static int read_interval_packets(AVTextFormatContext *tfc, InputFile *ifile,
         goto end;
     }
     while (!av_read_frame(fmt_ctx, pkt)) {
+        if (decode_interrupt_cb(NULL)) {
+            ret = AVERROR_EXIT;
+            break;
+        }
         if (fmt_ctx->nb_streams > nb_streams) {
             REALLOCZ_ARRAY_STREAM(nb_streams_frames,  nb_streams, fmt_ctx->nb_streams);
             REALLOCZ_ARRAY_STREAM(nb_streams_packets, nb_streams, fmt_ctx->nb_streams);
@@ -1700,7 +1706,12 @@ static int read_interval_packets(AVTextFormatContext *tfc, InputFile *ifile,
                 fd->pkt_pos  = pkt->pos;
                 fd->pkt_size = pkt->size;
 
-                while (process_frame(tfc, ifile, frame, pkt, &packet_new) > 0);
+                while (process_frame(tfc, ifile, frame, pkt, &packet_new) > 0) {
+                    if (decode_interrupt_cb(NULL)) {
+                        ret = AVERROR_EXIT;
+                        goto end;
+                    }
+                }
             }
         }
         av_packet_unref(pkt);
@@ -1708,9 +1719,18 @@ static int read_interval_packets(AVTextFormatContext *tfc, InputFile *ifile,
     av_packet_unref(pkt);
     //Flush remaining frames that are cached in the decoder
     for (i = 0; i < ifile->nb_streams; i++) {
+        if (decode_interrupt_cb(NULL)) {
+            ret = AVERROR_EXIT;
+            goto end;
+        }
         pkt->stream_index = i;
         if (do_read_frames) {
-            while (process_frame(tfc, ifile, frame, pkt, &(int){1}) > 0);
+            while (process_frame(tfc, ifile, frame, pkt, &(int){1}) > 0) {
+                if (decode_interrupt_cb(NULL)) {
+                    ret = AVERROR_EXIT;
+                    goto end;
+                }
+            }
             if (ifile->streams[i].dec_ctx)
                 avcodec_flush_buffers(ifile->streams[i].dec_ctx);
         }
@@ -2465,6 +2485,8 @@ static int open_input_file(InputFile *ifile, const char *filename,
         fmt_ctx->url = av_strdup(print_filename);
     }
     ifile->fmt_ctx = fmt_ctx;
+    ffmpegkit_register_root_context(fmt_ctx,
+                                    ffprobe_get_session_id(ffprobe_get_current_context()));
     if (scan_all_pmts_set)
         av_dict_set(&format_opts, "scan_all_pmts", NULL, AV_DICT_MATCH_CASE);
     while ((t = av_dict_iterate(format_opts, t)))
@@ -2565,6 +2587,7 @@ static void close_input_file(InputFile *ifile)
     av_freep(&ifile->streams);
     ifile->nb_streams = 0;
 
+    ffmpegkit_unregister_root_context(ifile->fmt_ctx);
     avformat_close_input(&ifile->fmt_ctx);
 }
 

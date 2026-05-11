@@ -25,6 +25,7 @@
 #include <stdlib.h>
 #include <errno.h>
 #include <math.h>
+#include <stdatomic.h>
 
 /* Include only the enabled headers since some compilers (namely, Sun
    Studio) will not omit unused inline functions and create undefined
@@ -60,6 +61,8 @@ FFMPEG_THREAD_LOCAL AVDictionary *format_opts, *codec_opts;
 
 FFMPEG_THREAD_LOCAL int hide_banner = 0;
 
+static atomic_uintptr_t ffmpegkit_log_delegate_callback_ptr;
+
 void uninit_opts(void)
 {
     av_dict_free(&swr_opts);
@@ -71,6 +74,31 @@ void uninit_opts(void)
 void log_callback_help(void *ptr, int level, const char *fmt, va_list vl)
 {
     vfprintf(stdout, fmt, vl);
+}
+
+void ffmpegkit_set_log_delegate_callback(
+    ffmpegkit_log_delegate_callback callback)
+{
+    atomic_store_explicit(&ffmpegkit_log_delegate_callback_ptr,
+                          (uintptr_t)callback, memory_order_release);
+}
+
+void ffmpegkit_dispatch_log_callback(void *ptr, int level, const char *fmt,
+                                     va_list vl)
+{
+    ffmpegkit_log_delegate_callback callback =
+        (ffmpegkit_log_delegate_callback)atomic_load_explicit(
+            &ffmpegkit_log_delegate_callback_ptr, memory_order_acquire);
+
+    if (callback != NULL) {
+        va_list delegate_args;
+        va_copy(delegate_args, vl);
+        callback(ptr, level, fmt, delegate_args);
+        va_end(delegate_args);
+        return;
+    }
+
+    av_log_default_callback(ptr, level, fmt, vl);
 }
 
 void init_dynload(void)
