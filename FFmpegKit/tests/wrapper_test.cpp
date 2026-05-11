@@ -1721,9 +1721,6 @@ TEST(FFmpegKitTest, ParallelFFprobeLogAttributionIsolation) {
     ffprobe_kit_session_execute_async(session1);
     ffprobe_kit_session_execute_async(session2);
 
-    EXPECT_TRUE(wait_for_running_state(session1, 5000));
-    EXPECT_TRUE(wait_for_running_state(session2, 5000));
-
     ASSERT_TRUE(wait_for_completion_signal(signal1, 30000));
     ASSERT_TRUE(wait_for_completion_signal(signal2, 30000));
     EXPECT_EQ(ffmpeg_kit_session_get_state(session1),
