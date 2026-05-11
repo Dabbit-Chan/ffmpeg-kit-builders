@@ -309,6 +309,10 @@ struct Scheduler {
     pthread_mutex_t     schedule_lock;
 
     atomic_int_least64_t last_dts;
+
+    void               *thread_hook_opaque;
+    void              (*thread_init)(void *opaque);
+    void              (*thread_uninit)(void *opaque);
 };
 
 /**
@@ -631,6 +635,18 @@ int sch_sdp_filename(Scheduler *sch, const char *sdp_filename)
     av_freep(&sch->sdp_filename);
     sch->sdp_filename = av_strdup(sdp_filename);
     return sch->sdp_filename ? 0 : AVERROR(ENOMEM);
+}
+
+void sch_set_thread_hooks(Scheduler *sch, void *opaque,
+                          void (*thread_init)(void *opaque),
+                          void (*thread_uninit)(void *opaque))
+{
+    if (!sch)
+        return;
+
+    sch->thread_hook_opaque = opaque;
+    sch->thread_init        = thread_init;
+    sch->thread_uninit      = thread_uninit;
 }
 
 static const AVClass sch_mux_class = {
@@ -2671,6 +2687,9 @@ static void *task_wrapper(void *arg)
     int ret;
     int err = 0;
 
+    if (sch->thread_init)
+        sch->thread_init(sch->thread_hook_opaque);
+
     ret = task->func(task->func_arg);
     if (ret < 0)
         av_log(task->func_arg, AV_LOG_ERROR,
@@ -2692,6 +2711,9 @@ static void *task_wrapper(void *arg)
     av_log(task->func_arg, ret < 0 ? AV_LOG_ERROR : AV_LOG_VERBOSE,
            "Terminating thread with return code %d (%s)\n", ret,
            ret < 0 ? av_err2str(ret) : "success");
+
+    if (sch->thread_uninit)
+        sch->thread_uninit(sch->thread_hook_opaque);
 
     return (void*)(intptr_t)ret;
 }

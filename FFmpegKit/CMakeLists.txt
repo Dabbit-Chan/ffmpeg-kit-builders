@@ -88,106 +88,8 @@ file(READ "${CMAKE_CURRENT_SOURCE_DIR}/src/config.h" CONFIG_H_CONTENT)
 string(REPLACE "#define HAVE_PTHREAD_SETNAME_NP 0" "" CONFIG_H_CONTENT "${CONFIG_H_CONTENT}")
 file(WRITE "${CMAKE_CURRENT_SOURCE_DIR}/src/config.h" "${CONFIG_H_CONTENT}")
 
-# Copy fftools (Source code)
-message(STATUS "Copying fftools from ${FFMPEG_SRC_DIR}...")
-#copy fftools to src/fftools.tmp
-file(COPY "${FFMPEG_SRC_DIR}/fftools/" 
-     DESTINATION "${CMAKE_CURRENT_SOURCE_DIR}/src/fftools.tmp"
-     FILES_MATCHING
-     PATTERN "*.c"
-     PATTERN "*.h"
-     PATTERN "*.css"
-     PATTERN "*.html"
-)
-# replace "fftools/" in "# include" with  "" in "${CMAKE_CURRENT_SOURCE_DIR}/src/fftools.tmp"
-file(GLOB_RECURSE FFTMP_FILES "${CMAKE_CURRENT_SOURCE_DIR}/src/fftools.tmp/*.c" "${CMAKE_CURRENT_SOURCE_DIR}/src/fftools.tmp/*.h")
-foreach(FFTMP_FILE ${FFTMP_FILES})
-    file(READ "${FFTMP_FILE}" FFTMP_CONTENT)
-    string(REPLACE "#include \"fftools/" "#include \"" FFTMP_CONTENT "${FFTMP_CONTENT}")
-    file(WRITE "${FFTMP_FILE}" "${FFTMP_CONTENT}")
-endforeach()
-# move files in fftools.tmp to src
-file(COPY "${CMAKE_CURRENT_SOURCE_DIR}/src/fftools.tmp/" 
-     DESTINATION "${CMAKE_CURRENT_SOURCE_DIR}/src/"
-     FILES_MATCHING
-     PATTERN "*"
-)
-# remove fftools.tmp
-file(REMOVE_RECURSE "${CMAKE_CURRENT_SOURCE_DIR}/src/fftools.tmp")
-# copy stdbit to src
-file(COPY "${FFMPEG_SRC_DIR}/compat/stdbit/stdbit.h" DESTINATION "${CMAKE_CURRENT_SOURCE_DIR}/src/")
-# copy va_copy.h to src
-file(COPY "${FFMPEG_SRC_DIR}/compat/va_copy.h" DESTINATION "${CMAKE_CURRENT_SOURCE_DIR}/src/compat/")
-# copy w32dlfcn.h to src
-if(WIN32)
-    file(COPY "${FFMPEG_SRC_DIR}/compat/w32dlfcn.h" DESTINATION "${CMAKE_CURRENT_SOURCE_DIR}/src/compat/")
-endif()
-# copy android compat files to src
-if(ANDROID)
-    file(COPY "${FFMPEG_SRC_DIR}/compat/android" DESTINATION "${CMAKE_CURRENT_SOURCE_DIR}/src/compat")
-endif()
 # =============================================================================
-# 3. PATCH APPLICATION: Automated Source Transformation
-# =============================================================================
-# - Apply manual patches from patches/ directory to fix FFmpeg tools
-# - Execute TLS patch script to convert globals to thread-local storage
-# - Execute options patch script to handle static const arrays with TLS
-# - These automated transformations enable concurrent FFmpeg execution
-# ==============================================================================
-if(IS_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/patches")
-    message(STATUS "Checking for patches in 'patches' directory...")
-    find_program(PATCH_EXECUTABLE NAMES gpatch patch REQUIRED)
-    message(STATUS "Using patch executable: ${PATCH_EXECUTABLE}")
-    file(GLOB PATCH_FILES "${CMAKE_CURRENT_SOURCE_DIR}/patches/*.patch")
-
-    foreach(PATCH_FILE ${PATCH_FILES})
-        get_filename_component(PATCH_NAME ${PATCH_FILE} NAME)
-        message(STATUS "Processing patch: ${PATCH_NAME}")
-
-        execute_process(
-            COMMAND ${PATCH_EXECUTABLE} -p1 -R -C -s
-            INPUT_FILE ${PATCH_FILE}
-            WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
-            RESULT_VARIABLE PATCH_APPLIED_EXIT_CODE
-            OUTPUT_QUIET ERROR_QUIET
-        )
-
-        if(PATCH_APPLIED_EXIT_CODE EQUAL 0)
-            message(STATUS "  - Already applied.")
-        else()
-            # Apply Patch
-            # -N: skip hunks that are already applied (forward-apply guard).
-            execute_process(
-                COMMAND ${PATCH_EXECUTABLE} -p1 -N
-                INPUT_FILE ${PATCH_FILE}
-                WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
-                RESULT_VARIABLE PATCH_EXIT_CODE
-            )
-            if(NOT PATCH_EXIT_CODE EQUAL 0)
-                message(FATAL_ERROR "Failed to apply patch '${PATCH_NAME}'. Check for conflicts.")
-            else()
-                message(STATUS "  - Applied successfully.")
-            endif()
-        endif()
-    endforeach()
-
-    if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/scripts/tls_patch.py")
-        message(STATUS "Applying TLS (Thread Local Storage) patches...")
-        execute_process(
-            COMMAND python3 "${CMAKE_CURRENT_SOURCE_DIR}/scripts/tls_patch.py" 
-            WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
-            RESULT_VARIABLE TLS_PATCH_EXIT_CODE
-        )
-        if(NOT TLS_PATCH_EXIT_CODE EQUAL 0)
-            message(FATAL_ERROR "Failed to apply TLS patches. Check for conflicts.")
-        endif()
-    else()
-        message(FATAL_ERROR "TLS patch script not found. Cannot proceed.")
-    endif()
-endif()
-
-# =============================================================================
-# 4. SOURCE DETECTION & METADATA: Build Asset Discovery
+# 3. SOURCE DETECTION & METADATA: Build Asset Discovery
 # =============================================================================
 # - Generate build metadata (date, bundle type, version)
 # - Discover all source files for compilation
@@ -224,7 +126,7 @@ list(FILTER KIT_SOURCES EXCLUDE REGEX ".*_(bak|orig)\\.(c|cpp)$")
 list(FILTER KIT_HEADERS EXCLUDE REGEX ".*_(bak|orig)\\.h$")
 
 # =============================================================================
-# 4.1 RESOURCE FILE COMPILATION: Apple Platform Resource Embedding
+# 3.1 RESOURCE FILE COMPILATION: Apple Platform Resource Embedding
 # =============================================================================
 # - Build bin2c host tool from FFmpeg source
 # - Generate C source files from graph.css and graph.html
@@ -239,7 +141,7 @@ endif()
 # message(STATUS "KIT_HEADERS: ${KIT_HEADERS}")
 
 # =============================================================================
-# 5. DEPENDENCY MANAGEMENT: Library Resolution & Linking
+# 4. DEPENDENCY MANAGEMENT: Library Resolution & Linking
 # =============================================================================
 # - Create ffmpegkit target with forced includes for TLS/assert overrides
 # - Configure pkg-config for FFmpeg library detection
@@ -617,7 +519,7 @@ if(TARGET PkgConfig::FFMPEG)
 endif()
 
 # =============================================================================
-# 6. TARGET CONFIGURATION: Compiler Flags & Platform Hardening
+# 5. TARGET CONFIGURATION: Compiler Flags & Platform Hardening
 # =============================================================================
 # - Set compiler standards, include directories, and optimization flags
 # - Define preprocessor macros for FFmpeg compatibility
@@ -647,8 +549,8 @@ target_compile_definitions(ffmpegkit PRIVATE
 
 target_compile_definitions(ffmpegkit PUBLIC
     FFMPEG_KIT_BUILD_DATE=${FFMPEG_KIT_BUILD_DATE}
-    FFMPEG_KIT_BUNDLE_TYPE=\"${FFMPEG_KIT_BUNDLE_TYPE}\"
-    FFMPEG_KIT_VERSION=\"${FFMPEG_KIT_VERSION}\" 
+    FFMPEG_KIT_BUNDLE_TYPE="${FFMPEG_KIT_BUNDLE_TYPE}"
+    FFMPEG_KIT_VERSION="${FFMPEG_KIT_VERSION}"
 )
 
 if(WIN32)
@@ -826,7 +728,7 @@ elseif(APPLE)
 endif()
 
 # =============================================================================
-# 7. LINKING & SCRIPTS: Library Integration & Build Automation
+# 6. LINKING & SCRIPTS: Library Integration & Build Automation
 # =============================================================================
 # - Configure static vs dynamic linking with proper dependency ordering
 # - Generate linker scripts to control symbol visibility
@@ -1026,7 +928,7 @@ if(MINGW)
 endif()
 
 # =============================================================================
-# 8. INSTALLATION: Package Distribution Setup
+# 7. INSTALLATION: Package Distribution Setup
 # =============================================================================
 # - Install library files (shared/static) to standard locations
 # - Install public headers for client application development
@@ -1047,7 +949,7 @@ configure_file("src/ffmpegkit.pc.in" "ffmpegkit.pc" @ONLY)
 install(FILES "${CMAKE_CURRENT_BINARY_DIR}/ffmpegkit.pc" DESTINATION lib/pkgconfig)
 
 # =============================================================================
-# 9. TESTING: Unit Test Framework Integration
+# 8. TESTING: Unit Test Framework Integration
 # =============================================================================
 # - Enable testing infrastructure with GoogleTest framework
 # - Configure cross-platform test build settings

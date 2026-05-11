@@ -1,3 +1,4 @@
+#include "ffmpeg_tls.h"
 /*
  * ffmpeg option parsing
  *
@@ -29,6 +30,7 @@
 #endif
 
 #include "ffmpeg.h"
+#include "ffmpeg_lib.h"
 #include "ffmpeg_sched.h"
 #include "cmdutils.h"
 #include "opt_common.h"
@@ -52,46 +54,46 @@
 
 #include "SDL_mutex.h"
 
-HWDevice *filter_hw_device;
+FFMPEG_THREAD_LOCAL HWDevice *filter_hw_device;
 
-char *vstats_filename;
+FFMPEG_THREAD_LOCAL char *vstats_filename;
 
-float dts_delta_threshold   = 10;
-float dts_error_threshold   = 3600*30;
+FFMPEG_THREAD_LOCAL float dts_delta_threshold   = 10;
+FFMPEG_THREAD_LOCAL float dts_error_threshold   = 3600*30;
 
 #if FFMPEG_OPT_VSYNC
-enum VideoSyncMethod video_sync_method = VSYNC_AUTO;
+FFMPEG_THREAD_LOCAL enum VideoSyncMethod video_sync_method = VSYNC_AUTO;
 #endif
-float frame_drop_threshold = 0;
-int do_benchmark      = 0;
-int do_benchmark_all  = 0;
-int do_hex_dump       = 0;
-int do_pkt_dump       = 0;
-int copy_ts           = 0;
-int start_at_zero     = 0;
-int copy_tb           = -1;
-int debug_ts          = 0;
-int exit_on_error     = 0;
-int abort_on_flags    = 0;
-int print_stats       = -1;
-int stdin_interaction = 1;
-float max_error_rate  = 2.0/3;
-char *filter_nbthreads;
-int filter_complex_nbthreads = 0;
-int filter_buffered_frames = 0;
-int vstats_version = 2;
-int print_graphs = 0;
-char *print_graphs_file = NULL;
-char *print_graphs_format = NULL;
-int auto_conversion_filters = 1;
-int64_t stats_period = 500000;
+FFMPEG_THREAD_LOCAL float frame_drop_threshold = 0;
+FFMPEG_THREAD_LOCAL int do_benchmark      = 0;
+FFMPEG_THREAD_LOCAL int do_benchmark_all  = 0;
+FFMPEG_THREAD_LOCAL int do_hex_dump       = 0;
+FFMPEG_THREAD_LOCAL int do_pkt_dump       = 0;
+FFMPEG_THREAD_LOCAL int copy_ts           = 0;
+FFMPEG_THREAD_LOCAL int start_at_zero     = 0;
+FFMPEG_THREAD_LOCAL int copy_tb           = -1;
+FFMPEG_THREAD_LOCAL int debug_ts          = 0;
+FFMPEG_THREAD_LOCAL int exit_on_error     = 0;
+FFMPEG_THREAD_LOCAL int abort_on_flags    = 0;
+FFMPEG_THREAD_LOCAL int print_stats       = -1;
+FFMPEG_THREAD_LOCAL int stdin_interaction = 1;
+FFMPEG_THREAD_LOCAL float max_error_rate  = 2.0/3;
+FFMPEG_THREAD_LOCAL char *filter_nbthreads;
+FFMPEG_THREAD_LOCAL int filter_complex_nbthreads = 0;
+FFMPEG_THREAD_LOCAL int filter_buffered_frames = 0;
+FFMPEG_THREAD_LOCAL int vstats_version = 2;
+FFMPEG_THREAD_LOCAL int print_graphs = 0;
+FFMPEG_THREAD_LOCAL char *print_graphs_file = NULL;
+FFMPEG_THREAD_LOCAL char *print_graphs_format = NULL;
+FFMPEG_THREAD_LOCAL int auto_conversion_filters = 1;
+FFMPEG_THREAD_LOCAL int64_t stats_period = 500000;
 
 
-static int file_overwrite     = 0;
-static int no_file_overwrite  = 0;
-int ignore_unknown_streams = 0;
-int copy_unknown_streams = 0;
-int recast_media = 0;
+static FFMPEG_THREAD_LOCAL int file_overwrite     = 0;
+static FFMPEG_THREAD_LOCAL int no_file_overwrite  = 0;
+FFMPEG_THREAD_LOCAL int ignore_unknown_streams = 0;
+FFMPEG_THREAD_LOCAL int copy_unknown_streams = 0;
+FFMPEG_THREAD_LOCAL int recast_media = 0;
 
 // this struct is passed as the optctx argument
 // to func_arg() for global options
@@ -164,7 +166,7 @@ static int show_hwaccels(void *optctx, const char *opt, const char *arg)
     while ((type = av_hwdevice_iterate_types(type)) !=
            AV_HWDEVICE_TYPE_NONE)
         av_log(NULL, AV_LOG_INFO, "%s", av_hwdevice_get_type_name(type));
-    av_log(NULL, AV_LOG_INFO, "\n");
+    printf("\n");
     return 0;
 }
 
@@ -760,7 +762,7 @@ static int opt_init_hw_device(void *optctx, const char *opt, const char *arg)
         while ((type = av_hwdevice_iterate_types(type)) !=
                AV_HWDEVICE_TYPE_NONE)
             av_log(NULL, AV_LOG_INFO, "%s", av_hwdevice_get_type_name(type));
-        av_log(NULL, AV_LOG_INFO, "\n");
+        printf("\n");
         return AVERROR_EXIT;
     } else {
         return hw_device_init_from_string(arg, NULL);
@@ -1407,7 +1409,7 @@ void ffmpeg_show_help_default(const char *opt, const char *arg)
     if (show_advanced)
         show_help_options(options, "Data stream options:",
                           OPT_DATA, OPT_VIDEO | OPT_AUDIO | OPT_SUBTITLE);
-    av_log(NULL, AV_LOG_INFO, "\n");
+    printf("\n");
 
     if (show_avoptions) {
         int flags = AV_OPT_FLAG_DECODING_PARAM | AV_OPT_FLAG_ENCODING_PARAM;
@@ -1564,10 +1566,12 @@ static int opt_progress(void *optctx, const char *opt, const char *arg)
 {
     AVIOContext *avio = NULL;
     int ret;
+    AVIOInterruptCB interrupt_callback;
 
     if (!strcmp(arg, "-"))
         arg = "pipe:";
-    ret = avio_open2(&avio, arg, AVIO_FLAG_WRITE, &int_cb, NULL);
+    ffmpeg_init_interrupt_callback(&interrupt_callback);
+    ret = avio_open2(&avio, arg, AVIO_FLAG_WRITE, &interrupt_callback, NULL);
     if (ret < 0) {
         av_log(NULL, AV_LOG_ERROR, "Failed to open progress URL \"%s\": %s\n",
                arg, av_err2str(ret));

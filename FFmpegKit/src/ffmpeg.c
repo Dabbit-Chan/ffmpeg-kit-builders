@@ -1,3 +1,4 @@
+#include "ffmpeg_tls.h"
 /*
  * Copyright (c) 2000-2003 Fabrice Bellard
  *
@@ -78,6 +79,7 @@
 #include "libavdevice/avdevice.h"
 
 #include "cmdutils.h"
+#include "ffmpeg_lib.h"
 #if CONFIG_MEDIACODEC
 #include "compat/android/binder.h"
 #endif
@@ -89,9 +91,14 @@
 //const char program_name[] = "ffmpeg";
 //const int program_birth_year = 2000;
 
-extern void (*report_callback)(int, float, float, int64_t, double, double, double, double);
+extern FFMPEG_THREAD_LOCAL void (*report_callback)(int, float, float, int64_t, double, double,
+                               double, double);
 
-FILE *vstats_file;
+extern void sch_set_thread_hooks(Scheduler *sch, void *opaque,
+                                 void (*thread_init)(void *opaque),
+                                 void (*thread_uninit)(void *opaque));
+
+FFMPEG_THREAD_LOCAL FILE *vstats_file;
 
 typedef struct BenchmarkTimeStamps {
     int64_t real_usec;
@@ -103,28 +110,28 @@ static BenchmarkTimeStamps get_benchmark_time_stamps(void);
 static int64_t getmaxrss(void);
 extern void ffmpeg_tls_init_options(void);
 
-atomic_uint nb_output_dumped = 0;
+FFMPEG_THREAD_LOCAL atomic_uint nb_output_dumped = 0;
 
-static BenchmarkTimeStamps current_time;
-AVIOContext *progress_avio = NULL;
+static FFMPEG_THREAD_LOCAL BenchmarkTimeStamps current_time;
+FFMPEG_THREAD_LOCAL AVIOContext *progress_avio = NULL;
 
-InputFile   **input_files   = NULL;
-int        nb_input_files   = 0;
+FFMPEG_THREAD_LOCAL InputFile   **input_files   = NULL;
+FFMPEG_THREAD_LOCAL int        nb_input_files   = 0;
 
-OutputFile   **output_files   = NULL;
-int         nb_output_files   = 0;
+FFMPEG_THREAD_LOCAL OutputFile   **output_files   = NULL;
+FFMPEG_THREAD_LOCAL int         nb_output_files   = 0;
 
-FilterGraph **filtergraphs;
-int        nb_filtergraphs;
+FFMPEG_THREAD_LOCAL FilterGraph **filtergraphs;
+FFMPEG_THREAD_LOCAL int        nb_filtergraphs;
 
-Decoder     **decoders;
-int        nb_decoders;
+FFMPEG_THREAD_LOCAL Decoder     **decoders;
+FFMPEG_THREAD_LOCAL int        nb_decoders;
 
 #if HAVE_TERMIOS_H
 
 /* init terminal so that we can grab keys */
-static struct termios oldtty;
-static int restore_tty;
+static FFMPEG_THREAD_LOCAL struct termios oldtty;
+static FFMPEG_THREAD_LOCAL int restore_tty;
 #endif
 
 static void term_exit_sigsafe(void)
@@ -145,7 +152,7 @@ static atomic_int received_sigterm = 0;
 static atomic_int received_nb_signals = 0;
 static atomic_int transcode_init_done = 0;
 static atomic_int ffmpeg_exited = 0;
-static int64_t copy_ts_first_pts = AV_NOPTS_VALUE;
+static FFMPEG_THREAD_LOCAL int64_t copy_ts_first_pts = AV_NOPTS_VALUE;
 
 void
 sigterm_handler(int sig)
@@ -308,7 +315,31 @@ static int read_key(void)
 
 static int decode_interrupt_cb(void *ctx)
 {
+    FFmpegContext *wrapper_ctx = ctx ? ctx : ffmpeg_get_current_context();
+    static FFMPEG_THREAD_LOCAL int interrupt_debug_count = 0;
+    const int cancel_requested =
+        wrapper_ctx ? ffmpeg_cancel_requested(wrapper_ctx) : 0;
+    const long session_id = wrapper_ctx ? ffmpeg_get_session_id(wrapper_ctx) : 0;
+
+    if (interrupt_debug_count < 20 || cancel_requested) {
+        interrupt_debug_count++;
+    }
+
+    if (cancel_requested)
+        return 1;
+
     return atomic_load(&received_nb_signals) > atomic_load(&transcode_init_done);
+}
+
+static void ffmpeg_thread_context_init(void *opaque)
+{
+    ffmpeg_bind_thread_context((FFmpegContext *)opaque);
+}
+
+static void ffmpeg_thread_context_uninit(void *opaque)
+{
+    (void)opaque;
+    ffmpeg_unbind_thread_context();
 }
 
 const AVIOInterruptCB int_cb = { decode_interrupt_cb, NULL };
@@ -589,8 +620,8 @@ static void print_report(int is_last_report, int64_t timer_start, int64_t cur_ti
     int vid;
     double bitrate;
     double speed;
-    static int64_t last_time = -1;
-    static int first_report = 1;
+    static FFMPEG_THREAD_LOCAL int64_t last_time = -1;
+    static FFMPEG_THREAD_LOCAL int first_report = 1;
     uint64_t nb_frames_dup = 0, nb_frames_drop = 0;
     int mins, secs, ms, us;
     int64_t hours;
@@ -858,7 +889,7 @@ static void set_tty_echo(int on)
 static int check_keyboard_interaction(int64_t cur_time)
 {
     int i, key;
-    static int64_t last_time;
+    static FFMPEG_THREAD_LOCAL int64_t last_time;
     /* read_key() returns 0 on EOF */
     if (cur_time - last_time >= 100000) {
         key =  read_key();
@@ -1043,7 +1074,7 @@ void ffmpeg_reset_internal_state(void)
     }
 }
 
-int ffmpeg_run_internal(int argc, char **argv)
+int ffmpeg_run_internal(FFmpegContext *wrapper_ctx, int argc, char **argv)
 {
     Scheduler *sch = NULL;
 
@@ -1072,6 +1103,10 @@ int ffmpeg_run_internal(int argc, char **argv)
         ret = AVERROR(ENOMEM);
         goto finish;
     }
+
+    sch_set_thread_hooks(sch, wrapper_ctx, ffmpeg_thread_context_init,
+                         ffmpeg_thread_context_uninit);
+    ffmpeg_set_scheduler(wrapper_ctx, sch);
 
     /* parse options and open all input/output files */
     ret = ffmpeg_parse_options(argc, argv, sch);
