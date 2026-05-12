@@ -1573,12 +1573,25 @@ int grow_array(void **array, int elem_size, int *size, int new_size)
 void *allocate_array_elem(void *ptr, size_t elem_size, int *nb_elems)
 {
     void *new_elem;
+    void **array;
+    int ret;
+
+    if (!ptr || !nb_elems || *nb_elems < 0)
+        return NULL;
 
     new_elem = av_mallocz(elem_size);
     if (!new_elem)
         return NULL;
-    if (av_dynarray_add_nofree(ptr, nb_elems, new_elem) < 0)
+
+    memcpy(&array, ptr, sizeof(array));
+    ret = grow_array((void **)&array, sizeof(*array), nb_elems, *nb_elems + 1);
+    if (ret < 0) {
         av_freep(&new_elem);
+        return NULL;
+    }
+
+    array[*nb_elems - 1] = new_elem;
+    memcpy(ptr, &array, sizeof(array));
 
     return new_elem;
 }

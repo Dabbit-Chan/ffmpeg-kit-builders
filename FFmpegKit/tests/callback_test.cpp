@@ -5,8 +5,16 @@
 #include <string>
 #include <vector>
 #include <atomic>
-#include <thread>
 #include <chrono>
+#include <functional>
+#include <memory>
+
+#ifdef _WIN32
+#include <process.h>
+#include <windows.h>
+#else
+#include <thread>
+#endif
 
 #ifndef FFMPEG_KIT_TEST_DIR
 #define FFMPEG_KIT_TEST_DIR "."
@@ -40,11 +48,23 @@ public:
         capturer->log_called = true;
     }
 
-    static void StatisticsCallback(FFmpegSessionHandle session, int64_t time, int64_t size, double bitrate, double speed, int64_t videoFrameNumber, double videoFps, double videoQuality, void* user_data) {
+    static void StatisticsCallback(FFmpegSessionHandle session, int64_t timeElapsed, int64_t time, int64_t size, double bitrate, double speed, int64_t videoFrameNumber, double videoFps, double videoQuality, void* user_data) {
         auto* capturer = static_cast<CallbackCapturer*>(user_data);
         capturer->stats_called = true;
     }
 };
+
+static void sleep_for_ms(int milliseconds) {
+#ifdef _WIN32
+    Sleep(static_cast<DWORD>(milliseconds));
+#else
+    const struct timespec ts {
+        milliseconds / 1000,
+        (milliseconds % 1000) * 1000000L
+    };
+    nanosleep(&ts, nullptr);
+#endif
+}
 
 class CallbackTest : public ::testing::Test {
 protected:
@@ -61,6 +81,66 @@ protected:
     }
 };
 
+#ifdef _WIN32
+class TestThread {
+public:
+    TestThread() = default;
+
+    template <typename Callable>
+    explicit TestThread(Callable &&callable) {
+        start(std::forward<Callable>(callable));
+    }
+
+    TestThread(const TestThread &) = delete;
+    TestThread &operator=(const TestThread &) = delete;
+
+    TestThread(TestThread &&other) noexcept : handle_(other.handle_) {
+        other.handle_ = nullptr;
+    }
+
+    TestThread &operator=(TestThread &&other) noexcept {
+        if (this != &other) {
+            join();
+            handle_ = other.handle_;
+            other.handle_ = nullptr;
+        }
+        return *this;
+    }
+
+    ~TestThread() { join(); }
+
+    template <typename Callable>
+    void start(Callable &&callable) {
+        using Task = std::function<void()>;
+        auto *task = new Task(std::forward<Callable>(callable));
+        unsigned thread_id = 0;
+        handle_ = reinterpret_cast<HANDLE>(_beginthreadex(
+            nullptr, 0, &TestThread::run, task, 0, &thread_id));
+    }
+
+    void join() {
+        if (!handle_) {
+            return;
+        }
+        WaitForSingleObject(handle_, INFINITE);
+        CloseHandle(handle_);
+        handle_ = nullptr;
+    }
+
+private:
+    static unsigned __stdcall run(void *arg) {
+        using Task = std::function<void()>;
+        std::unique_ptr<Task> task(static_cast<Task *>(arg));
+        (*task)();
+        return 0;
+    }
+
+    HANDLE handle_{nullptr};
+};
+#else
+using TestThread = std::thread;
+#endif
+
 // FFmpeg Callback Tests
 TEST_F(CallbackTest, FFmpegAsyncExecute) {
     CallbackCapturer capturer;
@@ -71,7 +151,7 @@ TEST_F(CallbackTest, FFmpegAsyncExecute) {
     // Wait for completion (busy wait with timeout)
     int64_t timeout_ms = 5000;
     while (!capturer.complete_called && timeout_ms > 0) {
-        std::this_thread::sleep_for(std::chrono::milliseconds(10));
+        sleep_for_ms(10);
         timeout_ms -= 10;
     }
 
@@ -107,7 +187,7 @@ TEST_F(CallbackTest, FFmpegAsyncExecuteFull) {
     // Wait for completion
     int64_t timeout_ms = 10000;
     while (!capturer.complete_called && timeout_ms > 0) {
-        std::this_thread::sleep_for(std::chrono::milliseconds(10));
+        sleep_for_ms(10);
         timeout_ms -= 10;
     }
 
@@ -147,7 +227,7 @@ TEST_F(CallbackTest, FFprobeAsyncExecute) {
 
     int64_t timeout_ms = 5000;
     while (!capturer.complete_called && timeout_ms > 0) {
-        std::this_thread::sleep_for(std::chrono::milliseconds(10));
+        sleep_for_ms(10);
         timeout_ms -= 10;
     }
 
@@ -164,7 +244,7 @@ TEST_F(CallbackTest, MediaInformationAsync) {
 
     int64_t timeout_ms = 10000; // Increased timeout slightly
     while (!capturer.complete_called && timeout_ms > 0) {
-        std::this_thread::sleep_for(std::chrono::milliseconds(10));
+        sleep_for_ms(10);
         timeout_ms -= 10;
     }
 
@@ -228,7 +308,7 @@ TEST_F(CallbackTest, FFplayAsyncExecute) {
 
     int64_t timeout_ms = 5000;
     while (!capturer.complete_called && timeout_ms > 0) {
-        std::this_thread::sleep_for(std::chrono::milliseconds(10));
+        sleep_for_ms(10);
         timeout_ms -= 10;
     }
 
@@ -254,7 +334,7 @@ public:
         capturer->log_called = true;
     }
 
-    static void StatisticsCallback(FFmpegSessionHandle session, int64_t time, int64_t size, double bitrate, double speed, int64_t videoFrameNumber, double videoFps, double videoQuality, void* user_data) {
+    static void StatisticsCallback(FFmpegSessionHandle session, int64_t timeElapsed, int64_t time, int64_t size, double bitrate, double speed, int64_t videoFrameNumber, double videoFps, double videoQuality, void* user_data) {
         auto* capturer = static_cast<GlobalCallbackCapturer*>(user_data);
         capturer->stats_called = true;
     }
@@ -326,7 +406,7 @@ TEST_F(CallbackTest, GlobalCallbacks) {
 
     int64_t timeout_ms = 10000;
     while (capturer.complete_called_count < 4 && timeout_ms > 0) {
-        std::this_thread::sleep_for(std::chrono::milliseconds(10));
+        sleep_for_ms(10);
         timeout_ms -= 10;
     }
 
@@ -366,12 +446,12 @@ TEST_F(CallbackTest, FFmpegCreateSessionWithCallbacks) {
 
     int64_t timeout_ms = 5000;
     while (!capturer_ptr->complete_called && timeout_ms > 0) {
-        std::this_thread::sleep_for(std::chrono::milliseconds(10));
+        sleep_for_ms(10);
         timeout_ms -= 10;
     }
 
     // Give background thread a moment to finish late-arriving logs/stats
-    std::this_thread::sleep_for(std::chrono::milliseconds(100));
+    sleep_for_ms(100);
 
     EXPECT_TRUE(capturer_ptr->complete_called);
     EXPECT_TRUE(capturer_ptr->log_called);
@@ -395,7 +475,7 @@ TEST_F(CallbackTest, FFprobeCreateSessionWithCallbacks) {
 
     int64_t timeout_ms = 5000;
     while (!capturer.complete_called && timeout_ms > 0) {
-        std::this_thread::sleep_for(std::chrono::milliseconds(10));
+        sleep_for_ms(10);
         timeout_ms -= 10;
     }
 
@@ -422,7 +502,7 @@ TEST_F(CallbackTest, MediaInformationCreateSessionWithCallbacks) {
 
     int64_t timeout_ms = 10000;
     while (!capturer.complete_called && timeout_ms > 0) {
-        std::this_thread::sleep_for(std::chrono::milliseconds(10));
+        sleep_for_ms(10);
         timeout_ms -= 10;
     }
 
@@ -453,7 +533,7 @@ TEST_F(CallbackTest, SessionCallbackStressTest) {
     ASSERT_NE(session, nullptr);
 
     std::atomic<bool> stop_stress{false};
-    std::thread stress_thread([&]() {
+    TestThread stress_thread([&]() {
         int i = 0;
         while (!stop_stress) {
             if (i % 2 == 0) {
@@ -462,14 +542,14 @@ TEST_F(CallbackTest, SessionCallbackStressTest) {
                 ffmpeg_kit_set_callbacks(session, CallbackCapturer::CompleteCallback, CallbackCapturer::LogCallback, CallbackCapturer::StatisticsCallback, &capturer2);
             }
             i++;
-            std::this_thread::yield();
+            sleep_for_ms(0);
         }
     });
 
     // Wait for completion
     int64_t timeout_ms = 10000;
     while (ffmpeg_kit_session_get_state(session) < FFMPEG_KIT_SESSION_STATE_COMPLETED && timeout_ms > 0) {
-        std::this_thread::sleep_for(std::chrono::milliseconds(10));
+        sleep_for_ms(10);
         timeout_ms -= 10;
     }
 
@@ -480,4 +560,3 @@ TEST_F(CallbackTest, SessionCallbackStressTest) {
     
     ffmpeg_kit_handle_release(session);
 }
-

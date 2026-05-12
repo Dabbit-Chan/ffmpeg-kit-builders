@@ -13,6 +13,14 @@ target_link_libraries(ffmpegkit_tests
     GTest::gtest_main
 )
 
+if(WIN32)
+    target_link_libraries(ffmpegkit_tests PRIVATE ws2_32)
+endif()
+
+if(MINGW)
+    target_link_options(ffmpegkit_tests PRIVATE "-Wl,--allow-multiple-definition")
+endif()
+
 # Ensure the test executable finds the shared libraries if needed
 target_include_directories(ffmpegkit_tests PRIVATE
     ${CMAKE_SOURCE_DIR}/src

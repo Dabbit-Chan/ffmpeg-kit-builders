@@ -1,9 +1,17 @@
 #include <gtest/gtest.h>
 #include "ffmpegkit_wrapper.h"
 #include <vector>
-#include <thread>
 #include <atomic>
 #include <chrono>
+#include <functional>
+#include <memory>
+
+#ifdef _WIN32
+#include <process.h>
+#include <windows.h>
+#else
+#include <thread>
+#endif
 
 #ifndef FFMPEG_KIT_TEST_DIR
 #define FFMPEG_KIT_TEST_DIR "."
@@ -34,6 +42,74 @@ protected:
     }
 };
 
+#ifdef _WIN32
+class TestThread {
+public:
+    TestThread() = default;
+
+    template <typename Callable>
+    explicit TestThread(Callable &&callable) {
+        start(std::forward<Callable>(callable));
+    }
+
+    TestThread(const TestThread &) = delete;
+    TestThread &operator=(const TestThread &) = delete;
+
+    TestThread(TestThread &&other) noexcept : handle_(other.handle_) {
+        other.handle_ = nullptr;
+    }
+
+    TestThread &operator=(TestThread &&other) noexcept {
+        if (this != &other) {
+            join();
+            handle_ = other.handle_;
+            other.handle_ = nullptr;
+        }
+        return *this;
+    }
+
+    ~TestThread() { join(); }
+
+    template <typename Callable>
+    void start(Callable &&callable) {
+        using Task = std::function<void()>;
+        auto *task = new Task(std::forward<Callable>(callable));
+        unsigned thread_id = 0;
+        handle_ = reinterpret_cast<HANDLE>(_beginthreadex(
+            nullptr, 0, &TestThread::run, task, 0, &thread_id));
+    }
+
+    void join() {
+        if (!handle_) {
+            return;
+        }
+        WaitForSingleObject(handle_, INFINITE);
+        CloseHandle(handle_);
+        handle_ = nullptr;
+    }
+
+private:
+    static unsigned __stdcall run(void *arg) {
+        using Task = std::function<void()>;
+        std::unique_ptr<Task> task(static_cast<Task *>(arg));
+        (*task)();
+        return 0;
+    }
+
+    HANDLE handle_{nullptr};
+};
+#else
+using TestThread = std::thread;
+#endif
+
+static void sleep_for_ms(int milliseconds) {
+#ifdef _WIN32
+    Sleep(static_cast<DWORD>(milliseconds));
+#else
+    std::this_thread::sleep_for(std::chrono::milliseconds(milliseconds));
+#endif
+}
+
 /**
  * Stress test: Rapidly execute many simple sync commands in serial.
  * Ensures that handle creation/release in a loop is stable.
@@ -55,7 +131,7 @@ TEST_F(StressTest, SerialSyncHammer) {
 TEST_F(StressTest, ParallelSyncHammer) {
     const int thread_count = 10;
     const int iterations_per_thread = 10;
-    std::vector<std::thread> threads;
+    std::vector<TestThread> threads;
 
     for (int t = 0; t < thread_count; ++t) {
         threads.emplace_back([iterations_per_thread]() {
@@ -97,7 +173,7 @@ TEST_F(StressTest, AsyncBurstHammer) {
     // Wait for all to complete with timeout
     auto start = std::chrono::steady_clock::now();
     while (completed_count < burst_size) {
-        std::this_thread::sleep_for(std::chrono::milliseconds(100));
+        sleep_for_ms(100);
         auto elapsed = std::chrono::steady_clock::now() - start;
         if (elapsed > std::chrono::seconds(30)) {
             break;
@@ -120,19 +196,19 @@ TEST_F(StressTest, SessionHistoryConcurrency) {
     std::vector<FFmpegSessionHandle> handles;
     
     // Thread 1: Constantly creating sessions
-    std::thread creator([&stop, &handles, &handles_mutex]() {
+    TestThread creator([&stop, &handles, &handles_mutex]() {
         while (!stop) {
             FFmpegSessionHandle s = ffmpeg_kit_execute_async("-version", nullptr, nullptr);
             if (s) {
                 std::lock_guard<std::mutex> lock(handles_mutex);
                 handles.push_back(s);
             }
-            std::this_thread::sleep_for(std::chrono::milliseconds(2));
+            sleep_for_ms(2);
         }
     });
 
     // Run for a few seconds
-    std::this_thread::sleep_for(std::chrono::seconds(5));
+    sleep_for_ms(5000);
     stop = true;
     creator.join();
 
@@ -141,7 +217,7 @@ TEST_F(StressTest, SessionHistoryConcurrency) {
         int waited = 0;
         while (waited < 5000 &&
                ffmpeg_kit_session_get_state(handle) == FFMPEG_KIT_SESSION_STATE_RUNNING) {
-            std::this_thread::sleep_for(std::chrono::milliseconds(50));
+            sleep_for_ms(50);
             waited += 50;
         }
     }
@@ -181,7 +257,7 @@ TEST_F(StressTest, MixedHammer) {
         FFprobeSessionHandle s2 = ffprobe_kit_execute_async("-version", nullptr, nullptr);
         MediaInformationSessionHandle s3 = ffprobe_kit_get_media_information_async(TEST_VIDEO_FILE, nullptr, nullptr);
         
-        std::this_thread::sleep_for(std::chrono::milliseconds(50));
+        sleep_for_ms(50);
         
         if (s1) ffmpeg_kit_handle_release(s1);
         if (s2) ffmpeg_kit_handle_release(s2);

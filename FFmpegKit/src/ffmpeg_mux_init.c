@@ -53,6 +53,22 @@
 
 #define DEFAULT_PASS_LOGFILENAME_PREFIX "ffmpeg2pass"
 
+static InputFile *input_file_checked(int file_idx)
+{
+    if (!input_files || file_idx < 0 || file_idx >= nb_input_files)
+        return NULL;
+    if (!input_files[file_idx] || !input_files[file_idx]->ctx)
+        return NULL;
+    return input_files[file_idx];
+}
+
+static OutputFile *output_file_checked(int file_idx)
+{
+    if (!output_files || file_idx < 0 || file_idx >= nb_output_files)
+        return NULL;
+    return output_files[file_idx];
+}
+
 static int check_opt_bitexact(void *ctx, const AVDictionary *opts,
                               const char *opt_name, int flag)
 {
@@ -727,8 +743,11 @@ static int new_stream_video(Muxer *mux, const OptionsContext *o,
             FILE *f;
 
             /* compute this stream's global index */
-            for (int idx = 0; idx <= ost->file->index; idx++)
-                ost_idx += output_files[idx]->nb_streams;
+            for (int idx = 0; idx <= ost->file->index; idx++) {
+                OutputFile *of = output_file_checked(idx);
+                if (of)
+                    ost_idx += of->nb_streams;
+            }
 
             snprintf(logfilename, sizeof(logfilename), "%s-%d.log",
                      ost->logfile_prefix ? ost->logfile_prefix :
@@ -1623,20 +1642,26 @@ static int map_auto_video(Muxer *mux, const OptionsContext *o)
 
     qcr = avformat_query_codec(oc->oformat, oc->oformat->video_codec, 0);
     for (int j = 0; j < nb_input_files; j++) {
-        InputFile *ifile = input_files[j];
+        InputFile *ifile = input_file_checked(j);
         InputStreamGroup *file_best_istg = NULL;
         InputStream *file_best_ist = NULL;
         int64_t file_best_score = 0;
-        for (int i = 0; i < ifile->nb_stream_groups; i++) {
+        if (!ifile)
+            continue;
+        for (int i = 0; ifile->stream_groups && i < ifile->nb_stream_groups; i++) {
             InputStreamGroup *istg = ifile->stream_groups[i];
             int64_t score = 0;
 
+            if (!istg || !istg->stg)
+                continue;
             if (!istg->fg)
                 continue;
 
             for (int j = 0; j < istg->stg->nb_streams; j++) {
                 AVStream *st = istg->stg->streams[j];
 
+                if (!st)
+                    continue;
                 if (st->event_flags & AVSTREAM_EVENT_FLAG_NEW_PACKETS) {
                     score = 100000000;
                     break;
@@ -1659,11 +1684,14 @@ static int map_auto_video(Muxer *mux, const OptionsContext *o)
                 file_best_istg  = istg;
             }
         }
-        for (int i = 0; i < ifile->nb_streams; i++) {
+        for (int i = 0; ifile->streams && i < ifile->nb_streams; i++) {
             InputStream *ist = ifile->streams[i];
-            const AVCodecDescriptor *desc = avcodec_descriptor_get(ist->st->codecpar->codec_id);
+            const AVCodecDescriptor *desc;
             int64_t score;
 
+            if (!ist || !ist->st || !ist->st->codecpar)
+                continue;
+            desc = avcodec_descriptor_get(ist->st->codecpar->codec_id);
             if (ist->user_set_discard == AVDISCARD_ALL ||
                 ist->st->codecpar->codec_type != AVMEDIA_TYPE_VIDEO ||
                 (desc && (desc->props & AV_CODEC_PROP_ENHANCEMENT)))
@@ -1728,13 +1756,19 @@ static int map_auto_audio(Muxer *mux, const OptionsContext *o)
         return 0;
 
     for (int j = 0; j < nb_input_files; j++) {
-        InputFile *ifile = input_files[j];
+        InputFile *ifile = input_file_checked(j);
         InputStream *file_best_ist = NULL;
         int file_best_score = 0;
+        if (!ifile)
+            continue;
+        if (!ifile->streams)
+            continue;
         for (int i = 0; i < ifile->nb_streams; i++) {
             InputStream *ist = ifile->streams[i];
             int score;
 
+            if (!ist || !ist->st || !ist->st->codecpar)
+                continue;
             if (ist->user_set_discard == AVDISCARD_ALL ||
                 ist->st->codecpar->codec_type != AVMEDIA_TYPE_AUDIO)
                 continue;
@@ -1862,8 +1896,17 @@ loop_end:
     } else {
         const ViewSpecifier *vs = map->vs.type == VIEW_SPECIFIER_TYPE_NONE ?
                                   NULL : &map->vs;
+        InputFile *ifile = input_file_checked(map->file_index);
 
-        ist = input_files[map->file_index]->streams[map->stream_index];
+        if (!ifile || !ifile->streams ||
+            map->stream_index < 0 || map->stream_index >= ifile->nb_streams ||
+            !ifile->streams[map->stream_index]) {
+            av_log(mux, AV_LOG_FATAL, "Invalid input stream #%d:%d cannot be mapped.\n",
+                   map->file_index, map->stream_index);
+            return AVERROR(EINVAL);
+        }
+
+        ist = ifile->streams[map->stream_index];
         if (ist->user_set_discard == AVDISCARD_ALL) {
             av_log(mux, AV_LOG_FATAL, "Stream #%d:%d is disabled and cannot be mapped.\n",
                    map->file_index, map->stream_index);
@@ -2479,22 +2522,30 @@ static int64_t get_stream_group_index_from_id(Muxer *mux, int64_t id)
 static int of_map_group(Muxer *mux, AVDictionary **dict, AVBPrint *bp, const char *map)
 {
     AVStreamGroup *stg;
+    InputFile *ifile;
     int ret, file_idx, stream_idx;
     char *ptr;
 
     file_idx = strtol(map, &ptr, 0);
-    if (file_idx >= nb_input_files || file_idx < 0 || map == ptr) {
+    ifile = input_file_checked(file_idx);
+    if (!ifile || map == ptr) {
         av_log(mux, AV_LOG_ERROR, "Invalid input file index: %d.\n", file_idx);
         return AVERROR(EINVAL);
     }
 
     stream_idx = strtol(*ptr == '=' ? ptr + 1 : ptr, &ptr, 0);
-    if (*ptr || stream_idx >= input_files[file_idx]->ctx->nb_stream_groups || stream_idx < 0) {
+    if (*ptr || stream_idx >= ifile->ctx->nb_stream_groups || stream_idx < 0) {
         av_log(mux, AV_LOG_ERROR, "Invalid input stream group index: %d.\n", stream_idx);
         return AVERROR(EINVAL);
     }
 
-    stg = input_files[file_idx]->ctx->stream_groups[stream_idx];
+    stg = ifile->ctx->stream_groups[stream_idx];
+    if (!stg) {
+        av_log(mux, AV_LOG_ERROR, "Input stream group #%d:%d is not available.\n",
+               file_idx, stream_idx);
+        return AVERROR(EINVAL);
+    }
+
     ret = of_serialize_options(mux, stg, bp);
     if (ret < 0)
        return ret;
@@ -3041,14 +3092,15 @@ static int copy_meta(Muxer *mux, const OptionsContext *o)
     for (int i = 0; i < o->metadata_map.nb_opt; i++) {
         char *p;
         int in_file_index = strtol(o->metadata_map.opt[i].u.str, &p, 0);
+        InputFile *ifile = in_file_index >= 0 ? input_file_checked(in_file_index) : NULL;
 
-        if (in_file_index >= nb_input_files) {
+        if (in_file_index >= nb_input_files || (in_file_index >= 0 && !ifile)) {
             av_log(mux, AV_LOG_FATAL, "Invalid input file index %d while "
                    "processing metadata maps\n", in_file_index);
             return AVERROR(EINVAL);
         }
         ret = copy_metadata(mux,
-                            in_file_index >= 0 ? input_files[in_file_index]->ctx : NULL,
+                            ifile ? ifile->ctx : NULL,
                             o->metadata_map.opt[i].specifier, *p ? p + 1 : p,
                             &metadata_global_manual, &metadata_streams_manual,
                             &metadata_chapters_manual);
@@ -3061,25 +3113,36 @@ static int copy_meta(Muxer *mux, const OptionsContext *o)
         if (chapters_input_file == INT_MAX) {
             /* copy chapters from the first input file that has them*/
             chapters_input_file = -1;
-            for (int i = 0; i < nb_input_files; i++)
-                if (input_files[i]->ctx->nb_chapters) {
+            for (int i = 0; i < nb_input_files; i++) {
+                InputFile *ifile = input_file_checked(i);
+                if (ifile && ifile->ctx->nb_chapters) {
                     chapters_input_file = i;
                     break;
                 }
+            }
         } else {
             av_log(mux, AV_LOG_FATAL, "Invalid input file index %d in chapter mapping.\n",
                    chapters_input_file);
             return AVERROR(EINVAL);
         }
     }
-    if (chapters_input_file >= 0)
-        copy_chapters(input_files[chapters_input_file], of, oc,
+    if (chapters_input_file >= 0) {
+        InputFile *ifile = input_file_checked(chapters_input_file);
+        if (!ifile) {
+            av_log(mux, AV_LOG_FATAL, "Invalid input file index %d in chapter mapping.\n",
+                   chapters_input_file);
+            return AVERROR(EINVAL);
+        }
+        copy_chapters(ifile, of, oc,
                       !metadata_chapters_manual);
+    }
 
     /* copy global metadata by default */
     if (!metadata_global_manual && nb_input_files){
-        av_dict_copy(&oc->metadata, input_files[0]->ctx->metadata,
-                     AV_DICT_DONT_OVERWRITE);
+        InputFile *ifile = input_file_checked(0);
+        if (ifile)
+            av_dict_copy(&oc->metadata, ifile->ctx->metadata,
+                         AV_DICT_DONT_OVERWRITE);
         if (of->recording_time != INT64_MAX)
             av_dict_set(&oc->metadata, "duration", NULL, 0);
         av_dict_set(&oc->metadata, "creation_time", NULL, 0);

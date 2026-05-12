@@ -954,175 +954,269 @@ int sch_connect(Scheduler *sch, SchedulerNode src, SchedulerNode dst)
 {
     int ret;
 
+    if (!sch) {
+        av_log(NULL, AV_LOG_ERROR, "Cannot connect scheduler nodes without a scheduler.\n");
+        return AVERROR(EINVAL);
+    }
+
     switch (src.type) {
     case SCH_NODE_TYPE_DEMUX: {
         SchDemuxStream *ds;
 
-        av_assert0(src.idx < sch->nb_demux &&
-                   src.idx_stream < sch->demux[src.idx].nb_streams);
+        if (src.idx >= sch->nb_demux || !sch->demux ||
+            src.idx_stream >= sch->demux[src.idx].nb_streams ||
+            !sch->demux[src.idx].streams) {
+            av_log(sch, AV_LOG_ERROR, "Invalid demux scheduler source %u:%u.\n",
+                   src.idx, src.idx_stream);
+            return AVERROR(EINVAL);
+        }
         ds = &sch->demux[src.idx].streams[src.idx_stream];
-
-        ret = GROW_ARRAY(ds->dst, ds->nb_dst);
-        if (ret < 0)
-            return ret;
-
-        ds->dst[ds->nb_dst - 1] = dst;
 
         // demuxed packets go to decoding or streamcopy
         switch (dst.type) {
         case SCH_NODE_TYPE_DEC: {
             SchDec *dec;
 
-            av_assert0(dst.idx < sch->nb_dec);
+            if (dst.idx >= sch->nb_dec || !sch->dec) {
+                av_log(sch, AV_LOG_ERROR, "Invalid decoder scheduler destination %u.\n",
+                       dst.idx);
+                return AVERROR(EINVAL);
+            }
             dec = &sch->dec[dst.idx];
-
-            av_assert0(!dec->src.type);
+            if (dec->src.type) {
+                av_log(sch, AV_LOG_ERROR, "Decoder scheduler destination %u is already connected.\n",
+                       dst.idx);
+                return AVERROR(EINVAL);
+            }
             dec->src = src;
             break;
             }
         case SCH_NODE_TYPE_MUX: {
             SchMuxStream *ms;
 
-            av_assert0(dst.idx < sch->nb_mux &&
-                       dst.idx_stream < sch->mux[dst.idx].nb_streams);
+            if (dst.idx >= sch->nb_mux || !sch->mux ||
+                dst.idx_stream >= sch->mux[dst.idx].nb_streams ||
+                !sch->mux[dst.idx].streams) {
+                av_log(sch, AV_LOG_ERROR, "Invalid mux scheduler destination %u:%u.\n",
+                       dst.idx, dst.idx_stream);
+                return AVERROR(EINVAL);
+            }
             ms = &sch->mux[dst.idx].streams[dst.idx_stream];
-
-            av_assert0(!ms->src.type);
+            if (ms->src.type) {
+                av_log(sch, AV_LOG_ERROR, "Mux scheduler destination %u:%u is already connected.\n",
+                       dst.idx, dst.idx_stream);
+                return AVERROR(EINVAL);
+            }
             ms->src = src;
-
             break;
             }
-        default: av_assert0(0);
+        default:
+            av_log(sch, AV_LOG_ERROR, "Invalid scheduler destination type %d for demux source.\n",
+                   dst.type);
+            return AVERROR(EINVAL);
         }
 
+        ret = GROW_ARRAY(ds->dst, ds->nb_dst);
+        if (ret < 0)
+            return ret;
+        ds->dst[ds->nb_dst - 1] = dst;
         break;
         }
     case SCH_NODE_TYPE_DEC: {
         SchDec *dec;
         SchDecOutput *o;
 
-        av_assert0(src.idx < sch->nb_dec);
+        if (src.idx >= sch->nb_dec || !sch->dec) {
+            av_log(sch, AV_LOG_ERROR, "Invalid decoder scheduler source %u.\n",
+                   src.idx);
+            return AVERROR(EINVAL);
+        }
         dec = &sch->dec[src.idx];
 
-        av_assert0(src.idx_stream < dec->nb_outputs);
+        if (src.idx_stream >= dec->nb_outputs || !dec->outputs) {
+            av_log(sch, AV_LOG_ERROR, "Invalid decoder scheduler output %u:%u.\n",
+                   src.idx, src.idx_stream);
+            return AVERROR(EINVAL);
+        }
         o = &dec->outputs[src.idx_stream];
-
-        ret = GROW_ARRAY(o->dst, o->nb_dst);
-        if (ret < 0)
-            return ret;
-
-        o->dst[o->nb_dst - 1] = dst;
 
         // decoded frames go to filters or encoding
         switch (dst.type) {
         case SCH_NODE_TYPE_FILTER_IN: {
             SchFilterIn *fi;
 
-            av_assert0(dst.idx < sch->nb_filters &&
-                       dst.idx_stream < sch->filters[dst.idx].nb_inputs);
+            if (dst.idx >= sch->nb_filters || !sch->filters ||
+                dst.idx_stream >= sch->filters[dst.idx].nb_inputs ||
+                !sch->filters[dst.idx].inputs) {
+                av_log(sch, AV_LOG_ERROR, "Invalid filter scheduler destination %u:%u.\n",
+                       dst.idx, dst.idx_stream);
+                return AVERROR(EINVAL);
+            }
             fi = &sch->filters[dst.idx].inputs[dst.idx_stream];
-
-            av_assert0(!fi->src.type);
+            if (fi->src.type) {
+                av_log(sch, AV_LOG_ERROR, "Filter scheduler destination %u:%u is already connected.\n",
+                       dst.idx, dst.idx_stream);
+                return AVERROR(EINVAL);
+            }
             fi->src = src;
             break;
             }
         case SCH_NODE_TYPE_ENC: {
             SchEnc *enc;
 
-            av_assert0(dst.idx < sch->nb_enc);
+            if (dst.idx >= sch->nb_enc || !sch->enc) {
+                av_log(sch, AV_LOG_ERROR, "Invalid encoder scheduler destination %u.\n",
+                       dst.idx);
+                return AVERROR(EINVAL);
+            }
             enc = &sch->enc[dst.idx];
-
-            av_assert0(!enc->src.type);
+            if (enc->src.type) {
+                av_log(sch, AV_LOG_ERROR, "Encoder scheduler destination %u is already connected.\n",
+                       dst.idx);
+                return AVERROR(EINVAL);
+            }
             enc->src = src;
             break;
             }
-        default: av_assert0(0);
+        default:
+            av_log(sch, AV_LOG_ERROR, "Invalid scheduler destination type %d for decoder source.\n",
+                   dst.type);
+            return AVERROR(EINVAL);
         }
 
+        ret = GROW_ARRAY(o->dst, o->nb_dst);
+        if (ret < 0)
+            return ret;
+        o->dst[o->nb_dst - 1] = dst;
         break;
         }
     case SCH_NODE_TYPE_FILTER_OUT: {
         SchFilterOut *fo;
 
-        av_assert0(src.idx < sch->nb_filters &&
-                   src.idx_stream < sch->filters[src.idx].nb_outputs);
+        if (src.idx >= sch->nb_filters || !sch->filters ||
+            src.idx_stream >= sch->filters[src.idx].nb_outputs ||
+            !sch->filters[src.idx].outputs) {
+            av_log(sch, AV_LOG_ERROR, "Invalid filter scheduler source %u:%u.\n",
+                   src.idx, src.idx_stream);
+            return AVERROR(EINVAL);
+        }
         fo = &sch->filters[src.idx].outputs[src.idx_stream];
-
-        av_assert0(!fo->dst.type);
-        fo->dst = dst;
+        if (fo->dst.type) {
+            av_log(sch, AV_LOG_ERROR, "Filter scheduler source %u:%u is already connected.\n",
+                   src.idx, src.idx_stream);
+            return AVERROR(EINVAL);
+        }
 
         // filtered frames go to encoding or another filtergraph
         switch (dst.type) {
         case SCH_NODE_TYPE_ENC: {
             SchEnc *enc;
 
-            av_assert0(dst.idx < sch->nb_enc);
+            if (dst.idx >= sch->nb_enc || !sch->enc) {
+                av_log(sch, AV_LOG_ERROR, "Invalid encoder scheduler destination %u.\n",
+                       dst.idx);
+                return AVERROR(EINVAL);
+            }
             enc = &sch->enc[dst.idx];
-
-            av_assert0(!enc->src.type);
+            if (enc->src.type) {
+                av_log(sch, AV_LOG_ERROR, "Encoder scheduler destination %u is already connected.\n",
+                       dst.idx);
+                return AVERROR(EINVAL);
+            }
             enc->src = src;
             break;
             }
         case SCH_NODE_TYPE_FILTER_IN: {
             SchFilterIn *fi;
 
-            av_assert0(dst.idx < sch->nb_filters &&
-                       dst.idx_stream < sch->filters[dst.idx].nb_inputs);
+            if (dst.idx >= sch->nb_filters || !sch->filters ||
+                dst.idx_stream >= sch->filters[dst.idx].nb_inputs ||
+                !sch->filters[dst.idx].inputs) {
+                av_log(sch, AV_LOG_ERROR, "Invalid filter scheduler destination %u:%u.\n",
+                       dst.idx, dst.idx_stream);
+                return AVERROR(EINVAL);
+            }
             fi = &sch->filters[dst.idx].inputs[dst.idx_stream];
-
-            av_assert0(!fi->src.type);
+            if (fi->src.type) {
+                av_log(sch, AV_LOG_ERROR, "Filter scheduler destination %u:%u is already connected.\n",
+                       dst.idx, dst.idx_stream);
+                return AVERROR(EINVAL);
+            }
             fi->src = src;
             break;
             }
-        default: av_assert0(0);
+        default:
+            av_log(sch, AV_LOG_ERROR, "Invalid scheduler destination type %d for filter source.\n",
+                   dst.type);
+            return AVERROR(EINVAL);
         }
 
-
+        fo->dst = dst;
         break;
         }
     case SCH_NODE_TYPE_ENC: {
-        SchEnc       *enc;
+        SchEnc *enc;
 
-        av_assert0(src.idx < sch->nb_enc);
+        if (src.idx >= sch->nb_enc || !sch->enc) {
+            av_log(sch, AV_LOG_ERROR, "Invalid encoder scheduler source %u.\n",
+                   src.idx);
+            return AVERROR(EINVAL);
+        }
         enc = &sch->enc[src.idx];
-
-        ret = GROW_ARRAY(enc->dst, enc->nb_dst);
-        if (ret < 0)
-            return ret;
-
-        enc->dst[enc->nb_dst - 1] = dst;
 
         // encoding packets go to muxing or decoding
         switch (dst.type) {
         case SCH_NODE_TYPE_MUX: {
             SchMuxStream *ms;
 
-            av_assert0(dst.idx        < sch->nb_mux &&
-                       dst.idx_stream < sch->mux[dst.idx].nb_streams);
+            if (dst.idx >= sch->nb_mux || !sch->mux ||
+                dst.idx_stream >= sch->mux[dst.idx].nb_streams ||
+                !sch->mux[dst.idx].streams) {
+                av_log(sch, AV_LOG_ERROR, "Invalid mux scheduler destination %u:%u.\n",
+                       dst.idx, dst.idx_stream);
+                return AVERROR(EINVAL);
+            }
             ms = &sch->mux[dst.idx].streams[dst.idx_stream];
-
-            av_assert0(!ms->src.type);
-            ms->src  = src;
-
+            if (ms->src.type) {
+                av_log(sch, AV_LOG_ERROR, "Mux scheduler destination %u:%u is already connected.\n",
+                       dst.idx, dst.idx_stream);
+                return AVERROR(EINVAL);
+            }
+            ms->src = src;
             break;
             }
         case SCH_NODE_TYPE_DEC: {
             SchDec *dec;
 
-            av_assert0(dst.idx < sch->nb_dec);
+            if (dst.idx >= sch->nb_dec || !sch->dec) {
+                av_log(sch, AV_LOG_ERROR, "Invalid decoder scheduler destination %u.\n",
+                       dst.idx);
+                return AVERROR(EINVAL);
+            }
             dec = &sch->dec[dst.idx];
-
-            av_assert0(!dec->src.type);
+            if (dec->src.type) {
+                av_log(sch, AV_LOG_ERROR, "Decoder scheduler destination %u is already connected.\n",
+                       dst.idx);
+                return AVERROR(EINVAL);
+            }
             dec->src = src;
-
             break;
             }
-        default: av_assert0(0);
+        default:
+            av_log(sch, AV_LOG_ERROR, "Invalid scheduler destination type %d for encoder source.\n",
+                   dst.type);
+            return AVERROR(EINVAL);
         }
 
+        ret = GROW_ARRAY(enc->dst, enc->nb_dst);
+        if (ret < 0)
+            return ret;
+        enc->dst[enc->nb_dst - 1] = dst;
         break;
         }
-    default: av_assert0(0);
+    default:
+        av_log(sch, AV_LOG_ERROR, "Invalid scheduler source type %d.\n", src.type);
+        return AVERROR(EINVAL);
     }
 
     return 0;

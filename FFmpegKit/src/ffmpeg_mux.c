@@ -51,6 +51,13 @@ static Muxer *mux_from_of(OutputFile *of)
     return (Muxer*)of;
 }
 
+static OutputFile *output_file_checked(int file_idx)
+{
+    if (!output_files || file_idx < 0 || file_idx >= nb_output_files)
+        return NULL;
+    return output_files[file_idx];
+}
+
 static int64_t filesize(AVIOContext *pb)
 {
     int64_t ret = -1;
@@ -518,9 +525,13 @@ int print_sdp(const char *filename)
     if (!avc)
         return AVERROR(ENOMEM);
     for (int i = 0; i < nb_output_files; i++) {
-        Muxer *mux = mux_from_of(output_files[i]);
+        OutputFile *of = output_file_checked(i);
+        Muxer *mux;
 
-        if (!strcmp(mux->fc->oformat->name, "rtp")) {
+        if (!of)
+            continue;
+        mux = mux_from_of(of);
+        if (mux->fc && mux->fc->oformat && !strcmp(mux->fc->oformat->name, "rtp")) {
             avc[j] = mux->fc;
             j++;
         }
@@ -896,5 +907,7 @@ void of_free(OutputFile **pof)
 int64_t of_filesize(OutputFile *of)
 {
     Muxer *mux = mux_from_of(of);
+    if (!mux)
+        return 0;
     return atomic_load(&mux->last_filesize);
 }

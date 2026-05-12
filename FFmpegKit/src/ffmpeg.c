@@ -121,6 +121,13 @@ FFMPEG_THREAD_LOCAL int        nb_input_files   = 0;
 FFMPEG_THREAD_LOCAL OutputFile   **output_files   = NULL;
 FFMPEG_THREAD_LOCAL int         nb_output_files   = 0;
 
+static OutputFile *output_file_checked(int file_idx)
+{
+    if (!output_files || file_idx < 0 || file_idx >= nb_output_files)
+        return NULL;
+    return output_files[file_idx];
+}
+
 FFMPEG_THREAD_LOCAL FilterGraph **filtergraphs;
 FFMPEG_THREAD_LOCAL int        nb_filtergraphs;
 
@@ -358,11 +365,17 @@ static void ffmpeg_cleanup(int ret)
         fg_free(&filtergraphs[i]);
     av_freep(&filtergraphs);
 
-    for (int i = 0; i < nb_output_files; i++)
-        of_free(&output_files[i]);
+    if (output_files) {
+        for (int i = 0; i < nb_output_files; i++)
+            if (output_files[i])
+                of_free(&output_files[i]);
+    }
 
-    for (int i = 0; i < nb_input_files; i++)
-        ifile_close(&input_files[i]);
+    if (input_files) {
+        for (int i = 0; i < nb_input_files; i++)
+            if (input_files[i])
+                ifile_close(&input_files[i]);
+    }
 
     for (int i = 0; i < nb_decoders; i++)
         dec_free(&decoders[i]);
@@ -407,8 +420,10 @@ OutputStream *ost_iter(OutputStream *prev)
     int ost_idx = prev ? prev->index + 1  : 0;
 
     for (; of_idx < nb_output_files; of_idx++) {
-        OutputFile *of = output_files[of_idx];
-        if (ost_idx < of->nb_streams)
+        OutputFile *of = output_file_checked(of_idx);
+        if (!of)
+            continue;
+        if (of->streams && ost_idx < of->nb_streams && of->streams[ost_idx])
             return of->streams[ost_idx];
 
         ost_idx = 0;
@@ -423,8 +438,10 @@ InputStream *ist_iter(InputStream *prev)
     int ist_idx = prev ? prev->index + 1  : 0;
 
     for (; if_idx < nb_input_files; if_idx++) {
-        InputFile *f = input_files[if_idx];
-        if (ist_idx < f->nb_streams)
+        InputFile *f = input_files ? input_files[if_idx] : NULL;
+        if (!f)
+            continue;
+        if (f->streams && ist_idx < f->nb_streams && f->streams[ist_idx])
             return f->streams[ist_idx];
 
         ist_idx = 0;
@@ -616,7 +633,8 @@ void update_benchmark(const char *fmt, ...)
 static void print_report(int is_last_report, int64_t timer_start, int64_t cur_time, int64_t pts)
 {
     AVBPrint buf, buf_script;
-    int64_t total_size = of_filesize(output_files[0]);
+    OutputFile *first_output = output_file_checked(0);
+    int64_t total_size = first_output ? of_filesize(first_output) : 0;
     int vid;
     double bitrate;
     double speed;
@@ -989,7 +1007,11 @@ static int transcode(Scheduler *sch)
 
     /* write the trailer if needed */
     for (int i = 0; i < nb_output_files; i++) {
-        int err = of_write_trailer(output_files[i]);
+        OutputFile *of = output_file_checked(i);
+        int err;
+        if (!of)
+            continue;
+        err = of_write_trailer(of);
         ret = err_merge(ret, err);
     }
 

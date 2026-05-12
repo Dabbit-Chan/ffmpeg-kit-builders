@@ -1864,10 +1864,21 @@ static const AVClass input_file_class = {
 
 static Demuxer *demux_alloc(void)
 {
-    Demuxer *d = allocate_array_elem(&input_files, sizeof(*d), &nb_input_files);
+    Demuxer *d = av_mallocz(sizeof(*d));
+    InputFile **new_input_files;
 
     if (!d)
         return NULL;
+
+    new_input_files = av_realloc_array(input_files, nb_input_files + 1,
+                                       sizeof(*input_files));
+    if (!new_input_files) {
+        av_freep(&d);
+        return NULL;
+    }
+
+    input_files = new_input_files;
+    input_files[nb_input_files++] = &d->f;
 
     d->f.class = &input_file_class;
     d->f.index = nb_input_files - 1;
