@@ -5,8 +5,12 @@
 - Added null pointer checks to wrapper functions for robustness
 - Changed `ffmpeg_kit_statistics_get_time` functions to return time instead of time elapsed and added separate `ffmpeg_kit_statistics_get_time_elapsed` functions to get time elapsed.
 - Redesigned log attribution to resolve session ownership through native root objects before falling back to session `0`, improving correctness for concurrent FFmpeg and FFprobe runs.
+- Reworked log attribution and callback transmission paths so concurrent FFmpeg, FFprobe, and FFplay sessions preserve session ownership more reliably under cancellation and parallel execution.
 - Fixed media information parsing to use raw ffprobe JSON output directly instead of reconstructing it from session logs.
 - Improved cancellation handoff so stalled and mid-stream sessions unwind correctly and `onComplete` callbacks fire after cancellation.
+- Hardened session/input/output access paths and cancellation-related state checks to reduce crashes during parallel execution, repeated cancellation, and teardown races.
+- Fixed MinGW/Windows thread-local storage handling for FFmpeg option state by switching the shared DLL build to a safer TLS path for concurrent sessions.
+- Fixed Windows build portability issues in logging/debug helpers and test support code, including MinGW-safe time/thread handling and test-suite compatibility fixes.
 - Added regression coverage for parallel log attribution, mixed FFmpeg/FFprobe cancellation, mid-stream termination, and unattributed callback handling.
 
 ## Version 0.10.0
