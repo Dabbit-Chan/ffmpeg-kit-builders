@@ -289,10 +289,15 @@ prebuilt/
 | Streaming |      | x     | x     | x              | x    |
 | Hardware  |      |       |       | x              | x    |
 | AI*       |      |       |       |                |      |
-| HTTPS     |      | x     | x     | x              | x    |
+| HTTPS     | *    | x     | x     | x              | x    |
 | Platform* | x    | x     | x     | x              | x    |
 
-*Platform features are built-in platform libraries that FFmpeg support like AVFounation, VideoToolbox, etc. on apple platforms or DirectX, MediaFoundation on Windows.
+1. AI features are not supported on all platforms. You must deploy your own custom build of ffmpeg-kit-extended to enable certain AI features.
+   - See [Supported External Libraries](https://github.com/akashskypatel/ffmpeg-kit-builders?tab=readme-ov-file#supported-external-libraries) for more information.
+
+3. Platform features are built-in platform libraries that FFmpeg support like AVFounation, VideoToolbox, etc. on apple platforms or DirectX, MediaFoundation on Windows.
+
+4. HTTPS features are enabled by default for Platforms that have built-in HTTPS support like Windows or Apple. For Linux and Android OpenSSL is enabled by default.
 
 ## Bundle Contents by Platform
 

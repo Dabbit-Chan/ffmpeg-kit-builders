@@ -77,6 +77,7 @@ CONFIG_LINUX="\
 # Android general
 CONFIG_ANDROID=" \
 --enable-jni \
+--enable-openssl \
 --enable-mediacodec"
 
 CONFIG_WINDOWS="\
