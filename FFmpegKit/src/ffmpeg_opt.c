@@ -56,6 +56,15 @@
 
 FFMPEG_THREAD_LOCAL HWDevice *filter_hw_device;
 
+static InputFile *input_file_checked(int file_idx)
+{
+    if (!input_files || file_idx < 0 || file_idx >= nb_input_files)
+        return NULL;
+    if (!input_files[file_idx] || !input_files[file_idx]->ctx)
+        return NULL;
+    return input_files[file_idx];
+}
+
 FFMPEG_THREAD_LOCAL char *vstats_filename;
 
 FFMPEG_THREAD_LOCAL float dts_delta_threshold   = 10;
@@ -403,10 +412,14 @@ int parse_and_set_vsync(const char *arg, enum VideoSyncMethod *vsync_var, int fi
 static void correct_input_start_times(void)
 {
     for (int i = 0; i < nb_input_files; i++) {
-        InputFile       *ifile = input_files[i];
-        AVFormatContext    *is = ifile->ctx;
+        InputFile       *ifile = input_file_checked(i);
+        AVFormatContext    *is;
         int64_t new_start_time = INT64_MAX, diff, abs_start_seek;
 
+        if (!ifile)
+            continue;
+
+        is = ifile->ctx;
         ifile->start_time_effective = is->start_time;
 
         if (is->start_time == AV_NOPTS_VALUE ||
@@ -440,10 +453,13 @@ static void correct_input_start_times(void)
 static int apply_sync_offsets(void)
 {
     for (int i = 0; i < nb_input_files; i++) {
-        InputFile *ref, *self = input_files[i];
+        InputFile *ref, *self = input_file_checked(i);
         int64_t adjustment;
         int64_t self_start_time, ref_start_time, self_seek_start, ref_seek_start;
         int start_times_set = 1;
+
+        if (!self)
+            continue;
 
         if (self->input_sync_ref == -1 || self->input_sync_ref == i) continue;
         if (self->input_sync_ref >= nb_input_files || self->input_sync_ref < -1) {
@@ -456,7 +472,11 @@ static int apply_sync_offsets(void)
             return AVERROR(EINVAL);
         }
 
-        ref = input_files[self->input_sync_ref];
+        ref = input_file_checked(self->input_sync_ref);
+        if (!ref) {
+            av_log(NULL, AV_LOG_FATAL, "-isync for input %d references unavailable input %d.\n", i, self->input_sync_ref);
+            return AVERROR(EINVAL);
+        }
         if (ref->input_sync_ref != -1 && ref->input_sync_ref != self->input_sync_ref) {
             av_log(NULL, AV_LOG_ERROR, "-isync for input %d references a resynced input %d. Sync not set.\n", i, self->input_sync_ref);
             continue;
@@ -612,10 +632,12 @@ static int opt_map(void *optctx, const char *opt, const char *arg)
         m->group_index = ss.stream_list == STREAM_LIST_GROUP_IDX ? ss.list_id : -1;
     } else {
         ViewSpecifier vs;
+        InputFile *ifile;
         char *endptr;
 
         file_idx = strtol(arg, &endptr, 0);
-        if (file_idx >= nb_input_files || file_idx < 0) {
+        ifile = input_file_checked(file_idx);
+        if (!ifile) {
             av_log(NULL, AV_LOG_FATAL, "Invalid input file index: %d.\n", file_idx);
             ret = AVERROR(EINVAL);
             goto fail;
@@ -649,21 +671,30 @@ static int opt_map(void *optctx, const char *opt, const char *arg)
             /* disable some already defined maps */
             for (i = 0; i < o->nb_stream_maps; i++) {
                 m = &o->stream_maps[i];
+                InputFile *mapped_ifile = input_file_checked(m->file_index);
                 if (file_idx == m->file_index &&
+                    mapped_ifile &&
+                    m->stream_index >= 0 && m->stream_index < mapped_ifile->ctx->nb_streams &&
+                    mapped_ifile->ctx->streams &&
+                    mapped_ifile->ctx->streams[m->stream_index] &&
                     stream_specifier_match(&ss,
-                                           input_files[m->file_index]->ctx,
-                                           input_files[m->file_index]->ctx->streams[m->stream_index],
+                                           mapped_ifile->ctx,
+                                           mapped_ifile->ctx->streams[m->stream_index],
                                            NULL))
                     m->disabled = 1;
             }
         else
-            for (i = 0; i < input_files[file_idx]->nb_streams; i++) {
+            for (i = 0; i < ifile->nb_streams; i++) {
+                if (!ifile->streams || !ifile->streams[i] ||
+                    i >= ifile->ctx->nb_streams || !ifile->ctx->streams ||
+                    !ifile->ctx->streams[i])
+                    continue;
                 if (!stream_specifier_match(&ss,
-                                            input_files[file_idx]->ctx,
-                                            input_files[file_idx]->ctx->streams[i],
+                                            ifile->ctx,
+                                            ifile->ctx->streams[i],
                                             NULL))
                     continue;
-                if (input_files[file_idx]->streams[i]->user_set_discard == AVDISCARD_ALL) {
+                if (ifile->streams[i]->user_set_discard == AVDISCARD_ALL) {
                     disabled = 1;
                     continue;
                 }
@@ -841,6 +872,11 @@ int find_codec(void *logctx, const char *name,
 
 int assert_file_overwrite(const char *filename)
 {
+    if (!filename || !*filename) {
+        av_log(NULL, AV_LOG_FATAL, "Invalid or empty output filename.\n");
+        return AVERROR(EINVAL);
+    }
+
     const char *proto_name = avio_find_protocol_name(filename);
 
     if (file_overwrite && no_file_overwrite) {
@@ -869,8 +905,14 @@ int assert_file_overwrite(const char *filename)
     }
 
     if (proto_name && !strcmp(proto_name, "file")) {
+        if (!input_files || nb_input_files <= 0) {
+            av_log(NULL, AV_LOG_WARNING, "No input files found, skipping overwrite check for %s\n", filename);
+            return 0;
+        }
         for (int i = 0; i < nb_input_files; i++) {
-             InputFile *file = input_files[i];
+             InputFile *file = input_file_checked(i);
+             if (!file || !file->ctx || !file->ctx->iformat || !file->ctx->url)
+                 continue;
              if (file->ctx->iformat->flags & AVFMT_NOFILE)
                  continue;
              if (!strcmp(filename, file->ctx->url)) {
@@ -924,9 +966,16 @@ static int opt_target(void *optctx, const char *opt, const char *arg)
         if (nb_input_files) {
             int i, j;
             for (j = 0; j < nb_input_files; j++) {
-                for (i = 0; i < input_files[j]->nb_streams; i++) {
-                    AVStream *st = input_files[j]->ctx->streams[i];
+                InputFile *ifile = input_file_checked(j);
+                if (!ifile)
+                    continue;
+                if (!ifile->ctx->streams)
+                    continue;
+                for (i = 0; i < ifile->nb_streams && i < ifile->ctx->nb_streams; i++) {
+                    AVStream *st = ifile->ctx->streams[i];
                     int64_t fr;
+                    if (!st)
+                        continue;
                     if (st->codecpar->codec_type != AVMEDIA_TYPE_VIDEO)
                         continue;
                     fr = st->time_base.den * 1000LL / st->time_base.num;

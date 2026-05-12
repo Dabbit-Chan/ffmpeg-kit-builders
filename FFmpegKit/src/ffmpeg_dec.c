@@ -38,6 +38,13 @@
 #include "ffmpeg_lib.h"
 #include "ffmpegkit_session_context.h"
 
+static OutputFile *output_file_checked(int file_idx)
+{
+    if (!output_files || file_idx < 0 || file_idx >= nb_output_files)
+        return NULL;
+    return output_files[file_idx];
+}
+
 typedef struct DecoderPriv {
     Decoder             dec;
 
@@ -1719,14 +1726,15 @@ int dec_create(const OptionsContext *o, const char *arg, Scheduler *sch)
     decoders[nb_decoders - 1] = (Decoder *)dp;
 
     of_index = strtol(arg, &p, 0);
-    if (of_index < 0 || of_index >= nb_output_files) {
+    of = output_file_checked(of_index);
+    if (!of) {
         av_log(dp, AV_LOG_ERROR, "Invalid output file index '%d' in %s\n", of_index, arg);
         return AVERROR(EINVAL);
     }
-    of = output_files[of_index];
 
     ost_index = strtol(p + 1, NULL, 0);
-    if (ost_index < 0 || ost_index >= of->nb_streams) {
+    if (ost_index < 0 || ost_index >= of->nb_streams ||
+        !of->streams || !of->streams[ost_index]) {
         av_log(dp, AV_LOG_ERROR, "Invalid output stream index '%d' in %s\n", ost_index, arg);
         return AVERROR(EINVAL);
     }

@@ -71,6 +71,7 @@ CONFIG_AUDIO_AI="\
 --enable-whisper"
 
 CONFIG_LINUX="\
+--enable-openssl \
 --enable-alsa"
 
 # Android general

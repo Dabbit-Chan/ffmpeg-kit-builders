@@ -41,6 +41,15 @@
 #include "libavutil/time.h"
 #include "libavutil/timestamp.h"
 
+static InputFile *input_file_checked(int file_idx)
+{
+    if (!input_files || file_idx < 0 || file_idx >= nb_input_files)
+        return NULL;
+    if (!input_files[file_idx] || !input_files[file_idx]->ctx)
+        return NULL;
+    return input_files[file_idx];
+}
+
 typedef struct FilterGraphPriv {
     FilterGraph      fg;
 
@@ -1372,12 +1381,13 @@ static int fg_complex_bind_input(FilterGraph *fg, InputFilter *ifilter, int comm
 
         // bind to an explicitly specified demuxer stream
         file_idx = strtol(ifilter->linklabel, &p, 0);
-        if (file_idx < 0 || file_idx >= nb_input_files) {
+        InputFile *ifile = input_file_checked(file_idx);
+        if (!ifile) {
             av_log(fg, AV_LOG_FATAL, "Invalid file index %d in filtergraph description %s.\n",
                    file_idx, fg->graph_desc);
             return AVERROR(EINVAL);
         }
-        s = input_files[file_idx]->ctx;
+        s = ifile->ctx;
 
         ret = stream_specifier_parse(&ss, *p == ':' ? p + 1 : p, 1, fg);
         if (ret < 0) {
@@ -1395,6 +1405,8 @@ static int fg_complex_bind_input(FilterGraph *fg, InputFilter *ifilter, int comm
         }
 
         for (i = 0; i < s->nb_streams; i++) {
+            if (!s->streams || !s->streams[i] || !s->streams[i]->codecpar)
+                continue;
             enum AVMediaType stream_type = s->streams[i]->codecpar->codec_type;
             if (stream_type != type &&
                 !(stream_type == AVMEDIA_TYPE_SUBTITLE &&
@@ -1411,7 +1423,13 @@ static int fg_complex_bind_input(FilterGraph *fg, InputFilter *ifilter, int comm
                    "matches no streams.\n", p, fg->graph_desc);
             return AVERROR(EINVAL);
         }
-        ist = input_files[file_idx]->streams[st->index];
+        if (!ifile->streams || st->index < 0 || st->index >= ifile->nb_streams ||
+            !ifile->streams[st->index]) {
+            av_log(fg, AV_LOG_FATAL, "Input stream %d:%d is not available for filtergraph binding.\n",
+                   file_idx, st->index);
+            return AVERROR(EINVAL);
+        }
+        ist = ifile->streams[st->index];
 
         if (commit)
             av_log(fg, AV_LOG_VERBOSE,

@@ -9,8 +9,10 @@
     #define FFMPEG_WEAK_SYMBOL
 #endif
 
-#if defined(_MSC_VER) || defined(__MINGW32__) || defined(__MINGW64__)
+#if defined(_MSC_VER)
     #define FFMPEG_THREAD_LOCAL __declspec(thread)
+#elif defined(__MINGW32__) || defined(__MINGW64__)
+    #define FFMPEG_THREAD_LOCAL __thread
 #elif defined(__APPLE__)
     #define FFMPEG_THREAD_LOCAL __attribute__((visibility("hidden"))) _Thread_local
 #elif defined(__STDC_VERSION__) && __STDC_VERSION__ >= 201112L

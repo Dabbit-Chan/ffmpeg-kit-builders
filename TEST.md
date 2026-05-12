@@ -6,30 +6,30 @@
 
 ```bash
 # Linux
-sudo ./runner.sh --host=linux --arch=x86_64 --enable-base --gpl --kit --test=thread --build-debug --skip --skip-pkg-check -y -f
+sudo ./runner.sh --host=linux --arch=x86_64 --enable-base --gpl --kit --test=thread --build-debug --skip -y -f
 
 # Windows - note that windows build will need windows libtsan libraries which are not available by defauly on linux
-sudo ./runner.sh --host=windows --arch=x86_64 --enable-base --gpl --kit --test=thread --build-debug --skip --skip-pkg-check -y -f
+sudo ./runner.sh --host=windows --arch=x86_64 --enable-base --gpl --kit --test=thread --build-debug --skip -y -f
 ```
 
 ### Address Sanitizer
 
 ```bash
 # Linux
-sudo ./runner.sh --host=linux --arch=x86_64 --enable-base --gpl --kit --test=address --build-debug --skip --skip-pkg-check -y -f
+sudo ./runner.sh --host=linux --arch=x86_64 --enable-base --gpl --kit --test=address --build-debug --skip -y -f
 
 # Windows - note that windows build will need windows libasan libraries which are not available by defauly on linux
-sudo ./runner.sh --host=windows --arch=x86_64 --enable-base --gpl --kit --test=address --build-debug --skip --skip-pkg-check -y -f
+sudo ./runner.sh --host=windows --arch=x86_64 --enable-base --gpl --kit --test=address --build-debug --skip -y -f
 ```
 
 ### Undefined Behavior Sanitizer
 
 ```bash
 # Linux
-sudo ./runner.sh --host=linux --arch=x86_64 --enable-base --gpl --kit --test=undefined --build-debug --skip --skip-pkg-check -y -f
+sudo ./runner.sh --host=linux --arch=x86_64 --enable-base --gpl --kit --test=undefined --build-debug --skip -y -f
 
 # Windows - note that windows build will need windows libubsan libraries which are not available by defauly on linux
-sudo ./runner.sh --host=windows --arch=x86_64 --enable-base --gpl --kit --test=undefined --build-debug --skip --skip-pkg-check -y -f
+sudo ./runner.sh --host=windows --arch=x86_64 --enable-base --gpl --kit --test=undefined --build-debug --skip -y -f
 ```
 
 ## Test execution Commands
