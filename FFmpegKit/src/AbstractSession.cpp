@@ -20,6 +20,7 @@
 #include "AbstractSession.hpp"
 #include "FFmpegKit.hpp"
 #include "FFmpegKitConfig.hpp"
+#include "Log.hpp"
 #include "LogCallback.hpp"
 #include "ReturnCode.hpp"
 #include <atomic>
@@ -236,28 +237,34 @@ void ffmpegkit::AbstractSession::addLog(
 }
 
 void ffmpegkit::AbstractSession::startRunning() {
-  std::lock_guard<std::mutex> lock(_stateMutex);
-  _state = SessionStateRunning;
-  _startTime = std::chrono::system_clock::now();
+  {
+    std::lock_guard<std::mutex> lock(_stateMutex);
+    _state = SessionStateRunning;
+    _startTime = std::chrono::system_clock::now();
+  }
   this->debugLog("startRunning session=%ld state=RUNNING", _sessionId);
 }
 
 void ffmpegkit::AbstractSession::complete(
     const std::shared_ptr<ffmpegkit::ReturnCode> returnCode) {
-  std::lock_guard<std::mutex> lock(_stateMutex);
-  _returnCode = returnCode;
-  _state = SessionStateCompleted;
-  _endTime = std::chrono::system_clock::now();
-  _stateConditionVariable.notify_all();
+  {
+    std::lock_guard<std::mutex> lock(_stateMutex);
+    _returnCode = returnCode;
+    _state = SessionStateCompleted;
+    _endTime = std::chrono::system_clock::now();
+    _stateConditionVariable.notify_all();
+  }
   this->debugLog("complete session=%ld state=COMPLETED return=%d", _sessionId, returnCode ? returnCode->getValue() : 0);
 }
 
 void ffmpegkit::AbstractSession::fail(const char *error) {
-  std::lock_guard<std::mutex> lock(_stateMutex);
-  _failStackTrace = error;
-  _state = SessionStateFailed;
-  _endTime = std::chrono::system_clock::now();
-  _stateConditionVariable.notify_all();
+  {
+    std::lock_guard<std::mutex> lock(_stateMutex);
+    _failStackTrace = error;
+    _state = SessionStateFailed;
+    _endTime = std::chrono::system_clock::now();
+    _stateConditionVariable.notify_all();
+  }
   this->debugLog("fail session=%ld state=FAILED error=%s", _sessionId, error ? error : "");
 }
 
@@ -329,19 +336,34 @@ void ffmpegkit::AbstractSession::debugLog(const char *fmt, ...) {
     std::vector<char> buffer(len + 1);
     std::vsnprintf(buffer.data(), buffer.size(), fmt, args2);
     va_end(args2);
-    std::lock_guard<std::mutex> lock(_debugLogMutex);
-    // Optional: Prevent unbounded memory growth (Cap log at ~1MB)
-    if (_debugLog.size() > 1024 * 1024) {
-         // Erase the oldest half of the logs to free memory
-         _debugLog.erase(0, 512 * 1024); 
-         _debugLog += "\n[... PREVIOUS LOGS TRUNCATED FOR MEMORY ...]\n";
+    std::string logMessage = std::string("[") + getCurrentTimeStamp() + "] " +
+                             "[ffmpeg-kit] [DEBUG] " + buffer.data() + "\n";
+
+    {
+        std::lock_guard<std::mutex> lock(_debugLogMutex);
+        // Optional: Prevent unbounded memory growth (Cap log at ~1MB)
+        if (_debugLog.size() > 1024 * 1024) {
+             // Erase the oldest half of the logs to free memory
+             _debugLog.erase(0, 512 * 1024);
+             _debugLog += "\n[... PREVIOUS LOGS TRUNCATED FOR MEMORY ...]\n";
+        }
+
+        _debugLog += logMessage;
     }
 
-    _debugLog += "[" + getCurrentTimeStamp() + "] ";
-    _debugLog += "[ffmpeg-kit] ";
-    _debugLog += "[DEBUG] ";
-    _debugLog += buffer.data();
-    _debugLog += "\n";
+    std::shared_ptr<ffmpegkit::Log> log = std::make_shared<ffmpegkit::Log>(
+        _sessionId, ffmpegkit::LevelAVLogDebug, logMessage.c_str());
+
+    ffmpegkit::LogCallback sessionLogCallback = this->getLogCallback();
+    if (sessionLogCallback != nullptr) {
+        sessionLogCallback(log);
+    }
+
+    ffmpegkit::LogCallback globalLogCallback =
+        ffmpegkit::FFmpegKitConfig::getLogCallback();
+    if (globalLogCallback != nullptr) {
+        globalLogCallback(log);
+    }
 }
 
 void ffmpegkit::AbstractSession::clearDebugLog() {

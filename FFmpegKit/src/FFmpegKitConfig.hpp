@@ -301,6 +301,13 @@ public:
   static void enableLogCallback(const ffmpegkit::LogCallback logCallback);
 
   /**
+   * <p>Returns the global log callback set.
+   *
+   * @return global log callback or nullptr if it is not set
+   */
+  static ffmpegkit::LogCallback getLogCallback();
+
+  /**
    * <p>Sets a global statistics callback to redirect FFmpeg statistics.
    *
    * @param statisticsCallback statistics callback or nullptr to disable a
