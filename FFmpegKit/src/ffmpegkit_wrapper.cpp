@@ -452,7 +452,8 @@ FFmpegSessionHandle DLL_ALIGN ffmpeg_kit_execute_async_full(
       if (stats_cb && s) {
         stats_cb(handle, (int64_t)(s->getTimeElapsed() * 1000), (int64_t)(s->getTime() * 1000), s->getSize(), s->getBitrate(),
                  s->getSpeed(), s->getVideoFrameNumber(), s->getVideoFps(),
-                 s->getVideoQuality(), user_data);
+                 s->getVideoQuality(), s->getDupFrames(),
+                 s->getDropFrames(), user_data);
       }
     };
 
@@ -514,7 +515,8 @@ FFmpegSessionHandle DLL_ALIGN ffmpeg_kit_create_session_with_callbacks(
       if (stats_cb && s) {
         stats_cb(handle, (int64_t)(s->getTimeElapsed() * 1000), (int64_t)(s->getTime() * 1000), s->getSize(), s->getBitrate(),
                  s->getSpeed(), s->getVideoFrameNumber(), s->getVideoFps(),
-                 s->getVideoQuality(), user_data);
+                 s->getVideoQuality(), s->getDupFrames(),
+                 s->getDropFrames(), user_data);
       }
     };
     session->setCompleteCallback(complete);
@@ -585,7 +587,8 @@ FFmpegSessionHandle DLL_ALIGN ffmpeg_kit_create_session_from_argv_with_callbacks
             if (stats_cb && s) {
                 stats_cb(handle, (int64_t)(s->getTimeElapsed() * 1000), (int64_t)(s->getTime() * 1000), s->getSize(), s->getBitrate(),
                          s->getSpeed(), s->getVideoFrameNumber(), s->getVideoFps(),
-                         s->getVideoQuality(), user_data);
+                         s->getVideoQuality(), s->getDupFrames(),
+                         s->getDropFrames(), user_data);
             }
         };
 
@@ -662,7 +665,8 @@ void DLL_ALIGN ffmpeg_kit_set_statistics_callback(FFmpegSessionHandle session,
         if (stats_cb && s) {
           stats_cb(session, (int64_t)(s->getTimeElapsed() * 1000), (int64_t)(s->getTime() * 1000), s->getSize(), s->getBitrate(),
                    s->getSpeed(), s->getVideoFrameNumber(), s->getVideoFps(),
-                   s->getVideoQuality(), user_data);
+                   s->getVideoQuality(), s->getDupFrames(),
+                   s->getDropFrames(), user_data);
         }
       };
       ptr->setStatisticsCallback(stats);
@@ -720,7 +724,8 @@ void DLL_ALIGN ffmpeg_kit_set_callbacks(FFmpegSessionHandle session,
         if (stats_cb && s) {
           stats_cb(session, (int64_t)(s->getTimeElapsed() * 1000), (int64_t)(s->getTime() * 1000), s->getSize(), s->getBitrate(),
                    s->getSpeed(), s->getVideoFrameNumber(), s->getVideoFps(),
-                   s->getVideoQuality(), user_data);
+                   s->getVideoQuality(), s->getDupFrames(),
+                   s->getDropFrames(), user_data);
         }
       };
       ptr->setCompleteCallback(complete);
@@ -3131,7 +3136,8 @@ void DLL_ALIGN ffmpeg_kit_config_enable_statistics_callback(
               g_stats_callback(session_handle, (int64_t)(s->getTimeElapsed() * 1000), (int64_t)(s->getTime() * 1000), s->getSize(),
                                s->getBitrate(), s->getSpeed(),
                                s->getVideoFrameNumber(), s->getVideoFps(),
-                               s->getVideoQuality(), g_stats_user_data);
+                               s->getVideoQuality(), s->getDupFrames(),
+                               s->getDropFrames(), g_stats_user_data);
             }
           });
     } else {
@@ -3623,6 +3629,34 @@ double DLL_ALIGN ffmpeg_kit_statistics_get_speed(StatisticsHandle handle) {
   } catch (const std::exception &e) {
     std::cerr << "[" << getCurrentTimeStamp() << "] [ffmpeg-kit] [Exception] in ffmpeg_kit_statistics_get_speed: " << e.what()
               << std::endl;
+    PRINT_STACK_TRACE();
+    return -1;
+  }
+}
+
+int64_t DLL_ALIGN ffmpeg_kit_statistics_get_dup_frames(
+    StatisticsHandle handle) {
+  try {
+    auto ptr = get_ptr<Statistics>(handle);
+    return ptr ? ptr->getDupFrames() : -1;
+  } catch (const std::exception &e) {
+    std::cerr << "[" << getCurrentTimeStamp()
+              << "] [ffmpeg-kit] [Exception] in ffmpeg_kit_statistics_get_dup_frames: "
+              << e.what() << std::endl;
+    PRINT_STACK_TRACE();
+    return -1;
+  }
+}
+
+int64_t DLL_ALIGN ffmpeg_kit_statistics_get_drop_frames(
+    StatisticsHandle handle) {
+  try {
+    auto ptr = get_ptr<Statistics>(handle);
+    return ptr ? ptr->getDropFrames() : -1;
+  } catch (const std::exception &e) {
+    std::cerr << "[" << getCurrentTimeStamp()
+              << "] [ffmpeg-kit] [Exception] in ffmpeg_kit_statistics_get_drop_frames: "
+              << e.what() << std::endl;
     PRINT_STACK_TRACE();
     return -1;
   }

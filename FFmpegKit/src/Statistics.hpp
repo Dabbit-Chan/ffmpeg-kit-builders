@@ -33,7 +33,8 @@ public:
   Statistics(const long sessionId, const int videoFrameNumber,
              const float videoFps, const float videoQuality, const int64_t size,
              const double timeElapsed, const double time, const double bitrate,
-             const double speed);
+             const double speed, const int64_t dupFrames,
+             const int64_t dropFrames);
 
   long getSessionId();
   int getVideoFrameNumber();
@@ -44,6 +45,8 @@ public:
   double getTime();
   double getBitrate();
   double getSpeed();
+  int64_t getDupFrames();
+  int64_t getDropFrames();
 
 private:
   const long _sessionId;
@@ -55,6 +58,8 @@ private:
   const double _time;
   const double _bitrate;
   const double _speed;
+  const int64_t _dupFrames;
+  const int64_t _dropFrames;
 };
 
 } // namespace ffmpegkit

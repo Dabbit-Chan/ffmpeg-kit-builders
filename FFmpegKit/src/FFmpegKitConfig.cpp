@@ -187,7 +187,8 @@ free_args:
 
 extern "C" {
 void set_report_callback(void (*callback)(int, float, float, int64_t, double,
-                                          double, double, double));
+                                          double, double, double, int64_t,
+                                          int64_t));
 void cancel_operation(long id);
 void ffmpegkit_set_log_delegate_callback(
     void (*callback)(void *ptr, int level, const char *format, va_list vargs));
@@ -627,12 +628,15 @@ public:
   CallbackData(const long sessionId, const int videoFrameNumber,
                const float videoFps, const float videoQuality,
                const int64_t size, const double timeElapsed, const double time,
-               const double bitrate, const double speed)
+               const double bitrate, const double speed,
+               const int64_t dupFrames, const int64_t dropFrames)
       : _type{StatisticsType}, _sessionId{sessionId},
         _statisticsFrameNumber{videoFrameNumber}, _statisticsFps{videoFps},
         _statisticsQuality{videoQuality}, _statisticsSize{size},
         _statisticsTimeElapsed{timeElapsed}, _statisticsTime{time},
-        _statisticsBitrate{bitrate}, _statisticsSpeed{speed} {}
+        _statisticsBitrate{bitrate}, _statisticsSpeed{speed},
+        _statisticsDupFrames{dupFrames},
+        _statisticsDropFrames{dropFrames} {}
 
   ~CallbackData() {
     if (_type == LogType) {
@@ -664,6 +668,10 @@ public:
 
   double getStatisticsSpeed() { return _statisticsSpeed; }
 
+  int64_t getStatisticsDupFrames() { return _statisticsDupFrames; }
+
+  int64_t getStatisticsDropFrames() { return _statisticsDropFrames; }
+
 private:
   CallbackType _type;
   long _sessionId; // session id
@@ -679,6 +687,8 @@ private:
   double _statisticsTime;        // statistics time
   double _statisticsBitrate;     // statistics bitrate
   double _statisticsSpeed;       // statistics speed
+  int64_t _statisticsDupFrames;  // duplicated frame count
+  int64_t _statisticsDropFrames; // dropped frame count
 };
 
 /**
@@ -811,7 +821,8 @@ static void logCallbackDataAdd(int level, AVBPrint *data) {
 static void statisticsCallbackDataAdd(int frameNumber, float fps, float quality,
                                       int64_t size, double timeElapsed,
                                       double time, double bitrate,
-                                      double speed) {
+                                      double speed, int64_t dupFrames,
+                                      int64_t dropFrames) {
   std::shared_ptr<ffmpegkit::Session> currentSession = tlsSession;
   long sessionId =
       (currentSession != nullptr) ? currentSession->getSessionId() : tlsSessionId;
@@ -831,7 +842,7 @@ static void statisticsCallbackDataAdd(int frameNumber, float fps, float quality,
   std::unique_lock<KitMutex> lock(getCallbackDataMutex(), std::defer_lock);
   CallbackData *callbackData =
       new CallbackData(sessionId, frameNumber, fps, quality, size, timeElapsed,
-                       time, bitrate, speed);
+                       time, bitrate, speed, dupFrames, dropFrames);
 
   if (sessionId == 0) {
     std::atomic_fetch_add(&unattributedMessagesInTransitCount, 1);
@@ -915,11 +926,13 @@ int cancelRequested(long sessionId) {
 }
 
 FFMPEG_THREAD_LOCAL void (*report_callback)(int, float, float, int64_t, double,
-                                            double, double, double) = NULL;
+                                            double, double, double, int64_t,
+                                            int64_t) = NULL;
 extern void sigterm_handler(int sig);
 
 void set_report_callback(void (*callback)(int, float, float, int64_t, double,
-                                          double, double, double)) {
+                                          double, double, double, int64_t,
+                                          int64_t)) {
   report_callback = callback;
 }
 
@@ -1032,9 +1045,11 @@ void ffmpegkit_log_callback_function(void *ptr, int level, const char *format,
 void ffmpegkit_statistics_callback_function(int frameNumber, float fps,
                                             float quality, int64_t size,
                                             double timeElapsed, double time,
-                                            double bitrate, double speed) {
+                                            double bitrate, double speed,
+                                            int64_t dupFrames,
+                                            int64_t dropFrames) {
   statisticsCallbackDataAdd(frameNumber, fps, quality, size, timeElapsed, time,
-                            bitrate, speed);
+                            bitrate, speed, dupFrames, dropFrames);
 }
 
 static void process_log(long sessionId, int levelValueInt,
@@ -1135,11 +1150,12 @@ static void process_log(long sessionId, int levelValueInt,
 
 void process_statistics(long sessionId, int videoFrameNumber, float videoFps,
                         float videoQuality, long size, double timeElapsed,
-                        double time, double bitrate, double speed) {
+                        double time, double bitrate, double speed,
+                        int64_t dupFrames, int64_t dropFrames) {
   std::shared_ptr<ffmpegkit::Statistics> statistics =
       std::make_shared<ffmpegkit::Statistics>(
           sessionId, videoFrameNumber, videoFps, videoQuality, size,
-          timeElapsed, time, bitrate, speed);
+          timeElapsed, time, bitrate, speed, dupFrames, dropFrames);
 
   auto session = ffmpegkit::FFmpegKitConfig::getSession(sessionId);
   if (session != nullptr && session->isFFmpeg()) {
@@ -1207,7 +1223,9 @@ void *callbackThreadFunction(void *pointer) {
                              callbackData->getStatisticsTimeElapsed(),
                              callbackData->getStatisticsTime(),
                              callbackData->getStatisticsBitrate(),
-                             callbackData->getStatisticsSpeed());
+                             callbackData->getStatisticsSpeed(),
+                             callbackData->getStatisticsDupFrames(),
+                             callbackData->getStatisticsDropFrames());
         }
 
         if (callbackData->getSessionId() == 0) {

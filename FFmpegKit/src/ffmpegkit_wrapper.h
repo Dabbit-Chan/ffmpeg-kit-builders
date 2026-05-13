@@ -53,9 +53,10 @@ typedef void (*FFmpegKitCompleteCallback)(FFmpegSessionHandle session,
 typedef void (*FFmpegKitLogCallback)(FFmpegSessionHandle session,
                                      const char *log, void *user_data);
 typedef void (*FFmpegKitStatisticsCallback)(
-    FFmpegSessionHandle session, int64_t time_elapsed, int64_t time, int64_t size, double bitrate,
-    double speed, int64_t videoFrameNumber, double videoFps,
-    double videoQuality, void *user_data);
+    FFmpegSessionHandle session, int64_t time_elapsed, int64_t time,
+    int64_t size, double bitrate, double speed, int64_t videoFrameNumber,
+    double videoFps, double videoQuality, int64_t dupFrames,
+    int64_t dropFrames, void *user_data);
 typedef void (*FFprobeKitCompleteCallback)(FFprobeSessionHandle session,
                                            void *user_data);
 typedef void (*FFplayKitCompleteCallback)(FFplaySessionHandle session,
@@ -2065,6 +2066,18 @@ ffmpeg_kit_statistics_get_bitrate(StatisticsHandle handle);
  */
 FFMPEG_KIT_C_EXPORT double
 ffmpeg_kit_statistics_get_speed(StatisticsHandle handle);
+
+/**
+ * Returns the duplicated frame count from a statistics entry.
+ */
+FFMPEG_KIT_C_EXPORT int64_t
+ffmpeg_kit_statistics_get_dup_frames(StatisticsHandle handle);
+
+/**
+ * Returns the dropped frame count from a statistics entry.
+ */
+FFMPEG_KIT_C_EXPORT int64_t
+ffmpeg_kit_statistics_get_drop_frames(StatisticsHandle handle);
 
 /* Entity Properties Extended */
 
