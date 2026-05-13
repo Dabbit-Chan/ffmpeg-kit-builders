@@ -2334,6 +2334,11 @@ void ffmpegkit::FFmpegKitConfig::enableLogCallback(
   logCallback = callback;
 }
 
+ffmpegkit::LogCallback ffmpegkit::FFmpegKitConfig::getLogCallback() {
+  std::lock_guard<KitMutex> lock(getGlobalCallbacksMutex());
+  return logCallback;
+}
+
 void ffmpegkit::FFmpegKitConfig::enableStatisticsCallback(
     const ffmpegkit::StatisticsCallback callback) {
   std::lock_guard<KitMutex> lock(getGlobalCallbacksMutex());
