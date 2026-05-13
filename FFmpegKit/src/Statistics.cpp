@@ -25,10 +25,13 @@ ffmpegkit::Statistics::Statistics(const long sessionId,
                                   const float videoFps,
                                   const float videoQuality, const int64_t size,
                                   const double timeElapsed, const double time,
-                                  const double bitrate, const double speed)
+                                  const double bitrate, const double speed,
+                                  const int64_t dupFrames,
+                                  const int64_t dropFrames)
     : _sessionId{sessionId}, _videoFrameNumber{videoFrameNumber},
       _videoFps{videoFps}, _videoQuality{videoQuality}, _size{size},
-      _timeElapsed{timeElapsed}, _time{time}, _bitrate{bitrate}, _speed{speed} {
+      _timeElapsed{timeElapsed}, _time{time}, _bitrate{bitrate},
+      _speed{speed}, _dupFrames{dupFrames}, _dropFrames{dropFrames} {
 }
 
 long ffmpegkit::Statistics::getSessionId() { return _sessionId; }
@@ -48,3 +51,7 @@ double ffmpegkit::Statistics::getTime() { return _time; }
 double ffmpegkit::Statistics::getBitrate() { return _bitrate; }
 
 double ffmpegkit::Statistics::getSpeed() { return _speed; }
+
+int64_t ffmpegkit::Statistics::getDupFrames() { return _dupFrames; }
+
+int64_t ffmpegkit::Statistics::getDropFrames() { return _dropFrames; }

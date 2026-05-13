@@ -48,7 +48,7 @@ public:
         capturer->log_called = true;
     }
 
-    static void StatisticsCallback(FFmpegSessionHandle session, int64_t timeElapsed, int64_t time, int64_t size, double bitrate, double speed, int64_t videoFrameNumber, double videoFps, double videoQuality, void* user_data) {
+    static void StatisticsCallback(FFmpegSessionHandle session, int64_t timeElapsed, int64_t time, int64_t size, double bitrate, double speed, int64_t videoFrameNumber, double videoFps, double videoQuality, int64_t dupFrames, int64_t dropFrames, void* user_data) {
         auto* capturer = static_cast<CallbackCapturer*>(user_data);
         capturer->stats_called = true;
     }
@@ -334,7 +334,7 @@ public:
         capturer->log_called = true;
     }
 
-    static void StatisticsCallback(FFmpegSessionHandle session, int64_t timeElapsed, int64_t time, int64_t size, double bitrate, double speed, int64_t videoFrameNumber, double videoFps, double videoQuality, void* user_data) {
+    static void StatisticsCallback(FFmpegSessionHandle session, int64_t timeElapsed, int64_t time, int64_t size, double bitrate, double speed, int64_t videoFrameNumber, double videoFps, double videoQuality, int64_t dupFrames, int64_t dropFrames, void* user_data) {
         auto* capturer = static_cast<GlobalCallbackCapturer*>(user_data);
         capturer->stats_called = true;
     }

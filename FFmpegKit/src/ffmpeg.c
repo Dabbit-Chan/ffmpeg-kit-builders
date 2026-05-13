@@ -91,8 +91,9 @@
 //const char program_name[] = "ffmpeg";
 //const int program_birth_year = 2000;
 
-extern FFMPEG_THREAD_LOCAL void (*report_callback)(int, float, float, int64_t, double, double,
-                               double, double);
+extern FFMPEG_THREAD_LOCAL void (*report_callback)(int, float, float, int64_t,
+                                                   double, double, double,
+                                                   double, int64_t, int64_t);
 
 extern void sch_set_thread_hooks(Scheduler *sch, void *opaque,
                                  void (*thread_init)(void *opaque),
@@ -793,12 +794,13 @@ static void print_report(int is_last_report, int64_t timer_start, int64_t cur_ti
     if (report_callback) {
         int frame_number = 0;
         float fps = 0.0f;
-        float quality = 0.0f;
+        float quality = -1.0f;
         float ft = FFABS64U(pts) / AV_TIME_BASE; // 
         for (OutputStream *ost = ost_iter(NULL); ost; ost = ost_iter(ost)) {
             if (ost->type == AVMEDIA_TYPE_VIDEO) {
                 frame_number = atomic_load(&ost->packets_written);
                 fps = t > 1 ? frame_number / t : 0;
+                quality = ost->enc ? atomic_load(&ost->quality) / (float)FF_QP2LAMBDA : -1.0f;
                 break; 
             }
         }
@@ -810,7 +812,9 @@ static void print_report(int is_last_report, int64_t timer_start, int64_t cur_ti
                         t,
                         ft,
                         bitrate, 
-                        speed);
+                        speed,
+                        nb_frames_dup,
+                        nb_frames_drop);
     }
 
     first_report = 0;

@@ -2,7 +2,8 @@
 
 ## Version 0.10.1
 
-- Added null pointer checks to wrapper functions for robustness
+- Added null pointer checks to wrapper functions for robustness.
+- Extended Statistics class with dupFrames and dropFrames fields, and added corresponding getters to wrapper.
 - Changed `ffmpeg_kit_statistics_get_time` functions to return time instead of time elapsed and added separate `ffmpeg_kit_statistics_get_time_elapsed` functions to get time elapsed.
 - Redesigned log attribution to resolve session ownership through native root objects before falling back to session `0`, improving correctness for concurrent FFmpeg and FFprobe runs.
 - Reworked log attribution and callback transmission paths so concurrent FFmpeg, FFprobe, and FFplay sessions preserve session ownership more reliably under cancellation and parallel execution.
