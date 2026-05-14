@@ -26,6 +26,7 @@
 #include "libavformat/avio.h"
 #include "libavutil/mem.h"
 #include <stdatomic.h>
+#include <errno.h>
 #include <string.h>
 #ifdef _WIN32
 #include <io.h>
@@ -49,6 +50,7 @@ extern void ffmpeg_reset_internal_state(void);
 extern int cancelRequested(long sessionId);
 
 static FFMPEG_THREAD_LOCAL FFmpegContext *current_ffmpeg_context = NULL;
+static atomic_int ffmpeg_runtime_unrecoverable = 0;
 
 struct FFmpegContext {
   _Atomic(Scheduler *) sch;
@@ -56,6 +58,7 @@ struct FFmpegContext {
   int argc;
   char **argv;
   atomic_int cancelled;
+  atomic_int shutdown_incomplete;
   int files_parsed;
   long session_id;
 };
@@ -215,9 +218,34 @@ FFmpegContext *ffmpeg_get_current_context(void) {
   return current_ffmpeg_context;
 }
 
+void ffmpeg_mark_shutdown_incomplete(FFmpegContext *ctx) {
+  if (!ctx)
+    return;
+  atomic_store(&ctx->shutdown_incomplete, 1);
+}
+
+int ffmpeg_shutdown_incomplete(const FFmpegContext *ctx) {
+  return ctx ? atomic_load(&ctx->shutdown_incomplete) : 0;
+}
+
+void ffmpeg_mark_runtime_unrecoverable(void) {
+  atomic_store(&ffmpeg_runtime_unrecoverable, 1);
+}
+
+int ffmpeg_runtime_is_unrecoverable(void) {
+  return atomic_load(&ffmpeg_runtime_unrecoverable);
+}
+
 int ffmpeg_run(FFmpegContext *ctx) {
   if (!ctx)
     return AVERROR(EINVAL);
+  if (ffmpeg_runtime_is_unrecoverable()) {
+    av_log(NULL, AV_LOG_ERROR,
+           "[ffmpeg-kit] ffmpeg_run: runtime is quarantined after an "
+           "incomplete prior shutdown; restart the host process before "
+           "starting a new FFmpeg session.\n");
+    return AVERROR(ECANCELED);
+  }
 
   ffmpeg_kit_assert_triggered = 0;
 

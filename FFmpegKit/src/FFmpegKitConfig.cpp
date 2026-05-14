@@ -1335,7 +1335,11 @@ executeFFmpeg(const std::shared_ptr<ffmpegkit::FFmpegSession> &session,
         nullptr);
   }
   clearSessionFromThread();
-  ffmpeg_free(ctx);
+  if (ffmpeg_shutdown_incomplete(ctx)) {
+    session->debugLog("executeFFmpeg preserving wrapper context after incomplete shutdown session_handle=%s session_id=%d", sessionStr.c_str(), sessionId);
+  } else {
+    ffmpeg_free(ctx);
+  }
   restoreConfiguredLogState();
 
   session->debugLog("executeFFmpeg end session_handle=%s session_id=%d", sessionStr.c_str(), sessionId);

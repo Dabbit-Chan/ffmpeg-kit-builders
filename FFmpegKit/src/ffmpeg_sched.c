@@ -69,6 +69,7 @@ typedef struct SchTask {
 
     pthread_t           thread;
     int                 thread_running;
+    atomic_int          finished;
 } SchTask;
 
 typedef struct SchDecOutput {
@@ -284,6 +285,7 @@ struct Scheduler {
 
     unsigned         nb_mux_done;
     unsigned            task_failed;
+    atomic_int          stop_failed;
     pthread_mutex_t     finish_lock;
     pthread_cond_t      finish_cond;
 
@@ -405,6 +407,41 @@ static int queue_alloc(ThreadQueue **ptq, unsigned nb_streams, unsigned queue_si
 
 static void *task_wrapper(void *arg);
 
+static void task_signal_finished(Scheduler *sch, SchTask *task)
+{
+    pthread_mutex_lock(&sch->finish_lock);
+    atomic_store(&task->finished, 1);
+    pthread_cond_broadcast(&sch->finish_cond);
+    pthread_mutex_unlock(&sch->finish_lock);
+}
+
+static int task_wait_finished(Scheduler *sch, SchTask *task, int timeout_ms)
+{
+    struct timespec tv;
+    int64_t now_us;
+    int ret = 0;
+
+    if (atomic_load(&task->finished))
+        return 1;
+
+    now_us = av_gettime();
+    tv.tv_sec  = now_us / 1000000;
+    tv.tv_nsec = (now_us % 1000000) * 1000;
+    tv.tv_sec  += timeout_ms / 1000;
+    tv.tv_nsec += (timeout_ms % 1000) * 1000000L;
+    if (tv.tv_nsec >= 1000000000L) {
+        tv.tv_sec++;
+        tv.tv_nsec -= 1000000000L;
+    }
+
+    pthread_mutex_lock(&sch->finish_lock);
+    while (!atomic_load(&task->finished) && ret != ETIMEDOUT)
+        ret = pthread_cond_timedwait(&sch->finish_cond, &sch->finish_lock, &tv);
+    pthread_mutex_unlock(&sch->finish_lock);
+
+    return atomic_load(&task->finished);
+}
+
 static int task_start(SchTask *task)
 {
     int ret;
@@ -415,6 +452,7 @@ static int task_start(SchTask *task)
     av_log(task->func_arg, AV_LOG_VERBOSE, "Starting thread...\n");
 
     av_assert0(!task->thread_running);
+    atomic_store(&task->finished, 0);
 
     ret = pthread_create(&task->thread, NULL, task_wrapper, task);
     if (ret) {
@@ -437,6 +475,7 @@ static void task_init(Scheduler *sch, SchTask *task, enum SchedulerNodeType type
 
     task->func      = func;
     task->func_arg  = func_arg;
+    atomic_store(&task->finished, 0);
 }
 
 static int64_t trailing_dts(const Scheduler *sch, int count_finished)
@@ -2830,6 +2869,8 @@ static void *task_wrapper(void *arg)
     if (sch->thread_uninit)
         sch->thread_uninit(sch->thread_hook_opaque);
 
+    task_signal_finished(sch, task);
+
     return (void*)(intptr_t)ret;
 }
 
@@ -2848,17 +2889,34 @@ static int task_stop(Scheduler *sch, SchTask *task)
 
 #ifdef _WIN32
     if (ret == ESRCH) {
-        av_log(NULL, AV_LOG_WARNING,
+        if (task_wait_finished(sch, task, 10000)) {
+            av_log(NULL, AV_LOG_WARNING,
+                   "[ffmpeg-kit] task_stop: pthread_join ESRCH for node "
+                   "type=%d idx=%d; task completion observed through scheduler "
+                   "signal.\n",
+                   task->node.type, task->node.idx);
+            task->thread_running = 0;
+            return 0;
+        }
+
+        av_log(NULL, AV_LOG_ERROR,
                "[ffmpeg-kit] task_stop: pthread_join ESRCH for node "
-               "type=%d idx=%d — thread completed normally, "
-               "skipping task_cleanup.\n",
+               "type=%d idx=%d and task completion was not observed within "
+               "timeout; scheduler teardown is not synchronized.\n",
                task->node.type, task->node.idx);
-        task->thread_running = 0;
-        return 0;
+        atomic_store(&sch->stop_failed, 1);
+        return AVERROR(ret);
     }
 #endif
 
-    av_assert0(ret == 0);
+    if (ret != 0) {
+        av_log(NULL, AV_LOG_ERROR,
+               "[ffmpeg-kit] task_stop: pthread_join failed for node "
+               "type=%d idx=%d: %s\n",
+               task->node.type, task->node.idx, strerror(ret));
+        atomic_store(&sch->stop_failed, 1);
+        return AVERROR(ret);
+    }
     task->thread_running = 0;
 
     return (intptr_t)thread_ret;
@@ -2922,4 +2980,9 @@ int sch_stop(Scheduler *sch, int64_t *finish_ts)
     sch->state = SCH_STATE_STOPPED;
 
     return ret;
+}
+
+int sch_stop_failed(const Scheduler *sch)
+{
+    return sch ? atomic_load(&sch->stop_failed) : 0;
 }
