@@ -118,6 +118,26 @@ FFMPEG_API void ffmpeg_unbind_thread_context(void);
 FFMPEG_API FFmpegContext *ffmpeg_get_current_context(void);
 
 /**
+ * Marks the context as not safe to free because shutdown did not fully join.
+ */
+FFMPEG_API void ffmpeg_mark_shutdown_incomplete(FFmpegContext *ctx);
+
+/**
+ * Returns whether the context must be preserved after ffmpeg_run() returns.
+ */
+FFMPEG_API int ffmpeg_shutdown_incomplete(const FFmpegContext *ctx);
+
+/**
+ * Marks the ffmpeg runtime as quarantined after an incomplete shutdown.
+ */
+FFMPEG_API void ffmpeg_mark_runtime_unrecoverable(void);
+
+/**
+ * Returns whether the ffmpeg runtime has been quarantined.
+ */
+FFMPEG_API int ffmpeg_runtime_is_unrecoverable(void);
+
+/**
  * Free the context and associated resources.
  *
  * @param ctx The context.

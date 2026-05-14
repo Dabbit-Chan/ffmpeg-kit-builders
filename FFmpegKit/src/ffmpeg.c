@@ -1107,6 +1107,14 @@ int ffmpeg_run_internal(FFmpegContext *wrapper_ctx, int argc, char **argv)
     int ret;
     BenchmarkTimeStamps ti;
 
+    if (ffmpeg_runtime_is_unrecoverable()) {
+        av_log(NULL, AV_LOG_ERROR,
+               "[ffmpeg-kit] ffmpeg_run_internal: runtime is quarantined after "
+               "an incomplete prior shutdown; restart the host process before "
+               "starting a new FFmpeg session.\n");
+        return AVERROR(ECANCELED);
+    }
+
     ffmpeg_reset_internal_state();
     ffmpeg_tls_init_options();
 
@@ -1175,10 +1183,20 @@ finish:
     if (ret == AVERROR_EXIT)
         ret = 0;
 
-    ffmpeg_cleanup(ret);
-
-    ffmpeg_set_scheduler(wrapper_ctx, NULL);
-    sch_free(&sch);
+    if (sch && sch_stop_failed(sch)) {
+        av_log(NULL, AV_LOG_ERROR,
+               "[ffmpeg-kit] ffmpeg_run_internal: scheduler shutdown did not "
+               "synchronize with all worker threads. Skipping cleanup to avoid "
+               "freeing live demux state and quarantining the runtime.\n");
+        ffmpeg_mark_shutdown_incomplete(wrapper_ctx);
+        ffmpeg_mark_runtime_unrecoverable();
+        if (ret >= 0)
+            ret = AVERROR(EIO);
+    } else {
+        ffmpeg_cleanup(ret);
+        ffmpeg_set_scheduler(wrapper_ctx, NULL);
+        sch_free(&sch);
+    }
 
     //av_log(NULL, AV_LOG_VERBOSE, "\n");
     //av_log(NULL, AV_LOG_VERBOSE, "Exiting with exit code %d\n", ret);

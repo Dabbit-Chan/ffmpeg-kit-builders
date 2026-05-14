@@ -350,6 +350,7 @@ while [ $# -gt 0 ]; do
 		;;
   --build-tests|--build-test|--test|--tests)
     export build_tests=y
+    source "${SCRIPTDIR}/extract-fate.sh"
 		shift
 		;;
   --build-tests=*|--build-test=*|--test=*|--tests=*)
