@@ -313,21 +313,28 @@ void DLL_ALIGN ffmpeg_kit_handle_release(void *handle) {
   }
 
   if (session) {
-    session->cancel();
+    const SessionState state = session->getState();
+    const bool should_cancel = state == SessionStateRunning;
+
+    if (should_cancel) {
+      session->cancel();
+    }
     /**
      * Block destruction until the native background thread has gracefully exited.
      * We bound this with a 10-second timeout to prevent deadlocking the calling
      * thread (e.g., the Flutter UI isolate) if a session hangs indefinitely.
      */
     bool timed_out = false;
-    auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(10);
-    while (session->getState() == SessionStateRunning) {
-      if (std::chrono::steady_clock::now() > deadline) {
-        std::cerr << "[" << getCurrentTimeStamp() << "] [ffmpeg-kit] [Warning] ffmpeg_kit_handle_release: timed out waiting for session to stop\n";
-        timed_out = true;
-        break;
+    if (should_cancel) {
+      auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(10);
+      while (session->getState() == SessionStateRunning) {
+        if (std::chrono::steady_clock::now() > deadline) {
+          std::cerr << "[" << getCurrentTimeStamp() << "] [ffmpeg-kit] [Warning] ffmpeg_kit_handle_release: timed out waiting for session to stop\n";
+          timed_out = true;
+          break;
+        }
+        std::this_thread::sleep_for(std::chrono::milliseconds(10));
       }
-      std::this_thread::sleep_for(std::chrono::milliseconds(10));
     }
 
     // For FFplay sessions, synchronise with the async execution thread so its
@@ -619,8 +626,8 @@ void DLL_ALIGN ffmpeg_kit_close_session(FFmpegSessionHandle handle) {
 void DLL_ALIGN ffmpeg_kit_debug_print_stack() {
     void* p = nullptr;
     uintptr_t stack_ptr = (uintptr_t)&p;
-    printf("[DEBUG] Entry Stack Pointer: 0x%llx\n", (unsigned long long)stack_ptr);
-    printf("[DEBUG] Alignment: %d\n", (int)(stack_ptr % 16));
+    printf("[%s] [ffmpeg-kit] [DEBUG] Entry Stack Pointer: 0x%llx\n", getCurrentTimeStamp().c_str(), (unsigned long long)stack_ptr);
+    printf("[%s] [ffmpeg-kit] [DEBUG] Alignment: %d\n", getCurrentTimeStamp().c_str(), (int)(stack_ptr % 16));
 }
 
 void DLL_ALIGN ffmpeg_kit_test_emit_unattributed_log(const char *message) {
