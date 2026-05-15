@@ -979,4 +979,6 @@ if(BUILD_TESTS)
     FetchContent_MakeAvailable(googletest)
 
     add_subdirectory(tests)
+
+    install(TARGETS ffmpegkit_tests ffmpegkit_fate_tests DESTINATION bin)
 endif()
