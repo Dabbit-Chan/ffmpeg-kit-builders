@@ -240,6 +240,17 @@ static std::atomic<long> activeFFplaySessionId(0);
 static std::atomic<short> sessionMap[SESSION_MAP_SIZE];
 static std::atomic<int> sessionInTransitMessageCountMap[SESSION_MAP_SIZE];
 static std::atomic<int> unattributedMessagesInTransitCount{0};
+static std::mutex &getSessionMessageDrainMutex() {
+  static auto *mutex = new std::mutex();
+  return *mutex;
+}
+static std::condition_variable &getSessionMessageDrainMonitor() {
+  static auto *monitor = new std::condition_variable();
+  return *monitor;
+}
+static void notifySessionMessageDrain() {
+  getSessionMessageDrainMonitor().notify_all();
+}
 
 /** Holds callback defined to redirect logs */
 static ffmpegkit::LogCallback logCallback;
@@ -583,13 +594,42 @@ static bool fs_create_dir(const std::string &s) {
   return true;
 }
 
+/*
+ * Delete expired sessions from the session history.
+ * This function should only be called while holding the session mutex.
+ * It is the caller's responsibility to acquire the session mutex before calling this function.
+ */
 void deleteExpiredSessions() {
-  while (getSessionHistoryList().size() > sessionHistorySize) {
+  // This function should only be called while holding the session mutex
+  // It is the caller's responsibility to acquire the session mutex before calling this function
+  size_t deletedCount = 0;
+  size_t initialHistorySize = getSessionHistoryList().size();
+  
+  // Fix the infinite loop issue by tracking iterations to prevent hanging
+  size_t iterations = 0;
+  const size_t maxIterations = initialHistorySize; // Prevent infinite loop by limiting iterations
+  
+  while (getSessionHistoryList().size() > sessionHistorySize && iterations < maxIterations) {
+    // Check if list is empty to prevent accessing front() on empty list
+    if (getSessionHistoryList().empty()) {
+      break;
+    }
+    
     auto first = getSessionHistoryList().front();
-    if (first != nullptr) {
+    // Fix the infinite loop issue: if the front session is not deletable, break the loop
+    if (first != nullptr && first->getState() != ffmpegkit::SessionStateCreated && first->getState() != ffmpegkit::SessionStateRunning) {
       getSessionHistoryList().pop_front();
       getSessionHistoryMap().erase(first->getSessionId());
+      deletedCount++;
+    } else {
+      // If the front session is not deletable, we can't delete it, so break to prevent infinite loop
+      break;
     }
+    iterations++;
+  }
+
+  if (deletedCount > 0) {
+    av_log(nullptr, AV_LOG_DEBUG, "[%s] [ffmpeg-kit] [DEBUG] Deleted %zu expired sessions.\n", getCurrentTimeStamp().c_str(), deletedCount);
   }
 }
 
@@ -608,6 +648,7 @@ void addSessionToSessionHistory(
   if (getSessionHistoryMap().count(sessionId) == 0) {
     getSessionHistoryMap().insert({sessionId, session});
     getSessionHistoryList().push_back(session);
+    // deleteExpiredSessions() is called while already holding the session mutex, which is fine by convention
     deleteExpiredSessions();
   }
 
@@ -794,7 +835,7 @@ static void logCallbackDataAdd(int level, AVBPrint *data) {
 
   if (currentSession != nullptr) {
     currentSession->debugLog(
-        "logCallbackDataAdd sessionId: %ld level: %d msg: %s", sessionId, level,
+        "FFmpegKitConfig::logCallbackDataAdd sessionId: %ld level: %d msg: %s", sessionId, level,
         (data->str ? data->str : "NULL"));
   }
 
@@ -839,6 +880,12 @@ static void statisticsCallbackDataAdd(int frameNumber, float fps, float quality,
                            timeElapsed, time, bitrate, speed,
                            currentSession != nullptr, tlsSessionId != 0);
 
+  if (currentSession != nullptr) {
+    currentSession->debugLog(
+        "FFmpegKitConfig::statisticsCallbackDataAdd sessionId: %ld frameNumber: %d fps: %f quality: %f size: %lld timeElapsed: %f time: %f bitrate: %f speed: %f dupFrames: %lld dropFrames: %lld", 
+        sessionId, frameNumber, fps, quality, size, timeElapsed, time, bitrate, speed, dupFrames, dropFrames);
+  }
+  
   std::unique_lock<KitMutex> lock(getCallbackDataMutex(), std::defer_lock);
   CallbackData *callbackData =
       new CallbackData(sessionId, frameNumber, fps, quality, size, timeElapsed,
@@ -956,11 +1003,13 @@ void cancel_operation(long id) {
 static void resetMessagesInTransmit(long sessionId) {
   if (sessionId == 0) {
     std::atomic_store(&unattributedMessagesInTransitCount, 0);
+    notifySessionMessageDrain();
     return;
   }
 
   std::atomic_store(
       &sessionInTransitMessageCountMap[sessionId % SESSION_MAP_SIZE], 0);
+  notifySessionMessageDrain();
 }
 
 /**
@@ -1209,35 +1258,39 @@ void *callbackThreadFunction(void *pointer) {
       CallbackData *callbackData = callbackDataRemove();
 
       if (callbackData != nullptr) {
+        std::unique_ptr<CallbackData> callbackGuard(callbackData);
+        const long sessionId = callbackGuard->getSessionId();
+        struct CallbackDrainGuard {
+          long sessionId;
+          ~CallbackDrainGuard() {
+            if (sessionId == 0) {
+              std::atomic_fetch_sub(&unattributedMessagesInTransitCount, 1);
+            } else {
+              std::atomic_fetch_sub(
+                  &sessionInTransitMessageCountMap[sessionId %
+                                                   SESSION_MAP_SIZE],
+                  1);
+            }
+            notifySessionMessageDrain();
+          }
+        } drainGuard{sessionId};
 
-        if (callbackData->getType() == LogType) {
-          process_log(callbackData->getSessionId(), callbackData->getLogLevel(),
-                      callbackData->getLogData());
+        if (callbackGuard->getType() == LogType) {
+          process_log(sessionId, callbackGuard->getLogLevel(),
+                      callbackGuard->getLogData());
         } else {
 
-          process_statistics(callbackData->getSessionId(),
-                             callbackData->getStatisticsFrameNumber(),
-                             callbackData->getStatisticsFps(),
-                             callbackData->getStatisticsQuality(),
-                             callbackData->getStatisticsSize(),
-                             callbackData->getStatisticsTimeElapsed(),
-                             callbackData->getStatisticsTime(),
-                             callbackData->getStatisticsBitrate(),
-                             callbackData->getStatisticsSpeed(),
-                             callbackData->getStatisticsDupFrames(),
-                             callbackData->getStatisticsDropFrames());
+          process_statistics(sessionId, callbackGuard->getStatisticsFrameNumber(),
+                             callbackGuard->getStatisticsFps(),
+                             callbackGuard->getStatisticsQuality(),
+                             callbackGuard->getStatisticsSize(),
+                             callbackGuard->getStatisticsTimeElapsed(),
+                             callbackGuard->getStatisticsTime(),
+                             callbackGuard->getStatisticsBitrate(),
+                             callbackGuard->getStatisticsSpeed(),
+                             callbackGuard->getStatisticsDupFrames(),
+                             callbackGuard->getStatisticsDropFrames());
         }
-
-        if (callbackData->getSessionId() == 0) {
-          std::atomic_fetch_sub(&unattributedMessagesInTransitCount, 1);
-        } else {
-          std::atomic_fetch_sub(
-              &sessionInTransitMessageCountMap[callbackData->getSessionId() %
-                                               SESSION_MAP_SIZE],
-              1);
-        }
-
-        delete callbackData;
       } else {
 
         callbackWait(100);
@@ -1294,7 +1347,7 @@ executeFFmpeg(const std::shared_ptr<ffmpegkit::FFmpegSession> &session,
   }
   const long sessionId = session->getSessionId();
   std::string sessionStr = std::to_string(sessionId);
-  session->debugLog("executeFFmpeg begin session_handle=%s session_id=%d", sessionStr.c_str(), sessionId);
+  session->debugLog("FFmpegKitConfig::executeFFmpeg begin session_handle=%s session_id=%d", sessionStr.c_str(), sessionId);
   
   bindSessionToThread(session);
 
@@ -1336,13 +1389,13 @@ executeFFmpeg(const std::shared_ptr<ffmpegkit::FFmpegSession> &session,
   }
   clearSessionFromThread();
   if (ffmpeg_shutdown_incomplete(ctx)) {
-    session->debugLog("executeFFmpeg preserving wrapper context after incomplete shutdown session_handle=%s session_id=%d", sessionStr.c_str(), sessionId);
+    session->debugLog("FFmpegKitConfig::executeFFmpeg preserving wrapper context after incomplete shutdown session_handle=%s session_id=%d", sessionStr.c_str(), sessionId);
   } else {
     ffmpeg_free(ctx);
   }
   restoreConfiguredLogState();
 
-  session->debugLog("executeFFmpeg end session_handle=%s session_id=%d", sessionStr.c_str(), sessionId);
+  session->debugLog("FFmpegKitConfig::executeFFmpeg end session_handle=%s session_id=%d", sessionStr.c_str(), sessionId);
 
   return returnCode;
 }
@@ -1355,7 +1408,7 @@ int executeFFprobe(const std::shared_ptr<ffmpegkit::AbstractSession> &session,
   }
   const long sessionId = session->getSessionId();
   std::string sessionStr = std::to_string(sessionId);
-  session->debugLog("executeFFprobe begin session_handle=%s session_id=%d", sessionStr.c_str(), sessionId);
+  session->debugLog("FFmpegKitConfig::executeFFprobe begin session_handle=%s session_id=%d", sessionStr.c_str(), sessionId);
   bindSessionToThread(session);
 
   registerSessionId(sessionId);
@@ -1426,7 +1479,7 @@ int executeFFprobe(const std::shared_ptr<ffmpegkit::AbstractSession> &session,
   ffprobe_free(ctx);
   restoreConfiguredLogState();
 
-  session->debugLog("executeFFprobe end session_handle=%s session_id=%d", sessionStr.c_str(), sessionId);
+  session->debugLog("FFmpegKitConfig::executeFFprobe end session_handle=%s session_id=%d", sessionStr.c_str(), sessionId);
 
   return returnCode;
 }
@@ -1435,12 +1488,12 @@ int executeFFplay(const long sessionId,
                   const std::shared_ptr<std::list<std::string>> arguments) {
   auto session = ffmpegkit::FFmpegKitConfig::getSession(sessionId);
   std::string sessionStr = std::to_string(sessionId);
-  session->debugLog("executeFFplay begin session_handle=%s session_id=%d", sessionStr.c_str(), sessionId);
+  session->debugLog("FFmpegKitConfig::executeFFplay begin session_handle=%s session_id=%d", sessionStr.c_str(), sessionId);
   bindSessionToThread(session);
   globalFFplaySessionId = sessionId;
 
   if (tlsSession != nullptr) {
-    tlsSession->debugLog("FFplayExecute: sessionId: %ld tls Bound", sessionId);
+    tlsSession->debugLog("FFmpegKitConfig::executeFFplay sessionId: %ld tls Bound", sessionId);
   }
   registerSessionId(sessionId);
   resetMessagesInTransmit(sessionId);
@@ -1457,7 +1510,7 @@ int executeFFplay(const long sessionId,
     if (arg == "-h" || arg == "--help" || arg == "-help" || arg == "?") {
       helpRequested = true;
       tlsSession->debugLog(
-          "FFplayExecute: sessionId: %ld ffplay help requested", sessionId);
+          "FFmpegKitConfig::executeFFplay sessionId: %ld ffplay help requested", sessionId);
       break;
     }
   }
@@ -1475,7 +1528,7 @@ int executeFFplay(const long sessionId,
       }
       removeSession(sessionId);
       if (tlsSession != nullptr) {
-        tlsSession->debugLog("FFplayExecute: sessionId: %ld ffplay help "
+        tlsSession->debugLog("FFmpegKitConfig::executeFFplay sessionId: %ld ffplay help "
                              "displayed, returning success",
                              sessionId);
       }
@@ -1483,7 +1536,7 @@ int executeFFplay(const long sessionId,
       globalFFplaySessionId = 0;
       return 0; // Success - help was displayed
     } else if (tlsSession != nullptr) {
-      tlsSession->debugLog("FFplayExecute: sessionId: %ld ffplay_init FAILED",
+      tlsSession->debugLog("FFmpegKitConfig::executeFFplay sessionId: %ld ffplay_init FAILED",
                            sessionId);
     }
     removeSession(sessionId);
@@ -1493,7 +1546,7 @@ int executeFFplay(const long sessionId,
   }
 
   if (tlsSession != nullptr) {
-    tlsSession->debugLog("FFplayExecute: sessionId: %ld ffplay_init SUCCESS",
+    tlsSession->debugLog("FFmpegKitConfig::executeFFplay sessionId: %ld ffplay_init SUCCESS",
                          sessionId);
   }
 
@@ -1542,7 +1595,7 @@ int executeFFplay(const long sessionId,
   ffplay_free(ctx);
   restoreConfiguredLogState();
 
-  session->debugLog("executeFFplay end session_handle=%s session_id=%d", sessionStr.c_str(), sessionId);
+  session->debugLog("FFmpegKitConfig::executeFFplay end session_handle=%s session_id=%d", sessionStr.c_str(), sessionId);
 
   return returnCode;
 }
@@ -1924,8 +1977,6 @@ void ffmpegkit::FFmpegKitConfig::ffmpegExecute(
     const std::shared_ptr<ffmpegkit::FFmpegSession> ffmpegSession) {
   ffmpegSession->startRunning();
   bindSessionToThread(ffmpegSession);
-  ffmpegSession->debugLog("FFmpegKitConfig::ffmpegExecute start session=%ld",
-                          ffmpegSession->getSessionId());
 
   try {
     int returnCodeValue = executeFFmpeg(ffmpegSession, ffmpegSession->getArguments());
@@ -1942,12 +1993,12 @@ void ffmpegkit::FFmpegKitConfig::ffmpegExecute(
 
     auto returnCode = std::make_shared<ffmpegkit::ReturnCode>(returnCodeValue);
     ffmpegSession->complete(returnCode);
-    ffmpegSession->debugLog("FFmpegExecute: sessionId: %ld complete",
+    ffmpegSession->debugLog("FFmpegKitConfig::ffmpegExecute sessionId: %ld complete",
                             ffmpegSession->getSessionId());
     clearSessionFromThread();
   } catch (const std::exception &exception) {
     if (ffmpegSession != nullptr) {
-      ffmpegSession->debugLog("FFmpegExecute: sessionId: %ld exception: %s",
+      ffmpegSession->debugLog("FFmpegKitConfig::ffmpegExecute sessionId: %ld exception: %s",
                               ffmpegSession->getSessionId(), exception.what());
     }
     ffmpegSession->fail(exception.what());
@@ -1979,12 +2030,12 @@ void ffmpegkit::FFmpegKitConfig::ffprobeExecute(
     ffprobeSession->waitForAsynchronousMessagesInTransmit(
         AbstractSession::DefaultTimeoutForAsynchronousMessagesInTransmit);
 
-    ffprobeSession->debugLog("FFprobeExecute: sessionId: %ld complete",
+    ffprobeSession->debugLog("FFmpegKitConfig::ffprobeExecute sessionId: %ld complete",
                              ffprobeSession->getSessionId());
     clearSessionFromThread();
   } catch (const std::exception &exception) {
     if (ffprobeSession != nullptr) {
-      ffprobeSession->debugLog("FFprobeExecute: sessionId: %ld exception: %s",
+      ffprobeSession->debugLog("FFmpegKitConfig::ffprobeExecute sessionId: %ld exception: %s",
                                ffprobeSession->getSessionId(),
                                exception.what());
     }
@@ -2050,7 +2101,7 @@ void ffmpegkit::FFmpegKitConfig::ffplayExecute(
     clearSessionFromThread();
   } catch (const std::exception &exception) {
     if (ffplaySession != nullptr) {
-      ffplaySession->debugLog("FFplayExecute: sessionId: %ld exception: %s",
+      ffplaySession->debugLog("FFmpegKitConfig::ffplayExecute sessionId: %ld exception: %s",
                               sessionId, exception.what());
     }
     activeFFplaySessionId.compare_exchange_strong(sessionId, 0);
@@ -2081,13 +2132,13 @@ void ffmpegkit::FFmpegKitConfig::getMediaInformationExecute(
     mediaInformationSession->complete(returnCode);
     if (returnCode->isValueSuccess()) {
       mediaInformationSession->debugLog(
-          "GetMediaInformationExecute: sessionId: %ld JSON length: %d",
+          "FFmpegKitConfig::getMediaInformationExecute sessionId: %ld JSON length: %d",
           mediaInformationSession->getSessionId(),
           (int)ffprobeJsonOutput.length());
 
       if (ffprobeJsonOutput.empty()) {
         mediaInformationSession->debugLog(
-            "GetMediaInformationExecute: sessionId: %ld empty captured output",
+            "FFmpegKitConfig::getMediaInformationExecute sessionId: %ld empty captured output",
             mediaInformationSession->getSessionId());
       }
 
@@ -2098,13 +2149,13 @@ void ffmpegkit::FFmpegKitConfig::getMediaInformationExecute(
 
       if (mediaInformation != nullptr) {
         mediaInformationSession->debugLog(
-            "GetMediaInformationExecute: sessionId: %ld parsing SUCCESS",
+            "FFmpegKitConfig::getMediaInformationExecute sessionId: %ld parsing SUCCESS",
             mediaInformationSession->getSessionId());
       }
     }
   } catch (const std::exception &exception) {
     mediaInformationSession->debugLog(
-        "GetMediaInformationExecute: sessionId: %ld exception: %s",
+        "FFmpegKitConfig::getMediaInformationExecute sessionId: %ld exception: %s",
         mediaInformationSession->getSessionId(), exception.what());
     mediaInformationSession->fail(exception.what());
     std::cout << "[" << getCurrentTimeStamp()
@@ -2435,7 +2486,11 @@ ffmpegkit::FFmpegKitConfig::logLevelToString(const ffmpegkit::Level level) {
 }
 
 int ffmpegkit::FFmpegKitConfig::getSessionHistorySize() {
-  return sessionHistorySize;
+  std::unique_lock<KitMutex> lock(getSessionMutex(), std::defer_lock);
+  lock.lock();
+  int size = sessionHistorySize;
+  lock.unlock();
+  return size;
 }
 
 void ffmpegkit::FFmpegKitConfig::setSessionHistorySize(
@@ -2446,12 +2501,20 @@ void ffmpegkit::FFmpegKitConfig::setSessionHistorySize(
      * THERE IS A HARD LIMIT ON THE NATIVE SIDE. HISTORY SIZE MUST BE SMALLER
      * THAN SESSION_MAP_SIZE
      */
-    throw std::runtime_error(
-        "Session history size must not exceed the hard limit!");
+    av_log(nullptr, AV_LOG_WARNING,
+           "[%s] [ffmpeg-kit] [WARNING] Session history size must not exceed "
+           "the hard limit of %d!\n",
+           getCurrentTimeStamp().c_str(), SESSION_MAP_SIZE);
+    sessionHistorySize = SESSION_MAP_SIZE;
   } else if (newSessionHistorySize > 0) {
     sessionHistorySize = newSessionHistorySize;
-    deleteExpiredSessions();
   }
+  
+  // Call deleteExpiredSessions while holding the session mutex
+  std::unique_lock<KitMutex> lock(getSessionMutex(), std::defer_lock);
+  lock.lock();
+  deleteExpiredSessions();
+  lock.unlock();
 }
 
 std::shared_ptr<ffmpegkit::Session>
@@ -2741,6 +2804,18 @@ int ffmpegkit::FFmpegKitConfig::messagesInTransmit(const long sessionId) {
 
   return std::atomic_load(
       &sessionInTransitMessageCountMap[sessionId % SESSION_MAP_SIZE]);
+}
+
+bool ffmpegkit::FFmpegKitConfig::waitForSessionMessagesInTransmit(
+    const long sessionId, const int timeout) {
+  if (sessionId == 0 || messagesInTransmit(sessionId) == 0) {
+    return true;
+  }
+
+  std::unique_lock<std::mutex> lock(getSessionMessageDrainMutex());
+  return getSessionMessageDrainMonitor().wait_for(
+      lock, std::chrono::milliseconds(timeout),
+      [sessionId]() { return messagesInTransmit(sessionId) == 0; });
 }
 
 std::string
