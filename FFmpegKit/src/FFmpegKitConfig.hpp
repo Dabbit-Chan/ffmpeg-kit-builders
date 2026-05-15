@@ -564,6 +564,17 @@ public:
   static int messagesInTransmit(const long sessionId);
 
   /**
+   * Waits until all asynchronous messages for the given session are drained or
+   * the timeout elapses.
+   *
+   * @param sessionId id of the session
+   * @param timeout timeout in milliseconds
+   * @return true if the session queue drained before timeout, false otherwise
+   */
+  static bool waitForSessionMessagesInTransmit(const long sessionId,
+                                               const int timeout);
+
+  /**
    * Converts session state to string.
    *
    * @param state session state
