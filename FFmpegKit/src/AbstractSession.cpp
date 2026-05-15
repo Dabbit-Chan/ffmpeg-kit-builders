@@ -69,16 +69,7 @@ static std::string getCurrentTimeStamp() {
 
 void ffmpegkit::AbstractSession::waitForAsynchronousMessagesInTransmit(
     const int timeout) const {
-  std::mutex mutex;
-  std::unique_lock<std::mutex> lock(mutex);
-  std::condition_variable condition_variable;
-  const std::chrono::time_point<std::chrono::system_clock> expireTime =
-      std::chrono::system_clock::now() + std::chrono::milliseconds(timeout);
-
-  while (this->thereAreAsynchronousMessagesInTransmit() &&
-         (std::chrono::system_clock::now() < expireTime)) {
-    condition_variable.wait_for(lock, std::chrono::milliseconds(100));
-  }
+  FFmpegKitConfig::waitForSessionMessagesInTransmit(_sessionId, timeout);
 }
 
 ffmpegkit::LogCallback ffmpegkit::AbstractSession::getLogCallback() const {
@@ -242,7 +233,7 @@ void ffmpegkit::AbstractSession::startRunning() {
     _state = SessionStateRunning;
     _startTime = std::chrono::system_clock::now();
   }
-  this->debugLog("startRunning session=%ld state=RUNNING", _sessionId);
+  this->debugLog("AbstractSession::startRunning session=%ld state=RUNNING", _sessionId);
 }
 
 void ffmpegkit::AbstractSession::complete(
@@ -254,7 +245,7 @@ void ffmpegkit::AbstractSession::complete(
     _endTime = std::chrono::system_clock::now();
     _stateConditionVariable.notify_all();
   }
-  this->debugLog("complete session=%ld state=COMPLETED return=%d", _sessionId, returnCode ? returnCode->getValue() : 0);
+  this->debugLog("AbstractSession::complete session=%ld state=COMPLETED return=%d", _sessionId, returnCode ? returnCode->getValue() : 0);
 }
 
 void ffmpegkit::AbstractSession::fail(const char *error) {
@@ -265,7 +256,7 @@ void ffmpegkit::AbstractSession::fail(const char *error) {
     _endTime = std::chrono::system_clock::now();
     _stateConditionVariable.notify_all();
   }
-  this->debugLog("fail session=%ld state=FAILED error=%s", _sessionId, error ? error : "");
+  this->debugLog("AbstractSession::fail session=%ld state=FAILED error=%s", _sessionId, error ? error : "");
 }
 
 bool ffmpegkit::AbstractSession::isFFmpeg() const {
@@ -289,14 +280,14 @@ bool ffmpegkit::AbstractSession::isFFplay() const {
 }
 
 void ffmpegkit::AbstractSession::cancel() {
-  this->debugLog("cancel session=%ld", _sessionId);
+  this->debugLog("AbstractSession::cancel session=%ld", _sessionId);
   SessionState currentState;
   {
     std::lock_guard<std::mutex> lock(_stateMutex);
     currentState = _state;
   }
   if (currentState == SessionStateRunning) {
-    this->debugLog("cancel dispatch session=%ld", _sessionId);
+    this->debugLog("AbstractSession::cancel dispatch session=%ld", _sessionId);
     FFmpegKit::cancel(_sessionId);
   }
 }
