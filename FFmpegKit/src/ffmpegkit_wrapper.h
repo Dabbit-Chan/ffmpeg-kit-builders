@@ -38,35 +38,108 @@ extern "C" {
 #endif
 
 // Opaque handles
+/**
+ * @brief Opaque FFmpeg session handle used to reference a specific FFmpeg session
+ * 
+ */
 typedef void *FFmpegSessionHandle;
+/**
+ * @brief Opaque FFprobe session handle used to reference a specific FFprobe session
+ * 
+ */
 typedef void *FFprobeSessionHandle;
+/**
+ * @brief Opaque FFplay session handle used to reference a specific FFplay session
+ * 
+ */
 typedef void *FFplaySessionHandle;
+/**
+ * @brief Opaque media information session handle used to reference a specific media information session
+ * 
+ */
 typedef void *MediaInformationSessionHandle;
+/**
+ * @brief Opaque media information handle used to reference a specific media information
+ * 
+ */
 typedef void *MediaInformationHandle;
+/**
+ * @brief Opaque stream information handle used to reference a specific stream information
+ * 
+ */
 typedef void *StreamInformationHandle;
+/**
+ * @brief Opaque chapter handle used to reference a specific chapter
+ * 
+ */
 typedef void *ChapterHandle;
+/**
+ * @brief Opaque statistics handle used to reference a specific statistics
+ * 
+ */
 typedef void *StatisticsHandle;
 
 // Callback function types
 typedef void (*FFmpegKitCompleteCallback)(FFmpegSessionHandle session,
                                           void *user_data);
+/**
+ * @brief Log callback function type
+ * 
+ * @param session The FFmpeg session handle
+ * @param log The log message
+ * @param user_data User data passed to the callback
+ */
 typedef void (*FFmpegKitLogCallback)(FFmpegSessionHandle session,
                                      const char *log, void *user_data);
+/**
+ * @brief Statistics callback function type
+ * 
+ * @param session The FFmpeg session handle
+ * @param time_elapsed Time elapsed in milliseconds
+ * @param time Time in milliseconds
+ * @param size Size in bytes
+ * @param bitrate Bitrate in kbps
+ * @param speed Speed in x
+ * @param videoFrameNumber Video frame number
+ * @param videoFps Video frame rate
+ * @param videoQuality Video quality
+ * @param dupFrames Duplicate frames
+ * @param dropFrames Dropped frames
+ * @param user_data User data passed to the callback
+ */
 typedef void (*FFmpegKitStatisticsCallback)(
     FFmpegSessionHandle session, int64_t time_elapsed, int64_t time,
     int64_t size, double bitrate, double speed, int64_t videoFrameNumber,
     double videoFps, double videoQuality, int64_t dupFrames,
     int64_t dropFrames, void *user_data);
+/**
+ * @brief FFprobe complete callback function type
+ * 
+ * @param session The FFprobe session handle
+ * @param user_data User data passed to the callback
+ */
 typedef void (*FFprobeKitCompleteCallback)(FFprobeSessionHandle session,
                                            void *user_data);
+/**
+ * @brief FFplay complete callback function type
+ * 
+ * @param session The FFplay session handle
+ * @param user_data User data passed to the callback
+ */
 typedef void (*FFplayKitCompleteCallback)(FFplaySessionHandle session,
                                           void *user_data);
+/**
+ * @brief Media information session complete callback function type
+ * 
+ * @param session The media information session handle
+ * @param user_data User data passed to the callback
+ */
 typedef void (*MediaInformationSessionCompleteCallback)(
     MediaInformationSessionHandle session, void *user_data);
 
 /**
  * Frame-ready callback type for desktop (Linux/Windows) video output.
- *
+*
  * Fired inside ffplay_step() on every rendered video frame.
  * Pixel format: RGBA8888 — bytes [R][G][B][A] on little-endian, compatible
  * with Flutter's FlutterDesktopPixelBuffer.
@@ -1735,7 +1808,7 @@ ffmpeg_kit_get_last_completed_session(void);
 /**
  * Gets the session history size.
  *
- * @return the session history size
+ * @return the session history size, should be smaller than 1000
  */
 FFMPEG_KIT_C_EXPORT int64_t ffmpeg_kit_get_session_history_size(void);
 
