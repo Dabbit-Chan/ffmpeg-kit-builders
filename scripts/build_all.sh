@@ -507,7 +507,13 @@ if [[ ${#android_platforms[@]} -gt 0 ]] && truthy "$build_bundle"; then
   else
     remote="--local"
   fi
-  sudo -E bash -c "${WORK_DIR}/scripts/android/build_aar.sh --bundle=${bundles} --reset ${remote} ${SNAPSHOT}"
+  export GITHUB_USERNAME="$(get_github_owner)" && \
+  export GITHUB_REPO="$(get_github_repo)" && \
+  export GITHUB_PASSWORD="$(get_github_token)" && \
+  export GITHUB_PASSWORD_CLASSIC="$(get_github_token_classic)" && \
+  export OSSRH_USERNAME="$(get_maven_username)" && \
+  export OSSRH_PASSWORD="$(get_maven_password)" && \
+  "${WORK_DIR}/scripts/android/build_aar.sh" --bundle="${bundles}" --reset "${remote}" "${SNAPSHOT}"
 fi
 
 # Build XCFrameworks for Apple platforms

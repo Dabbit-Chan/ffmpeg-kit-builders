@@ -212,12 +212,15 @@ fix_pkgconfig_flags() {
 }
 
 ffmpeg_patches() {
-	if isandroid && [[ "$host_arch" == "armv7a" ]]; then
-		echo "INFO: Patching ffmpeg for Android armv7a..." >>"$LOG_FILE"
-		if [[ -f "$ffmpeg_source_dir/libavutil/hwcontext_vulkan.c" ]]; then
-			sed -i 's/static VkBool32 VKAPI_CALL vk_dbg_callback/static VKAPI_ATTR VkBool32 VKAPI_CALL vk_dbg_callback/' "$ffmpeg_source_dir/libavutil/hwcontext_vulkan.c"
+	if isandroid; then
+		echo "INFO: Patching ffmpeg for Android..." >>"$LOG_FILE"
+		copy_path "$PATCHDIR/binder.c" "$ffmpeg_source_dir/compat/android/binder.c" "-f"
+		if [[ "$host_arch" == "armv7a" ]]; then		
+			if [[ -f "$ffmpeg_source_dir/libavutil/hwcontext_vulkan.c" ]]; then
+				sed -i 's/static VkBool32 VKAPI_CALL vk_dbg_callback/static VKAPI_ATTR VkBool32 VKAPI_CALL vk_dbg_callback/' "$ffmpeg_source_dir/libavutil/hwcontext_vulkan.c"
+			fi
 		fi
-		echo "INFO: Done patching ffmpeg for Android armv7a." >>"$LOG_FILE"
+		echo "INFO: Done patching ffmpeg for Android." >>"$LOG_FILE"
 	fi
 }
 

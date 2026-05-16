@@ -53,12 +53,7 @@ set(FFMPEG_KIT_BUNDLE_TYPE "" CACHE STRING "Bundle type override")
 set(FFMPEG_KIT_VERSION "" CACHE STRING "FFmpegKit version override")
 
 # Define Paths
-set(FFMPEG_SRC_DIR "" CACHE PATH "Path to FFmpeg source directory (fftools)")
 set(FFMPEG_BUILD_DIR "" CACHE PATH "Path to FFmpeg build directory (libs)")
-
-if(NOT FFMPEG_SRC_DIR OR NOT EXISTS "${FFMPEG_SRC_DIR}/fftools")
-    message(FATAL_ERROR "FFMPEG_SRC_DIR is invalid. Point it to the FFmpeg source root.")
-endif()
 
 if(NOT FFMPEG_BUILD_DIR OR NOT EXISTS "${FFMPEG_BUILD_DIR}/include/config.h")
     message(FATAL_ERROR "FFMPEG_BUILD_DIR is invalid. It must contain include/config.h")
