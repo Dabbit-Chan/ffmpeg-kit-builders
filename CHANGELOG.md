@@ -1,6 +1,6 @@
 # FFmpegKit Changelog
 
-## Version 0.10.1
+## Version 0.10.2
 
 - Added null pointer checks to wrapper functions for robustness.
 - Extended Statistics class with dupFrames and dropFrames fields, and added corresponding getters to wrapper.
@@ -9,10 +9,12 @@
 - Reworked log attribution and callback transmission paths so concurrent FFmpeg, FFprobe, and FFplay sessions preserve session ownership more reliably under cancellation and parallel execution.
 - Fixed media information parsing to use raw ffprobe JSON output directly instead of reconstructing it from session logs.
 - Improved cancellation handoff so stalled and mid-stream sessions unwind correctly and `onComplete` callbacks fire after cancellation.
-- Hardened session/input/output access paths and cancellation-related state checks to reduce crashes during parallel execution, repeated cancellation, and teardown races.
-- Fixed MinGW/Windows thread-local storage handling for FFmpeg option state by switching the shared DLL build to a safer TLS path for concurrent sessions.
 - Fixed Windows build portability issues in logging/debug helpers and test support code, including MinGW-safe time/thread handling and test-suite compatibility fixes.
 - Added regression coverage for parallel log attribution, mixed FFmpeg/FFprobe cancellation, mid-stream termination, and unattributed callback handling.
+- **Android**: Fixed binder threadpool crash.
+- **Windows**: Fixed crashes due to:
+  - Hardened session/input/output access paths and cancellation-related state checks to reduce crashes during parallel execution, repeated cancellation, and teardown races.
+  - Fixed MinGW/Windows thread-local storage handling for FFmpeg option state by switching the shared DLL build to a safer TLS path for concurrent sessions.
 
 ## Version 0.10.0
  
