@@ -587,7 +587,7 @@ int mux_check_init(void *arg)
     mux->header_written = 1;
 
     av_dump_format(fc, of->index, fc->url, 1);
-    atomic_fetch_add(&nb_output_dumped, 1);
+    ffmpeg_increment_output_dumped();
 
     return 0;
 }

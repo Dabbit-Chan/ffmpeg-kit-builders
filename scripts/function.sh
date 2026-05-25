@@ -4537,6 +4537,7 @@ create_ffmpeg_kit_release() {
     zip_dir "$ffmpeg_kit_bundle" "$work_dir/releases/$out_dir"
     echo -e "INFO: Done creating release bundle at $work_dir/releases/$out_dir.zip" | tee -a "$LOG_FILE"
     truthy "$create_release_clean" && clean_builds "$create_release_clean_type"
+    truthy "$create_release_clean" && clean_builds "$create_release_clean_type"
     if [[ "$create_release" == "remote" ]]; then
       create_github_release "$work_dir/releases/$out_dir.zip"
     fi

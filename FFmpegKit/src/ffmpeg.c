@@ -111,8 +111,6 @@ static BenchmarkTimeStamps get_benchmark_time_stamps(void);
 static int64_t getmaxrss(void);
 extern void ffmpeg_tls_init_options(void);
 
-FFMPEG_THREAD_LOCAL atomic_uint nb_output_dumped = 0;
-
 static FFMPEG_THREAD_LOCAL BenchmarkTimeStamps current_time;
 FFMPEG_THREAD_LOCAL AVIOContext *progress_avio = NULL;
 
@@ -656,7 +654,9 @@ static void print_report(int is_last_report, int64_t timer_start, int64_t cur_ti
             last_time = cur_time;
         }
         if (((cur_time - last_time) < stats_period && !first_report) ||
-            (first_report && atomic_load(&nb_output_dumped) < nb_output_files))
+            (first_report &&
+             ffmpeg_get_output_dumped(ffmpeg_get_current_context()) <
+                 nb_output_files))
             return;
         last_time = cur_time;
     }
@@ -1077,7 +1077,7 @@ void ffmpeg_reset_internal_state(void)
     nb_output_files = 0;
     nb_filtergraphs = 0;
     nb_decoders = 0;
-    nb_output_dumped = 0;
+    ffmpeg_reset_output_dumped(ffmpeg_get_current_context());
     
     // Free arrays if they exist (safety check)
     av_freep(&input_files);

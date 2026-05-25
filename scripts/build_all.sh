@@ -548,4 +548,3 @@ if [[ -n "${apple_platforms_str}" ]] && truthy "$build_bundle"; then
   fi
   sudo -E bash -c "${WORK_DIR}/scripts/apple/build_xcframework.sh --platform=${apple_platforms_str} --bundle=${bundles} --reset ${remote}"
 fi
-
