@@ -6,7 +6,6 @@
 - Moved the output-header progress counter from thread-local FFmpeg state into the shared FFmpegContext.
 - Updated muxer worker threads to increment the shared context counter so the transcode control thread can detect when output initialization has completed.
 - Restored periodic print_report() execution after muxer header write, allowing statistics callbacks to fire continuously during long-running transcodes.
-- Kept the fix scoped to native FFmpegKit code; no Dart bridge changes were required for this issue.
 
 ## Version 0.10.2
 
