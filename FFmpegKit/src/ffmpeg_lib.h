@@ -118,6 +118,23 @@ FFMPEG_API void ffmpeg_unbind_thread_context(void);
 FFMPEG_API FFmpegContext *ffmpeg_get_current_context(void);
 
 /**
+ * Increments the number of output files whose muxer header has been written
+ * for the current thread-bound context.
+ */
+FFMPEG_API void ffmpeg_increment_output_dumped(void);
+
+/**
+ * Returns the number of output files whose muxer header has been written for
+ * the given context.
+ */
+FFMPEG_API unsigned ffmpeg_get_output_dumped(FFmpegContext *ctx);
+
+/**
+ * Resets the output-dumped counter for the given context.
+ */
+FFMPEG_API void ffmpeg_reset_output_dumped(FFmpegContext *ctx);
+
+/**
  * Marks the context as not safe to free because shutdown did not fully join.
  */
 FFMPEG_API void ffmpeg_mark_shutdown_incomplete(FFmpegContext *ctx);

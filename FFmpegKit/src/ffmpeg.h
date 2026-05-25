@@ -795,8 +795,6 @@ extern FFMPEG_THREAD_LOCAL OptionDef options[];
 
 extern FFMPEG_THREAD_LOCAL HWDevice *filter_hw_device;
 
-extern FFMPEG_THREAD_LOCAL atomic_uint nb_output_dumped;
-
 extern FFMPEG_THREAD_LOCAL int ignore_unknown_streams;
 extern FFMPEG_THREAD_LOCAL int copy_unknown_streams;
 

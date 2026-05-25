@@ -59,6 +59,7 @@ struct FFmpegContext {
   char **argv;
   atomic_int cancelled;
   atomic_int shutdown_incomplete;
+  atomic_uint output_dumped;
   int files_parsed;
   long session_id;
 };
@@ -218,6 +219,21 @@ FFmpegContext *ffmpeg_get_current_context(void) {
   return current_ffmpeg_context;
 }
 
+void ffmpeg_increment_output_dumped(void) {
+  FFmpegContext *ctx = ffmpeg_get_current_context();
+  if (ctx)
+    atomic_fetch_add(&ctx->output_dumped, 1);
+}
+
+unsigned ffmpeg_get_output_dumped(FFmpegContext *ctx) {
+  return ctx ? atomic_load(&ctx->output_dumped) : 0;
+}
+
+void ffmpeg_reset_output_dumped(FFmpegContext *ctx) {
+  if (ctx)
+    atomic_store(&ctx->output_dumped, 0);
+}
+
 void ffmpeg_mark_shutdown_incomplete(FFmpegContext *ctx) {
   if (!ctx)
     return;
@@ -282,11 +298,8 @@ float ffmpeg_get_progress(FFmpegContext *ctx) {
   if (!ctx || !ctx->files_parsed)
     return 0.0f;
 
-  // nb_output_dumped and nb_output_files are globals in ffmpeg.c
-  // strictly speaking, we should lock to read these if they change,
-  // but for a simple progress bar, a torn read is usually acceptable risk.
   if (nb_output_files > 0) {
-    return (float)nb_output_dumped / nb_output_files;
+    return (float)ffmpeg_get_output_dumped(ctx) / nb_output_files;
   }
   return 0.0f;
 }
