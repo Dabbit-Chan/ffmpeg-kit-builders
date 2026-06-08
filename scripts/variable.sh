@@ -80,6 +80,13 @@ CONFIG_ANDROID=" \
 --enable-openssl \
 --enable-mediacodec"
 
+# OpenHarmony / HarmonyOS general (software-only first stage; ohcodec is opt-in)
+CONFIG_OH="\
+--enable-openssl"
+
+# OpenHarmony / HarmonyOS non-free
+CONFIG_OH_NON_FREE=""
+
 CONFIG_WINDOWS="\
 --enable-d3d11va \
 --enable-d3d12va \

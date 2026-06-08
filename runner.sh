@@ -671,6 +671,9 @@ if [[ $host_platform == "iphonesimulator" ]]; then
 	source_platform="ios"
 elif [[ $host_platform == "appletvsimulator" ]]; then
   source_platform="appletvos"
+elif [[ $host_platform == "harmony" ]] || [[ $host_platform == "oh" ]] || [[ $host_platform == "ohos" ]] || [[ $host_platform == "openharmony" ]] || [[ $host_platform == "open-harmony" ]] || [[ $host_platform == "open_harmony" ]]; then
+  source_platform="harmony"
+  export host_platform="harmony"
 else
 	source_platform="$host_platform"
 fi

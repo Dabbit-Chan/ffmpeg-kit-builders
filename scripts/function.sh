@@ -367,6 +367,7 @@ setup_build_environment() {
         "iphonesimulator") setup_ios_environment "iphonesimulator" ;;
         "appletvos") setup_tvos_environment "appletvos" ;;
         "appletvsimulator") setup_tvos_environment "appletvsimulator" ;;
+        "harmony") setup_harmony_environment ;;
         *) exit_message 1 "setup_build_environment: Unknown host platform '$host_platform'" ;;
     esac
     create_dir "$src_dir"
@@ -850,6 +851,121 @@ setup_tvos_environment() {
     create_dir "$dependency_install_prefix/{bin,lib/pkgconfig,include,usr/include}"
 }
 
+setup_harmony_environment() {
+    export PATCHDIR="$SCRIPTDIR/harmony/patches"
+
+    # OpenHarmony Native SDK detection. OHOS_SDK_HOME should point at the
+    # `native/` directory of the OpenHarmony SDK (the layer containing
+    # `llvm/`, `sysroot/`, `build/cmake/ohos.toolchain.cmake` and
+    # `oh-uni-package.json`). HARMONYOS_ADAPTATION.md documents the layout.
+    if [[ -z "$OHOS_SDK_HOME" ]]; then
+        if [[ -d "/opt/ohos-sdk/native" ]]; then
+            export OHOS_SDK_HOME="/opt/ohos-sdk/native"
+        elif [[ -d "$HOME/ohos-sdk/native" ]]; then
+            export OHOS_SDK_HOME="$HOME/ohos-sdk/native"
+        fi
+    fi
+    if [[ -z "$OHOS_SDK_HOME" ]] || [[ ! -d "$OHOS_SDK_HOME" ]]; then
+        exit_message 1 "setup_harmony_environment: OHOS_SDK_HOME is not set or directory missing. Point it at the OpenHarmony Native SDK 'native/' directory (see HARMONYOS_ADAPTATION.md)."
+    fi
+    if [[ ! -d "$OHOS_SDK_HOME/llvm/bin" ]] || [[ ! -d "$OHOS_SDK_HOME/sysroot" ]]; then
+        exit_message 1 "setup_harmony_environment: '$OHOS_SDK_HOME' does not look like a valid OpenHarmony Native SDK (missing llvm/bin or sysroot)."
+    fi
+
+    # Map host_arch to OpenHarmony target triple, FFmpeg --arch and
+    # ohos.toolchain.cmake OHOS_ARCH value. We accept both the Android-style
+    # ABI names (arm64-v8a / armeabi-v7a / x86_64) and the raw FFmpeg
+    # arch names (aarch64 / armv7a / x86_64); the former are recommended
+    # because they map 1:1 to -DOHOS_ARCH=, see HARMONYOS_ADAPTATION.md.
+    case "$host_arch" in
+        "x86_64")
+            export host_arch="x86_64"
+            export cmake_host_arch="x86_64"
+            export host_target="x86_64-linux-ohos"
+            export clang_target_triple="x86_64-linux-ohos"
+            export clang_wrapper_triple="x86_64-unknown-linux-ohos"
+            export clang_arch="x86_64"
+            export ohos_abi="x86_64"
+            ;;
+        "aarch64"|"arm64"|"arm64-v8a")
+            export host_arch="aarch64"
+            export cmake_host_arch="aarch64"
+            export host_target="aarch64-linux-ohos"
+            export clang_target_triple="aarch64-linux-ohos"
+            export clang_wrapper_triple="aarch64-unknown-linux-ohos"
+            export clang_arch="aarch64"
+            export ohos_abi="arm64-v8a"
+            ;;
+        "armv7a"|"arm"|"armeabi-v7a")
+            export host_arch="armv7a"
+            export cmake_host_arch="armv7-a"
+            export host_target="arm-linux-ohos"
+            export clang_target_triple="arm-linux-ohos"
+            export clang_wrapper_triple="armv7-unknown-linux-ohos"
+            export clang_arch="arm"
+            export ohos_abi="armeabi-v7a"
+            ;;
+        *)
+            exit_message 1 "setup_harmony_environment: Unsupported host arch '$host_arch' for $host_platform"
+            ;;
+    esac
+
+    export dependency_install_prefix="$work_dir/libraries"
+    export install_pkgconfig_dir="${dependency_install_prefix}/lib/pkgconfig"
+
+    export toolchain_bin_path="$OHOS_SDK_HOME/llvm/bin"
+    export toolchain_include_path="$OHOS_SDK_HOME/sysroot/usr/include"
+    export toolchain_lib_path="$OHOS_SDK_HOME/sysroot/usr/lib/${clang_target_triple}"
+    export SYSROOT="$OHOS_SDK_HOME/sysroot"
+
+    # Use the bare clang with --target rather than the *-clang wrappers so the
+    # value of CC is portable across the wrapper-name variations and matches
+    # what the Meson cross-files, CMake toolchain and FFmpeg configure expect.
+    export cross_prefix=""
+    export CROSS_COMPILE="${clang_target_triple}-"
+    export PKG_CONFIG_PATH=""
+    export PKG_CONFIG_LIBDIR="$install_pkgconfig_dir:$ffmpeg_install_prefix/lib/pkgconfig"
+    export PKG_CONFIG_SYSROOT_DIR="/"
+    export PATH="$toolchain_bin_path:$original_path:$ffmpeg_install_prefix/bin"
+
+    create_dir "$install_pkgconfig_dir"
+    create_dir "$work_dir/pkgconfig"
+    create_dir "$dependency_install_prefix/{bin,lib/pkgconfig,include,usr/include}"
+
+    reset_cross_vars
+    local _ohos_target_flag="--target=${clang_target_triple} --sysroot=${SYSROOT}"
+    export CC="${toolchain_bin_path}/clang ${_ohos_target_flag}"
+    export CXX="${toolchain_bin_path}/clang++ ${_ohos_target_flag}"
+    export AR="${toolchain_bin_path}/llvm-ar"
+    export AS="${toolchain_bin_path}/clang ${_ohos_target_flag}"
+    export NM="${toolchain_bin_path}/llvm-nm"
+    export RANLIB="${toolchain_bin_path}/llvm-ranlib"
+    export STRIP="${toolchain_bin_path}/llvm-strip"
+    export LD="${toolchain_bin_path}/clang ${_ohos_target_flag}"
+
+    export PREFIX="$dependency_install_prefix"
+    export build_cross_compile=y
+
+    export harmony_cflags="$original_cflags \
+-fPIC \
+-Wno-error=implicit-function-declaration \
+-Wno-error=int-conversion \
+-Wno-error=macro-redefined \
+-Wno-macro-redefined \
+-Wno-unused-command-line-argument \
+-I${toolchain_include_path} \
+-I${dependency_install_prefix}/include"
+    [[ "$host_arch" == "armv7a" ]] && harmony_cflags+=" -march=armv7-a -mfloat-abi=softfp -mfpu=vfpv3-d16 "
+
+    export CFLAGS="$harmony_cflags"
+    export harmony_cxxflags="$original_cxxflags $harmony_cflags"
+    export CXXFLAGS="$harmony_cxxflags"
+    export harmony_cppflags="$original_cppflags -I${toolchain_include_path} -I${dependency_install_prefix}/include"
+    export CPPFLAGS="$harmony_cppflags"
+    export harmony_ldflags="$original_ldflags -L${dependency_install_prefix}/lib -L${toolchain_lib_path}"
+    export LDFLAGS="$harmony_ldflags"
+}
+
 iswindows() {
   if [[ "$host_platform" == "windows" ]]; then
     return 0
@@ -901,6 +1017,13 @@ istvos() {
 
 istvossimulator() {
   if [[ "$host_platform" == "appletvsimulator" ]]; then
+    return 0
+  fi
+  return 1
+}
+
+isharmony() {
+  if [[ "$host_platform" == "harmony" ]]; then
     return 0
   fi
   return 1
@@ -3833,6 +3956,10 @@ configure_ffmpeg() {
     fix_pkgconfig_flags
     init_options+=" --host-cc=$(command -v cc)"
   fi
+  if isharmony; then
+    fix_pkgconfig_flags
+    init_options+=" --host-cc=$(command -v cc)"
+  fi
   # Common compiler flags for Windows    
   if ismacos || isios || isiossimulator; then
     get_gas_preprocessor
@@ -3870,6 +3997,38 @@ configure_ffmpeg() {
     init_options+=" --disable-programs"
     if [[ "$host_arch" == "armv7a" ]]; then
       # these do not support 32bit architecture
+      disable_library "libsvtav1"
+      disable_library "libxevd"
+      disable_library "libxeve"
+    fi
+  elif isharmony; then
+    # OpenHarmony cross-compile. We use bare clang with --target/--sysroot
+    # baked into CC/CXX/LD by setup_harmony_environment, so we just point
+    # FFmpeg at those wrappers. Target OS is 'linux' for broad
+    # compatibility; FFmpeg 6.1+ also accepts target-os=ohos but the linux
+    # mapping yields the same effective config and avoids requiring a
+    # newer FFmpeg version.
+    export PKG_CONFIG_SYSROOT_DIR="/"
+    export PKG_CONFIG_LIBDIR="$install_pkgconfig_dir:$ffmpeg_install_prefix/lib/pkgconfig"
+    export AS="$CC"
+    export LD="$CXX"
+    export LDFLAGS="$LDFLAGS -Wl,--allow-multiple-definition"
+    init_options+=" --cc=$CC"
+    init_options+=" --cxx=$CXX"
+    init_options+=" --ld=$CXX"
+    init_options+=" --ar=$AR"
+    init_options+=" --as=$CC"
+    init_options+=" --nm=$NM"
+    init_options+=" --ranlib=$RANLIB"
+    init_options+=" --strip=$STRIP"
+    init_options+=" --sysroot=$SYSROOT"
+    init_options+=" --target-os=linux"
+    init_options+=" --enable-pthreads"
+    init_options+=" --extra-ldflags='$LDFLAGS'"
+    init_options+=" --extra-ldexeflags='$LDFLAGS'"
+    init_options+=" --disable-programs"
+    add_extra_libs "-lm -ldl"
+    if [[ "$host_arch" == "armv7a" ]]; then
       disable_library "libsvtav1"
       disable_library "libxevd"
       disable_library "libxeve"
@@ -3914,7 +4073,7 @@ configure_ffmpeg() {
 
 	if ! islinux; then
     init_options+=" --enable-cross-compile"
-    ! isandroid && ! isios && init_options+=" --cross-prefix=$cross_prefix"
+    ! isandroid && ! isios && ! isharmony && init_options+=" --cross-prefix=$cross_prefix"
   fi
 
   if iswindows; then
@@ -4917,16 +5076,21 @@ pick_host_platform() {
     export toolchain_sys="appletvsimulator"
     apply_preset "$CONFIG_IOS"
   }
+  set_harmony() {
+    export host_platform="harmony"
+    export toolchain_sys="harmony"
+    apply_preset "$CONFIG_OH"
+  }
 	if truthy "$accept_defaults" && [[ -z "$1" ]]; then
     set_linux
     return 0
   fi
   unknown_opts=()
-  if [[ ! "$1" =~ ^([1-9]|linux|windows|android|mac(os)?|iphone(os|simulator)?|ios(-sim(ulator)?)?|iphonesim(ulator)?|tvos(-sim(ulator)?)?|appletvos|appletvsim(ulator)?)$ ]]; then
+  if [[ ! "$1" =~ ^([1-9]|10|linux|windows|android|mac(os)?|iphone(os|simulator)?|ios(-sim(ulator)?)?|iphonesim(ulator)?|tvos(-sim(ulator)?)?|appletvos|appletvsim(ulator)?|harmony|oh|ohos|openharmony|open-harmony|open_harmony)$ ]]; then
      unknown_opts+=("$1")
    fi
   export host_platform=${1:-host_platform}
-	while [[ ! "${host_platform,,}" =~ ^([1-9]|linux|windows|android|mac(os)?|iphone(os|simulator)?|ios(-sim(ulator)?)?|iphonesim(ulator)?|tvos(-sim(ulator)?)?|appletvos|appletvsim(ulator)?)$ ]]; do
+	while [[ ! "${host_platform,,}" =~ ^([1-9]|10|linux|windows|android|mac(os)?|iphone(os|simulator)?|ios(-sim(ulator)?)?|iphonesim(ulator)?|tvos(-sim(ulator)?)?|appletvos|appletvsim(ulator)?|harmony|oh|ohos|openharmony|open-harmony|open_harmony)$ ]]; do
 		# shellcheck disable=SC2199
 		if [[ -n "${unknown_opts[@]}" ]]; then
 			echo -e -n 'Unknown option(s)'
@@ -4947,8 +5111,9 @@ Which host platform are you trying to build, update, or clean for?
   7. Apple TV
   8. Apple TV-Simulator
   9. Exit
+  10. OpenHarmony / HarmonyOS
 EOF
-		echo -e -n 'Input your choice [1-9]: '
+		echo -e -n 'Input your choice [1-10]: '
 		read -r host_platform
 	done
   if [[ -z "$host_platform" ]] && truthy "$accept_defaults"; then
@@ -4983,6 +5148,9 @@ EOF
   ;;
 	9)
   exit_message 0 "pick_host_platform: exiting"
+  ;;
+  10|harmony|oh|ohos|openharmony|open-harmony|open_harmony) set_harmony
+  return 0
   ;;
 	*)
   unknown_opts+=("$host_platform")

@@ -172,7 +172,7 @@ function(replace_static_with_shared INPUT_LIB OUTPUT_VAR)
     if(INPUT_LIB MATCHES "\\.a$" OR INPUT_LIB MATCHES "\\.lib$")
         if(WIN32)
             string(REPLACE ".a" ".dll" SHARED_PATH "${INPUT_LIB}")
-        elseif(CMAKE_SYSTEM_NAME STREQUAL "Linux" OR CMAKE_SYSTEM_NAME STREQUAL "Android")
+        elseif(CMAKE_SYSTEM_NAME STREQUAL "Linux" OR CMAKE_SYSTEM_NAME STREQUAL "Android" OR CMAKE_SYSTEM_NAME STREQUAL "OHOS")
             string(REPLACE ".a" ".so" SHARED_PATH "${INPUT_LIB}")
         elseif(APPLE)
             string(REPLACE ".a" ".dylib" SHARED_PATH "${INPUT_LIB}")
@@ -665,6 +665,40 @@ elseif(ANDROID)
         "-Wl,--as-needed"
         # "-Wl,--verbose"
     )
+elseif(OHOS)
+    # OpenHarmony / HarmonyOS native build
+    # The OHOS toolchain (ohos.toolchain.cmake) defines OHOS=1, OHOS_ARCH,
+    # OHOS_PLATFORM and pre-sets CMAKE_SYSTEM_NAME to OHOS.
+    target_compile_definitions(ffmpegkit PRIVATE
+        TARGET_OS_OHOS
+        OHOS_PLATFORM
+        _FORTIFY_SOURCE=2
+    )
+
+    target_compile_options(ffmpegkit PRIVATE
+        -fstack-protector-strong
+        -fvisibility=default
+        -fPIC
+    )
+
+    # Core system libraries available in the OpenHarmony Native sysroot.
+    # ohcodec is provided by libnative_media_* under
+    # $OHOS_SDK_HOME/sysroot/usr/lib/<triple>/ and is linked by FFmpeg at
+    # FFmpeg-configure time when --enable-ohcodec is set, so we only need
+    # the basics here.
+    target_link_libraries(ffmpegkit PRIVATE
+        m
+        z
+        dl
+    )
+
+    target_link_options(ffmpegkit PRIVATE
+        "-Wl,-z,relro"
+        "-Wl,-z,now"
+        "-Wl,-z,noexecstack"
+        "-Wl,--allow-multiple-definition"
+        "-Wl,--as-needed"
+    )
 elseif(APPLE)
     # iOS/macOS platform configuration
     target_compile_definitions(ffmpegkit PRIVATE TARGET_OS_APPLE _FORTIFY_SOURCE=2)
@@ -794,6 +828,13 @@ if(BUILD_SHARED_LIBS)
                 ${BUNDLE_LIBRARIES}
             )
         elseif(ANDROID)
+            target_link_libraries(ffmpegkit PRIVATE
+                "-Wl,--whole-archive"
+                ${FFMPEG_STATIC_LIBS}
+                "-Wl,--no-whole-archive"
+                ${BUNDLE_LIBRARIES}
+            )
+        elseif(OHOS)
             target_link_libraries(ffmpegkit PRIVATE
                 "-Wl,--whole-archive"
                 ${FFMPEG_STATIC_LIBS}
