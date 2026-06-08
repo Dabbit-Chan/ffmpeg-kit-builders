@@ -101,6 +101,11 @@ ENV RUSTUP_HOME=/usr/local/rustup \
     CARGO_HOME=/usr/local/cargo \
     PATH=/usr/local/cargo/bin:$PATH
 
+# Install rustup + stable toolchain into $RUSTUP_HOME / $CARGO_HOME
+RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | \
+    sh -s -- -y --no-modify-path --default-toolchain stable --profile minimal && \
+    chmod -R a+w "$RUSTUP_HOME" "$CARGO_HOME"
+
 RUN echo 'export RUSTUP_HOME=/usr/local/rustup' >> /etc/profile.d/rust.sh && \
     echo 'export CARGO_HOME=/usr/local/cargo' >> /etc/profile.d/rust.sh && \
     echo 'export PATH=/usr/local/cargo/bin:$PATH' >> /etc/profile.d/rust.sh && \
