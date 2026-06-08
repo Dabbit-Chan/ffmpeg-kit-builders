@@ -175,6 +175,12 @@ pkg-config = 'pkg-config'
 cmake = 'cmake'
 
 [host_machine]
+# OpenHarmony is a Linux-kernel + musl-libc OS. Meson doesn't have an
+# 'ohos' system value; using 'linux' makes libraries that gate on
+# host_machine.system() == 'linux' take their Linux paths, which is the
+# behavior we want for the kernel-level interfaces. Library-specific
+# OpenHarmony quirks (e.g. -landroid being absent) are handled in the
+# per-library build_* functions.
 system = 'linux'
 cpu_family = '$cpu_family'
 cpu = '$host_arch'

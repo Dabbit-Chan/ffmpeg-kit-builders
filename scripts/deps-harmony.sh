@@ -4,7 +4,7 @@
 
 declare -A SUB_DEPENDENCIES
 
-SUB_DEPENDENCIES[build_libjsoncpp]="build_libunwind"
+SUB_DEPENDENCIES[build_libjsoncpp]=""
 SUB_DEPENDENCIES[build_jni]=""
 SUB_DEPENDENCIES[build_ladspa]="build_libsndfile build_libid3tag build_libmp3lame"
 SUB_DEPENDENCIES[build_mediacodec]=""

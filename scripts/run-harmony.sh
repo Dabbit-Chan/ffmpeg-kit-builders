@@ -4270,7 +4270,7 @@ build_opengl() {
 # build_openssl           # config_options+= --enable-openssl             # enable openssl, needed for https support if gnutls, libtls or mbedtls is not used [no]
 build_openssl() {
   local lib="openssl"
-  # https://github.com/openssl/openssl 
+  # https://github.com/openssl/openssl
   local repo="https://github.com/openssl/openssl"
   local repo_ver="openssl-3.6.0"
   change_dir "$src_dir"
@@ -4278,24 +4278,33 @@ build_openssl() {
   change_dir "$src_dir/$lib"
   install_missing_packages perl-IPC-Cmd perl-Time-Piece
   touch "no.autoreconf"
-  local ssl_target="android-${host_arch}"
+  # OpenSSL has no native 'ohos' target. Use its generic linux-* targets and
+  # let our exported CC / AR / RANLIB (set up by setup_harmony_environment to
+  # point at the OpenHarmony clang wrappers with --target=<triple>) do the
+  # cross-compile work. The CROSS_COMPILE env var is intentionally cleared
+  # because OpenSSL would otherwise prepend it to gcc/ar names that don't
+  # exist in the OpenHarmony SDK.
+  local ssl_target
   case "$host_arch" in
     "x86_64")
-      local ssl_target="android-x86_64"
+      ssl_target="linux-x86_64"
       ;;
     "aarch64")
-      local ssl_target="android-arm64"
+      ssl_target="linux-aarch64"
       ;;
     "armv7a")
-      local ssl_target="android-arm"
+      ssl_target="linux-armv4"
       ;;
     *)
-      exit_message 1 "build_openssl: Unsupported host arch '$host_arch' for Android"
+      exit_message 1 "build_openssl: Unsupported host arch '$host_arch' for OpenHarmony"
       ;;
   esac
+  local _saved_cross_compile="$CROSS_COMPILE"
+  unset CROSS_COMPILE
   do_configure "$ssl_target --release --prefix=$dependency_install_prefix --openssldir=$dependency_install_prefix/ssl --libdir=lib no-shared no-tests no-docs no-demos no-legacy"
   disable_nonessential "$src_dir/$lib"
   do_make_and_make_install
+  export CROSS_COMPILE="$_saved_cross_compile"
   find "$dependency_install_prefix/lib" -name "libssl.so*" -delete
   find "$dependency_install_prefix/lib" -name "libcrypto.so*" -delete
   change_dir "$src_dir"
@@ -4719,6 +4728,9 @@ pkg-config = 'pkg-config'
 cmake = 'cmake'
 
 [host_machine]
+# OpenHarmony is a Linux-kernel + musl-libc OS. 'linux' is the right value
+# here: Meson has no 'ohos' system value, and libraries that gate on
+# host_machine.system() == 'linux' need to take their Linux paths.
 system = 'linux'
 cpu_family = '$cpu_family'
 cpu = '$host_arch'

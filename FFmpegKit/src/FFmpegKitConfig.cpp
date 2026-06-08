@@ -67,7 +67,7 @@ extern "C" {
 #include <thread> // 2. Standard library headers at the end
 #include <unordered_map>
 
-#if (defined(__ANDROID__) && __ANDROID_API__ < 28) || defined(__APPLE__)
+#if (defined(__ANDROID__) && __ANDROID_API__ < 28) || defined(__APPLE__) || defined(__OHOS__) || defined(__HARMONY__) || defined(TARGET_OS_OHOS) || (defined(__linux__) && !defined(__GLIBC__))
 #include <cstdlib>
 #include <errno.h>
 #include <pthread.h>

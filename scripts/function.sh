@@ -918,9 +918,12 @@ setup_harmony_environment() {
     export toolchain_lib_path="$OHOS_SDK_HOME/sysroot/usr/lib/${clang_target_triple}"
     export SYSROOT="$OHOS_SDK_HOME/sysroot"
 
-    # Use the bare clang with --target rather than the *-clang wrappers so the
-    # value of CC is portable across the wrapper-name variations and matches
-    # what the Meson cross-files, CMake toolchain and FFmpeg configure expect.
+    # IMPORTANT: CC/CXX/AS/LD must be single-token paths (no embedded spaces),
+    # otherwise downstream callers like do_make will pass them as
+    # "CC=/path/clang --target=..." and make will interpret --target as one of
+    # its own flags and bail out printing --help. The OpenHarmony SDK ships
+    # per-target wrappers (aarch64-unknown-linux-ohos-clang, etc.) with the
+    # --target and sysroot already baked in, so use those.
     export cross_prefix=""
     export CROSS_COMPILE="${clang_target_triple}-"
     export PKG_CONFIG_PATH=""
@@ -933,15 +936,14 @@ setup_harmony_environment() {
     create_dir "$dependency_install_prefix/{bin,lib/pkgconfig,include,usr/include}"
 
     reset_cross_vars
-    local _ohos_target_flag="--target=${clang_target_triple} --sysroot=${SYSROOT}"
-    export CC="${toolchain_bin_path}/clang ${_ohos_target_flag}"
-    export CXX="${toolchain_bin_path}/clang++ ${_ohos_target_flag}"
+    export CC="${toolchain_bin_path}/${clang_wrapper_triple}-clang"
+    export CXX="${toolchain_bin_path}/${clang_wrapper_triple}-clang++"
     export AR="${toolchain_bin_path}/llvm-ar"
-    export AS="${toolchain_bin_path}/clang ${_ohos_target_flag}"
+    export AS="${toolchain_bin_path}/${clang_wrapper_triple}-clang"
     export NM="${toolchain_bin_path}/llvm-nm"
     export RANLIB="${toolchain_bin_path}/llvm-ranlib"
     export STRIP="${toolchain_bin_path}/llvm-strip"
-    export LD="${toolchain_bin_path}/clang ${_ohos_target_flag}"
+    export LD="${toolchain_bin_path}/${clang_wrapper_triple}-clang"
 
     export PREFIX="$dependency_install_prefix"
     export build_cross_compile=y
@@ -2780,6 +2782,7 @@ do_configure() {
       echo "INFO: Setting up libtoolize for macOS" >> "$LOG_FILE"
       LIBTOOLIZE="glibtoolize"
   fi
+  : "${LIBTOOLIZE:=libtoolize}"
 	local cur_dir2=$(pwd)
 	local english_name=$(basename "$cur_dir2")
   local touch_prefix="${host_name}${touch_postfix}already"
@@ -4002,12 +4005,13 @@ configure_ffmpeg() {
       disable_library "libxeve"
     fi
   elif isharmony; then
-    # OpenHarmony cross-compile. We use bare clang with --target/--sysroot
-    # baked into CC/CXX/LD by setup_harmony_environment, so we just point
-    # FFmpeg at those wrappers. Target OS is 'linux' for broad
-    # compatibility; FFmpeg 6.1+ also accepts target-os=ohos but the linux
-    # mapping yields the same effective config and avoids requiring a
-    # newer FFmpeg version.
+    # OpenHarmony cross-compile. CC/CXX/LD are single-path wrappers
+    # (aarch64-unknown-linux-ohos-clang etc.) with --target/--sysroot baked
+    # in by setup_harmony_environment, so we just pass them through to
+    # FFmpeg configure. Target OS is 'linux' for broad compatibility;
+    # FFmpeg 6.1+ also accepts target-os=ohos but the linux mapping yields
+    # the same effective config and avoids requiring a newer FFmpeg
+    # version.
     export PKG_CONFIG_SYSROOT_DIR="/"
     export PKG_CONFIG_LIBDIR="$install_pkgconfig_dir:$ffmpeg_install_prefix/lib/pkgconfig"
     export AS="$CC"

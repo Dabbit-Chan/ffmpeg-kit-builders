@@ -52,7 +52,9 @@
 #include "libavutil/stereo3d.h"
 #include "graph/graphprint.h"
 
+#if CONFIG_SDL2
 #include "SDL_mutex.h"
+#endif
 
 FFMPEG_THREAD_LOCAL HWDevice *filter_hw_device;
 

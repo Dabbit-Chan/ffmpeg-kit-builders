@@ -80,7 +80,8 @@ CONFIG_ANDROID=" \
 --enable-openssl \
 --enable-mediacodec"
 
-# OpenHarmony / HarmonyOS general (software-only first stage; ohcodec is opt-in)
+# OpenHarmony / HarmonyOS general (software-only first stage; ohcodec is
+# opt-in via --enable-ohcodec to keep the minimum bundle small).
 CONFIG_OH="\
 --enable-openssl"
 

@@ -116,10 +116,27 @@ file(GLOB_RECURSE KIT_HEADERS "${CMAKE_CURRENT_SOURCE_DIR}/src/*.h")
 list(REMOVE_ITEM KIT_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/src/ffplay.c")
 list(REMOVE_ITEM KIT_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/src/ffprobe.c")
 
+# Probe for SDL2 early so we can swap the real ffplay implementation for a
+# no-op stub when SDL2 isn't available (e.g. OpenHarmony --enable-base
+# --disable-sdl2). The full pkg-config check happens later; this is just an
+# availability gate.
+find_package(PkgConfig QUIET)
+if(PkgConfig_FOUND)
+    pkg_check_modules(_SDL2_AVAIL QUIET sdl2)
+endif()
+if(_SDL2_AVAIL_FOUND)
+    message(STATUS "SDL2 found; using real ffplay implementation")
+    # Drop the stub to avoid duplicate-symbol link errors.
+    list(REMOVE_ITEM KIT_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/src/ffplay_lib_stub.c")
+else()
+    message(STATUS "SDL2 not available; using ffplay no-op stub")
+    list(REMOVE_ITEM KIT_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/src/ffplay_lib.c")
+    list(REMOVE_ITEM KIT_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/src/ffplay_renderer.c")
+endif()
+
 # exclude _bak and _orig files
 list(FILTER KIT_SOURCES EXCLUDE REGEX ".*_(bak|orig)\\.(c|cpp)$")
 list(FILTER KIT_HEADERS EXCLUDE REGEX ".*_(bak|orig)\\.h$")
-
 # =============================================================================
 # 3.1 RESOURCE FILE COMPILATION: Apple Platform Resource Embedding
 # =============================================================================
@@ -164,9 +181,26 @@ set(ENV{PKG_CONFIG_PATH} "${FFMPEG_BUILD_DIR}/lib/pkgconfig:$ENV{PKG_CONFIG_PATH
 
 set(PKG_CONFIG_USE_STATIC_LIBS ON)
 
-pkg_check_modules(FFMPEG REQUIRED IMPORTED_TARGET 
-    libavdevice libavfilter libavformat libavcodec libswresample libswscale libavutil jsoncpp sdl2 iconv bzip2 liblzma zlib
+# Required FFmpeg + jsoncpp modules — these must always be present.
+pkg_check_modules(FFMPEG REQUIRED IMPORTED_TARGET
+    libavdevice libavfilter libavformat libavcodec libswresample libswscale libavutil jsoncpp
 )
+
+# Optional cross-platform deps. Standard bundles ship them, but a slim build
+# (e.g. OpenHarmony --enable-base with --disable-sdl2) may omit some. Probe
+# each separately so a missing one doesn't fail the FFmpegKit configure; the
+# downstream linker line only references them through configure_static_linking
+# when their TARGET exists.
+foreach(_optional_pkg sdl2 iconv bzip2 liblzma zlib)
+    string(TOUPPER "${_optional_pkg}" _optional_pkg_var)
+    pkg_check_modules(${_optional_pkg_var}_OPT IMPORTED_TARGET ${_optional_pkg})
+    if(${_optional_pkg_var}_OPT_FOUND)
+        message(STATUS "Optional pkg-config dep found: ${_optional_pkg}")
+        target_link_libraries(ffmpegkit PRIVATE PkgConfig::${_optional_pkg_var}_OPT)
+    else()
+        message(STATUS "Optional pkg-config dep missing (skipping): ${_optional_pkg}")
+    endif()
+endforeach()
 
 function(replace_static_with_shared INPUT_LIB OUTPUT_VAR)
     if(INPUT_LIB MATCHES "\\.a$" OR INPUT_LIB MATCHES "\\.lib$")
